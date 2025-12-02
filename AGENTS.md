@@ -41,7 +41,7 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
 **Goal:** Stress test the system with adversarial behavior. This is your biggest marketing event before launch.
 
 *   **Build (Tech):**
-    *   **The L2 Bridge:** Connect the L1 to an Ethereum testnet (e.g., Sepolia).
+    *   **The L2 Bridge:** [in_progress] Connect the L1 to an Ethereum testnet (e.g., Sepolia).
     *   **Incentives:** Automated tracking of uptime and proofs.
     *   **Block Explorer:** A visual map of the "Nil-Lattice" showing where data is living.
 *   **Validate:**
