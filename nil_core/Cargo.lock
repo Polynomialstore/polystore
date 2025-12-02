@@ -187,6 +187,7 @@ dependencies = [
  "argon2",
  "c-kzg",
  "hex",
+ "libc",
  "num-bigint",
  "num-integer",
  "num-traits",

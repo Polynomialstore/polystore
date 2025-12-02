@@ -1,0 +1,16 @@
+[package]
+name = "nil_p2p"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libp2p = { version = "0.53", features = ["gossipsub", "mdns", "noise", "tcp", "yamux", "macros", "tokio"] }
+tokio = { version = "1.36", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4.4", features = ["derive"] }
+futures = "0.3"
+nil_core = { path = "../nil_core" }

@@ -24,11 +24,11 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
 **Goal:** Connect 10-50 nodes controlled by you and "friendly" early backers.
 
 *   **Build (Tech):**
-    *   **The "Thin" L1:** Initialize the Cosmos-SDK chain. Minimal governance.
-    *   **P2P Networking:** Nodes can now gossip shards to each other.
-    *   **Faucet:** A simple way to get test tokens.
+    *   **The "Thin" L1:** [x] Initialize the Cosmos-SDK chain. Minimal governance.
+    *   **P2P Networking:** [x] Nodes can now gossip shards to each other.
+    *   **Faucet:** [x] A simple way to get test tokens.
 *   **Validate:**
-    *   **Chaos Testing:** Kill nodes randomly. Does the data survive?
+    *   **Chaos Testing:** [x] Kill nodes randomly. Does the data survive?
     *   **Latency:** How long does it take for a shard to propagate from London to Tokyo?
 *   **Market (Community):**
     *   **The "Founding Node" Program:** Hand-pick 20 diverse engineers (universities, data centers, crypto-natives) to run nodes. Give them direct access to the dev team.

@@ -3,10 +3,14 @@ name = "nil_core"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
 [dependencies]
 argon2 = { version = "0.5.3", features = ["std"] }
 c-kzg = "2.1.5"
 hex = "0.4.3"
+libc = "0.2"
 num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
