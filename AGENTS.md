@@ -35,7 +35,7 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
     *   **The "Founding Node" Program:** Hand-pick 20 diverse engineers (universities, data centers, crypto-natives) to run nodes. Give them direct access to the dev team.
     *   **Discord:** Open a Discord, but keep it technical.
 *   **Refine:**
-    *   The installation experience. If it takes a PhD to install `nild`, you will fail. It must be `curl | bash`.
+    *   [x] The installation experience. If it takes a PhD to install `nild`, you will fail. It must be `curl | bash`.
 
 ## Phase 3: "Store Wars" (Incentivized Testnet) (Months 6-12)
 **Goal:** Stress test the system with adversarial behavior. This is your biggest marketing event before launch.
