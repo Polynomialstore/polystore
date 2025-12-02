@@ -29,7 +29,8 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
     *   **Faucet:** [x] A simple way to get test tokens.
 *   **Validate:**
     *   **Chaos Testing:** [x] Kill nodes randomly. Does the data survive?
-    *   **Latency:** How long does it take for a shard to propagate from London to Tokyo?
+    *   **Latency:** [x] How long does it take for a shard to propagate from London to Tokyo?
+        *   **Result:** ~14.38ms (Localhost).
 *   **Market (Community):**
     *   **The "Founding Node" Program:** Hand-pick 20 diverse engineers (universities, data centers, crypto-natives) to run nodes. Give them direct access to the dev team.
     *   **Discord:** Open a Discord, but keep it technical.
