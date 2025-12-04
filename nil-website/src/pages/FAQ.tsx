@@ -17,7 +17,7 @@ const faqs = [
       },
       {
         q: "What is the 'Nilmanifold'?",
-        a: "It's a metaphor for our network topology. In mathematics, a manifold is a space that looks locally similar everywhere. Our network is 'homogeneous'—every node is equal, and data flows fluidly between them to heal failures automatically, much like heat dissipating across a surface (Ricci Flow)."
+        a: "It is a precise mathematical metaphor for our network's architecture. In geometry, a Nilmanifold is a compact, homogeneous space derived from a nilpotent Lie group. 'Homogeneous' means the space looks the same from every point—there are no privileged centers. NilStore mirrors this: every node is topologically equal, and data flows fluidly across the network to balance load and heal failures, governed by equations analogous to Ricci Flow (which smooths out irregularities/curvature over time)."
       }
     ]
   },
