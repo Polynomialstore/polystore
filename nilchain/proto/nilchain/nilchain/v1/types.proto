@@ -1,0 +1,57 @@
+syntax = "proto3";
+package nilchain.nilchain.v1;
+
+import "gogoproto/gogo.proto";
+import "cosmos_proto/cosmos.proto";
+
+option go_package = "nilchain/x/nilchain/types";
+
+// Deal represents a storage deal between a user and the network.
+message Deal {
+  uint64 id = 1;
+  string cid = 2; // Root CID of the file manifest
+  uint64 size = 3; // Total size in bytes
+  string owner = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Address of the deal creator
+  int64 escrow_balance = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // Remaining $STOR for payments
+  uint64 start_block = 6; // Block height when deal became active
+  uint64 end_block = 7; // Block height when deal expires
+  repeated string providers = 8 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // List of assigned SP addresses (Base Layer)
+  uint32 redundancy_mode = 9; // e.g., 1 = Standard (RS(12,8))
+  uint64 current_replication = 10; // e.g., 12 for base layer, increases with hot replicas
+  string service_hint = 11; // "Hot" or "Cold"
+  uint64 max_monthly_spend = 12 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
+}
+
+// Provider represents a Storage Provider in the network.
+message Provider {
+  string address = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 total_storage = 2; // Total storage capacity in bytes
+  uint64 used_storage = 3; // Used storage capacity in bytes
+  string capabilities = 4; // "Archive", "General", "Edge"
+  string status = 5; // "Active", "Offline", "Jailed"
+}
+
+// VirtualStripe tracks overlay replicas for a deal, used for elasticity.
+message VirtualStripe {
+  uint64 deal_id = 1;
+  uint32 stripe_index = 2; // Which stripe this refers to (e.g., shard index)
+  repeated string overlay_providers = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // List of providers holding this overlay replica
+}
+
+// KzgProof represents a KZG proof for a single 128 KiB blob.
+message KzgProof {
+  bytes kzg_commitment = 1; // 48-byte G1 point (for the KZG blob)
+  bytes z_value = 2;        // 32-byte scalar (challenge point)
+  bytes y_value = 3;        // 32-byte scalar (evaluation at z)
+  bytes kzg_proof = 4;      // 48-byte G1 point (KZG opening proof)
+}
+
+// RetrievalReceipt represents a user's signed confirmation of data retrieval.
+message RetrievalReceipt {
+  uint64 deal_id = 1;
+  uint64 epoch_id = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Provider's address
+  uint64 bytes_served = 4;  // Actual bytes transferred (for one shard chunk)
+  KzgProof proof_details = 5 [(gogoproto.nullable) = false]; // KZG proof for the served chunk
+  bytes user_signature = 6; // User's Ed25519 signature
+}
