@@ -1,5 +1,5 @@
 # NilStore Litepaper: The Sealing-Free Storage Network
-**Technical Overview v2.4**
+**Technical Overview v2.5**
 
 ## 1. Introduction & Value Proposition
 NilStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
@@ -15,6 +15,7 @@ By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Plac
 *   **Instant Availability:** Data is stored in a retrieval-ready format. No "unsealing" latency.
 *   **User-Funded Elasticity:** Viral content automatically scales to meet demand, funded by the deal's escrow.
 *   **Configurable Resilience:** Users define `ServiceHints` (Hot/Cold) to optimize placement for cost (Archive) or speed (Edge).
+*   **Enterprise Privacy:** Data is encrypted client-side. Scaling is "Zero-Touch" (network replicates ciphertext). Deletion is guaranteed via **Crypto-Erasure**.
 
 ---
 
@@ -69,8 +70,6 @@ We don't ban S3. We just pay for speed.
 
 ---
 
-## 6. Why Developers Care
-1.  **S3 Compatibility:** The SDK abstracts the complexity.
-2.  **Verifiability:** Cryptographic proofs provide certainty of data persistence.
-3.  **Performance:** The lack of "sealing" enables low-latency, high-throughput retrieval.
-4.  **Elasticity:** Your content scales automatically if it goes viral.
+## 6. Enterprise Features
+*   **Zero-Knowledge Cloud:** Providers store encrypted blobs (`AES-256`). They cannot read your data.
+*   **Proof of Deletion:** You hold the key. Destroy the key, and the data is globally erased (Crypto-Erasure).
