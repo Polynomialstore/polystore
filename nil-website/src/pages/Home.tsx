@@ -1,4 +1,4 @@
-import { ArrowRight, Code, Database, Shield, Activity } from "lucide-react";
+import { ArrowRight, Database, Shield, Activity } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 
@@ -9,6 +9,24 @@ export const Home = () => {
         
         {/* Hero Section */}
         <div className="text-center mb-24">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.8 }}
+            className="mx-auto w-64 h-64 mb-8 relative"
+          >
+             <img 
+               src="/logo_dark.jpg" 
+               alt="NilStore Logo" 
+               className="absolute inset-0 w-full h-full object-contain dark:hidden mix-blend-multiply"
+             />
+             <img 
+               src="/logo_light.jpg" 
+               alt="NilStore Logo" 
+               className="absolute inset-0 w-full h-full object-contain hidden dark:block mix-blend-screen"
+             />
+          </motion.div>
+
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
