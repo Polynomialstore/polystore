@@ -37,6 +37,30 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
 *   **Refine:**
     *   [x] The installation experience. If it takes a PhD to install `nild`, you will fail. It must be `curl | bash`.
 
+## Phase 2.5: The Pivot (Performance Market & System Placement)
+**Status:** Spec Updated, Implementation Pending.
+
+We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to a **Market-Incentivized** model.
+
+*   **Architecture Change 1: System-Defined Placement.**
+    *   *Old:* User selects SPs. (Vulnerable to Sybil).
+    *   *New:* Chain selects SPs deterministically (`Hash(Deal + Block)`).
+    *   *Goal:* Anti-Sybil. Forced Diversity.
+*   **Architecture Change 2: Performance Market.**
+    *   *Old:* 1.1s Deadline or Slash.
+    *   *New:* Block-Tiered Rewards. H+1 (Platinum), H+5 (Gold), H+20 (Fail).
+    *   *Goal:* Incentivize speed without punishing honest jitter. Implicitly filters S3 Glacier.
+*   **Architecture Change 3: Explicit Deal State.**
+    *   *Old:* Stateless proofs.
+    *   *New:* `MsgCreateDeal` creates a `Deal` object. Proofs must match Deal ID.
+
+**Immediate Tasks:**
+1.  [ ] Implement `MsgCreateDeal` in `nilchain`.
+2.  [ ] Implement `ActiveProviderList` Keeper.
+3.  [ ] Implement Deterministic Slotting Logic.
+
+---
+
 ## Phase 3: "Store Wars" (Incentivized Testnet) (Months 6-12)
 **Goal:** Stress test the system with adversarial behavior. This is your biggest marketing event before launch.
 
@@ -58,10 +82,12 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
 *   **Build:**
     *   **S3 Adapter:** [x] `nil_s3` Go service implemented (PUT/GET -> Shard -> Chain).
     *   **Governance:** [x] Emergency Council setup (`x/group`) & Mainnet Params configured.
+    *   **Adversarial Simulation:** [x] End-to-End attack simulation & visualization.
     *   Production-grade Audits (Security).
 *   **Validate:**
     *   Slow rollout of the "Lattice" (limit the number of nodes initially).
 *   **Market:**
+    *   **Re-branding:** [ ] Update copy to "Nilmanifold" & "Homogeneity".
     *   Announce the "Genesis Block."
     *   **Web2 Wrapper:** [ ] Documentation for S3 Adapter.
     *   **Governance:** [ ] Documentation for DAO & Council.
