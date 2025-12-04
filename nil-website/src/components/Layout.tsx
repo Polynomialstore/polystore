@@ -18,6 +18,7 @@ export const Layout = () => {
             <Link to="/security" className="hover:text-foreground transition-colors">Security</Link>
             <Link to="/s3-adapter" className="hover:text-foreground transition-colors">S3 Adapter</Link>
             <Link to="/governance" className="hover:text-foreground transition-colors">Governance</Link>
+            <Link to="/faq" className="hover:text-foreground transition-colors">FAQ</Link>
             <a href="#" className="hover:text-foreground transition-colors">GitHub</a>
             <div className="pl-4 border-l">
                 <ModeToggle />

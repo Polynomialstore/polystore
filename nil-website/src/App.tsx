@@ -13,6 +13,8 @@ import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
 import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
+import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
+import { FAQ } from "./pages/FAQ";
 import { ThemeProvider } from "./context/ThemeContext";
 
 function App() {
@@ -29,6 +31,9 @@ function App() {
               <Route path="governance" element={<GovernanceDocs />} />
               <Route path="economy" element={<EconomyDashboard />} />
               <Route path="security" element={<AdversarialSimulation />} />
+              <Route path="litepaper" element={<Litepaper />} />
+              <Route path="whitepaper" element={<Whitepaper />} />
+              <Route path="faq" element={<FAQ />} />
               <Route path="technology" element={<TechnologyLayout />}>
                 <Route index element={<Technology />} />
                 <Route path="sharding" element={<ShardingDeepDive />} />
