@@ -15,6 +15,7 @@ import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
 import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
 import { FAQ } from "./pages/FAQ";
+import { LogoShowcase } from "./pages/LogoShowcase";
 import { ThemeProvider } from "./context/ThemeContext";
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
       <ProofProvider>
         <HashRouter>
           <Routes>
+            <Route path="/brand" element={<LogoShowcase />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="testnet" element={<TestnetDocs />} />
