@@ -110,6 +110,33 @@ To manage this, it is recommended to organize development efforts into these thr
 *   *Output:* NPM packages, Docs site.
 
 **3. The "Lab" (Research & Simulation)**
+
 *   *Focus:* Python/Jupyter Notebooks. Validating the economics and lattice distribution.
+
 *   *Metric:* "Nakamoto Coefficient" (How decentralized is the lattice?).
+
 *   *Output:* Research papers, Simulation reports.
+
+
+
+## Change Log (Session 1)
+
+
+
+**Architectural Pivot: The Performance Market**
+
+We have executed a major refactor of the protocol specification to replace "Physics Policing" with "Economic Incentives."
+
+
+
+1.  **PoDE Deprecation:** Removed `Argon2id` and strict 1.1s timing checks. The mechanism was deemed brittle and unverifiable on-chain.
+
+2.  **Tiered Rewards:** Introduced **Block-Height Latency** tiers (Platinum/Gold/Silver). Speed is now priced by the market.
+
+3.  **Unified Liveness:** Merged "Storage" and "Retrieval." User `RetrievalReceipts` now count as valid storage proofs.
+
+4.  **System-Defined Placement:** Implemented deterministic slotting (`Hash(Deal+Block)`) to prevent Sybil attacks.
+
+5.  **Elasticity:** Added "Saturation Signals" and "User-Funded Scaling" to handle viral content dynamically.
+
+6.  **Risk Analysis:** Documented meta-risks including Cold Start fragility and Data Gravity in `metaspec.md`.

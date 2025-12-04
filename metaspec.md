@@ -62,8 +62,8 @@ This section documents accepted architectural risks and necessary safeguards.
 *   **Safeguard:** The chain MUST support a **Bootstrap Mode** (governance-gated) that relaxes diversity constraints until `N > Threshold`.
 
 ### 6.2 The "Viral Debt" Risk
-*   **Risk:** User-Funded Elasticity creates a hard stop. If a creator runs out of escrow during a viral event, the content throttles, creating a poor "Network UX" perception.
-*   **Safeguard:** The Protocol MUST support **Third-Party Sponsorship**. `MsgFundEscrow` must allow *any* address to top-up a Deal, enabling DAOs or advertisers to rescue viral content.
+*   **Risk:** User-Funded Elasticity creates a hard stop. If a creator runs out of escrow during a viral event, the content throttles.
+*   **Assessment:** This is a valid economic state ("You get what you pay for"). However, to improve UX, the Protocol SHOULD support **Third-Party Sponsorship** (`MsgFundEscrow`) to allow communities to rescue vital content.
 
 ### 6.3 Data Gravity & Non-Atomic Migration
 *   **Risk:** Moving data takes time. When an SP is rotated (due to saturation or failure), there is a latency gap before the new SP is ready.
@@ -71,4 +71,7 @@ This section documents accepted architectural risks and necessary safeguards.
 
 ### 6.4 Economic Sybil Assumption
 *   **Risk:** Unified Liveness allows SPs to "self-audit" by generating fake traffic.
-*   **Safeguard:** This attack is only irrational if **`BurnRate > 0`**. Governance MUST never set `BurnRate` to zero, or the network will succumb to wash-trading.
+*   **Safeguard:**
+    1.  **Signatures:** A valid `RetrievalReceipt` requires a signature from the **Data Owner**. An SP cannot forge this.
+    2.  **Encryption:** Data is stored as ciphertext. An SP cannot effectively "use" the data to mimic real user behavior.
+    3.  **Burn Rate:** The `BurnRate > 0` ensures that even if an SP colludes with a Data Owner, wash-trading costs money.
