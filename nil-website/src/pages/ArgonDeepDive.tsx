@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, ShieldAlert, Cpu, HeartCrack } from "lucide-react";
 
 export const ArgonDeepDive = () => {
-  const [fileSizeMB, setFileSizeMB] = useState(5);
   const podeWorkMs = 1000; // PoDE is tuned to 1 second
   const networkLatencyMs = 200; // Typical network latency to fetch data
   const deadlineMs = podeWorkMs + 100; // Deadline is 100ms after compute

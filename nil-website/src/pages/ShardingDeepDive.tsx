@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { File, Hash, Code, Layers, ArrowRightLeft, Spline } from "lucide-react";
+import { File, Hash, Layers, ArrowRightLeft, Spline } from "lucide-react";
 
 export const ShardingDeepDive = () => {
   const [isReversed, setIsReversed] = useState(false);

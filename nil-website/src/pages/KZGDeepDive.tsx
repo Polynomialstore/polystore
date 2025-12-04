@@ -44,7 +44,7 @@ export const KZGDeepDive = () => {
             <Zap className="w-5 h-5 text-yellow-500" /> 2. The Commitment (C_root)
           </h3>
           <p className="text-muted-foreground mb-6">
-            After data is sharded and mapped to field elements, we compute a single, compact KZG commitment for each blob of 128 KiB. This commitment ($C_{root}$) acts as a tamper-proof cryptographic fingerprint of the data.
+            After data is sharded and mapped to field elements, we compute a single, compact KZG commitment for each blob of 128 KiB. This commitment ($C_root$) acts as a tamper-proof cryptographic fingerprint of the data.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6 mb-6">
