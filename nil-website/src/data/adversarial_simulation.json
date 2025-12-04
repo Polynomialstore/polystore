@@ -1,813 +1,1113 @@
 {
   "meta": {
-    "timestamp": 1764845576.675385,
+    "timestamp": 1764888361.4857569,
     "parameters": {
-      "pode_work_ms": 1000.0,
-      "network_latency_ms": 300.0,
-      "deadline_ms": 1100.0
+      "storage_cost_nvme": 0.02,
+      "storage_cost_s3": 0.004,
+      "bandwidth_cost": 0.05
     }
   },
   "data": [
     {
-      "id": 1,
+      "epoch": 1,
       "honest": {
-        "read_ms": 12.26,
-        "compute_ms": 1002.95,
-        "total_ms": 1015.2,
-        "success": true
+        "balance": 100.08,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 321.31,
-        "compute_ms": 1006.84,
-        "total_ms": 1328.15,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.046,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 2,
+      "epoch": 2,
       "honest": {
-        "read_ms": 11.96,
-        "compute_ms": 987.2,
-        "total_ms": 999.16,
-        "success": true
+        "balance": 100.16,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 270.84,
-        "compute_ms": 1009.56,
-        "total_ms": 1280.4,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.072,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 3,
+      "epoch": 3,
       "honest": {
-        "read_ms": 11.42,
-        "compute_ms": 995.29,
-        "total_ms": 1006.71,
-        "success": true
+        "balance": 100.24,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 263.95,
-        "compute_ms": 1003.53,
-        "total_ms": 1267.48,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.098,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 4,
+      "epoch": 4,
       "honest": {
-        "read_ms": 13.2,
-        "compute_ms": 1010.79,
-        "total_ms": 1023.99,
-        "success": true
+        "balance": 100.32,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 361.88,
-        "compute_ms": 988.4,
-        "total_ms": 1350.28,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.144,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 5,
+      "epoch": 5,
       "honest": {
-        "read_ms": 8.04,
-        "compute_ms": 1007.5,
-        "total_ms": 1015.53,
-        "success": true
+        "balance": 100.4,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 346.74,
-        "compute_ms": 1003.2,
-        "total_ms": 1349.94,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.17,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 6,
+      "epoch": 6,
       "honest": {
-        "read_ms": 5.82,
-        "compute_ms": 1000.14,
-        "total_ms": 1005.96,
-        "success": true
+        "balance": 100.48,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 320.77,
-        "compute_ms": 1016.53,
-        "total_ms": 1337.3,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.216,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 7,
+      "epoch": 7,
       "honest": {
-        "read_ms": 11.11,
-        "compute_ms": 1005.92,
-        "total_ms": 1017.03,
-        "success": true
+        "balance": 100.56,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 301.78,
-        "compute_ms": 1021.28,
-        "total_ms": 1323.06,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.262,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 8,
+      "epoch": 8,
       "honest": {
-        "read_ms": 8.53,
-        "compute_ms": 990.5,
-        "total_ms": 999.03,
-        "success": true
+        "balance": 100.64,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 312.28,
-        "compute_ms": 999.44,
-        "total_ms": 1311.72,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.288,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 9,
+      "epoch": 9,
       "honest": {
-        "read_ms": 11.09,
-        "compute_ms": 998.29,
-        "total_ms": 1009.38,
-        "success": true
+        "balance": 100.72,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 325.1,
-        "compute_ms": 1006.51,
-        "total_ms": 1331.61,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.314,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 10,
+      "epoch": 10,
       "honest": {
-        "read_ms": 8.41,
-        "compute_ms": 1004.92,
-        "total_ms": 1013.34,
-        "success": true
+        "balance": 100.8,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 273.01,
-        "compute_ms": 1007.19,
-        "total_ms": 1280.2,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.34,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 11,
+      "epoch": 11,
       "honest": {
-        "read_ms": 10.7,
-        "compute_ms": 992.61,
-        "total_ms": 1003.3,
-        "success": true
+        "balance": 100.88,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 265.49,
-        "compute_ms": 990.71,
-        "total_ms": 1256.2,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.386,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 12,
+      "epoch": 12,
       "honest": {
-        "read_ms": 8.41,
-        "compute_ms": 992.51,
-        "total_ms": 1000.92,
-        "success": true
+        "balance": 100.96,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 238.64,
-        "compute_ms": 988.04,
-        "total_ms": 1226.68,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.412,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 13,
+      "epoch": 13,
       "honest": {
-        "read_ms": 9.15,
-        "compute_ms": 1013.11,
-        "total_ms": 1022.26,
-        "success": true
+        "balance": 101.04,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 256.77,
-        "compute_ms": 1008.06,
-        "total_ms": 1264.83,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.438,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 14,
+      "epoch": 14,
       "honest": {
-        "read_ms": 8.69,
-        "compute_ms": 1013.2,
-        "total_ms": 1021.89,
-        "success": true
+        "balance": 101.12,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 345.33,
-        "compute_ms": 1012.77,
-        "total_ms": 1358.1,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.464,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 15,
+      "epoch": 15,
       "honest": {
-        "read_ms": 9.53,
-        "compute_ms": 1006.78,
-        "total_ms": 1016.3,
-        "success": true
+        "balance": 101.2,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 395.23,
-        "compute_ms": 1001.71,
-        "total_ms": 1396.93,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.51,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 16,
+      "epoch": 16,
       "honest": {
-        "read_ms": 7.51,
-        "compute_ms": 998.64,
-        "total_ms": 1006.15,
-        "success": true
+        "balance": 101.28,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 373.98,
-        "compute_ms": 1009.08,
-        "total_ms": 1383.06,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.536,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 17,
+      "epoch": 17,
       "honest": {
-        "read_ms": 10.28,
-        "compute_ms": 1003.5,
-        "total_ms": 1013.78,
-        "success": true
+        "balance": 101.36,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 282.29,
-        "compute_ms": 1000.24,
-        "total_ms": 1282.53,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.562,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 18,
+      "epoch": 18,
       "honest": {
-        "read_ms": 9.49,
-        "compute_ms": 990.87,
-        "total_ms": 1000.36,
-        "success": true
+        "balance": 101.44,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 414.14,
-        "compute_ms": 989.33,
-        "total_ms": 1403.47,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.608,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 19,
+      "epoch": 19,
       "honest": {
-        "read_ms": 5.6,
-        "compute_ms": 1018.4,
-        "total_ms": 1024.0,
-        "success": true
+        "balance": 101.52,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 305.63,
-        "compute_ms": 1002.34,
-        "total_ms": 1307.97,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.654,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 20,
+      "epoch": 20,
       "honest": {
-        "read_ms": 9.03,
-        "compute_ms": 1008.24,
-        "total_ms": 1017.27,
-        "success": true
+        "balance": 101.6,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 289.11,
-        "compute_ms": 1014.26,
-        "total_ms": 1303.37,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.68,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 21,
+      "epoch": 21,
       "honest": {
-        "read_ms": 9.37,
-        "compute_ms": 972.47,
-        "total_ms": 981.84,
-        "success": true
+        "balance": 101.68,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 393.57,
-        "compute_ms": 996.56,
-        "total_ms": 1390.13,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.726,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 22,
+      "epoch": 22,
       "honest": {
-        "read_ms": 11.86,
-        "compute_ms": 1017.03,
-        "total_ms": 1028.9,
-        "success": true
+        "balance": 101.76,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 314.21,
-        "compute_ms": 1006.75,
-        "total_ms": 1320.96,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.772,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 23,
+      "epoch": 23,
       "honest": {
-        "read_ms": 9.76,
-        "compute_ms": 1027.0,
-        "total_ms": 1036.76,
-        "success": true
+        "balance": 101.84,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 311.61,
-        "compute_ms": 998.38,
-        "total_ms": 1309.99,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.818,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 24,
+      "epoch": 24,
       "honest": {
-        "read_ms": 9.8,
-        "compute_ms": 998.87,
-        "total_ms": 1008.67,
-        "success": true
+        "balance": 101.92,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 297.97,
-        "compute_ms": 1005.56,
-        "total_ms": 1303.52,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.864,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 25,
+      "epoch": 25,
       "honest": {
-        "read_ms": 10.17,
-        "compute_ms": 983.6,
-        "total_ms": 993.76,
-        "success": true
+        "balance": 102.0,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 292.4,
-        "compute_ms": 1003.04,
-        "total_ms": 1295.45,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.89,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 26,
+      "epoch": 26,
       "honest": {
-        "read_ms": 8.54,
-        "compute_ms": 983.58,
-        "total_ms": 992.12,
-        "success": true
+        "balance": 102.08,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 310.84,
-        "compute_ms": 990.99,
-        "total_ms": 1301.83,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.936,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 27,
+      "epoch": 27,
       "honest": {
-        "read_ms": 7.08,
-        "compute_ms": 999.55,
-        "total_ms": 1006.63,
-        "success": true
+        "balance": 102.16,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 302.96,
-        "compute_ms": 994.39,
-        "total_ms": 1297.35,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 100.982,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 28,
+      "epoch": 28,
       "honest": {
-        "read_ms": 8.24,
-        "compute_ms": 997.12,
-        "total_ms": 1005.36,
-        "success": true
+        "balance": 102.24,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 243.48,
-        "compute_ms": 999.01,
-        "total_ms": 1242.49,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.028,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 29,
+      "epoch": 29,
       "honest": {
-        "read_ms": 12.42,
-        "compute_ms": 981.25,
-        "total_ms": 993.66,
-        "success": true
+        "balance": 102.32,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 270.88,
-        "compute_ms": 1004.21,
-        "total_ms": 1275.09,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.074,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 30,
+      "epoch": 30,
       "honest": {
-        "read_ms": 9.08,
-        "compute_ms": 1008.85,
-        "total_ms": 1017.93,
-        "success": true
+        "balance": 102.4,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 356.81,
-        "compute_ms": 1001.38,
-        "total_ms": 1358.19,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.12,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 31,
+      "epoch": 31,
       "honest": {
-        "read_ms": 8.83,
-        "compute_ms": 1002.32,
-        "total_ms": 1011.15,
-        "success": true
+        "balance": 102.48,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 275.21,
-        "compute_ms": 1011.4,
-        "total_ms": 1286.61,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.146,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 32,
+      "epoch": 32,
       "honest": {
-        "read_ms": 10.16,
-        "compute_ms": 989.18,
-        "total_ms": 999.34,
-        "success": true
+        "balance": 102.56,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 252.15,
-        "compute_ms": 1013.52,
-        "total_ms": 1265.67,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.172,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 33,
+      "epoch": 33,
       "honest": {
-        "read_ms": 9.81,
-        "compute_ms": 988.33,
-        "total_ms": 998.14,
-        "success": true
+        "balance": 102.64,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 341.13,
-        "compute_ms": 1006.76,
-        "total_ms": 1347.89,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.218,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 34,
+      "epoch": 34,
       "honest": {
-        "read_ms": 12.93,
-        "compute_ms": 1002.75,
-        "total_ms": 1015.68,
-        "success": true
+        "balance": 102.72,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 320.2,
-        "compute_ms": 997.27,
-        "total_ms": 1317.46,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.244,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 35,
+      "epoch": 35,
       "honest": {
-        "read_ms": 9.67,
-        "compute_ms": 1008.8,
-        "total_ms": 1018.47,
-        "success": true
+        "balance": 102.8,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 298.4,
-        "compute_ms": 1003.17,
-        "total_ms": 1301.56,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.29,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 36,
+      "epoch": 36,
       "honest": {
-        "read_ms": 11.51,
-        "compute_ms": 994.16,
-        "total_ms": 1005.67,
-        "success": true
+        "balance": 102.88,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 404.78,
-        "compute_ms": 995.65,
-        "total_ms": 1400.43,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.316,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 37,
+      "epoch": 37,
       "honest": {
-        "read_ms": 11.49,
-        "compute_ms": 1006.78,
-        "total_ms": 1018.27,
-        "success": true
+        "balance": 102.96,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 332.57,
-        "compute_ms": 1023.34,
-        "total_ms": 1355.91,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.342,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 38,
+      "epoch": 38,
       "honest": {
-        "read_ms": 10.41,
-        "compute_ms": 1012.44,
-        "total_ms": 1022.86,
-        "success": true
+        "balance": 103.04,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 306.92,
-        "compute_ms": 996.98,
-        "total_ms": 1303.9,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.388,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 39,
+      "epoch": 39,
       "honest": {
-        "read_ms": 11.01,
-        "compute_ms": 992.07,
-        "total_ms": 1003.07,
-        "success": true
+        "balance": 103.12,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 264.22,
-        "compute_ms": 983.42,
-        "total_ms": 1247.64,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.434,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 40,
+      "epoch": 40,
       "honest": {
-        "read_ms": 6.74,
-        "compute_ms": 1006.75,
-        "total_ms": 1013.49,
-        "success": true
+        "balance": 103.2,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 252.94,
-        "compute_ms": 992.73,
-        "total_ms": 1245.68,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.46,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 41,
+      "epoch": 41,
       "honest": {
-        "read_ms": 9.7,
-        "compute_ms": 1007.92,
-        "total_ms": 1017.62,
-        "success": true
+        "balance": 103.28,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 302.44,
-        "compute_ms": 1001.02,
-        "total_ms": 1303.47,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.506,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 42,
+      "epoch": 42,
       "honest": {
-        "read_ms": 6.93,
-        "compute_ms": 973.82,
-        "total_ms": 980.76,
-        "success": true
+        "balance": 103.36,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 341.37,
-        "compute_ms": 1000.56,
-        "total_ms": 1341.94,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.552,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 43,
+      "epoch": 43,
       "honest": {
-        "read_ms": 12.76,
-        "compute_ms": 987.0,
-        "total_ms": 999.77,
-        "success": true
+        "balance": 103.44,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 278.25,
-        "compute_ms": 985.45,
-        "total_ms": 1263.71,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.598,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 44,
+      "epoch": 44,
       "honest": {
-        "read_ms": 13.1,
-        "compute_ms": 1006.37,
-        "total_ms": 1019.47,
-        "success": true
+        "balance": 103.52,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 385.14,
-        "compute_ms": 999.98,
-        "total_ms": 1385.12,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.644,
+        "tier": "Platinum"
+      }
     },
     {
-      "id": 45,
+      "epoch": 45,
       "honest": {
-        "read_ms": 8.9,
-        "compute_ms": 1018.38,
-        "total_ms": 1027.28,
-        "success": true
+        "balance": 103.6,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 227.62,
-        "compute_ms": 999.24,
-        "total_ms": 1226.87,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.67,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 46,
+      "epoch": 46,
       "honest": {
-        "read_ms": 8.78,
-        "compute_ms": 994.31,
-        "total_ms": 1003.09,
-        "success": true
+        "balance": 103.68,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 190.24,
-        "compute_ms": 1000.87,
-        "total_ms": 1191.1,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.696,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 47,
+      "epoch": 47,
       "honest": {
-        "read_ms": 10.08,
-        "compute_ms": 990.64,
-        "total_ms": 1000.72,
-        "success": true
+        "balance": 103.76,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 260.06,
-        "compute_ms": 993.87,
-        "total_ms": 1253.93,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.722,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 48,
+      "epoch": 48,
       "honest": {
-        "read_ms": 8.55,
-        "compute_ms": 1009.13,
-        "total_ms": 1017.68,
-        "success": true
+        "balance": 103.84,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 342.92,
-        "compute_ms": 1014.48,
-        "total_ms": 1357.4,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.748,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 49,
+      "epoch": 49,
       "honest": {
-        "read_ms": 5.58,
-        "compute_ms": 1010.01,
-        "total_ms": 1015.59,
-        "success": true
+        "balance": 103.92,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 255.19,
-        "compute_ms": 978.21,
-        "total_ms": 1233.4,
-        "success": false
-      },
-      "deadline_ms": 1100.0
+        "balance": 101.774,
+        "tier": "Gold"
+      }
     },
     {
-      "id": 50,
+      "epoch": 50,
       "honest": {
-        "read_ms": 9.52,
-        "compute_ms": 1022.1,
-        "total_ms": 1031.62,
-        "success": true
+        "balance": 104.0,
+        "tier": "Platinum"
       },
       "attacker": {
-        "fetch_ms": 306.54,
-        "compute_ms": 990.64,
-        "total_ms": 1297.19,
-        "success": false
+        "balance": 101.82,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 51,
+      "honest": {
+        "balance": 104.08,
+        "tier": "Platinum"
       },
-      "deadline_ms": 1100.0
+      "attacker": {
+        "balance": 101.866,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 52,
+      "honest": {
+        "balance": 104.16,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 101.912,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 53,
+      "honest": {
+        "balance": 104.24,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 101.958,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 54,
+      "honest": {
+        "balance": 104.32,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.004,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 55,
+      "honest": {
+        "balance": 104.4,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.03,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 56,
+      "honest": {
+        "balance": 104.48,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.056,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 57,
+      "honest": {
+        "balance": 104.56,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.102,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 58,
+      "honest": {
+        "balance": 104.64,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.128,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 59,
+      "honest": {
+        "balance": 104.72,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.174,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 60,
+      "honest": {
+        "balance": 104.8,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.22,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 61,
+      "honest": {
+        "balance": 104.88,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.246,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 62,
+      "honest": {
+        "balance": 104.96,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.272,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 63,
+      "honest": {
+        "balance": 105.04,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.298,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 64,
+      "honest": {
+        "balance": 105.12,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.324,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 65,
+      "honest": {
+        "balance": 105.2,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.37,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 66,
+      "honest": {
+        "balance": 105.28,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.416,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 67,
+      "honest": {
+        "balance": 105.36,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.462,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 68,
+      "honest": {
+        "balance": 105.44,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.488,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 69,
+      "honest": {
+        "balance": 105.52,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.534,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 70,
+      "honest": {
+        "balance": 105.6,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.56,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 71,
+      "honest": {
+        "balance": 105.68,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.586,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 72,
+      "honest": {
+        "balance": 105.76,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.612,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 73,
+      "honest": {
+        "balance": 105.84,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.638,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 74,
+      "honest": {
+        "balance": 105.92,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.684,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 75,
+      "honest": {
+        "balance": 106.0,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.73,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 76,
+      "honest": {
+        "balance": 106.08,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.776,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 77,
+      "honest": {
+        "balance": 106.16,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.802,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 78,
+      "honest": {
+        "balance": 106.24,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.828,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 79,
+      "honest": {
+        "balance": 106.32,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.854,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 80,
+      "honest": {
+        "balance": 106.4,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.9,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 81,
+      "honest": {
+        "balance": 106.48,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.946,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 82,
+      "honest": {
+        "balance": 106.56,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 102.972,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 83,
+      "honest": {
+        "balance": 106.64,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.018,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 84,
+      "honest": {
+        "balance": 106.72,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.044,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 85,
+      "honest": {
+        "balance": 106.8,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.07,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 86,
+      "honest": {
+        "balance": 106.88,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.096,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 87,
+      "honest": {
+        "balance": 106.96,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.142,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 88,
+      "honest": {
+        "balance": 107.04,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.188,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 89,
+      "honest": {
+        "balance": 107.12,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.234,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 90,
+      "honest": {
+        "balance": 107.2,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.26,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 91,
+      "honest": {
+        "balance": 107.28,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.286,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 92,
+      "honest": {
+        "balance": 107.36,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.312,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 93,
+      "honest": {
+        "balance": 107.44,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.338,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 94,
+      "honest": {
+        "balance": 107.52,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.384,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 95,
+      "honest": {
+        "balance": 107.6,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.41,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 96,
+      "honest": {
+        "balance": 107.68,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.456,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 97,
+      "honest": {
+        "balance": 107.76,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.482,
+        "tier": "Gold"
+      }
+    },
+    {
+      "epoch": 98,
+      "honest": {
+        "balance": 107.84,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.528,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 99,
+      "honest": {
+        "balance": 107.92,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.574,
+        "tier": "Platinum"
+      }
+    },
+    {
+      "epoch": 100,
+      "honest": {
+        "balance": 108.0,
+        "tier": "Platinum"
+      },
+      "attacker": {
+        "balance": 103.6,
+        "tier": "Gold"
+      }
     }
   ],
-  "analysis": "Simulation of 50 challenge-response cycles. The Honest Node (Local Storage) succeeded 50/50 times (100.0%). The Adversarial Node (Lazy Fetching) succeeded 0/50 times (0.0%). The strict 1100.0ms deadline successfully filters out providers attempting to outsource storage, as network latency (300.0ms avg) pushes the total response time beyond the PoDE work threshold."
+  "analysis": "Simulation of 100 epochs comparing Local NVMe vs S3 Wrapper. The Honest Node finished with $108.00, consistently hitting 'Platinum' tiers due to low latency. The Attacker finished with $103.60. While S3 storage is cheaper, the egress fees and latency penalties (dropping to 'Gold') drastically reduce margins. In a competitive market, the Honest Node outcompetes the Lazy Provider by a factor of 1.0x."
 }
