@@ -62,8 +62,8 @@ export const Home = () => {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            The first decentralized storage network powered by <strong>Proof-of-Useful-Data</strong>. 
-            No massive hardware. No sealing delay. Just instant, verifiable cloud storage.
+            A decentralized storage network where <strong>Speed is Consensus</strong>. 
+            Data flows fluidly across a homogeneous Nilmanifold, scaling instantly to meet demand.
           </motion.p>
 
           <motion.div 
@@ -90,18 +90,18 @@ export const Home = () => {
         <div className="grid md:grid-cols-3 gap-8 mb-24">
           <FeatureCard 
             icon={<Shield className="w-8 h-8 text-green-400" />}
-            title="Verifiable Security"
-            desc="Every byte is protected by KZG Commitments. Mathematical proof of existence, instantly verified on-chain."
+            title="Unified Liveness"
+            desc="Zero Wasted Work. User retrievals *are* the storage proofs. We don't separate 'auditing' from 'serving'. High traffic = High security."
           />
           <FeatureCard 
-            icon={<Activity className="w-8 h-8 text-purple-400" />}
-            title="High Performance"
-            desc="Proof-of-Delayed-Encode (PoDE) replaces slow sealing with fast timing checks. Data is ready to serve in milliseconds."
+            icon={<Activity className="w-8 h-8 text-blue-400" />}
+            title="The Performance Market"
+            desc="Tiered Rewards. Responses in Block H+1 earn Platinum rewards. Slow adapters earn dust. Speed is incentivized, not just enforced."
           />
-          <FeatureCard
+          <FeatureCard 
             icon={<Database className="w-8 h-8 text-purple-400" />}
-            title="Web2 Compatible"
-            desc="Native S3 Adapter allows existing applications to seamlessly transition to decentralized storage without code changes."
+            title="Elasticity & Privacy"
+            desc="Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically, funded by user escrow. Zero-Knowledge encryption ensures privacy."
           />
         </div>
 

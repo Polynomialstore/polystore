@@ -70,11 +70,20 @@ export const KZGDeepDive = () => {
         {/* Section 3: Proof & Verification Protocol */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <CheckCircle className="w-5 h-5 text-green-500" /> 3. Verification Protocol
+            <CheckCircle className="w-5 h-5 text-green-500" /> 3. Unified Verification
           </h3>
           <p className="text-muted-foreground mb-6">
-            To prove data possession, a Storage Provider (SP) is challenged at a random `z` (point). The SP must provide `y` (the data's value at `z`) and a tiny 48-byte proof ($\pi$). This is verified via a fast elliptic curve pairing equation.
+            In the <strong>Performance Market</strong>, we don't just audit data in the background. When a user retrieves a file, the Storage Provider attaches a KZG proof to the data stream.
           </p>
+          <div className="bg-card p-6 rounded-xl border border-border mb-6">
+            <p className="text-sm text-muted-foreground">
+              <strong>The "Double-Pay" Innovation:</strong> The user signs a receipt for the valid data. This receipt serves two purposes:
+            </p>
+            <ul className="list-disc list-inside text-sm text-muted-foreground mt-2 ml-2">
+                <li>It proves the user got their file (Bandwidth Fee).</li>
+                <li>It proves the node has the data (Storage Reward).</li>
+            </ul>
+          </div>
           <div className="bg-secondary/30 p-8 rounded-2xl border border-border overflow-hidden relative">
             
             {/* Animated Protocol Visualization */}

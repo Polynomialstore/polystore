@@ -37,10 +37,10 @@ export const ShardingDeepDive = () => {
         {/* Section 1: Data Units (DUs) */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <File className="w-5 h-5 text-blue-500" /> 128 KiB Data Units
+            <File className="w-5 h-5 text-blue-500" /> 8 MiB Mega-Data Units (MDUs)
           </h3>
           <p className="text-muted-foreground mb-6">
-            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>131,072-byte (128KB)</strong> symbols. This size aligns with Ethereum's EIP-4844 blobs for maximum interoperability and efficiency, minimizing on-chain overhead.
+            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>8 MiB (8,388,608 bytes)</strong> Mega-Data Units. This size optimizes batch verification throughput and aligns with our tiered reward structure.
           </p>
           
           <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-3xl border">
@@ -74,7 +74,7 @@ export const ShardingDeepDive = () => {
                     transition={{ delay: i * 0.2, duration: 0.5 }}
                     className="bg-green-100 border border-green-300 rounded flex items-center justify-center text-[10px] font-mono text-green-700 shadow-sm"
                   >
-                    128KB
+                    8 MiB
                   </motion.div>
                 ))}
               </div>
@@ -119,11 +119,19 @@ export const ShardingDeepDive = () => {
         {/* Section 3: Distribution & Repair */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <ArrowRightLeft className="w-5 h-5 text-green-500" /> Distribution & Efficient Repair
+            <ArrowRightLeft className="w-5 h-5 text-green-500" /> System-Defined Placement
           </h3>
           <p className="text-muted-foreground mb-6">
-            The encoded shards are distributed to distinct nodes across the <strong>Nil-Lattice</strong> topology. This ensures geographic diversity and enables rapid data healing.
+            To prevent "Sybil Attacks" (where a single user pretends to be 10 different nodes to trick the system), NilStore uses <strong>Deterministic Slotting</strong>.
           </p>
+          <div className="bg-card border border-border p-6 rounded-xl shadow-sm mb-6">
+            <p className="text-sm text-muted-foreground font-mono">
+              Target_Slot = Hash(DealID + BlockHash + ShardIndex)
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This means the blockchain decides where data goes, not the user. This forces diversity and ensures robust decentralization.
+            </p>
+          </div>
           <ul className="list-disc list-inside text-muted-foreground space-y-2 mb-6">
             <li><strong>Customizable Resilience:</strong> You choose the safety level for each file.</li>
             <li><strong>Parallel Throughput:</strong> Client software downloads from the fastest available subset of nodes simultaneously.</li>

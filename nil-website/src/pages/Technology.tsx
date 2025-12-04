@@ -1,6 +1,6 @@
 import { ShardingDeepDive } from "./ShardingDeepDive";
 import { KZGDeepDive } from "./KZGDeepDive";
-import { ArgonDeepDive } from "./ArgonDeepDive";
+import { PerformanceDeepDive } from "./PerformanceDeepDive";
 
 export const Technology = () => {
   return (
@@ -41,7 +41,7 @@ export const Technology = () => {
             <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 font-bold shrink-0">3</div>
           </div>
           <div className="w-full pb-12">
-            <ArgonDeepDive />
+            <PerformanceDeepDive />
           </div>
         </div>
       </div>

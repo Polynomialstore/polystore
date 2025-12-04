@@ -37,7 +37,19 @@ const faqs = [
       },
       {
         q: "What is 'Proof-of-Delayed-Encode' (PoDE)?",
-        a: "This is our defense against lazy providers. We challenge storage nodes to perform a memory-hard computation (Argon2id) that takes exactly 1 second. If a node tries to cheat by downloading the data from Amazon S3 on-the-fly, the network latency will make them miss the 1-second deadline. This guarantees the data is physically stored on their machine."
+        a: "PoDE was our initial timing-based mechanism. We have evolved this into the **Performance Market**. Instead of a binary 'Pass/Fail' based on a synthetic delay, we now tier rewards based on actual response speed. Faster nodes (Platinum) earn more than slow ones (Gold/Silver), implicitly filtering out lazy providers without brittle timing constants."
+      },
+      {
+        q: "What is Unified Liveness?",
+        a: "In most networks, 'serving a user' and 'proving you have data' are separate tasks. In NilStore, they are the same. When a user downloads a file, the receipt they sign acts as a cryptographic proof of storage. This eliminates wasted compute power and aligns incentives: the best way to earn storage rewards is to be a fast, reliable CDN."
+      },
+      {
+        q: "Why 8 MiB Data Units?",
+        a: "We moved from 128 KB to 8 MiB Mega-Data Units (MDUs) to optimize throughput. Larger units mean fewer on-chain transactions per Terabyte, allowing the network to scale to Petabytes without clogging the blockchain."
+      },
+      {
+        q: "Can I delete my data?",
+        a: "Yes. NilStore supports **Crypto-Erasure**. When you upload a file, it is encrypted client-side. If you want to 'delete' it, you simply destroy the encryption key. The data remaining on the network becomes mathematically irretrievable noise, effectively erasing it from existence."
       },
       {
         q: "What are external resources to learn about the technology?",
