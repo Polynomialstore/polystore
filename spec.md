@@ -55,7 +55,25 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 ### 6.2 Auto-Scaling (Dynamic Overlays)
 
-Even without signals, the chain protects performance.
-*   **Trigger:** If `ServedBytes` for a DU exceeds the capacity of its `Base` nodes (e.g., latency degrades to Silver/Gold).
-*   **Action:** The protocol triggers **System Placement** to recruit temporary **Hot Replicas** from the `Edge` pool.
-*   **Result:** Traffic shifts to the Overlay Layer. Base nodes revert to simple Storage Rewards.
+Even with Hints, demand can change.
+*   **Trigger:** If `ServedBytes` for a DU exceeds the capacity of its `Base` nodes.
+*   **Action:** The protocol triggers **System Placement** to recruit temporary **Hot Replicas**.
+*   **Mechanism (Ciphertext Replication):** The Base SP transmits the **Encrypted Ciphertext** directly to the new Overlay SP.
+    *   *User Liveness:* **NOT REQUIRED.** The User does not need to come online to re-encrypt or authorize the transfer.
+    *   *Security:* Overlay nodes hold the data but cannot read it (they lack the `FMK`).
+
+### 6.3 Deletion (Crypto-Erasure)
+*   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto-Erasure**.
+*   **Process:** To "delete" a file, the Data Owner destroys their copy of the `FMK`. Without this key, the stored ciphertext is statistically indistinguishable from random noise.
+*   **Garbage Collection:** When a Deal is cancelled (`MsgCancelDeal`) or expires, SPs act economically: they delete the data to free up space for paying content.
+
+## Appendix A: Core Cryptographic Primitives
+
+### A.3 File Manifest & Crypto Policy (Normative)
+
+NilStore uses a content‑addressed file manifest.
+
+  * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
+  * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
+  * **Encryption:** All data is encrypted client-side before ingress.
+  * **Deletion:** Achieved via key destruction (Crypto-Erasure).

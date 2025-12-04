@@ -79,8 +79,26 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 
 ---
 
-## 6. Roadmap
+## 6. Enterprise Features: Privacy & Deletion
+
+NilStore is built for **Zero-Trust** environments.
+
+### 6.1 Zero-Knowledge Cloud
+*   **Encryption:** Data is encrypted client-side (`AES-256-GCM`) before it ever touches the network.
+*   **Blind Replication:** When the network scales up "Hot Replicas," it copies **Ciphertext**. Providers act as blind mules; they store and serve data they cannot read.
+*   **Zero-Touch Scaling:** Because the encryption is deterministic, the network can replicate data autonomously. The Data Owner does **not** need to be online to re-encrypt data for new nodes.
+
+### 6.2 Proof of Deletion (Crypto-Erasure)
+Regulatory compliance (GDPR/CCPA) requires the ability to delete data.
+*   **The Problem:** You cannot prove a remote server wiped a hard drive.
+*   **The Solution:** We rely on **Crypto-Erasure**.
+*   **Mechanism:** The User holds the **File Master Key (FMK)**. To "delete" the data globally, the User destroys the FMK. The encrypted data remaining on the network becomes mathematically irretrievable garbage.
+
+---
+
+## 7. Roadmap
 
 1.  **Phase 1:** Core Crypto & CLI (Completed).
 2.  **Phase 2:** Local Testnet & Specs (Completed).
 3.  **Phase 3:** Implementation of **Deal Object**, **Provider Capabilities**, and **System Placement**.
+4.  **Phase 4:** **Retrieval Market** & Edge SDK.
