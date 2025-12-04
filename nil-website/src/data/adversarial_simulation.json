@@ -1,0 +1,813 @@
+{
+  "meta": {
+    "timestamp": 1764845576.675385,
+    "parameters": {
+      "pode_work_ms": 1000.0,
+      "network_latency_ms": 300.0,
+      "deadline_ms": 1100.0
+    }
+  },
+  "data": [
+    {
+      "id": 1,
+      "honest": {
+        "read_ms": 12.26,
+        "compute_ms": 1002.95,
+        "total_ms": 1015.2,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 321.31,
+        "compute_ms": 1006.84,
+        "total_ms": 1328.15,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 2,
+      "honest": {
+        "read_ms": 11.96,
+        "compute_ms": 987.2,
+        "total_ms": 999.16,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 270.84,
+        "compute_ms": 1009.56,
+        "total_ms": 1280.4,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 3,
+      "honest": {
+        "read_ms": 11.42,
+        "compute_ms": 995.29,
+        "total_ms": 1006.71,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 263.95,
+        "compute_ms": 1003.53,
+        "total_ms": 1267.48,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 4,
+      "honest": {
+        "read_ms": 13.2,
+        "compute_ms": 1010.79,
+        "total_ms": 1023.99,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 361.88,
+        "compute_ms": 988.4,
+        "total_ms": 1350.28,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 5,
+      "honest": {
+        "read_ms": 8.04,
+        "compute_ms": 1007.5,
+        "total_ms": 1015.53,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 346.74,
+        "compute_ms": 1003.2,
+        "total_ms": 1349.94,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 6,
+      "honest": {
+        "read_ms": 5.82,
+        "compute_ms": 1000.14,
+        "total_ms": 1005.96,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 320.77,
+        "compute_ms": 1016.53,
+        "total_ms": 1337.3,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 7,
+      "honest": {
+        "read_ms": 11.11,
+        "compute_ms": 1005.92,
+        "total_ms": 1017.03,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 301.78,
+        "compute_ms": 1021.28,
+        "total_ms": 1323.06,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 8,
+      "honest": {
+        "read_ms": 8.53,
+        "compute_ms": 990.5,
+        "total_ms": 999.03,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 312.28,
+        "compute_ms": 999.44,
+        "total_ms": 1311.72,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 9,
+      "honest": {
+        "read_ms": 11.09,
+        "compute_ms": 998.29,
+        "total_ms": 1009.38,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 325.1,
+        "compute_ms": 1006.51,
+        "total_ms": 1331.61,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 10,
+      "honest": {
+        "read_ms": 8.41,
+        "compute_ms": 1004.92,
+        "total_ms": 1013.34,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 273.01,
+        "compute_ms": 1007.19,
+        "total_ms": 1280.2,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 11,
+      "honest": {
+        "read_ms": 10.7,
+        "compute_ms": 992.61,
+        "total_ms": 1003.3,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 265.49,
+        "compute_ms": 990.71,
+        "total_ms": 1256.2,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 12,
+      "honest": {
+        "read_ms": 8.41,
+        "compute_ms": 992.51,
+        "total_ms": 1000.92,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 238.64,
+        "compute_ms": 988.04,
+        "total_ms": 1226.68,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 13,
+      "honest": {
+        "read_ms": 9.15,
+        "compute_ms": 1013.11,
+        "total_ms": 1022.26,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 256.77,
+        "compute_ms": 1008.06,
+        "total_ms": 1264.83,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 14,
+      "honest": {
+        "read_ms": 8.69,
+        "compute_ms": 1013.2,
+        "total_ms": 1021.89,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 345.33,
+        "compute_ms": 1012.77,
+        "total_ms": 1358.1,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 15,
+      "honest": {
+        "read_ms": 9.53,
+        "compute_ms": 1006.78,
+        "total_ms": 1016.3,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 395.23,
+        "compute_ms": 1001.71,
+        "total_ms": 1396.93,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 16,
+      "honest": {
+        "read_ms": 7.51,
+        "compute_ms": 998.64,
+        "total_ms": 1006.15,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 373.98,
+        "compute_ms": 1009.08,
+        "total_ms": 1383.06,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 17,
+      "honest": {
+        "read_ms": 10.28,
+        "compute_ms": 1003.5,
+        "total_ms": 1013.78,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 282.29,
+        "compute_ms": 1000.24,
+        "total_ms": 1282.53,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 18,
+      "honest": {
+        "read_ms": 9.49,
+        "compute_ms": 990.87,
+        "total_ms": 1000.36,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 414.14,
+        "compute_ms": 989.33,
+        "total_ms": 1403.47,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 19,
+      "honest": {
+        "read_ms": 5.6,
+        "compute_ms": 1018.4,
+        "total_ms": 1024.0,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 305.63,
+        "compute_ms": 1002.34,
+        "total_ms": 1307.97,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 20,
+      "honest": {
+        "read_ms": 9.03,
+        "compute_ms": 1008.24,
+        "total_ms": 1017.27,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 289.11,
+        "compute_ms": 1014.26,
+        "total_ms": 1303.37,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 21,
+      "honest": {
+        "read_ms": 9.37,
+        "compute_ms": 972.47,
+        "total_ms": 981.84,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 393.57,
+        "compute_ms": 996.56,
+        "total_ms": 1390.13,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 22,
+      "honest": {
+        "read_ms": 11.86,
+        "compute_ms": 1017.03,
+        "total_ms": 1028.9,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 314.21,
+        "compute_ms": 1006.75,
+        "total_ms": 1320.96,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 23,
+      "honest": {
+        "read_ms": 9.76,
+        "compute_ms": 1027.0,
+        "total_ms": 1036.76,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 311.61,
+        "compute_ms": 998.38,
+        "total_ms": 1309.99,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 24,
+      "honest": {
+        "read_ms": 9.8,
+        "compute_ms": 998.87,
+        "total_ms": 1008.67,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 297.97,
+        "compute_ms": 1005.56,
+        "total_ms": 1303.52,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 25,
+      "honest": {
+        "read_ms": 10.17,
+        "compute_ms": 983.6,
+        "total_ms": 993.76,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 292.4,
+        "compute_ms": 1003.04,
+        "total_ms": 1295.45,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 26,
+      "honest": {
+        "read_ms": 8.54,
+        "compute_ms": 983.58,
+        "total_ms": 992.12,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 310.84,
+        "compute_ms": 990.99,
+        "total_ms": 1301.83,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 27,
+      "honest": {
+        "read_ms": 7.08,
+        "compute_ms": 999.55,
+        "total_ms": 1006.63,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 302.96,
+        "compute_ms": 994.39,
+        "total_ms": 1297.35,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 28,
+      "honest": {
+        "read_ms": 8.24,
+        "compute_ms": 997.12,
+        "total_ms": 1005.36,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 243.48,
+        "compute_ms": 999.01,
+        "total_ms": 1242.49,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 29,
+      "honest": {
+        "read_ms": 12.42,
+        "compute_ms": 981.25,
+        "total_ms": 993.66,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 270.88,
+        "compute_ms": 1004.21,
+        "total_ms": 1275.09,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 30,
+      "honest": {
+        "read_ms": 9.08,
+        "compute_ms": 1008.85,
+        "total_ms": 1017.93,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 356.81,
+        "compute_ms": 1001.38,
+        "total_ms": 1358.19,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 31,
+      "honest": {
+        "read_ms": 8.83,
+        "compute_ms": 1002.32,
+        "total_ms": 1011.15,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 275.21,
+        "compute_ms": 1011.4,
+        "total_ms": 1286.61,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 32,
+      "honest": {
+        "read_ms": 10.16,
+        "compute_ms": 989.18,
+        "total_ms": 999.34,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 252.15,
+        "compute_ms": 1013.52,
+        "total_ms": 1265.67,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 33,
+      "honest": {
+        "read_ms": 9.81,
+        "compute_ms": 988.33,
+        "total_ms": 998.14,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 341.13,
+        "compute_ms": 1006.76,
+        "total_ms": 1347.89,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 34,
+      "honest": {
+        "read_ms": 12.93,
+        "compute_ms": 1002.75,
+        "total_ms": 1015.68,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 320.2,
+        "compute_ms": 997.27,
+        "total_ms": 1317.46,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 35,
+      "honest": {
+        "read_ms": 9.67,
+        "compute_ms": 1008.8,
+        "total_ms": 1018.47,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 298.4,
+        "compute_ms": 1003.17,
+        "total_ms": 1301.56,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 36,
+      "honest": {
+        "read_ms": 11.51,
+        "compute_ms": 994.16,
+        "total_ms": 1005.67,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 404.78,
+        "compute_ms": 995.65,
+        "total_ms": 1400.43,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 37,
+      "honest": {
+        "read_ms": 11.49,
+        "compute_ms": 1006.78,
+        "total_ms": 1018.27,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 332.57,
+        "compute_ms": 1023.34,
+        "total_ms": 1355.91,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 38,
+      "honest": {
+        "read_ms": 10.41,
+        "compute_ms": 1012.44,
+        "total_ms": 1022.86,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 306.92,
+        "compute_ms": 996.98,
+        "total_ms": 1303.9,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 39,
+      "honest": {
+        "read_ms": 11.01,
+        "compute_ms": 992.07,
+        "total_ms": 1003.07,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 264.22,
+        "compute_ms": 983.42,
+        "total_ms": 1247.64,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 40,
+      "honest": {
+        "read_ms": 6.74,
+        "compute_ms": 1006.75,
+        "total_ms": 1013.49,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 252.94,
+        "compute_ms": 992.73,
+        "total_ms": 1245.68,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 41,
+      "honest": {
+        "read_ms": 9.7,
+        "compute_ms": 1007.92,
+        "total_ms": 1017.62,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 302.44,
+        "compute_ms": 1001.02,
+        "total_ms": 1303.47,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 42,
+      "honest": {
+        "read_ms": 6.93,
+        "compute_ms": 973.82,
+        "total_ms": 980.76,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 341.37,
+        "compute_ms": 1000.56,
+        "total_ms": 1341.94,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 43,
+      "honest": {
+        "read_ms": 12.76,
+        "compute_ms": 987.0,
+        "total_ms": 999.77,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 278.25,
+        "compute_ms": 985.45,
+        "total_ms": 1263.71,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 44,
+      "honest": {
+        "read_ms": 13.1,
+        "compute_ms": 1006.37,
+        "total_ms": 1019.47,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 385.14,
+        "compute_ms": 999.98,
+        "total_ms": 1385.12,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 45,
+      "honest": {
+        "read_ms": 8.9,
+        "compute_ms": 1018.38,
+        "total_ms": 1027.28,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 227.62,
+        "compute_ms": 999.24,
+        "total_ms": 1226.87,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 46,
+      "honest": {
+        "read_ms": 8.78,
+        "compute_ms": 994.31,
+        "total_ms": 1003.09,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 190.24,
+        "compute_ms": 1000.87,
+        "total_ms": 1191.1,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 47,
+      "honest": {
+        "read_ms": 10.08,
+        "compute_ms": 990.64,
+        "total_ms": 1000.72,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 260.06,
+        "compute_ms": 993.87,
+        "total_ms": 1253.93,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 48,
+      "honest": {
+        "read_ms": 8.55,
+        "compute_ms": 1009.13,
+        "total_ms": 1017.68,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 342.92,
+        "compute_ms": 1014.48,
+        "total_ms": 1357.4,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 49,
+      "honest": {
+        "read_ms": 5.58,
+        "compute_ms": 1010.01,
+        "total_ms": 1015.59,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 255.19,
+        "compute_ms": 978.21,
+        "total_ms": 1233.4,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    },
+    {
+      "id": 50,
+      "honest": {
+        "read_ms": 9.52,
+        "compute_ms": 1022.1,
+        "total_ms": 1031.62,
+        "success": true
+      },
+      "attacker": {
+        "fetch_ms": 306.54,
+        "compute_ms": 990.64,
+        "total_ms": 1297.19,
+        "success": false
+      },
+      "deadline_ms": 1100.0
+    }
+  ],
+  "analysis": "Simulation of 50 challenge-response cycles. The Honest Node (Local Storage) succeeded 50/50 times (100.0%). The Adversarial Node (Lazy Fetching) succeeded 0/50 times (0.0%). The strict 1100.0ms deadline successfully filters out providers attempting to outsource storage, as network latency (300.0ms avg) pushes the total response time beyond the PoDE work threshold."
+}
