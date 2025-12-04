@@ -1,13 +1,13 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v2.2 - Unified Liveness)**
+**(White Paper v2.3 - Dynamic Optimization)**
 
 **Date:** 2025-12-04
 **Authors:** NilStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work: popular data audits itself. For cold data, the system acts as the "User of Last Resort," ensuring liveness via synthetic challenges. Rewards are tiered based on **Block-Height Latency**, incentivizing high-performance hardware over slow cloud archives.
+NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. For cold data, the system acts as the "User of Last Resort." Placement is **System-Defined** but **Hint-Aware**, allowing users to signal "Hot" or "Cold" intent to optimize initial node selection (Archive vs Edge) while maintaining anti-Sybil guarantees.
 
 ## 1\. Introduction
 
@@ -19,8 +19,8 @@ Legacy networks treat "Storage" (proving you have data) and "Retrieval" (sending
 
   * **Unified Liveness:** A user downloading a file *is* the storage audit.
   * **Synthetic Challenges:** The network automatically audits files that users aren't currently reading.
-  * **Performance Market:** Rewards are based on speed (Platinum/Gold/Silver). S3 Glacier earns zero.
-  * **System-Defined Placement:** Deterministic assignment prevents Sybil attacks.
+  * **Performance Market:** Rewards are based on speed (Platinum/Gold/Silver).
+  * **Hint-Aware Placement:** Deterministic assignment respects user intent (Hot/Cold) to pair files with the right class of hardware.
 
 ---
 
@@ -40,10 +40,6 @@ Legacy networks treat "Storage" (proving you have data) and "Retrieval" (sending
 4.  **Consensus:** SP submits proof to chain.
 5.  **Result:** SP earns **Storage Reward** (for proving liveness).
 
-### 2.3 The Outcome
-*   **Efficiency:** For popular files, 100% of the "Work" is useful data transfer. Zero cycles wasted on artificial audits.
-*   **Incentives:** SPs want "Hot" data because it pays double (Storage + Bandwidth).
-
 ---
 
 ## 3. The Performance Market (Tiered Rewards)
@@ -57,25 +53,22 @@ Time is Money.
 | **Silver** | 10 Blocks (~50s) | **50%** |
 | **Fail** | > 20 Blocks | **Slashing** |
 
-*   **S3 Standard:** Likely Gold/Silver.
-*   **S3 Glacier:** Guaranteed Fail.
-*   **Local NVMe:** Guaranteed Platinum.
-
 ---
 
 ## 4. The Lifecycle of a File
 
 ### Step 1: Ingestion & Placement
-1.  **Deal Creation:** User submits `MsgCreateDeal`.
-2.  **System Assignment:** Chain deterministically assigns 12 SPs.
-3.  **Upload:** User uploads data.
+1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot")`.
+2.  **Filtering:** Chain filters for "General" and "Edge" providers.
+3.  **Assignment:** Chain deterministically assigns 12 SPs from the filtered set.
+4.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file. SPs submit user receipts. Chain verifies signature + KZG. SPs get rich.
-*   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges. SPs submit proofs. SPs get base pay.
+*   **Scenario 1 (Viral):** Users swarm the file. SPs submit user receipts.
+*   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges.
 
-### Step 3: Auto-Scaling
-*   If **Path A** activity exceeds a threshold, the Chain triggers **System Placement** to recruit more Platinum SPs to handle the load.
+### Step 3: Auto-Scaling (Dynamic Overlays)
+*   If a "Cold" file suddenly goes viral and its "Archive" nodes struggle (dropping to Silver tier), the protocol triggers **System Placement** to recruit temporary **Hot Replicas** from the Edge pool to absorb the load.
 
 ---
 
@@ -94,4 +87,4 @@ Time is Money.
 
 1.  **Phase 1:** Core Crypto & CLI (Completed).
 2.  **Phase 2:** Local Testnet & Specs (Completed).
-3.  **Phase 3:** Implementation of **Unified Liveness Message** (`MsgProveLiveness`) and **System Placement**.
+3.  **Phase 3:** Implementation of **Deal Object**, **Provider Capabilities**, and **System Placement**.

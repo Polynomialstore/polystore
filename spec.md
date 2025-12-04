@@ -1,4 +1,4 @@
-# NilStore Core v 2.2
+# NilStore Core v 2.3
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -12,72 +12,31 @@ It specifies:
 1.  **Unified Liveness:** Organic user retrieval receipts act as valid storage proofs.
 2.  **Synthetic Challenges:** The system acts as the "User of Last Resort" for cold data.
 3.  **Tiered Rewards:** Storage rewards are tiered by latency, regardless of whether the trigger was Organic or Synthetic.
-4.  **System-Defined Placement:** Deterministic assignment to ensure diversity.
-
----
-
-## § 4 Consensus & Verification (Unified Liveness) — Normative
-
-### 4.0 Objective & Model
-
-The protocol does not distinguish between "Verification" and "Retrieval." Both are cryptographic attestations of data possession delivered within a time window.
-
-**The Rule:** Every Epoch, an SP must prove liveness for every assigned DU.
-*   **Path A (Hot):** Submit a signed **Retrieval Receipt** from a User.
-*   **Path B (Cold):** Submit a response to the **System Challenge** (Synthetic).
-
-### 4.1 The Retrieval Receipt (Dual-Purpose)
-
-To serve as a storage proof, a receipt must bind the delivery to the underlying crypto-commitments.
-
-```protobuf
-message RetrievalReceipt {
-  uint64 deal_id = 1;
-  uint64 epoch_id = 2;
-  bytes kzg_proof = 3;          // 48-byte G1 point (Proof of Chunk)
-  bytes y_value = 4;            // 32-byte chunk data hash
-  bytes signature = 5;          // User's Ed25519 signature
-}
-```
-
-*   **Consensus Rule:** A valid `RetrievalReceipt` is cryptographically equivalent to a `MsgSubmitProof` for the purpose of Storage Rewards.
-
-### 4.2 The System Challenge (User of Last Resort)
-
-If a DU receives zero user traffic in an epoch, the protocol generates a **Synthetic Request**.
-
-*   **Trigger:** SP has no `RetrievalReceipt` for `DealID` in `Epoch_N`.
-*   **Challenge:** `Z = Hash(EpochBeacon + DealID)`.
-*   **Action:** SP computes `KZG_Open(C, Z)` and submits it.
-*   **Reward:** Unlocks **Storage Reward** (Tiered) but **Zero Bandwidth Payment**.
-
-### 4.3 Tiered Rewards (Latency)
-
-Rewards are based on the **Inclusion Latency** of the proof, regardless of source.
-
-**Latency `L = H_proof - H_request`.**
-(For Path A, `H_request` is the block the user initiated the stream. For Path B, it is the Beacon block).
-
-| Tier | Latency (Blocks) | Reward Multiplier | Description |
-| :--- | :--- | :--- | :--- |
-| **Platinum** | `L <= 1` | **100%** | Immediate service (Hot / NVMe). |
-| **Gold** | `L <= 5` | **80%** | Fast service. |
-| **Silver** | `L <= 10` | **50%** | Slow service. |
-| **Fail** | `L > 20` | **0% + Slash** | Offline / Glacier. |
-
-### 4.4 Prover Obligations
-
-1.  **Monitor Traffic:** If user requests data, serve it and cache the `RetrievalReceipt`.
-2.  **Monitor Beacon:** If no user requests data, compute the System Challenge.
-3.  **Submit Best:** Broadcast the proof with the best latency tier to the chain.
+4.  **System-Defined Placement:** Deterministic assignment to ensure diversity, optimized by **Service Hints**.
 
 ---
 
 ## § 6 Product-Aligned Economics
 
-### 6.0 System-Defined Placement (Anti-Sybil)
+### 6.0 System-Defined Placement (Anti-Sybil & Hints)
 
-(Unchanged from v2.1 - Deterministic Slotting).
+To prevent "Self-Dealing," clients cannot choose their SPs. However, to optimize performance, the selection algorithm respects **Service Hints**.
+
+#### 6.0.1 Provider Capabilities
+When registering, SPs declare their intended service mode via `MsgRegisterProvider(Capabilities)`:
+*   **Archive:** High capacity, standard latency. Optimized for long-term persistence.
+*   **General (Default):** Balanced storage and bandwidth.
+*   **Edge:** Low capacity, ultra-low latency. Optimized for caching and burst traffic.
+
+#### 6.0.2 Deal Hints
+`MsgCreateDeal` includes a `ServiceHint`:
+*   **Cold:** Protocol biases selection towards `Archive` and `General` nodes. (Lower Escrow Cost).
+*   **Hot:** Protocol biases selection towards `General` and `Edge` nodes. (Higher Escrow Cost).
+
+#### 6.0.3 Selection Algorithm
+`Idx_i = Hash(DealID || BlockHash || i) % AP_List.Length`
+*   *Filter:* The `AP_List` is pre-filtered to include only nodes matching the `ServiceHint`.
+*   *Fallback:* If insufficient matching nodes exist, the protocol expands the filter to include `General` nodes.
 
 ### 6.1 The Unified Market
 
@@ -85,6 +44,9 @@ Rewards are based on the **Inclusion Latency** of the proof, regardless of sourc
 *   **Bandwidth Income:** Earned ONLY via Path A (User Receipts).
 *   **Incentive Alignment:** "Hot" files are more profitable (Double Income). "Cold" files pay only Storage Income. This naturally aligns SPs to desire popular content and optimize for retrieval speed.
 
-### 6.2 Auto-Scaling
+### 6.2 Auto-Scaling (Dynamic Overlays)
 
-*   If `UniqueUsers(Path A) > Threshold`, the protocol triggers **System Placement** to replicate the DU to more Platinum-tier nodes.
+Even with Hints, demand can change.
+*   **Trigger:** If `ServedBytes` for a DU exceeds the capacity of its `Base` nodes (e.g., latency degrades to Silver/Gold).
+*   **Action:** The protocol triggers **System Placement** to recruit temporary **Hot Replicas** from the `Edge` pool.
+*   **Result:** Traffic shifts to the Overlay Layer. Base nodes revert to simple Storage Rewards.

@@ -1,16 +1,16 @@
-# NilStore Meta-Specification (v2.2)
+# NilStore Meta-Specification (v2.3)
 
-**Target:** Unified Liveness Protocol & Performance Market
+**Target:** Unified Liveness Protocol & Performance Market & Service Hints
 
 ## 1. Overview
 
-This meta-spec defines the architecture for NilStore v2.2, merging the "Storage" and "Retrieval" markets into a single **Unified Liveness** flow.
+This meta-spec defines the architecture for NilStore v2.3, adding **Service Hints** to the placement logic.
 
 ### 1.1 Core Tenets
 
 1.  **Retrieval IS Storage.** A verified user retrieval acts as a storage proof.
 2.  **The System is the User of Last Resort.** If no humans ask for the data, the chain asks for it.
-3.  **Speed is Value.** Faster responses earn more, regardless of who asked.
+3.  **Optimization via Hints.** Users hint at their needs (Hot/Cold); the System optimizes placement without giving up control.
 
 ---
 
@@ -22,21 +22,16 @@ The `Deal` is the central state object.
 *   **CID:** Content Identifier.
 *   **Placement:** System-assigned SP list.
 *   **Escrow:** Combined Storage + Bandwidth balance.
+*   **ServiceHint:** `Hot | Cold`.
 
-## 3. The Unified Proof
+## 3. Placement Algorithm
 
-One message type covers both organic and synthetic activity.
+**Function:** `AssignProviders(DealID, BlockHash, ActiveSet, Hint)`
 
-```protobuf
-message MsgProveLiveness {
-  uint64 deal_id = 1;
-  uint64 epoch_id = 2;
-  oneof proof_type {
-    RetrievalReceipt user_receipt = 3;  // Path A (Hot)
-    KzgProof system_proof = 4;          // Path B (Cold)
-  }
-}
-```
+1.  **Filter:** `CandidateSet = ActiveSet.Filter(Hint)`.
+2.  **Seed:** `S = Hash(DealID + BlockHash)`.
+3.  **Selection:** Deterministic sampling from `CandidateSet`.
+4.  **Diversity:** Enforce distinct ASN/Subnet rules.
 
 ## 4. Economics
 
@@ -53,7 +48,7 @@ Paid from `Deal.Escrow` to SP for **Traffic**.
 
 ## 5. Implementation Gaps
 
-1.  **L1 Chain:** `MsgProveLiveness` handling both types.
-2.  **L1 Chain:** Logic to distinguish Organic vs Synthetic for Bandwidth Payouts.
-3.  **L1 Chain:** Deterministic Placement.
+1.  **L1 Chain:** `MsgCreateDeal` with `ServiceHint`.
+2.  **L1 Chain:** `MsgRegisterProvider` with `Capabilities`.
+3.  **L1 Chain:** Placement Logic & Diversity Keepers.
 4.  **SDK:** Receipt generation must include KZG elements.
