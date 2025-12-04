@@ -41,10 +41,10 @@ export const ShardingDeepDive = () => {
           {/* Section 1: The 1KB Symbol */}
           <section>
             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <File className="w-6 h-6 text-blue-500" /> 1. The 1KB Symbol
+              <File className="w-6 h-6 text-blue-500" /> 1. The 128KB Symbol
             </h2>
             <p className="text-muted-foreground mb-6">
-              NilStore standardizes all data into <strong>1024-byte (1KB)</strong> symbols. This size is chosen to balance overhead with granularity.
+              NilStore standardizes all data into <strong>131,072-byte (128KB)</strong> symbols. This size aligns with Ethereum's EIP-4844 blobs for maximum interoperability and efficiency.
             </p>
             
             <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-3xl border">
@@ -78,7 +78,7 @@ export const ShardingDeepDive = () => {
                       transition={{ delay: i * 0.2, duration: 0.5 }}
                       className="bg-green-100 border border-green-300 rounded flex items-center justify-center text-[10px] font-mono text-green-700 shadow-sm"
                     >
-                      1KB
+                      128KB
                     </motion.div>
                   ))}
                 </div>

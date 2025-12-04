@@ -11,7 +11,10 @@ export const Layout = () => {
           </Link>
           <div className="hidden md:flex gap-8 text-sm font-medium text-muted-foreground">
             <Link to="/technology" className="hover:text-foreground transition-colors">Technology</Link>
-            <a href="#" className="hover:text-foreground transition-colors">Whitepaper</a>
+            <Link to="/testnet" className="hover:text-foreground transition-colors">Testnet</Link>
+            <Link to="/leaderboard" className="hover:text-foreground transition-colors">Leaderboard</Link>
+            <Link to="/s3-adapter" className="hover:text-foreground transition-colors">S3 Adapter</Link>
+            <Link to="/governance" className="hover:text-foreground transition-colors">Governance</Link>
             <a href="#" className="hover:text-foreground transition-colors">GitHub</a>
           </div>
           <button className="bg-foreground text-background px-4 py-2 rounded-full text-sm font-medium hover:opacity-90">
@@ -38,6 +41,7 @@ export const Layout = () => {
             <div>
               <h4 className="font-bold mb-4 text-foreground">Resources</h4>
               <ul className="space-y-2">
+                <li><Link to="/testnet">Testnet Guide</Link></li>
                 <li><a href="#">Whitepaper</a></li>
                 <li><a href="#">GitHub</a></li>
                 <li><a href="#">CLI Tool</a></li>

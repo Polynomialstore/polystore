@@ -5,8 +5,8 @@ import { Link } from "react-router-dom";
 
 export const ArgonDeepDive = () => {
   const [fileSizeMB, setFileSizeMB] = useState(5);
-  const sealTimePerMB = 191; 
-  const sealTimeSeconds = (fileSizeMB * 1024 / 128) * (sealTimePerMB / 1000);
+  const sealTimePerMB = 200; // ~200ms per MB
+  const sealTimeSeconds = fileSizeMB * (sealTimePerMB / 1000);
 
   return (
     <div className="max-w-4xl">
