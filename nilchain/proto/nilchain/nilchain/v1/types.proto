@@ -38,12 +38,16 @@ message VirtualStripe {
   repeated string overlay_providers = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // List of providers holding this overlay replica
 }
 
-// KzgProof represents a KZG proof for a single 128 KiB blob.
+// KzgProof represents a KZG proof for a single 128 KiB blob within an 8 MiB MDU,
+// along with the Merkle proof connecting it to the MDU's root.
 message KzgProof {
-  bytes kzg_commitment = 1; // 48-byte G1 point (for the KZG blob)
-  bytes z_value = 2;        // 32-byte scalar (challenge point)
-  bytes y_value = 3;        // 32-byte scalar (evaluation at z)
-  bytes kzg_proof = 4;      // 48-byte G1 point (KZG opening proof)
+  bytes mdu_merkle_root = 1;                   // 32-byte Merkle root of the MDU's 64 KZG commitments
+  bytes challenged_kzg_commitment = 2;         // 48-byte G1 point (KZG commitment of the challenged 128 KiB blob)
+  repeated bytes challenged_kzg_commitment_merkle_path = 3; // Merkle path (list of 32-byte hashes)
+  uint32 challenged_kzg_commitment_index = 4;  // Index of the challenged 128 KiB blob within the MDU (0-63)
+  bytes z_value = 5;                           // 32-byte scalar (challenge point)
+  bytes y_value = 6;                           // 32-byte scalar (evaluation at z)
+  bytes kzg_opening_proof = 7;                 // 48-byte G1 point (KZG opening proof for the challenged blob)
 }
 
 // RetrievalReceipt represents a user's signed confirmation of data retrieval.

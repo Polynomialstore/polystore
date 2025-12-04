@@ -5,6 +5,12 @@ pub use c_kzg; // Re-export the crate or types
 use std::path::Path;
 use thiserror::Error;
 
+// Define MDU (Mega-Data Unit) and Shard sizes
+pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
+pub const SHARD_SIZE: usize = 1 * 1024 * 1024; // 1 MiB
+pub const BLOB_SIZE: usize = c_kzg::BYTES_PER_BLOB; // 128 KiB
+pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE; // 64 blobs per MDU
+
 #[derive(Error, Debug)]
 pub enum KzgError {
     #[error("IO error: {0}")]
@@ -13,6 +19,10 @@ pub enum KzgError {
     Internal(c_kzg::Error),
     #[error("Invalid data length")]
     InvalidDataLength,
+    #[error("Invalid MDU size: expected {MDU_SIZE} bytes")]
+    InvalidMduSize,
+    #[error("MDU commitment calculation failed")]
+    MduCommitmentFailed,
 }
 
 impl From<c_kzg::Error> for KzgError {
@@ -33,7 +43,7 @@ impl KzgContext {
     }
 
     pub fn blob_to_commitment(&self, blob_bytes: &[u8]) -> Result<KzgCommitment, KzgError> {
-        if blob_bytes.len() != c_kzg::BYTES_PER_BLOB {
+        if blob_bytes.len() != BLOB_SIZE {
             return Err(KzgError::InvalidDataLength);
         }
         
@@ -42,12 +52,28 @@ impl KzgContext {
             .map_err(KzgError::Internal)
     }
 
+    /// Converts an 8 MiB MDU into a vector of 64 KZG commitments for its constituent 128 KiB blobs.
+    pub fn mdu_to_kzg_commitments(&self, mdu_bytes: &[u8]) -> Result<Vec<KzgCommitment>, KzgError> {
+        if mdu_bytes.len() != MDU_SIZE {
+            return Err(KzgError::InvalidMduSize);
+        }
+
+        let mut commitments = Vec::with_capacity(BLOBS_PER_MDU);
+        for i in 0..BLOBS_PER_MDU {
+            let start = i * BLOB_SIZE;
+            let end = start + BLOB_SIZE;
+            let blob_slice = &mdu_bytes[start..end];
+            commitments.push(self.blob_to_commitment(blob_slice)?);
+        }
+        Ok(commitments)
+    }
+
     pub fn compute_proof(
         &self,
         blob_bytes: &[u8],
         input_point_bytes: &[u8],
     ) -> Result<(KzgProof, Bytes32), KzgError> {
-        if blob_bytes.len() != c_kzg::BYTES_PER_BLOB {
+        if blob_bytes.len() != BLOB_SIZE {
              return Err(KzgError::InvalidDataLength);
         }
         if input_point_bytes.len() != 32 {
@@ -110,12 +136,22 @@ mod tests {
     }
 
     #[test]
+    fn test_mdu_to_kzg_commitments() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+
+        let mdu_data = vec![0u8; MDU_SIZE];
+        let commitments = ctx.mdu_to_kzg_commitments(&mdu_data).unwrap();
+        assert_eq!(commitments.len(), BLOBS_PER_MDU);
+    }
+
+    #[test]
     fn test_commit_prove_verify() {
         let path = get_trusted_setup_path();
         let ctx = KzgContext::load_from_file(&path).unwrap();
 
         // Create a dummy blob (all zeros except first byte)
-        let mut blob_bytes = [0u8; c_kzg::BYTES_PER_BLOB];
+        let mut blob_bytes = [0u8; BLOB_SIZE];
         blob_bytes[0] = 1; // Just some data
 
         // Commit
