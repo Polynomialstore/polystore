@@ -26,6 +26,11 @@ type Keeper struct {
 	Params collections.Item[types.Params]
 	ProofCount collections.Sequence
 	Proofs     collections.Map[uint64, types.Proof]
+    
+	// New collections for Deals and Providers
+	DealCount  collections.Sequence
+	Deals      collections.Map[uint64, types.Deal]
+	Providers  collections.Map[string, types.Provider] // Key by address string
 }
 
 func NewKeeper(
@@ -52,6 +57,10 @@ func NewKeeper(
 		Params:       collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProofCount:   collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
 		Proofs:       collections.NewMap(sb, types.ProofsKey, "proofs", collections.Uint64Key, codec.CollValue[types.Proof](cdc)),
+
+		DealCount:    collections.NewSequence(sb, types.DealCountKey, "deal_count"),
+		Deals:        collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
+		Providers:    collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
 	}
 
 	schema, err := sb.Build()
