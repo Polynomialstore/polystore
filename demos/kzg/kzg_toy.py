@@ -209,7 +209,7 @@ def commit_file(path: str, srs: SRS) -> Pledge:
     with open(path, "rb") as f:
         data = f.read()
     # Split into 1 KiB units
-    CHUNK = 1024
+    CHUNK = 131072
     blocks = [data[i:i+CHUNK] for i in range(0, len(data), CHUNK)]
     if len(blocks) == 0:
         blocks = [b""]  # handle empty file as one empty block
@@ -239,7 +239,7 @@ def prove_index(pledge: Pledge, i: int) -> Proof:
     # π = commit(Q)
     pi = commit_from_coeffs(Q, pledge.srs)
     # Return the raw block for possession check
-    CHUNK = 1024
+    CHUNK = 131072
     with open(pledge.filename, "rb") as f:
         f.seek(i * CHUNK)
         block = f.read(CHUNK)
@@ -308,7 +308,7 @@ def print_proof(proof: Proof, ok: bool):
 # ---------- Demo runner ----------
 def demo(filename: str, seeds=(123, 456, 789), max_degree_hint: int = None, srs_seed: int = 1337):
     # Compute max degree; if not provided, use #blocks - 1 after reading file once.
-    CHUNK = 1024
+    CHUNK = 131072
     size = os.path.getsize(filename)
     N = (size + CHUNK - 1) // CHUNK
     if N == 0: N = 1

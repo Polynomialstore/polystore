@@ -38,7 +38,7 @@ else:
 FR_MODULUS = int("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
 FE_BYTES = 32
 FE_PER_BLOB = 4096
-SRC_SYMBOL = 1024  # 1 KiB per PoUD symbol (normative size in Nilcoin)  # demo
+SRC_SYMBOL = 131072  # 128 KiB per PoUD symbol (normative size in Nilcoin)  # demo
 GENERATOR = 5      # multiplicative generator used to derive ω (standard choice)
 
 def fr(x: int) -> int:

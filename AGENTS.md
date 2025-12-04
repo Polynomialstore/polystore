@@ -41,29 +41,30 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
 **Goal:** Stress test the system with adversarial behavior. This is your biggest marketing event before launch.
 
 *   **Build (Tech):**
-    *   **The L2 Bridge:** [in_progress] Connect the L1 to an Ethereum testnet (e.g., Sepolia).
-    *   **Incentives:** Automated tracking of uptime and proofs.
-    *   **Block Explorer:** A visual map of the "Nil-Lattice" showing where data is living.
+    *   **The L2 Bridge:** [x] Contract implemented & verified. Relayer pending.
+    *   **Incentives:** [x] L1 Proof Verification (Rust FFI) & Rewards (Minting) active.
+    *   **Block Explorer:** [x] "Lattice" Visualizer & Interactive Playground live.
+    *   **System Upgrade:** [x] 128 KiB Data Units (EIP-4844 aligned).
 *   **Validate:**
-    *   **Game Theory:** Offer bounties for breaking the consensus. Can someone fake a proof?
-    *   **Economics:** Does the "Burn" mechanism actually function when usage spikes?
+    *   **Game Theory:** [x] Slashing implemented for invalid proofs (Anti-spam/Anti-fraud).
+    *   **Economics:** [x] Token Minting (Rewards) and Burning (Slashing) active.
 *   **Market (Hype):**
-    *   **"Race to 1 Petabyte":** A competition where node operators race to store dummy data.
-    *   **Leaderboard:** Publicly rank nodes by performance.
-    *   **Design Partners:** Onboard *one* real data client (e.g., an AI startup archiving training data) to store real files.
-*   **Refine:**
-    *   Fix the inevitable consensus bugs and memory leaks that appear at scale.
+    *   **"Race to 1 Petabyte":** [x] Leaderboard UI implemented.
+    *   **Design Partners:** Onboard *one* real data client.
 
 ## Phase 4: Mainnet Beta (Launch)
 **Goal:** Real money, real data, "Training Wheels" on.
 
 *   **Build:**
+    *   **S3 Adapter:** [x] `nil_s3` Go service implemented (PUT/GET -> Shard -> Chain).
+    *   **Governance:** [x] Emergency Council setup (`x/group`) & Mainnet Params configured.
     *   Production-grade Audits (Security).
-    *   Governance Modules (DAO).
 *   **Validate:**
     *   Slow rollout of the "Lattice" (limit the number of nodes initially).
 *   **Market:**
     *   Announce the "Genesis Block."
+    *   **Web2 Wrapper:** [ ] Documentation for S3 Adapter.
+    *   **Governance:** [ ] Documentation for DAO & Council.
     *   Focus on the "Web2 Wrapper" (S3 compatibility) to attract actual users, not just crypto speculators.
 
 ---

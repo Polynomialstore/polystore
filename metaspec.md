@@ -110,7 +110,7 @@ L1      →  L2:  ZK-Bridge(recursive SNARK) → state update & vesting
 
 ### 3.2 Erasure Coding and Placement
 
-**Normative (Redundancy & Sharding).** Each DU is encoded with **systematic Reed–Solomon over GF(2^8)** using **symbol_size = 1 KiB**. A DU is striped into **k** equal data stripes; **n−k** parity stripes are computed; stripes are concatenated per‑shard to form **n shards** of near‑equal size. The default profile is **RS(n=12, k=9)** (≈ **1.33×** overhead), tolerating **f = n−k = 3** arbitrary shard losses **without** data loss.
+**Normative (Redundancy & Sharding).** Each DU is encoded with **systematic Reed–Solomon over GF(2^8)** using **symbol_size = 128 KiB**. A DU is striped into **k** equal data stripes; **n−k** parity stripes are computed; stripes are concatenated per‑shard to form **n shards** of near‑equal size. The default profile is **RS(n=12, k=9)** (≈ **1.33×** overhead), tolerating **f = n−k = 3** arbitrary shard losses **without** data loss.
 **Normative (Placement constraints).** At most **one shard per SP per ring‑cell**; shards of the same DU MUST be placed across distinct ring‑cells with a minimum topological separation (governance‑tunable).
 **Normative (Repair triggers).** A **RepairNeeded** event is raised when `healthy_shards ≤ k+1`. Repairs MUST produce openings **against the original DU commitment**; re‑committing a DU is invalid.
 **Deal metadata MUST include:**
@@ -313,7 +313,7 @@ Core supports **one** normative proof path evaluated over the deal’s canonical
 
 For each epoch and each assigned DU sliver interval:
 
-1) Content correctness: The SP MUST provide one or more **KZG multi‑open** proofs at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation. When multiple indices are scheduled for the same DU in the epoch, SPs SHOULD batch using multi‑open to minimize calldata.
+1) Content correctness: The SP MUST provide one or more **KZG multi‑open** proofs at verifier‑chosen 128 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation. When multiple indices are scheduled for the same DU in the epoch, SPs SHOULD batch using multi‑open to minimize calldata.
 
 2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute
 ```
@@ -363,7 +363,7 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
 
 For each SP and each assigned DU interval per epoch the DA chain enforces:
 
-1. **PoUD (KZG‑PDP on canonical bytes):** The SP submits one or more **KZG openings** at verifier‑chosen **1 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
+1. **PoUD (KZG‑PDP on canonical bytes):** The SP submits one or more **KZG openings** at verifier‑chosen **128 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
 2. **PoDE (timed derivation):** For each challenged **W = 8 MiB** window, compute a salted local transform `Derive(canon_window, beacon_salt, row_id)` **within the proof window** and submit `H(deriv)` with the minimal canonical bytes to recompute. **`R ≥ 16`** sub‑challenges/window and **Σ verified bytes ≥ B_min = 128 MiB** per epoch (defaults; DAO‑tunable).
    **Normative (PoDE Linkage):** The prover MUST include a KZG opening proof `π_kzg` demonstrating that the `canon_window` input bytes correspond exactly to the data committed in `C_root` (See Core Spec §4.3).
 3. **Deadlines:** Proofs must arrive within `Δ_submit` after epoch end. Timing may be attested by RTT‑oracle transcripts for remote verification.
@@ -410,7 +410,7 @@ NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing 
 **Normative (Escalation Guard):** Escalation MUST be triggered both system-wide and per-SP. Per-SP escalation MUST immediately increase the SP's individual sampling rate $p_{sp}$ if their failure rate significantly exceeds $\epsilon$. System-wide escalation MUST increase $p$ stepwise by at most ×2 per epoch. However, if the anomaly rate exceeds $5 \times \epsilon_{sys}$, $p$ MUST immediately escalate to the maximum allowed by the **Verification Load Cap** (§ 6.1). Escalation auto‑reverts after 2 clean epochs. All changes MUST be announced in‑protocol.
 
 Additional dial (content‑audited receipts):
-- `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 1 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. In plaintext mode, `p_kzg` MUST be ≥ 0.05 unless disabled by DAO vote under the Verification Load Cap. Honeypot DUs MUST use `p_kzg = 1.0`. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
+- `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 128 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. In plaintext mode, `p_kzg` MUST be ≥ 0.05 unless disabled by DAO vote under the Verification Load Cap. Honeypot DUs MUST use `p_kzg = 1.0`. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
 
 
 #### 6.3.5 Security & Liveness
