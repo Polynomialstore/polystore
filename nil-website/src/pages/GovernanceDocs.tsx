@@ -1,4 +1,4 @@
-import { Shield, Users, Lock, AlertTriangle } from "lucide-react";
+import { Shield, Users } from "lucide-react";
 
 export const GovernanceDocs = () => {
   return (

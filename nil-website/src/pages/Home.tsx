@@ -27,34 +27,35 @@ export const Home = () => {
              />
           </motion.div>
 
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-5xl md:text-6xl font-extrabold tracking-widest uppercase mb-6"
-            style={{
-              fontFamily: "'Montserrat', sans-serif",
-              backgroundImage: "linear-gradient(90deg, #00E5FF 0%, #E056FD 50%, #7B2CBF 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              filter: "drop-shadow(0 0 8px rgba(0, 229, 255, 0.3))"
-            }}
-          >
-            NilStore
-          </motion.h2>
+                              <motion.h1 // This is the "NilStore" text
 
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-6xl md:text-8xl font-bold mb-6 tracking-tight text-foreground"
-          >
-            Storage, <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
-              Unsealed.
+                                initial={{ opacity: 0, y: 20 }}
+
+                                animate={{ opacity: 1, y: 0 }}
+
+                                transition={{ duration: 0.8, delay: 0.2 }}
+
+                                className="group text-6xl md:text-8xl font-extrabold tracking-tight mb-6"
+
+                              >
+
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 drop-shadow-lg">
+              NilStore
             </span>
           </motion.h1>
-          
+
+                    
+                                          <motion.h2 // This is "Storage, Unsealed."
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.8 }}
+                      className="text-5xl md:text-6xl font-bold mb-6 tracking-tight text-foreground"
+                    >
+                      Storage, <br/>
+                      <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+                        Unsealed.
+                      </span>
+                    </motion.h2>          
           <motion.p 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

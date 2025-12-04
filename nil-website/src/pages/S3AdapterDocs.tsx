@@ -1,4 +1,4 @@
-import { Terminal, Shield, Globe, Database, Lock } from "lucide-react";
+import { Terminal, Globe, Database } from "lucide-react";
 
 export const S3AdapterDocs = () => {
   return (

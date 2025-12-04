@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
 import simulationData from '../data/adversarial_simulation.json';
-import { ShieldAlert, CheckCircle, XCircle, Clock, Server, Wifi, Database, Lock } from 'lucide-react';
+import { ShieldAlert, CheckCircle, XCircle, Server, Wifi, Database, Lock, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const AdversarialSimulation = () => {

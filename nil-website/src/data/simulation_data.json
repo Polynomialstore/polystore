@@ -1,169 +1,409 @@
 {
   "meta": {
-    "timestamp": 1764843912.556988,
-    "epochs": 20
+    "timestamp": 1764844629.433169,
+    "epochs": 50
   },
   "data": [
     {
       "epoch": 1,
-      "storage_gb": 0.512,
-      "supply": 1000019.0,
+      "storage_gb": 11.28,
+      "supply": 1000135.0,
       "slashed": 0.0,
-      "rewards_epoch": 19.0,
+      "rewards_epoch": 135.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 2,
-      "storage_gb": 1.152,
-      "supply": 1000043.0,
-      "slashed": 0.0,
-      "rewards_epoch": 24.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 13.584,
+      "supply": 1000252.0,
+      "slashed": 45.0,
+      "rewards_epoch": 162.0,
+      "slashed_epoch": 45.0
     },
     {
       "epoch": 3,
-      "storage_gb": 1.28,
-      "supply": 1000049.0,
-      "slashed": 0.0,
-      "rewards_epoch": 6.0,
+      "storage_gb": 15.504,
+      "supply": 1000438.0,
+      "slashed": 45.0,
+      "rewards_epoch": 186.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 4,
-      "storage_gb": 1.408,
-      "supply": 1000017.0,
-      "slashed": 38.0,
-      "rewards_epoch": 6.0,
-      "slashed_epoch": 38.0
+      "storage_gb": 17.04,
+      "supply": 1000592.0,
+      "slashed": 95.0,
+      "rewards_epoch": 204.0,
+      "slashed_epoch": 50.0
     },
     {
       "epoch": 5,
-      "storage_gb": 2.048,
-      "supply": 1000043.0,
-      "slashed": 38.0,
-      "rewards_epoch": 26.0,
+      "storage_gb": 18.192,
+      "supply": 1000809.5,
+      "slashed": 95.0,
+      "rewards_epoch": 217.5,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 6,
-      "storage_gb": 2.432,
-      "supply": 1000060.0,
-      "slashed": 38.0,
-      "rewards_epoch": 17.0,
+      "storage_gb": 21.008,
+      "supply": 1001061.5,
+      "slashed": 95.0,
+      "rewards_epoch": 252.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 7,
-      "storage_gb": 2.944,
-      "supply": 1000083.0,
-      "slashed": 38.0,
-      "rewards_epoch": 23.0,
+      "storage_gb": 22.288,
+      "supply": 1001328.5,
+      "slashed": 95.0,
+      "rewards_epoch": 267.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 8,
-      "storage_gb": 2.944,
-      "supply": 1000088.0,
-      "slashed": 38.0,
-      "rewards_epoch": 5.0,
+      "storage_gb": 23.184,
+      "supply": 1001606.0,
+      "slashed": 95.0,
+      "rewards_epoch": 277.5,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 9,
-      "storage_gb": 3.456,
-      "supply": 1000112.0,
-      "slashed": 38.0,
-      "rewards_epoch": 24.0,
+      "storage_gb": 25.744,
+      "supply": 1001913.5,
+      "slashed": 95.0,
+      "rewards_epoch": 307.5,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 10,
-      "storage_gb": 3.712,
-      "supply": 1000128.0,
-      "slashed": 38.0,
-      "rewards_epoch": 16.0,
+      "storage_gb": 28.432,
+      "supply": 1002254.0,
+      "slashed": 95.0,
+      "rewards_epoch": 340.5,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 11,
-      "storage_gb": 4.096,
-      "supply": 1000105.0,
-      "slashed": 82.0,
-      "rewards_epoch": 21.0,
-      "slashed_epoch": 44.0
+      "storage_gb": 30.736,
+      "supply": 1002621.5,
+      "slashed": 95.0,
+      "rewards_epoch": 367.5,
+      "slashed_epoch": 0.0
     },
     {
       "epoch": 12,
-      "storage_gb": 4.096,
-      "supply": 1000113.0,
-      "slashed": 82.0,
-      "rewards_epoch": 8.0,
+      "storage_gb": 33.296,
+      "supply": 1003020.5,
+      "slashed": 95.0,
+      "rewards_epoch": 399.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 13,
-      "storage_gb": 4.48,
-      "supply": 1000101.0,
-      "slashed": 115.0,
-      "rewards_epoch": 21.0,
-      "slashed_epoch": 33.0
+      "storage_gb": 34.192,
+      "supply": 1003430.0,
+      "slashed": 95.0,
+      "rewards_epoch": 409.5,
+      "slashed_epoch": 0.0
     },
     {
       "epoch": 14,
-      "storage_gb": 4.736,
-      "supply": 1000119.0,
-      "slashed": 115.0,
-      "rewards_epoch": 18.0,
+      "storage_gb": 37.264,
+      "supply": 1003877.0,
+      "slashed": 95.0,
+      "rewards_epoch": 447.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 15,
-      "storage_gb": 4.864,
-      "supply": 1000132.0,
-      "slashed": 115.0,
-      "rewards_epoch": 13.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 38.416,
+      "supply": 1003782.5,
+      "slashed": 650.0,
+      "rewards_epoch": 460.5,
+      "slashed_epoch": 555.0
     },
     {
       "epoch": 16,
-      "storage_gb": 4.992,
-      "supply": 1000145.0,
-      "slashed": 115.0,
-      "rewards_epoch": 13.0,
+      "storage_gb": 40.08,
+      "supply": 1004262.5,
+      "slashed": 650.0,
+      "rewards_epoch": 480.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 17,
-      "storage_gb": 5.12,
-      "supply": 1000159.0,
-      "slashed": 115.0,
-      "rewards_epoch": 14.0,
+      "storage_gb": 43.664,
+      "supply": 1004786.0,
+      "slashed": 650.0,
+      "rewards_epoch": 523.5,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 18,
-      "storage_gb": 5.632,
-      "supply": 1000188.0,
-      "slashed": 115.0,
-      "rewards_epoch": 29.0,
+      "storage_gb": 48.016,
+      "supply": 1005362.0,
+      "slashed": 650.0,
+      "rewards_epoch": 576.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 19,
-      "storage_gb": 6.272,
-      "supply": 1000222.0,
-      "slashed": 115.0,
-      "rewards_epoch": 34.0,
+      "storage_gb": 49.04,
+      "supply": 1005950.0,
+      "slashed": 650.0,
+      "rewards_epoch": 588.0,
       "slashed_epoch": 0.0
     },
     {
       "epoch": 20,
-      "storage_gb": 6.912,
-      "supply": 1000257.0,
-      "slashed": 115.0,
-      "rewards_epoch": 35.0,
+      "storage_gb": 52.624,
+      "supply": 1006580.0,
+      "slashed": 650.0,
+      "rewards_epoch": 630.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 21,
+      "storage_gb": 55.184,
+      "supply": 1007241.5,
+      "slashed": 650.0,
+      "rewards_epoch": 661.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 22,
+      "storage_gb": 59.408,
+      "supply": 1007954.0,
+      "slashed": 650.0,
+      "rewards_epoch": 712.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 23,
+      "storage_gb": 64.016,
+      "supply": 1008722.0,
+      "slashed": 650.0,
+      "rewards_epoch": 768.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 24,
+      "storage_gb": 65.424,
+      "supply": 1009506.5,
+      "slashed": 650.0,
+      "rewards_epoch": 784.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 25,
+      "storage_gb": 70.032,
+      "supply": 1010346.5,
+      "slashed": 650.0,
+      "rewards_epoch": 840.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 26,
+      "storage_gb": 75.152,
+      "supply": 1011248.0,
+      "slashed": 650.0,
+      "rewards_epoch": 901.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 27,
+      "storage_gb": 78.224,
+      "supply": 1012185.5,
+      "slashed": 650.0,
+      "rewards_epoch": 937.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 28,
+      "storage_gb": 82.448,
+      "supply": 1013174.0,
+      "slashed": 650.0,
+      "rewards_epoch": 988.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 29,
+      "storage_gb": 86.032,
+      "supply": 1014206.0,
+      "slashed": 650.0,
+      "rewards_epoch": 1032.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 30,
+      "storage_gb": 87.952,
+      "supply": 1015260.5,
+      "slashed": 650.0,
+      "rewards_epoch": 1054.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 31,
+      "storage_gb": 90.128,
+      "supply": 1016297.0,
+      "slashed": 695.0,
+      "rewards_epoch": 1081.5,
+      "slashed_epoch": 45.0
+    },
+    {
+      "epoch": 32,
+      "storage_gb": 94.096,
+      "supply": 1017425.0,
+      "slashed": 695.0,
+      "rewards_epoch": 1128.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 33,
+      "storage_gb": 97.936,
+      "supply": 1018599.5,
+      "slashed": 695.0,
+      "rewards_epoch": 1174.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 34,
+      "storage_gb": 99.344,
+      "supply": 1019790.5,
+      "slashed": 695.0,
+      "rewards_epoch": 1191.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 35,
+      "storage_gb": 102.416,
+      "supply": 1020202.0,
+      "slashed": 1512.0,
+      "rewards_epoch": 1228.5,
+      "slashed_epoch": 817.0
+    },
+    {
+      "epoch": 36,
+      "storage_gb": 108.304,
+      "supply": 1021501.0,
+      "slashed": 1512.0,
+      "rewards_epoch": 1299.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 37,
+      "storage_gb": 110.736,
+      "supply": 1022828.5,
+      "slashed": 1512.0,
+      "rewards_epoch": 1327.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 38,
+      "storage_gb": 113.936,
+      "supply": 1024195.0,
+      "slashed": 1512.0,
+      "rewards_epoch": 1366.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 39,
+      "storage_gb": 117.52,
+      "supply": 1025605.0,
+      "slashed": 1512.0,
+      "rewards_epoch": 1410.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 40,
+      "storage_gb": 121.744,
+      "supply": 1027064.5,
+      "slashed": 1512.0,
+      "rewards_epoch": 1459.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 41,
+      "storage_gb": 126.736,
+      "supply": 1028584.0,
+      "slashed": 1512.0,
+      "rewards_epoch": 1519.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 42,
+      "storage_gb": 129.04,
+      "supply": 1030120.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1548.0,
+      "slashed_epoch": 12.0
+    },
+    {
+      "epoch": 43,
+      "storage_gb": 134.544,
+      "supply": 1031734.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1614.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 44,
+      "storage_gb": 136.592,
+      "supply": 1033372.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1638.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 45,
+      "storage_gb": 141.968,
+      "supply": 1035074.5,
+      "slashed": 1524.0,
+      "rewards_epoch": 1702.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 46,
+      "storage_gb": 144.784,
+      "supply": 1036811.5,
+      "slashed": 1524.0,
+      "rewards_epoch": 1737.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 47,
+      "storage_gb": 147.728,
+      "supply": 1038583.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1771.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 48,
+      "storage_gb": 154.0,
+      "supply": 1040431.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1848.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 49,
+      "storage_gb": 160.4,
+      "supply": 1042355.5,
+      "slashed": 1524.0,
+      "rewards_epoch": 1924.5,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 50,
+      "storage_gb": 163.472,
+      "supply": 1044316.0,
+      "slashed": 1524.0,
+      "rewards_epoch": 1960.5,
       "slashed_epoch": 0.0
     }
   ],
-  "analysis": "Simulation over 20 epochs demonstrates a healthy network bootstrap phase. Storage capacity grew by 0.32 GB/epoch on average. The token economy expanded to 1000257 NIL, driven by proof rewards, while the slashing mechanism successfully removed 115 NIL from circulation, proving the efficacy of the 'Burn' incentive for security enforcement."
+  "analysis": "This agent-based simulation models the network's economic trajectory over 50 epochs. We observe a steady storage accumulation rate of ~3.04 GB/epoch, driving the Token Supply from 1.0M to 1.04M NIL. Notably, epochs #15 and #35 simulated 'Mass Slash' events where correlated failures triggered the quadratic burning mechanism, removing significant liquidity (1524 NIL total) and proving the protocol's deflationary pressure under stress."
 }

@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import simulationData from '../data/simulation_data.json';
 import { TrendingUp, AlertTriangle, HardDrive, Coins, Info, Activity } from 'lucide-react';
 import { motion } from 'framer-motion';

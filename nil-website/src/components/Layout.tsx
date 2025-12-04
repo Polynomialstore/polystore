@@ -6,12 +6,23 @@ export const Layout = () => {
     <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300">
       <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold flex items-center gap-2 text-foreground">
+          <Link to="/" className="text-xl font-bold flex items-center gap-2"> {/* Removed text-foreground */}
             <div className="relative w-8 h-8">
                 <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden" />
                 <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block" />
             </div>
-            NilStore
+            <span 
+              className="font-extrabold tracking-tight text-xl" // Matched tracking-tight and increased size
+              style={{
+                fontFamily: "'Montserrat', sans-serif",
+                backgroundImage: "linear-gradient(90deg, #00E5FF 0%, #E056FD 50%, #7B2CBF 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                filter: "drop-shadow(0 0 2px rgba(0, 229, 255, 0.2))" // Subtle shadow
+              }}
+            >
+              NilStore
+            </span>
           </Link>
           <div className="hidden md:flex gap-8 text-sm font-medium text-muted-foreground items-center">
             <Link to="/technology" className="hover:text-foreground transition-colors">Technology</Link>

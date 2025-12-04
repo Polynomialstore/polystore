@@ -1,0 +1,14 @@
+Create a futuristic, abstract logo for 'NilStore'. The central element should be a Tesseract (4D Hypercube)
+  constructed from translucent, glowing edges.
+  >
+  > Crucial Detail: Weaving seamlessly through the open spaces of the tesseract is a Mobius Strip lattice—a single,
+  continuous, twisting ribbon of hexagonal mesh. This ribbon should loop inside and outside the tesseract's frame,
+  symbolizing infinite, self-healing data flow within a higher-dimensional structure.
+  >
+  > Aesthetic:
+  >    Tesseract:* Sharp, precise geometric lines in bright Cyan (#00FFFF).
+  >    Mobius Mesh:* Fluid, organic curvature in deep Violet (#8A2BE2).
+  >    Background:* Deep void black or dark slate gray.
+  >    Style:* Cyber-topological, mathematical visualization, clean vector lines, high-tech.
+  >
+  > The overall image should convey 'Structured Infinity'.

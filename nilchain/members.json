@@ -1,0 +1,14 @@
+{
+    "members": [
+        {
+            "address": "nil1htunpgup0zsga3hn86we75n4gusyf0pg0et4rw",
+            "weight": "1",
+            "metadata": "Alice (Core Team)"
+        },
+        {
+            "address": "nil1s8l4rvvp4fx65m6e5ua49ml2qw4y35lxn5hvxs",
+            "weight": "1",
+            "metadata": "Bob (Auditor)"
+        }
+    ]
+}
