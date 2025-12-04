@@ -1,26 +1,26 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v2.3 - Dynamic Optimization)**
+**(White Paper v2.4 - Elastic Performance)**
 
 **Date:** 2025-12-04
 **Authors:** NilStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. For cold data, the system acts as the "User of Last Resort." Placement is **System-Defined** but **Hint-Aware**, allowing users to signal "Hot" or "Cold" intent to optimize initial node selection (Archive vs Edge) while maintaining anti-Sybil guarantees.
+NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. Crucially, the network supports **User-Funded Elasticity**: Providers can signal saturation to trigger automatic, budget-capped replication surges, ensuring viral content remains available without punishing successful nodes.
 
 ## 1\. Introduction
 
 ### 1.1 The "Double-Pay" Problem
 
-Legacy networks treat "Storage" (proving you have data) and "Retrieval" (sending data) as separate jobs. This is inefficient. NilStore unifies them.
+Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is inefficient. NilStore unifies them.
 
 ### 1.2 Key Innovations
 
   * **Unified Liveness:** A user downloading a file *is* the storage audit.
-  * **Synthetic Challenges:** The network automatically audits files that users aren't currently reading.
+  * **Synthetic Challenges:** The network audits cold data automatically.
   * **Performance Market:** Rewards are based on speed (Platinum/Gold/Silver).
-  * **Hint-Aware Placement:** Deterministic assignment respects user intent (Hot/Cold) to pair files with the right class of hardware.
+  * **Elasticity:** The network automatically scales replication to meet demand, funded by the user's prepaid escrow.
 
 ---
 
@@ -42,33 +42,30 @@ Legacy networks treat "Storage" (proving you have data) and "Retrieval" (sending
 
 ---
 
-## 3. The Performance Market (Tiered Rewards)
+## 3. Traffic Management (Elasticity)
 
-Time is Money.
+### 3.1 The Saturation Signal
+If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Saturation Signal** to the chain.
+*   **Condition:** The SP must be in good standing (Platinum/Gold) and show high receipt volume.
+*   **Response:** The Chain verifies the user has **Budget Available** in their escrow.
+*   **Action:** The Chain spawns **Hot Replicas** on new Edge nodes to absorb the load. The original SP is *not* penalized.
 
-| Tier | Response Time | Reward |
-| :--- | :--- | :--- |
-| **Platinum** | 1 Block (~5s) | **100%** |
-| **Gold** | 5 Blocks (~25s) | **80%** |
-| **Silver** | 10 Blocks (~50s) | **50%** |
-| **Fail** | > 20 Blocks | **Slashing** |
+### 3.2 User Controls
+*   **Budget Cap:** Users set a `MaxMonthlySpend`. The protocol will never spawn replicas if it would exceed this cap.
+*   **Result:** "Viral" content scales automatically. "Budget" content is rate-limited.
 
 ---
 
 ## 4. The Lifecycle of a File
 
 ### Step 1: Ingestion & Placement
-1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot")`.
-2.  **Filtering:** Chain filters for "General" and "Edge" providers.
-3.  **Assignment:** Chain deterministically assigns 12 SPs from the filtered set.
-4.  **Upload:** User uploads data.
+1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)`.
+2.  **Assignment:** Chain deterministically assigns 12 SPs.
+3.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file. SPs submit user receipts.
+*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`. Chain spawns 5 more replicas.
 *   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges.
-
-### Step 3: Auto-Scaling (Dynamic Overlays)
-*   If a "Cold" file suddenly goes viral and its "Archive" nodes struggle (dropping to Silver tier), the protocol triggers **System Placement** to recruit temporary **Hot Replicas** from the Edge pool to absorb the load.
 
 ---
 
@@ -77,9 +74,8 @@ Time is Money.
 | Threat | Mitigation |
 | :--- | :--- |
 | **Sybil Attack** | **System-Defined Placement.** |
-| **Fake Traffic** | **Signed Receipts.** SP needs user signatures to claim bandwidth fees. |
-| **Lazy Provider** | **Tiered Rewards.** Slow providers earn fraction of rewards. |
-| **Dead Data** | **System Challenges.** Cold data is audited as rigorously as hot data. |
+| **Constraint Attack** | **Rebalancing Fees.** SPs pay to rotate off shards early. |
+| **Billing Runaway** | **Spend Caps.** Protocol strictly enforces user-defined limits. |
 
 ---
 

@@ -1,4 +1,4 @@
-# NilStore Core v 2.3
+# NilStore Core v 2.4
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -11,8 +11,9 @@ NilStore is a decentralized storage network that unifies **Storage** and **Retri
 It specifies:
 1.  **Unified Liveness:** Organic user retrieval receipts act as valid storage proofs.
 2.  **Synthetic Challenges:** The system acts as the "User of Last Resort" for cold data.
-3.  **Tiered Rewards:** Storage rewards are tiered by latency, regardless of whether the trigger was Organic or Synthetic.
+3.  **Tiered Rewards:** Storage rewards are tiered by latency.
 4.  **System-Defined Placement:** Deterministic assignment to ensure diversity, optimized by **Service Hints**.
+5.  **Traffic Management:** User-funded **Elastic Scaling** triggered by **Saturation Signals** from Providers.
 
 ---
 
@@ -24,29 +25,37 @@ To prevent "Self-Dealing," clients cannot choose their SPs. However, to optimize
 
 #### 6.0.1 Provider Capabilities
 When registering, SPs declare their intended service mode via `MsgRegisterProvider(Capabilities)`:
-*   **Archive:** High capacity, standard latency. Optimized for long-term persistence.
-*   **General (Default):** Balanced storage and bandwidth.
-*   **Edge:** Low capacity, ultra-low latency. Optimized for caching and burst traffic.
+*   **Archive:** High capacity, standard latency.
+*   **General (Default):** Balanced.
+*   **Edge:** Low capacity, ultra-low latency.
 
 #### 6.0.2 Deal Hints
 `MsgCreateDeal` includes a `ServiceHint`:
-*   **Cold:** Protocol biases selection towards `Archive` and `General` nodes. (Lower Escrow Cost).
-*   **Hot:** Protocol biases selection towards `General` and `Edge` nodes. (Higher Escrow Cost).
+*   **Cold:** Biased towards `Archive` / `General`.
+*   **Hot:** Biased towards `General` / `Edge`.
 
-#### 6.0.3 Selection Algorithm
-`Idx_i = Hash(DealID || BlockHash || i) % AP_List.Length`
-*   *Filter:* The `AP_List` is pre-filtered to include only nodes matching the `ServiceHint`.
-*   *Fallback:* If insufficient matching nodes exist, the protocol expands the filter to include `General` nodes.
+### 6.1 The Unified Market & Elasticity
 
-### 6.1 The Unified Market
+#### 6.1.1 Traffic Management (Saturation)
+To prevent punishment of high-performing nodes during viral events, the protocol supports **Pre-emptive Scaling**.
 
-*   **Storage Income:** Earned by satisfying liveness (via Path A or Path B).
-*   **Bandwidth Income:** Earned ONLY via Path A (User Receipts).
-*   **Incentive Alignment:** "Hot" files are more profitable (Double Income). "Cold" files pay only Storage Income. This naturally aligns SPs to desire popular content and optimize for retrieval speed.
+1.  **Saturation Signal:** An SP submits `MsgSignalSaturation(DealID)`.
+    *   *Condition:* SP must be currently **Platinum/Gold** and have high `ReceiptVolume`.
+2.  **Action:** The Chain increases `Deal.CurrentReplication` (e.g., 12 -> 15) and triggers `SystemPlacement` to recruit **Edge** nodes.
+3.  **Incentive:** The signaling SP is NOT penalized. They maintain their tier on manageable traffic, while overflow is routed to new replicas.
+
+#### 6.1.2 User-Funded Elasticity
+Scaling is not free. It is strictly constrained by the User's budget.
+
+*   **Funding Source:** `Deal.Escrow`.
+*   **Budget Cap:** `Deal.MaxMonthlySpend`.
+*   **Logic:**
+    *   If `Escrow > Cost(NewReplica)` AND `Spend < Cap`: **Spawn Replica.**
+    *   Else: **Reject Scaling.** The file becomes rate-limited naturally.
 
 ### 6.2 Auto-Scaling (Dynamic Overlays)
 
-Even with Hints, demand can change.
+Even without signals, the chain protects performance.
 *   **Trigger:** If `ServedBytes` for a DU exceeds the capacity of its `Base` nodes (e.g., latency degrades to Silver/Gold).
 *   **Action:** The protocol triggers **System Placement** to recruit temporary **Hot Replicas** from the `Edge` pool.
 *   **Result:** Traffic shifts to the Overlay Layer. Base nodes revert to simple Storage Rewards.
