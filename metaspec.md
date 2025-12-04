@@ -47,8 +47,10 @@ The `Deal` is the central state object.
 *   **Fail (>H+20):** 0% + Slash
 
 ### 4.2 Saturation & Scaling
-*   **Signal:** `MsgSignalSaturation`.
-*   **Logic:** `If (GoodStanding && HighTraffic && BudgetAvailable) { SpawnReplica() }`.
+*   **Signal:** `MsgSignalSaturation` or Protocol-Detected High Load (EMA).
+*   **Strategy:** **Stripe-Aligned.** Scale `n` shards simultaneously to preserve aggregate throughput.
+*   **Damping:** Use Hysteresis (80% Up / 30% Down).
+*   **Gravity:** Enforce **Minimum TTL** (24h) on new replicas to prevent thrashing.
 *   **Rotation:** `MsgRotateShard` (Voluntary Downgrade) incurs `RebalancingFee`.
 
 ## 5. Implementation Gaps

@@ -53,14 +53,22 @@ Scaling is not free. It is strictly constrained by the User's budget.
     *   If `Escrow > Cost(NewReplica)` AND `Spend < Cap`: **Spawn Replica.**
     *   Else: **Reject Scaling.** The file becomes rate-limited naturally.
 
-### 6.2 Auto-Scaling (Dynamic Overlays)
+### 6.2 Auto-Scaling (Stripe-Aligned Elasticity)
 
-Even with Hints, demand can change.
-*   **Trigger:** If `ServedBytes` for a DU exceeds the capacity of its `Base` nodes.
-*   **Action:** The protocol triggers **System Placement** to recruit temporary **Hot Replicas**.
-*   **Mechanism (Ciphertext Replication):** The Base SP transmits the **Encrypted Ciphertext** directly to the new Overlay SP.
-    *   *User Liveness:* **NOT REQUIRED.** The User does not need to come online to re-encrypt or authorize the transfer.
-    *   *Security:* Overlay nodes hold the data but cannot read it (they lack the `FMK`).
+To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
+
+#### 6.2.1 The Stripe Unit
+*   **Principle:** Increasing the capacity of Shard #1 does not help if Shards #2-12 are saturated.
+*   **Mechanism:** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` (e.g., 12) new Overlay Providers, creating one new replica for *each* shard index.
+
+#### 6.2.2 Damping & Hysteresis (Intelligent Triggers)
+To prevent oscillation (rapidly spinning nodes up and down) and account for the cost of data transfer:
+1.  **Trigger:** The protocol tracks the **Exponential Moving Average (EMA)** of `ReceiptVolume`.
+    *   **Scale Up:** If `Load > 80%` of current capacity.
+    *   **Scale Down:** If `Load < 30%` of current capacity.
+2.  **Minimum TTL (Data Gravity):** New Overlay Replicas have a mandatory **Minimum TTL** (e.g., 24 hours).
+    *   *Rationale:* Moving data consumes network resources. Spawning a replica is an "investment" that must be amortized over a minimum service period.
+    *   *Cost:* The User's escrow is debited for this minimum period upon spawn.
 
 ### 6.3 Deletion (Crypto-Erasure)
 *   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto-Erasure**.
