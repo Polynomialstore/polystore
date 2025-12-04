@@ -27,4 +27,33 @@ contract NilBridgeTest is Test {
         // Should fail because 5 < 10
         bridge.updateStateRoot(5, root2);
     }
+
+    function test_VerifyInclusion() public {
+        bytes32 leaf1 = keccak256("leaf1");
+        bytes32 leaf2 = keccak256("leaf2");
+        
+        // Construct Root (Sorted Pair)
+        bytes32 root;
+        if (leaf1 <= leaf2) {
+            root = keccak256(abi.encodePacked(leaf1, leaf2));
+        } else {
+            root = keccak256(abi.encodePacked(leaf2, leaf1));
+        }
+
+        bridge.updateStateRoot(1, root);
+
+        // Proof for leaf1 is just [leaf2]
+        bytes32[] memory proof = new bytes32[](1);
+        proof[0] = leaf2;
+
+        assertTrue(bridge.verifyInclusion(leaf1, proof));
+        
+        // Proof for leaf2 is just [leaf1]
+        proof[0] = leaf1;
+        assertTrue(bridge.verifyInclusion(leaf2, proof));
+
+        // Wrong proof
+        proof[0] = keccak256("wrong");
+        assertFalse(bridge.verifyInclusion(leaf1, proof));
+    }
 }

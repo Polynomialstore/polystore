@@ -33,9 +33,21 @@ contract NilBridge {
     }
 
     // Verifiers can check if a specific file root exists in the L1 state
-    // (In a real bridge, we would verify a Merkle proof against latestStateRoot here)
-    function verifyInclusion(bytes32 /* fileRoot */, bytes32[] calldata /* proof */) external view returns (bool) {
-        // TODO: Implement Merkle Proof verification against latestStateRoot
-        return true; 
+    function verifyInclusion(bytes32 leaf, bytes32[] calldata proof) external view returns (bool) {
+        bytes32 computedHash = leaf;
+
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 proofElement = proof[i];
+
+            if (computedHash <= proofElement) {
+                // Hash(current computed hash + current element of the proof)
+                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+            } else {
+                // Hash(current element of the proof + current computed hash)
+                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+            }
+        }
+
+        return computedHash == latestStateRoot;
     }
 }
