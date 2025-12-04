@@ -19,11 +19,13 @@ type Keeper struct {
 	// Address capable of executing a MsgUpdateParams message.
 	// Typically, this should be the x/gov module account.
 	authority []byte
+	
+	BankKeeper types.BankKeeper
 
 	Schema collections.Schema
 	Params collections.Item[types.Params]
-    
-	
+	ProofCount collections.Sequence
+	Proofs     collections.Map[uint64, types.Proof]
 }
 
 func NewKeeper(
@@ -31,6 +33,7 @@ func NewKeeper(
 	cdc codec.Codec,
 	addressCodec address.Codec,
 	authority []byte,
+	bankKeeper types.BankKeeper,
     
 ) Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
@@ -44,8 +47,11 @@ func NewKeeper(
 		cdc:          cdc,
 		addressCodec: addressCodec,
 		authority:    authority,
+		BankKeeper:   bankKeeper,
 		
 		Params:       collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProofCount:   collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
+		Proofs:       collections.NewMap(sb, types.ProofsKey, "proofs", collections.Uint64Key, codec.CollValue[types.Proof](cdc)),
 	}
 
 	schema, err := sb.Build()

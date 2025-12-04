@@ -6,6 +6,7 @@ import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
 import "nilchain/nilchain/v1/params.proto";
+import "nilchain/nilchain/v1/proof.proto";
 
 option go_package = "nilchain/x/nilchain/types";
 
@@ -14,6 +15,11 @@ service Query {
   // Parameters queries the parameters of the module.
   rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/params";
+  }
+
+  // Queries a list of Proof items.
+  rpc ListProofs(QueryListProofsRequest) returns (QueryListProofsResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/proofs";
   }
 }
 
@@ -27,4 +33,13 @@ message QueryParamsResponse {
     (gogoproto.nullable) = false,
     (amino.dont_omitempty) = true
   ];
+}
+
+message QueryListProofsRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+message QueryListProofsResponse {
+  repeated Proof proof = 1;
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

@@ -25,3 +25,11 @@ validators:
   bonded: 200000000stake
 - name: validator2
   bonded: 100000000stake
+genesis:
+  app_state:
+    gov:
+      params:
+        voting_period: "172800s" # 2 days
+        min_deposit:
+          - amount: "10000000"
+            denom: "stake"

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"

@@ -6,10 +6,8 @@ import (
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/depinject/appconfig"
-	"cosmossdk.io/log"
 	"github.com/cosmos/cosmos-sdk/codec"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
 	"nilchain/x/nilchain/keeper"
 	"nilchain/x/nilchain/types"
@@ -59,6 +57,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	    in.Cdc,
 		in.AddressCodec,
 	    authority, 
+		in.BankKeeper,
 	)
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
 

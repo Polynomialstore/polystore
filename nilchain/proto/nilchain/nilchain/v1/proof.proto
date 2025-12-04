@@ -1,0 +1,12 @@
+syntax = "proto3";
+package nilchain.nilchain.v1;
+
+option go_package = "nilchain/x/nilchain/types";
+
+message Proof {
+  uint64 id = 1;
+  string creator = 2;
+  string commitment = 3; 
+  bool valid = 4;
+  int64 block_height = 5;
+}

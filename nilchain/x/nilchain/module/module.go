@@ -12,12 +12,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	
 
+	"nilchain/x/nilchain/client/cli"
 	"nilchain/x/nilchain/keeper"
 	"nilchain/x/nilchain/types"
-	
 )
 
 var (
@@ -145,3 +146,7 @@ func (am AppModule) EndBlock(_ context.Context) error {
 	return nil
 }
 
+// GetTxCmd returns the root tx command for the module.
+func (AppModule) GetTxCmd() *cobra.Command {
+	return cli.GetTxCmd()
+}

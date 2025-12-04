@@ -21,3 +21,8 @@ const (
 
 // ParamsKey is the prefix to retrieve all Params
 var ParamsKey = collections.NewPrefix("p_nilchain")
+
+var (
+	ProofCountKey = collections.NewPrefix("ProofCount/value/")
+	ProofsKey     = collections.NewPrefix("Proofs/value/")
+)
