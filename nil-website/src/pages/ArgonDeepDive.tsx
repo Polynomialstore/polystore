@@ -113,12 +113,6 @@ export const ArgonDeepDive = () => {
             </div>
           </section>
         </div>
-
-        <div className="mt-16 flex justify-start">
-          <Link to="/technology/kzg" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Previous: KZG Commitments
-          </Link>
-        </div>
       </motion.div>
     </div>
   );

@@ -122,15 +122,6 @@ export const KZGDeepDive = () => {
             </div>
           </section>
         </div>
-
-        <div className="mt-16 flex justify-between">
-          <Link to="/technology/sharding" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Previous: Sharding
-          </Link>
-          <Link to="/technology/sealing" className="inline-flex items-center gap-2 px-6 py-3 bg-secondary hover:bg-secondary/80 rounded-full font-medium transition-colors">
-            Next: Proof of Seal <ArrowLeft className="w-4 h-4 rotate-180" />
-          </Link>
-        </div>
       </motion.div>
     </div>
   );
