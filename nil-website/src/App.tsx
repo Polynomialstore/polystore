@@ -11,6 +11,7 @@ import { ProofProvider } from "./context/ProofContext";
 import { Leaderboard } from "./pages/Leaderboard";
 import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
+import { EconomyDashboard } from "./pages/EconomyDashboard";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="s3-adapter" element={<S3AdapterDocs />} />
             <Route path="governance" element={<GovernanceDocs />} />
+            <Route path="economy" element={<EconomyDashboard />} />
             <Route path="technology" element={<TechnologyLayout />}>
               <Route index element={<Technology />} />
               <Route path="sharding" element={<ShardingDeepDive />} />

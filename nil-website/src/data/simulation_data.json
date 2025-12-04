@@ -1,0 +1,169 @@
+{
+  "meta": {
+    "timestamp": 1764843912.556988,
+    "epochs": 20
+  },
+  "data": [
+    {
+      "epoch": 1,
+      "storage_gb": 0.512,
+      "supply": 1000019.0,
+      "slashed": 0.0,
+      "rewards_epoch": 19.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 2,
+      "storage_gb": 1.152,
+      "supply": 1000043.0,
+      "slashed": 0.0,
+      "rewards_epoch": 24.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 3,
+      "storage_gb": 1.28,
+      "supply": 1000049.0,
+      "slashed": 0.0,
+      "rewards_epoch": 6.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 4,
+      "storage_gb": 1.408,
+      "supply": 1000017.0,
+      "slashed": 38.0,
+      "rewards_epoch": 6.0,
+      "slashed_epoch": 38.0
+    },
+    {
+      "epoch": 5,
+      "storage_gb": 2.048,
+      "supply": 1000043.0,
+      "slashed": 38.0,
+      "rewards_epoch": 26.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 6,
+      "storage_gb": 2.432,
+      "supply": 1000060.0,
+      "slashed": 38.0,
+      "rewards_epoch": 17.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 7,
+      "storage_gb": 2.944,
+      "supply": 1000083.0,
+      "slashed": 38.0,
+      "rewards_epoch": 23.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 8,
+      "storage_gb": 2.944,
+      "supply": 1000088.0,
+      "slashed": 38.0,
+      "rewards_epoch": 5.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 9,
+      "storage_gb": 3.456,
+      "supply": 1000112.0,
+      "slashed": 38.0,
+      "rewards_epoch": 24.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 10,
+      "storage_gb": 3.712,
+      "supply": 1000128.0,
+      "slashed": 38.0,
+      "rewards_epoch": 16.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 11,
+      "storage_gb": 4.096,
+      "supply": 1000105.0,
+      "slashed": 82.0,
+      "rewards_epoch": 21.0,
+      "slashed_epoch": 44.0
+    },
+    {
+      "epoch": 12,
+      "storage_gb": 4.096,
+      "supply": 1000113.0,
+      "slashed": 82.0,
+      "rewards_epoch": 8.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 13,
+      "storage_gb": 4.48,
+      "supply": 1000101.0,
+      "slashed": 115.0,
+      "rewards_epoch": 21.0,
+      "slashed_epoch": 33.0
+    },
+    {
+      "epoch": 14,
+      "storage_gb": 4.736,
+      "supply": 1000119.0,
+      "slashed": 115.0,
+      "rewards_epoch": 18.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 15,
+      "storage_gb": 4.864,
+      "supply": 1000132.0,
+      "slashed": 115.0,
+      "rewards_epoch": 13.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 16,
+      "storage_gb": 4.992,
+      "supply": 1000145.0,
+      "slashed": 115.0,
+      "rewards_epoch": 13.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 17,
+      "storage_gb": 5.12,
+      "supply": 1000159.0,
+      "slashed": 115.0,
+      "rewards_epoch": 14.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 18,
+      "storage_gb": 5.632,
+      "supply": 1000188.0,
+      "slashed": 115.0,
+      "rewards_epoch": 29.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 19,
+      "storage_gb": 6.272,
+      "supply": 1000222.0,
+      "slashed": 115.0,
+      "rewards_epoch": 34.0,
+      "slashed_epoch": 0.0
+    },
+    {
+      "epoch": 20,
+      "storage_gb": 6.912,
+      "supply": 1000257.0,
+      "slashed": 115.0,
+      "rewards_epoch": 35.0,
+      "slashed_epoch": 0.0
+    }
+  ],
+  "analysis": "Simulation over 20 epochs demonstrates a healthy network bootstrap phase. Storage capacity grew by 0.32 GB/epoch on average. The token economy expanded to 1000257 NIL, driven by proof rewards, while the slashing mechanism successfully removed 115 NIL from circulation, proving the efficacy of the 'Burn' incentive for security enforcement."
+}
