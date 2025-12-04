@@ -20,15 +20,17 @@ This meta-spec defines the architecture for NilStore v2.4, adding **Traffic Mana
 The `Deal` is the central state object.
 
 *   **ID:** Unique uint64.
-*   **CID:** Content Identifier.
+*   **CID:** Content Identifier (Root).
 *   **Placement:** System-assigned SP list.
 *   **Escrow:** Combined Storage + Bandwidth balance.
 *   **ServiceHint:** `Hot | Cold`.
 *   **Replication:**
-    *   `Base`: Fixed (e.g., 12).
-    *   `Current`: Dynamic (e.g., 15).
+    *   `Base`: Fixed (e.g., 12 for RS(12,8)).
+    *   `Current`: Dynamic (e.g., 12 to 24).
     *   `Max`: User-Defined Cap (e.g., 50).
 *   **Budget:** `MaxMonthlySpend`.
+*   **MDU Size:** 8 MiB (8,388,608 bytes).
+*   **Shard Size:** 1 MiB (1,048,576 bytes).
 
 ## 3. Placement Algorithm
 
@@ -48,10 +50,12 @@ The `Deal` is the central state object.
 
 ### 4.2 Saturation & Scaling
 *   **Signal:** `MsgSignalSaturation` or Protocol-Detected High Load (EMA).
-*   **Strategy:** **Stripe-Aligned.** Scale `n` shards simultaneously to preserve aggregate throughput.
-*   **Damping:** Use Hysteresis (80% Up / 30% Down).
-*   **Gravity:** Enforce **Minimum TTL** (24h) on new replicas to prevent thrashing.
-*   **Rotation:** `MsgRotateShard` (Voluntary Downgrade) incurs `RebalancingFee`.
+*   **Strategy:** **Stripe-Aligned Scaling.** When increasing replication, add `n` new Overlay Providers simultaneously, each hosting a replica of a distinct shard index.
+*   **Damping:** Use Hysteresis (80% Up / 30% Down) based on EMA of `ReceiptVolume`.
+*   **Gravity:** Enforce **Minimum TTL** (e.g., 24h) on new Overlay Replicas.
+
+### 4.3 Rotation
+*   `MsgRotateShard` (Voluntary Downgrade) incurs `RebalancingFee`.
 
 ## 5. Implementation Gaps
 
