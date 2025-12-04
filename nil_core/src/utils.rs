@@ -6,7 +6,7 @@ use num_traits::Num;
 pub const FR_MODULUS_HEX: &str = "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001";
 pub const BYTES_PER_BLOB: usize = 4096 * 32;
 pub const SYMBOLS_PER_BLOB: usize = 4096;
-pub const SYMBOL_SIZE: usize = 1024; // 1KB
+pub const SYMBOL_SIZE: usize = 131072; // 128KB (EIP-4844 aligned)
 pub const GENERATOR: u64 = 7;
 
 pub fn get_modulus() -> BigUint {

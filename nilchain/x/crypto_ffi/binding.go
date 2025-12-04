@@ -6,11 +6,14 @@ package crypto_ffi
 
 int nil_init(const char* path);
 int nil_verify_proof(const unsigned char* commitment, const unsigned char* z, const unsigned char* y, const unsigned char* proof);
+int nil_blob_to_commitment(const unsigned char* blob, unsigned char* out_commitment);
 */
 import "C"
 import (
 	"errors"
 	"unsafe"
+    "encoding/hex"
+    "fmt"
 )
 
 // Init loads the trusted setup from the given path.
@@ -31,6 +34,12 @@ func VerifyProof(commitment []byte, z []byte, y []byte, proof []byte) (bool, err
     if len(commitment) != 48 || len(z) != 32 || len(y) != 32 || len(proof) != 48 {
         return false, errors.New("invalid input lengths")
     }
+    
+    fmt.Printf("DEBUG GO: VerifyProof Inputs:\nC: %s\nZ: %s\nY: %s\nP: %s\n", 
+        hex.EncodeToString(commitment),
+        hex.EncodeToString(z),
+        hex.EncodeToString(y),
+        hex.EncodeToString(proof))
 
     cComm := (*C.uchar)(unsafe.Pointer(&commitment[0]))
     cZ := (*C.uchar)(unsafe.Pointer(&z[0]))
@@ -45,4 +54,22 @@ func VerifyProof(commitment []byte, z []byte, y []byte, proof []byte) (bool, err
     } else {
         return false, errors.New("nil_core verification error (context not initialized?)")
     }
+}
+
+// BlobToCommitment generates a KZG commitment for a blob (131072 bytes).
+func BlobToCommitment(blob []byte) ([]byte, error) {
+    if len(blob) != 131072 {
+        return nil, fmt.Errorf("invalid blob size: expected 131072, got %d", len(blob))
+    }
+
+    out := make([]byte, 48)
+    cBlob := (*C.uchar)(unsafe.Pointer(&blob[0]))
+    cOut := (*C.uchar)(unsafe.Pointer(&out[0]))
+
+    res := C.nil_blob_to_commitment(cBlob, cOut)
+    if res != 0 {
+        return nil, errors.New("failed to generate commitment")
+    }
+
+    return out, nil
 }
