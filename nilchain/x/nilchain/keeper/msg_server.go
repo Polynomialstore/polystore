@@ -80,12 +80,91 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 // CreateDeal handles MsgCreateDeal to create a new storage deal.
 func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (*types.MsgCreateDealResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	_ = ctx // TODO: implement deal creation logic
 
-	// Placeholder logic for now
+	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
+	}
+
+	// 1. Generate new Deal ID
+	dealID, err := k.DealCount.Next(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
+	}
+
+	// 2. Assign Providers
+	blockHash := ctx.BlockHeader().LastBlockId.GetHash() // Use previous block hash for deterministic assignment
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, msg.ServiceHint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign providers: %w", err)
+	}
+
+	// 3. Validate Inputs
+	if len(msg.Cid) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("CID cannot be empty")
+	}
+	if msg.Size == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size cannot be zero")
+	}
+	if msg.DurationBlocks == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
+	}
+	if msg.ServiceHint != "Hot" && msg.ServiceHint != "Cold" && msg.ServiceHint != "General" && msg.ServiceHint != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", msg.ServiceHint)
+	}
+
+	initialEscrowAmount, ok := sdk.NewIntFromString(msg.InitialEscrowAmount)
+	if !ok || initialEscrowAmount.IsNil() || initialEscrowAmount.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid initial escrow amount: %s", msg.InitialEscrowAmount)
+	}
+	maxMonthlySpend, ok := sdk.NewIntFromString(msg.MaxMonthlySpend)
+	if !ok || maxMonthlySpend.IsNil() || maxMonthlySpend.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", msg.MaxMonthlySpend)
+	}
+	
+	// 4. Deduct Escrow
+	escrowCoin := sdk.NewCoins(sdk.NewCoin("token", initialEscrowAmount)) // Assuming "token" is the native currency
+	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, escrowCoin); err != nil {
+		return nil, err
+	}
+
+	// 5. Create Deal object
+	deal := types.Deal{
+		Id:                 dealID,
+		Cid:                msg.Cid,
+		Size:               msg.Size,
+		Owner:              msg.Creator,
+		EscrowBalance:      initialEscrowAmount,
+		StartBlock:         ctx.BlockHeight(),
+		EndBlock:           ctx.BlockHeight() + int64(msg.DurationBlocks),
+		Providers:          assignedProviders,
+		RedundancyMode:     1, // Default RS(12,8)
+		CurrentReplication: types.DealBaseReplication,
+		ServiceHint:        msg.ServiceHint,
+		MaxMonthlySpend:    maxMonthlySpend,
+	}
+
+	// 6. Save Deal state
+	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+		return nil, fmt.Errorf("failed to set deal: %w", err)
+	}
+
+	// 7. Emit Event
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgCreateDeal,
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
+			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
+			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size)),
+			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
+			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
+		),
+	)
+
 	return &types.MsgCreateDealResponse{
-		DealId: 0,
-		AssignedProviders: []string{"cosmos1placeholder", "cosmos1placeholder2"},
+		DealId:            deal.Id,
+		AssignedProviders: deal.Providers,
 	}, nil
 }
 
@@ -127,7 +206,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			kzgProof.MduMerkleRoot,
 			kzgProof.ChallengedKzgCommitment,
 			kzgProof.ChallengedKzgCommitmentMerklePath,
-			uint64(len(kzgProof.ChallengedKzgCommitmentMerklePath)), // Length of serialized path
+			uint32(len(kzgProof.ChallengedKzgCommitmentMerklePath)), // Length of serialized path (using uint32 as defined in Rust)
 			kzgProof.ChallengedKzgCommitmentIndex,
 			kzgProof.ZValue,
 			kzgProof.YValue,

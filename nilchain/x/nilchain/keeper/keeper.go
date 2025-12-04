@@ -2,12 +2,15 @@ package keeper
 
 import (
 	"fmt"
+	"crypto/sha256" // ADDED
+	"encoding/binary" // ADDED
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/address"
 	corestore "cosmossdk.io/core/store"
 	"github.com/cosmos/cosmos-sdk/codec"
-	 
+	sdk "github.com/cosmos/cosmos-sdk/types" // ADDED for Context
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors" // ADDED for errors
 
 	"nilchain/x/nilchain/types"
 )
@@ -70,6 +73,88 @@ func NewKeeper(
 	k.Schema = schema
 
 	return k
+}
+
+// AssignProviders deterministically assigns providers for a new deal.
+// It uses a hash-based approach to select `types.DealBaseReplication` providers
+// from the active provider list, respecting service hints and diversity constraints.
+func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string) ([]string, error) {
+	var allProviders []types.Provider
+	
+	// Collect all providers
+	err := k.Providers.Walk(ctx, nil, func(key string, provider types.Provider) (stop bool, err error) {
+		allProviders = append(allProviders, provider)
+		return false, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk providers: %w", err)
+	}
+
+	if len(allProviders) == 0 {
+		return nil, fmt.Errorf("no providers registered")
+	}
+
+	var candidateProviders []types.Provider
+	// Filter by capabilities based on serviceHint
+	for _, provider := range allProviders {
+		// Only consider "Active" providers for assignment
+		if provider.Status != "Active" {
+			continue
+		}
+
+		// Apply service hint filter
+		if serviceHint == "Hot" && (provider.Capabilities == "General" || provider.Capabilities == "Edge") {
+			candidateProviders = append(candidateProviders, provider)
+		} else if serviceHint == "Cold" && (provider.Capabilities == "Archive" || provider.Capabilities == "General") {
+			candidateProviders = append(candidateProviders, provider)
+		} else if serviceHint == "" || serviceHint == "General" { // Default/No specific hint, consider General and above
+			candidateProviders = append(candidateProviders, provider)
+		}
+	}
+
+	if len(candidateProviders) < types.DealBaseReplication {
+		return nil, fmt.Errorf("not enough suitable providers (%d/%d) for service hint '%s' to satisfy deal replication", len(candidateProviders), types.DealBaseReplication, serviceHint)
+	}
+
+	assignedProviders := make([]string, types.DealBaseReplication)
+	selectedIndices := make(map[int]struct{})       // To ensure unique providers from candidateProviders slice
+	selectedAddresses := make(map[string]struct{})   // To ensure unique provider addresses
+
+	seedBase := make([]byte, 0)
+	seedBase = append(seedBase, sdk.Uint64ToBigEndian(dealID)...)
+	seedBase = append(seedBase, blockHash...)
+
+	for i := uint64(0); i < types.DealBaseReplication; {
+		// Deterministic seed for this selection round
+		currentHash := sha256.Sum256(append(seedBase, sdk.Uint64ToBigEndian(i)...))
+		
+		// Use the hash as a random source to pick an index
+		idx := int(binary.BigEndian.Uint64(currentHash[:8])) % len(candidateProviders)
+
+		provider := candidateProviders[idx]
+
+		// Check if provider at idx (in candidateProviders slice) is already selected for this deal round
+		if _, exists := selectedIndices[idx]; exists {
+			// Already selected, re-seed and try again to find a new unique provider.
+			// This might loop if not enough unique providers are available, but that's caught by len(candidateProviders) check.
+			seedBase = sha256.Sum256(currentHash[:]) 
+			continue
+		}
+		
+		// Ensure unique provider addresses. This implicitly handles diversity (for now)
+		// as it ensures each provider address is distinct.
+		if _, exists := selectedAddresses[provider.Address]; exists {
+			seedBase = sha256.Sum256(currentHash[:]) 
+			continue
+		}
+
+		assignedProviders[i] = provider.Address
+		selectedIndices[idx] = struct{}{}
+		selectedAddresses[provider.Address] = struct{}{}
+		i++
+	}
+
+	return assignedProviders, nil
 }
 
 // GetAuthority returns the module's authority.
