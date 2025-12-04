@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, BookOpen, ShieldCheck, Coins, Network } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, ShieldCheck, Coins, Network } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const faqs = [
@@ -9,11 +9,17 @@ const faqs = [
     questions: [
       {
         q: "What is NilStore?",
-        a: "NilStore is a decentralized storage network that works like a public cloud (think S3) but runs on a community of independent nodes. Unlike other networks that rely on expensive hardware, NilStore uses advanced mathematics (Zero-Knowledge proofs) to ensure your data is safe, retrievable, and censorship-resistant."
+        a: <>
+          NilStore is a decentralized storage network that works like a public cloud (think S3) but runs on a community of independent nodes.
+          Unlike other networks that rely on expensive hardware, NilStore uses advanced mathematics (Zero-Knowledge proofs) to ensure your data is safe, retrievable, and censorship-resistant.
+        </>
       },
       {
         q: "How is this different from Filecoin or Arweave?",
-        a: "Speed and Efficiency. Most legacy decentralized storage networks require 'sealing'—a slow, energy-intensive process to secure data. This makes them slow to write to and requires specialized mining rigs. NilStore uses **KZG Commitments** (the same tech scaling Ethereum) to verify data instantly without sealing. This means you can run a node on a standard server and users get cloud-like performance."
+        a: <>
+          <p><strong>Speed and Efficiency.</strong> Most legacy decentralized storage networks require 'sealing'—a slow, energy-intensive process to secure data. This makes them slow to write to and requires specialized mining rigs.</p>
+          <p>NilStore uses <strong>KZG Commitments</strong> (the same tech scaling Ethereum) and <strong>Proof-of-Delayed-Encode (PoDE)</strong> to verify data instantly without sealing. This means you can run a node on a standard server and users get cloud-like performance.</p>
+        </>
       },
       {
         q: "What is the 'Nilmanifold'?",
@@ -66,7 +72,14 @@ const faqs = [
     questions: [
       {
         q: "How do I earn $STOR?",
-        a: "You can join the network as a Storage Provider. You earn $STOR tokens in two ways: (1) **Capacity Rewards** for storing data and passing daily verification proofs, and (2) **Bandwidth Fees** for delivering data quickly to users. Join our 'Store Wars' testnet to start earning today."
+        a: <>
+          You can join the network as a Storage Provider. You earn $STOR tokens in two ways:
+          <ul className="list-disc list-inside mt-2 space-y-1">
+            <li><strong>Capacity Rewards:</strong> For storing data and passing daily verification proofs.</li>
+            <li><strong>Bandwidth Fees:</strong> For delivering data quickly to users.</li>
+          </ul>
+          Join our 'Store Wars' testnet to start earning today.
+        </>
       },
       {
         q: "What happens if a node goes offline?",
