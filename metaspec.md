@@ -53,7 +53,22 @@ The `Deal` is the central state object.
 
 ## 5. Implementation Gaps
 
-1.  **L1 Chain:** `MsgCreateDeal` with Hints & Caps.
-2.  **L1 Chain:** `MsgSignalSaturation` & `MsgRotateShard`.
-3.  **L1 Chain:** Dynamic Replication Logic (`Current` vs `Base`).
-4.  **SDK:** Receipt generation must include KZG elements.
+## 6. System Constraints & Meta-Risks
+
+This section documents accepted architectural risks and necessary safeguards.
+
+### 6.1 The "Cold Start" Fragility
+*   **Risk:** System-Defined Placement assumes a large, diverse `ActiveProviderList`. When `N` is small (Testnet), diversity rules (distinct ASN) may be impossible to satisfy, causing placement failures.
+*   **Safeguard:** The chain MUST support a **Bootstrap Mode** (governance-gated) that relaxes diversity constraints until `N > Threshold`.
+
+### 6.2 The "Viral Debt" Risk
+*   **Risk:** User-Funded Elasticity creates a hard stop. If a creator runs out of escrow during a viral event, the content throttles, creating a poor "Network UX" perception.
+*   **Safeguard:** The Protocol MUST support **Third-Party Sponsorship**. `MsgFundEscrow` must allow *any* address to top-up a Deal, enabling DAOs or advertisers to rescue viral content.
+
+### 6.3 Data Gravity & Non-Atomic Migration
+*   **Risk:** Moving data takes time. When an SP is rotated (due to saturation or failure), there is a latency gap before the new SP is ready.
+*   **Safeguard:** Migration MUST be **Overlapping**. The Old SP is not released (unbonded) until the New SP submits their first valid **Platinum** proof. During this transition, `ReplicaCount` effectively increases by 1.
+
+### 6.4 Economic Sybil Assumption
+*   **Risk:** Unified Liveness allows SPs to "self-audit" by generating fake traffic.
+*   **Safeguard:** This attack is only irrational if **`BurnRate > 0`**. Governance MUST never set `BurnRate` to zero, or the network will succumb to wash-trading.
