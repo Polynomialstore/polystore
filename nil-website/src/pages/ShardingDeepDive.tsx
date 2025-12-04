@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, File, Hash, Code, Layers, ArrowRightLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import { File, Hash, Code, Layers, ArrowRightLeft, Spline } from "lucide-react";
 
 export const ShardingDeepDive = () => {
   const [isReversed, setIsReversed] = useState(false);
 
-  // Toggle reversal every few seconds for demo
   useEffect(() => {
     const interval = setInterval(() => {
       setIsReversed((prev) => !prev);
@@ -15,170 +13,144 @@ export const ShardingDeepDive = () => {
   }, []);
 
   const indices = [0, 1, 2, 3, 4, 5, 6, 7];
-  // Bit reversal for 3 bits (0-7):
   const reversedIndices = [0, 4, 2, 6, 1, 5, 3, 7];
-
   const currentOrder = isReversed ? reversedIndices : indices;
 
   return (
-    <div className="max-w-4xl">      
+    <div className="w-full">      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-            <span className="text-2xl">🧩</span>
+          <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 shrink-0">
+            <Spline className="w-8 h-8 text-blue-500" />
           </div>
-          <h1 className="text-4xl font-bold">Data Sharding & Encoding</h1>
+          <h2 className="text-3xl font-bold text-foreground">Data Layout: Erasure Coding & Sharding</h2>
         </div>
 
-        <p className="text-xl text-muted-foreground mb-12 leading-relaxed">
-          Before any cryptography happens, user data must be prepared for the "Nil-Lattice". This involves splitting files into uniform symbols, mapping them to the scalar field of the BLS12-381 curve, and aggregating them into blobs.
+        <p className="text-muted-foreground leading-relaxed mb-6">
+          NilStore achieves unparalleled durability and performance through precise data fragmentation, not simple replication. Files are processed into standardized chunks called <strong>Data Units (DUs)</strong>.
         </p>
 
-        <div className="space-y-16">
-          {/* Section 1: The 1KB Symbol */}
-          <section>
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <File className="w-6 h-6 text-blue-500" /> 1. The 128KB Symbol
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              NilStore standardizes all data into <strong>131,072-byte (128KB)</strong> symbols. This size aligns with Ethereum's EIP-4844 blobs for maximum interoperability and efficiency.
-            </p>
-            
-            <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-3xl border">
-              <div className="flex flex-col items-center gap-4">
-                <motion.div 
-                  className="w-24 h-32 bg-blue-100 border-2 border-blue-300 rounded-lg flex items-center justify-center shadow-sm relative"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <File className="w-8 h-8 text-blue-500" />
-                  <div className="absolute bottom-2 text-[10px] font-mono text-blue-600">RAW DATA</div>
-                </motion.div>
-                <div className="text-sm font-medium">Input File</div>
-              </div>
-
-              <div className="flex items-center justify-center">
-                <motion.div
-                  animate={{ x: [0, 10, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
-                >
-                  <span className="text-4xl text-muted-foreground/50">→</span>
-                </motion.div>
-              </div>
-
-              <div className="relative h-32 w-full max-w-[200px] mx-auto">
-                <div className="absolute inset-0 grid grid-cols-2 gap-2">
-                  {[...Array(4)].map((_, i) => (
-                    <motion.div 
-                      key={i}
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      whileInView={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.2, duration: 0.5 }}
-                      className="bg-green-100 border border-green-300 rounded flex items-center justify-center text-[10px] font-mono text-green-700 shadow-sm"
-                    >
-                      128KB
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
+        {/* Section 1: Data Units (DUs) */}
+        <section>
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
+            <File className="w-5 h-5 text-blue-500" /> 128 KiB Data Units
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>131,072-byte (128KB)</strong> symbols. This size aligns with Ethereum's EIP-4844 blobs for maximum interoperability and efficiency, minimizing on-chain overhead.
+          </p>
+          
+          <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-3xl border">
+            <div className="flex flex-col items-center gap-4">
+              <motion.div 
+                className="w-24 h-32 bg-blue-100 border-2 border-blue-300 rounded-lg flex items-center justify-center shadow-sm relative"
+                whileHover={{ scale: 1.05 }}
+              >
+                <File className="w-8 h-8 text-blue-500" />
+                <div className="absolute bottom-2 text-[10px] font-mono text-blue-600">RAW DATA</div>
+              </motion.div>
+              <div className="text-sm font-medium text-foreground">Input File</div>
             </div>
 
-            <div className="mt-6 bg-secondary/30 p-4 rounded-lg border">
-              <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
-                <Code className="w-4 h-4" /> Implementation Detail
-              </h4>
-              <pre className="text-xs overflow-x-auto font-mono bg-black/80 text-gray-300 p-4 rounded">
-{`pub fn file_to_symbols(data: &[u8]) -> Vec<Vec<u8>> {
-    // ...
-    for chunk in data.chunks(SYMBOL_SIZE) {
-        // ...
-    }
-}`}
-              </pre>
-            </div>
-          </section>
-
-          {/* Section 2: Mapping to the Field */}
-          <section>
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <Hash className="w-6 h-6 text-green-500" /> 2. Mapping to the Field ($Fr$)
-            </h2>
-            <div className="bg-secondary/30 p-6 rounded-2xl border mb-6">
-              <p className="mb-4">
-                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each chunk to an integer modulo a massive prime number $r$.
-              </p>
-              <div className="font-mono bg-black/80 text-green-400 p-4 rounded-lg text-sm overflow-x-auto mb-4 shadow-inner">
-                r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
-              </div>
+            <div className="flex items-center justify-center">
+              <motion.div
+                animate={{ x: [0, 10, 0] }}
+                transition={{ repeat: Infinity, duration: 1.5 }}
+              >
+                <span className="text-4xl text-muted-foreground/50">→</span>
+              </motion.div>
             </div>
 
-            <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg">
-              <h4 className="font-bold text-sm text-yellow-600 mb-2">⚠️ Engineering Nuance: Big Endian vs Little Endian</h4>
-              <p className="text-sm text-muted-foreground">
-                While Rust typically uses Little Endian, the <code>c-kzg</code> library (based on Ethereum specs) expects field elements in <strong>Big Endian</strong> format. 
-                Our CLI tool explicitly handles this conversion to ensure proofs generated locally are valid on the network.
-              </p>
-            </div>
-          </section>
-
-          {/* Section 3: Blob Aggregation */}
-          <section>
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <Layers className="w-6 h-6 text-purple-500" /> 3. Blob Aggregation & Bit-Reversal
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              To allow $O(n \log n)$ commitment generation, we must reorder the data chunks within a blob using a <strong>Bit-Reversal Permutation</strong>.
-            </p>
-            
-            <div className="bg-card border rounded-3xl p-8 shadow-sm overflow-hidden">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="font-bold flex items-center gap-2">
-                  <ArrowRightLeft className="w-4 h-4" /> 
-                  {isReversed ? "Bit-Reversed Order" : "Natural Order"}
-                </h3>
-                <div className="text-xs bg-secondary px-2 py-1 rounded font-mono">
-                  {isReversed ? "FFT Ready" : "Input Stream"}
-                </div>
-              </div>
-
-              <div className="flex justify-center gap-2 relative h-20">
-                {currentOrder.map((val) => (
-                  <motion.div
-                    layout
-                    key={val}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="w-10 h-10 md:w-12 md:h-12 bg-purple-100 border border-purple-300 text-purple-700 rounded-lg flex flex-col items-center justify-center shadow-sm z-10"
+            <div className="relative h-32 w-full max-w-[200px] mx-auto">
+              <div className="absolute inset-0 grid grid-cols-2 gap-2">
+                {[...Array(4)].map((_, i) => (
+                  <motion.div 
+                    key={i}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.2, duration: 0.5 }}
+                    className="bg-green-100 border border-green-300 rounded flex items-center justify-center text-[10px] font-mono text-green-700 shadow-sm"
                   >
-                    <span className="text-xs font-bold">{val}</span>
-                    <span className="text-[8px] opacity-60 font-mono">
-                      {val.toString(2).padStart(3, '0')}
-                    </span>
+                    128KB
                   </motion.div>
                 ))}
               </div>
-              
-              <div className="mt-4 text-center text-xs text-muted-foreground">
-                Visualizing permutation for 8 elements ($2^3$)
+            </div>
+          </div>
+        </section>
+
+        {/* Section 2: Configurable Erasure Coding */}
+        <section className="mt-16">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
+            <Layers className="w-5 h-5 text-purple-500" /> Configurable Erasure Coding
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Each DU is mathematically split using Reed-Solomon encoding (RS). You can configure the redundancy level <strong>per file</strong>, choosing from profiles like "Standard", "Archive", or "Mission Critical".
+          </p>
+          <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
+            <p className="text-sm text-muted-foreground mb-4">
+              <strong>Example:</strong> A "Standard" profile might use RS(12,9), meaning data is split into 12 shards, and any 9 are needed to reconstruct the original DU.
+            </p>
+            <div className="flex justify-around items-center text-center mt-6">
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-bold text-blue-400">9</span>
+                <span className="text-sm text-muted-foreground">Data Shards (k)</span>
+              </div>
+              <span className="text-3xl text-muted-foreground">+</span>
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-bold text-purple-400">3</span>
+                <span className="text-sm text-muted-foreground">Parity Shards (n-k)</span>
+              </div>
+              <span className="text-3xl text-muted-foreground">=</span>
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-bold text-green-400">12</span>
+                <span className="text-sm text-muted-foreground">Total Shards (n)</span>
               </div>
             </div>
+            <p className="text-sm text-muted-foreground italic mt-6">
+              This means you could lose 3 entire nodes (25% of the network) and your data is still safe.
+            </p>
+          </div>
+        </section>
 
-            <div className="mt-6">
-              <div className="bg-secondary/30 p-4 rounded-lg border">
-                <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
-                  <Code className="w-4 h-4" /> Rust Implementation
-                </h4>
-                <pre className="text-xs overflow-x-auto font-mono bg-black/80 text-gray-300 p-4 rounded">
-{`// Apply bit-reversal permutation
-let j = reverse_bits(i, 12); // 4096 = 2^12
-let offset = j * 32;
-blob[offset..offset+32].copy_from_slice(&bytes);`}
-                </pre>
+        {/* Section 3: Distribution & Repair */}
+        <section className="mt-16">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
+            <ArrowRightLeft className="w-5 h-5 text-green-500" /> Distribution & Efficient Repair
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            The encoded shards are distributed to distinct nodes across the <strong>Nil-Lattice</strong> topology. This ensures geographic diversity and enables rapid data healing.
+          </p>
+          <ul className="list-disc list-inside text-muted-foreground space-y-2 mb-6">
+            <li><strong>Customizable Resilience:</strong> You choose the safety level for each file.</li>
+            <li><strong>Parallel Throughput:</strong> Client software downloads from the fastest available subset of nodes simultaneously.</li>
+            <li><strong>Efficient Repair:</strong> If a node fails, the network mathematically reconstructs only the specific missing shard, without needing to move the full file.</li>
+          </ul>
+        </section>
+
+        {/* Section 4: Mapping to the Field */}
+        <section className="mt-16">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
+              <Hash className="w-5 h-5 text-green-500" /> Mapping to the Field ($Fr$)
+            </h3>
+            <div className="bg-card p-6 rounded-xl border border-border mb-6">
+              <p className="text-muted-foreground mb-4">
+                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each 128 KiB data unit to an integer modulo a massive prime number $r$. This is the input to our commitment scheme.
+              </p>
+              <div className="font-mono bg-background/50 text-foreground p-4 rounded-lg text-sm overflow-x-auto mb-4 border border-border shadow-inner">
+                r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+              </div>
+              <div className="bg-accent/10 border border-accent/50 p-4 rounded-lg">
+                <h4 className="font-bold text-sm text-accent-foreground mb-2">⚠️ Engineering Nuance: Big Endian vs Little Endian</h4>
+                <p className="text-sm text-muted-foreground">
+                  The underlying <code>c-kzg</code> library (based on Ethereum specs) expects field elements in <strong>Big Endian</strong> format. Our core library explicitly handles this conversion to ensure cryptographic compatibility.
+                </p>
               </div>
             </div>
           </section>
-        </div>
       </motion.div>
     </div>
   );

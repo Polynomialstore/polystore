@@ -17,7 +17,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="nilstore-theme">
+    <ThemeProvider defaultTheme="system" storageKey="nilstore-theme">
       <ProofProvider>
         <HashRouter>
           <Routes>
