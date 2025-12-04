@@ -1,13 +1,13 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v2.4 - Elastic Performance)**
+**(White Paper v2.6 - Elastic Performance)**
 
 **Date:** 2025-12-04
 **Authors:** NilStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. Crucially, the network supports **User-Funded Elasticity**: Providers can signal saturation to trigger automatic, budget-capped replication surges, ensuring viral content remains available without punishing successful nodes.
+NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. Crucially, the network supports **User-Funded Elasticity** with **8 MiB Mega-Data Units (MDUs)** and **Stripe-Aligned Scaling**, ensuring viral content remains available without punishing successful nodes.
 
 ## 1\. Introduction
 
@@ -20,7 +20,7 @@ Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is ineffi
   * **Unified Liveness:** A user downloading a file *is* the storage audit.
   * **Synthetic Challenges:** The network audits cold data automatically.
   * **Performance Market:** Rewards are based on speed (Platinum/Gold/Silver).
-  * **Elasticity:** The network automatically scales replication to meet demand, funded by the user's prepaid escrow.
+  * **Elasticity:** The network automatically scales replication using **Stripe-Aligned Scaling** to meet demand, funded by the user's prepaid escrow.
 
 ---
 
@@ -60,11 +60,11 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 
 ### Step 1: Ingestion & Placement
 1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)`.
-2.  **Assignment:** Chain deterministically assigns 12 SPs.
+2.  **Assignment:** Chain deterministically assigns 12 SPs for **8 MiB MDUs**.
 3.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`. Chain spawns 5 more replicas.
+*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`. Chain spawns 5 more **Stripe-Aligned** replicas.
 *   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges.
 
 ---
@@ -85,7 +85,7 @@ NilStore is built for **Zero-Trust** environments.
 
 ### 6.1 Zero-Knowledge Cloud
 *   **Encryption:** Data is encrypted client-side (`AES-256-GCM`) before it ever touches the network.
-*   **Blind Replication:** When the network scales up "Hot Replicas," it copies **Ciphertext**. Providers act as blind mules; they store and serve data they cannot read.
+*   **Blind Replication:** When the network scales up "Hot Replicas," it copies **8 MiB Encrypted MDUs** as ciphertext. Providers act as blind mules; they store and serve data they cannot read.
 *   **Zero-Touch Scaling:** Because the encryption is deterministic, the network can replicate data autonomously. The Data Owner does **not** need to be online to re-encrypt data for new nodes.
 
 ### 6.2 Proof of Deletion (Crypto-Erasure)

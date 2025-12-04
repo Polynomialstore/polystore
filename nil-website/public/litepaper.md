@@ -1,5 +1,5 @@
 # NilStore Litepaper: The Sealing-Free Storage Network
-**Technical Overview v2.5**
+**Technical Overview v2.6**
 
 ## 1. Introduction & Value Proposition
 NilStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
@@ -12,8 +12,8 @@ By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Plac
 *   **Unified Revenue:** Earn rewards for both **Storage** (Liveness) and **Bandwidth** (Traffic) in a single flow.
 
 ### Value for Data Owners
-*   **Instant Availability:** Data is stored in a retrieval-ready format. No "unsealing" latency.
-*   **User-Funded Elasticity:** Viral content automatically scales to meet demand, funded by the deal's escrow.
+*   **Instant Availability:** Data is stored in 8 MiB Mega-Data Units (MDUs) for efficient retrieval.
+*   **User-Funded Elasticity:** Viral content automatically scales using **Stripe-Aligned Scaling** to meet demand, funded by the deal's escrow.
 *   **Configurable Resilience:** Users define `ServiceHints` (Hot/Cold) to optimize placement for cost (Archive) or speed (Edge).
 *   **Enterprise Privacy:** Data is encrypted client-side. Scaling is "Zero-Touch" (network replicates ciphertext). Deletion is guaranteed via **Crypto-Erasure**.
 
@@ -50,7 +50,7 @@ We don't ban S3. We just pay for speed.
 
 ### Step 1: Ingestion
 1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)`.
-2.  **Placement:** The Chain deterministically assigns 12 Providers based on `Hash(DealID + Block)`.
+2.  **Placement:** The Chain deterministically assigns 12 Providers for **8 MiB MDUs**.
 3.  **Upload:** User streams data to the assigned nodes.
 
 ### Step 2: The Loop
@@ -59,7 +59,7 @@ We don't ban S3. We just pay for speed.
 
 ### Step 3: Scaling
 *   **Saturation:** If a Platinum node is overwhelmed, it signals the chain.
-*   **Action:** The Chain checks the User's `MaxSpend` budget. If funds exist, it spawns **Hot Replicas** on new Edge nodes to absorb the load.
+*   **Action:** The Chain checks the User's `MaxSpend` budget. If funds exist, it spawns **Hot Replicas** using **Stripe-Aligned Scaling** on new Edge nodes to absorb the load.
 
 ---
 
@@ -71,5 +71,5 @@ We don't ban S3. We just pay for speed.
 ---
 
 ## 6. Enterprise Features
-*   **Zero-Knowledge Cloud:** Providers store encrypted blobs (`AES-256`). They cannot read your data.
+*   **Zero-Knowledge Cloud:** Providers store encrypted 8 MiB MDUs (`AES-256`). They cannot read your data.
 *   **Proof of Deletion:** You hold the key. Destroy the key, and the data is globally erased (Crypto-Erasure).
