@@ -13,7 +13,7 @@ export const Home = () => {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.8 }}
-            className="mx-auto w-64 h-64 mb-8 relative"
+            className="mx-auto w-64 h-64 mb-4 relative"
           >
              <img 
                src="/logo_dark.jpg" 
@@ -26,6 +26,22 @@ export const Home = () => {
                className="absolute inset-0 w-full h-full object-contain hidden dark:block mix-blend-screen"
              />
           </motion.div>
+
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="text-5xl md:text-6xl font-extrabold tracking-widest uppercase mb-6"
+            style={{
+              fontFamily: "'Montserrat', sans-serif",
+              backgroundImage: "linear-gradient(90deg, #00E5FF 0%, #E056FD 50%, #7B2CBF 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              filter: "drop-shadow(0 0 8px rgba(0, 229, 255, 0.3))"
+            }}
+          >
+            NilStore
+          </motion.h2>
 
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
