@@ -5,7 +5,7 @@ export const TestnetDocs = () => {
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-4xl">
       <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-4">NilStore Incentivized Testnet (Phase 3)</h1>
+        <h1 className="text-4xl font-bold mb-4 text-foreground">NilStore Incentivized Testnet (Phase 3)</h1>
         <p className="text-xl text-muted-foreground">
           Welcome to "Store Wars". This documentation details how to run the entire stack locally: the L1 Chain (Cosmos SDK), the Cryptography Core (Rust), the L2 Bridge (Foundry), and the Visualizer (React).
         </p>
@@ -23,7 +23,7 @@ export const TestnetDocs = () => {
 
         {/* Section 1: Architecture Overview */}
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold border-b pb-2 text-slate-100">System Architecture & Behaviors</h2>
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">System Architecture & Behaviors</h2>
           <div className="grid md:grid-cols-3 gap-6 mt-4">
             <div className="bg-secondary/20 p-6 rounded-lg border">
               <h3 className="font-bold text-lg mb-2">1. NilChain (L1)</h3>
@@ -57,7 +57,7 @@ export const TestnetDocs = () => {
 
         {/* Section 2: Developer Setup Guide */}
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold border-b pb-2 text-slate-100">Developer Setup Guide</h2>
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Developer Setup Guide</h2>
           <p className="text-muted-foreground">
             Follow these steps to build and run the entire stack from source.
           </p>
@@ -116,7 +116,7 @@ export const TestnetDocs = () => {
 
         {/* Section 3: Live Lattice Status */}
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold border-b pb-2 text-slate-100">Live Network Status</h2>
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Live Network Status</h2>
           <p className="text-sm text-muted-foreground">
             Below is the live visualization of the local testnet. Submitting a proof via CLI will update this map in real-time.
           </p>
@@ -125,7 +125,7 @@ export const TestnetDocs = () => {
 
         {/* Section 4: Demo Interaction */}
         <section className="space-y-4">
-            <h2 className="text-2xl font-bold border-b pb-2 text-slate-100">Interactive Demo</h2>
+            <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Interactive Demo</h2>
             <p className="text-sm">To simulate a storage node submitting a proof, run this command in a new terminal (ensure you are in the <code>nilchain</code> directory):</p>
             <div className="bg-slate-900 text-slate-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
                 <p className="text-slate-500"># Submit a valid "Non-Zero" proof (generated from Rust core)</p>
@@ -146,7 +146,7 @@ export const TestnetDocs = () => {
 
         {/* Section 5: Automated End-to-End Testing */}
         <section className="space-y-4">
-            <h2 className="text-2xl font-bold border-b pb-2 text-slate-100">Automated End-to-End Testing</h2>
+            <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Automated End-to-End Testing</h2>
             <p className="text-sm">
                 To run a full end-to-end test of the entire stack (Rust core build, Go chain build, chain startup, and valid proof submission) use the provided `e2e_test.sh` script. This script verifies all components are working together correctly.
             </p>

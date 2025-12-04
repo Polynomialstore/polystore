@@ -46,13 +46,14 @@ export const EconomyDashboard = () => {
           
                 {/* Key Metrics */}
                 <div className="grid md:grid-cols-4 gap-6 mb-16">
-                  <MetricCard 
-                      title="Total Storage" 
-                      value={`${data[data.length-1].storage_gb.toFixed(2)} GB`} 
-                      sub="Accumulated Data"
-                      icon={<HardDrive className="text-blue-500 dark:text-blue-400"/>} 
-                      delay={0.1}
-                  />
+                          <MetricCard 
+                              title="Total Storage" 
+                              value={`${data[data.length-1].storage_gb.toFixed(2)} GB`} 
+                              sub="Accumulated Data (GB)"
+                              icon={<HardDrive className="text-blue-500 dark:text-blue-400"/>} 
+                              delay={0.1}
+                          />
+                  
                   <MetricCard 
                       title="Circulating Supply" 
                       value={`${(data[data.length-1].supply / 1000000).toFixed(2)}M NIL`} 

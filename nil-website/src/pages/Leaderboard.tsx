@@ -31,15 +31,15 @@ export const Leaderboard = () => {
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-4xl">
       <div className="mb-12 text-center">
-        <h1 className="text-4xl font-bold mb-4 text-slate-100">"Store Wars" Leaderboard</h1>
+        <h1 className="text-4xl font-bold mb-4 text-foreground">"Store Wars" Leaderboard</h1>
         <p className="text-xl text-muted-foreground">
           Top Storage Providers competing for the 1 Petabyte Goal.
         </p>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-slate-950 text-slate-400 font-medium uppercase text-xs tracking-wider">
+          <thead className="bg-muted/50 text-foreground font-medium uppercase text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4">Rank</th>
               <th className="px-6 py-4">Storage Provider</th>
@@ -47,7 +47,7 @@ export const Leaderboard = () => {
               <th className="px-6 py-4 text-right">Points</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-border">
             {ranked.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">
@@ -56,13 +56,13 @@ export const Leaderboard = () => {
               </tr>
             ) : (
               ranked.map((node) => (
-                <tr key={node.address} className="hover:bg-slate-800/50 transition-colors text-slate-200">
+                <tr key={node.address} className="hover:bg-muted/50 transition-colors text-foreground">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {node.rank === 1 && <Trophy className="w-5 h-5 text-yellow-400" />}
-                      {node.rank === 2 && <Medal className="w-5 h-5 text-slate-400" />}
+                      {node.rank === 2 && <Medal className="w-5 h-5 text-muted-foreground" />}
                       {node.rank === 3 && <Award className="w-5 h-5 text-amber-600" />}
-                      {node.rank > 3 && <span className="font-mono text-slate-500">#{node.rank}</span>}
+                      {node.rank > 3 && <span className="font-mono text-muted-foreground">#{node.rank}</span>}
                     </div>
                   </td>
                   <td className="px-6 py-4 font-mono text-sm">
@@ -74,7 +74,7 @@ export const Leaderboard = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 text-right font-mono">{node.proofs}</td>
-                  <td className="px-6 py-4 text-right font-bold text-green-400">
+                  <td className="px-6 py-4 text-right font-bold text-primary">
                     {node.points.toLocaleString()} PTS
                   </td>
                 </tr>
