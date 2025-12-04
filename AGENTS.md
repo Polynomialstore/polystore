@@ -291,11 +291,27 @@ We have executed a major refactor of the protocol specification to replace "Phys
 
 
 
-*   [ ] **Blob Size**: Update `BYTES_PER_BLOB` constants to reflect **8 MiB MDU** (batching). Currently, `c-kzg` likely assumes 128KB (EIP-4844). We need a wrapper to verify 64 blobs as one "Proof" or handle the vector commitment logic.
 
 
 
-*   [ ] **Batch Verification**: Expose a `verify_batch` FFI function to allow verifying an entire 8 MiB MDU proof efficiently.
+
+*   [x] **Audit nil_core: Remove Argon2id (PoDE) logic as it is now deprecated.**
+
+
+
+
+
+
+
+*   [x] **Audit nil_core: Verify KZG Blob size constants and ensure support for 8 MiB MDUs (likely via batching 64 blobs).**
+
+
+
+
+
+
+
+*   [x] **Batch Verification**: Expose a `verify_batch` FFI function to allow verifying an entire 8 MiB MDU proof efficiently.
 
 
 
