@@ -1,15 +1,16 @@
 import { Outlet, Link } from "react-router-dom";
+import { ModeToggle } from "./ModeToggle";
 
 export const Layout = () => {
   return (
-    <div className="min-h-screen bg-background font-sans antialiased">
+    <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300">
       <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold flex items-center gap-2">
+          <Link to="/" className="text-xl font-bold flex items-center gap-2 text-foreground">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-mono">N</div>
             NilStore
           </Link>
-          <div className="hidden md:flex gap-8 text-sm font-medium text-muted-foreground">
+          <div className="hidden md:flex gap-8 text-sm font-medium text-muted-foreground items-center">
             <Link to="/technology" className="hover:text-foreground transition-colors">Technology</Link>
             <Link to="/testnet" className="hover:text-foreground transition-colors">Testnet</Link>
             <Link to="/leaderboard" className="hover:text-foreground transition-colors">Leaderboard</Link>
@@ -17,10 +18,13 @@ export const Layout = () => {
             <Link to="/s3-adapter" className="hover:text-foreground transition-colors">S3 Adapter</Link>
             <Link to="/governance" className="hover:text-foreground transition-colors">Governance</Link>
             <a href="#" className="hover:text-foreground transition-colors">GitHub</a>
+            <div className="pl-4 border-l">
+                <ModeToggle />
+            </div>
           </div>
-          <button className="bg-foreground text-background px-4 py-2 rounded-full text-sm font-medium hover:opacity-90">
-            Launch App
-          </button>
+          <div className="md:hidden flex items-center gap-4">
+             <ModeToggle />
+          </div>
         </div>
       </nav>
 

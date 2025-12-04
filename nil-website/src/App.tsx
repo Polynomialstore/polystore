@@ -12,29 +12,32 @@ import { Leaderboard } from "./pages/Leaderboard";
 import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
 import { EconomyDashboard } from "./pages/EconomyDashboard";
+import { ThemeProvider } from "./context/ThemeContext";
 
 function App() {
   return (
-    <ProofProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="testnet" element={<TestnetDocs />} />
-            <Route path="leaderboard" element={<Leaderboard />} />
-            <Route path="s3-adapter" element={<S3AdapterDocs />} />
-            <Route path="governance" element={<GovernanceDocs />} />
-            <Route path="economy" element={<EconomyDashboard />} />
-            <Route path="technology" element={<TechnologyLayout />}>
-              <Route index element={<Technology />} />
-              <Route path="sharding" element={<ShardingDeepDive />} />
-              <Route path="kzg" element={<KZGDeepDive />} />
-              <Route path="sealing" element={<ArgonDeepDive />} />
+    <ThemeProvider defaultTheme="dark" storageKey="nilstore-theme">
+      <ProofProvider>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="testnet" element={<TestnetDocs />} />
+              <Route path="leaderboard" element={<Leaderboard />} />
+              <Route path="s3-adapter" element={<S3AdapterDocs />} />
+              <Route path="governance" element={<GovernanceDocs />} />
+              <Route path="economy" element={<EconomyDashboard />} />
+              <Route path="technology" element={<TechnologyLayout />}>
+                <Route index element={<Technology />} />
+                <Route path="sharding" element={<ShardingDeepDive />} />
+                <Route path="kzg" element={<KZGDeepDive />} />
+                <Route path="sealing" element={<ArgonDeepDive />} />
+              </Route>
             </Route>
-          </Route>
-        </Routes>
-      </HashRouter>
-    </ProofProvider>
+          </Routes>
+        </HashRouter>
+      </ProofProvider>
+    </ThemeProvider>
   );
 }
 
