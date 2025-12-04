@@ -1,83 +1,75 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v2.0 - Performance Market Edition)**
+**(White Paper v2.1 - User-Centric Economy)**
 
 **Date:** 2025-12-04
 **Authors:** NilStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage. Unlike legacy protocols that rely on hardware-intensive "Sealing" or fragile timing checks, NilStore introduces a **Performance Market**: a tiered reward system that incentivizes providers to store data on high-performance, local media (NVMe/SSD) by paying premium rewards for fast proof inclusion (Block H+1). Combined with **System-Defined Placement** (deterministic slotting) and **Chain-Derived Challenges**, NilStore eliminates Sybil attacks and "Lazy Provider" vampirism while maintaining a permissionless, commodity-hardware friendly ecosystem.
+NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage. It introduces a **Performance Market** (tiered rewards for speed), **System-Defined Placement** (anti-Sybil distribution), and a **User-Centric Retrieval Economy** where users control encryption, bandwidth quotas, and edge caching.
 
 ## 1\. Introduction
 
 ### 1.1 Motivation
 
-Decentralized storage promises resilience, but often suffers from two extremes:
-1.  **Centralization:** High hardware requirements (GPUs for sealing) limit participation to data centers.
-2.  **Vampirism:** "Lazy" providers simply proxy data to Amazon S3, undermining the network's redundancy goals.
-
-NilStore solves this via **Incentive Design**, not "Physics Police." By tying rewards directly to **Inclusion Latency** (how many blocks it takes to respond to a challenge), we create a market where genuine, high-performance providers naturally out-compete slow S3 proxies.
+Decentralized storage often fails on two fronts: **Latency** (slow retrieval) and **Complexity** (users managing payment channels). NilStore solves this by treating **Retrieval as a First-Class Citizen**.
 
 ### 1.2 Key Innovations
 
-  * **Performance Market (Tiered Rewards):** Rewards are scaled based on response speed. "Platinum" (immediate) responses earn 100%; "Silver" (delayed) responses earn 50%; "Fail" (glacier-speed) earn 0%.
-  * **System-Defined Placement:** Clients do not choose their providers. The network deterministically assigns shards to random, diverse providers (`Hash(Deal + Block)`), making Sybil attacks statistically impossible.
-  * **Chain-Derived Challenges:** Challenges (`Z`) are derived from the unpredictable Epoch Beacon, preventing pre-computation attacks.
-  * **$STOR-Only Economy:** A unified economic model using $STOR for capacity commitment, bandwidth settlement, and governance.
+  * **Performance Market:** Rewards are scaled based on response speed (Block Latency).
+  * **System-Defined Placement:** Deterministic assignment ensures diversity and prevents self-dealing.
+  * **Included Quota:** Deals come with prepaid bandwidth, simplifying the UX to "Pay Once, Store & Serve."
+  * **Edge-Ready:** Data is stored as encrypted ciphertext, decryptable only by the User or their authorized Edge Nodes (e.g., Cloudflare Workers), enabling true CDN functionality.
 
 ---
 
-## 2. The Core Innovation: The Performance Market
+## 2. The Performance Market (Incentivized Speed)
 
-Instead of a binary "Pass/Fail" based on a brittle 100ms timing window, NilStore uses **Block-Based Tiers** to enforce quality.
+Instead of banning S3, we out-compete it.
 
 ### The Logic
 1.  **Challenge:** At Block `H`, the network issues a challenge.
-2.  **Race:** Providers must fetch data, compute the KZG proof, and submit the transaction.
-3.  **Reward:**
-    *   **Platinum (Block H+1):** 100% Reward. (Requires Local NVMe/SSD).
-    *   **Gold (Block H+2 to H+5):** 80% Reward. (Tolerates minor network jitter).
-    *   **Silver (Block H+10):** 50% Reward. (Standard HDD / Congested Network).
-    *   **Fail (Block H+20+):** 0% Reward + Slash. (Deep Freeze / Offline).
-
-### The Outcome
-*   **S3 Standard:** Might hit Gold or Silver tiers. Profitable, but less so than local hardware.
-*   **S3 Glacier:** Will consistently miss the deadline (Fail). Unprofitable.
-*   **Local Hardware:** Consistently hits Platinum/Gold. Maximum Profit.
-
-This market mechanism aligns the provider's selfish profit motive with the network's need for fast, available data.
+2.  **Reward:**
+    *   **Platinum (Block H+1):** 100% Reward. (Requires Local NVMe).
+    *   **Gold (Block H+5):** 80% Reward.
+    *   **Fail (Block H+20):** 0% Reward. (Glacier/Offline).
 
 ---
 
-## 3. Architecture
+## 3. The Retrieval Economy
 
-### Layer 1: Consensus & Verification (Cosmos-SDK)
-*   **Role:** The "Math Police."
-*   **Function:** Manages the **Active Provider List**, executes **System-Defined Placement**, issues **Epoch Beacons**, and verifies **KZG Proofs**. It calculates reward tiers based on proof inclusion height.
+NilStore automates the "CDN" experience through the protocol.
 
-### Layer 2: Settlement & Governance (EVM)
-*   **Role:** The "Bank."
-*   **Function:** Hosts the **$STOR** token, Deal NFTs, and DAO governance.
+### 3.1 User-Pays & Included Quota
+*   **Prepaid Model:** When creating a deal, users fund an **Escrow** that covers both storage (Space) and retrieval (Bandwidth).
+*   **Quotas:** Users set a `MaxMonthlySpend`. The protocol enforces this cap, preventing billing runaways.
+
+### 3.2 Auto-Scaling (Hot Replicas)
+*   **Viral Content:** If a file is requested frequently, the protocol automatically detects the heat.
+*   **Reaction:** The chain assigns **Hot Replicas** to additional, high-performance nodes to meet demand.
+*   **Decay:** As demand cools, these replicas are spun down to save costs.
+
+### 3.3 Efficient Auditing
+*   **Decaying Sampling:** To keep gas costs low, the network audits high-volume providers *less frequently* over time as they build reputation, while maintaining strict checks on new providers.
 
 ---
 
 ## 4. The Lifecycle of a File
 
-### Step 1: Ingestion & Placement (System-Defined)
-1.  **Deal Creation:** User submits `MsgCreateDeal(CID, Size)` to the L1 Chain.
-2.  **System Assignment:** The Chain deterministically calculates the Provider Set: `SelectedNodes = Hash(DealID + BlockHash) % ActiveProviderList`.
-3.  **Diversity Check:** The Chain ensures selected nodes are from distinct failure domains (IP/ASN).
-4.  **Upload:** User streams data shards to the *assigned* providers.
+### Step 1: Ingestion & Placement
+1.  **Deal Creation:** User submits `MsgCreateDeal`. Chain deterministically assigns 12 distinct Providers.
+2.  **Upload:** User streams encrypted shards to the assigned IPs.
 
 ### Step 2: Storage & Verification
-1.  **Beacon:** The network generates a random `EpochBeacon`.
-2.  **Derived Challenge:** Providers compute `Z = Hash(Beacon + DealID)`. They cannot know this `Z` in advance.
-3.  **Proof Submission:** Providers compute `KZG_Open(Data, Z)` and broadcast the proof.
+1.  **Challenge:** Chain issues `Z` from Epoch Beacon.
+2.  **Proof:** Providers submit KZG proofs.
+3.  **Tiering:** Faster proofs earn Platinum rewards.
 
-### Step 3: Settlement
-1.  **Tier Calculation:** The L1 Validator receives the proof at Block `H_proof`. It compares this to the challenge block `H_challenge`.
-2.  **Payout:** The Deal Escrow pays the Provider based on the Tier (Platinum/Gold/Silver).
+### Step 3: Retrieval & Consumption
+1.  **Request:** User (or Edge Node) requests shards.
+2.  **Service:** SP streams ciphertext. User signs a **Micro-Receipt**.
+3.  **Settlement:** SP batches receipts. Chain verifies a random sample and debits User Escrow.
 
 ---
 
@@ -85,16 +77,16 @@ This market mechanism aligns the provider's selfish profit motive with the netwo
 
 | Threat | Mitigation |
 | :--- | :--- |
-| **Sybil Attack** | **System-Defined Placement.** Attackers cannot self-assign deals. They must control >51% of the network to statistically capture a file. |
-| **Lazy Provider (S3)** | **Performance Market.** S3 latency forces providers into lower reward tiers (Gold/Silver), reducing their competitive edge against local hardware. |
-| **Pre-Computation** | **Chain-Derived Challenges.** `Z` is linked to the unpredictable Beacon. Deleting the file and keeping a "proof" is impossible. |
-| **Glacier/Archive** | **Block Deadlines.** High-latency retrieval misses the 20-block window entirely, resulting in slashing. |
+| **Sybil Attack** | **System-Defined Placement.** Attackers cannot self-assign deals. |
+| **Lazy Provider** | **Performance Market.** Slow retrieval = Low/No Reward. |
+| **Fake Traffic** | **Signed Receipts.** Providers cannot fake bandwidth claims without User signatures. |
+| **Billing Runaway** | **Spend Caps.** Protocol strictly enforces user-defined limits. |
 
 ---
 
 ## 6. Roadmap
 
 1.  **Phase 1:** Core Crypto & CLI (Completed).
-2.  **Phase 2:** Local Testnet ("Store Wars").
-3.  **Phase 3:** Implementation of **System-Defined Placement** module (In Progress).
-4.  **Phase 4:** Mainnet Launch.
+2.  **Phase 2:** Local Testnet & Specs.
+3.  **Phase 3:** Implementation of **Deal Object** and **System Placement**.
+4.  **Phase 4:** **Retrieval Market** & Edge SDK.

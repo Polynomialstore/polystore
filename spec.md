@@ -1,4 +1,4 @@
-# NilStore Core v 2.0
+# NilStore Core v 2.1
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -11,14 +11,14 @@ NilStore is a decentralized storage network that guarantees data availability an
 It specifies, in a fully reproducible manner:
 
 1. **System-Defined Placement** — Deterministic assignment of providers to ensure Anti-Sybil diversity.
-2. **Performance Market (Tiered Rewards)** — Block-latency based rewards (Platinum/Gold/Silver) replacing strict timing failures.
-3. **Chain-Derived Challenges** — Anti-precomputation via Epoch Beacons.
-4. **BLS VRF** and BATMAN aggregation for unbiased epoch beacons.
+2. **Performance Market (Tiered Rewards)** — Block-latency based rewards (Platinum/Gold/Silver).
+3. **Retrieval Economy** — User-pays model with "Included Quota", spending caps, and verifiable, decaying-sample auditing.
+4. **Chain-Derived Challenges** — Anti-precomputation via Epoch Beacons.
 
 All constants and vectors in this specification are reproducible and accompanied by deterministic Known‑Answer Tests (Annex A–B).
 
 ---
-## § 0 Notation, Dial System & Versioning ( Baseline Profile “S‑512” )
+## § 0 Notation, Dial System & Versioning
 
 ### 0.1 Symbols, Typography, and Conventions
 
@@ -27,10 +27,6 @@ All constants and vectors in this specification are reproducible and accompanied
 | `u8`, `u16`, `u32`, `u64` | Little‑endian unsigned integers of the stated width   | `0x0100 → 256`  |
 | `≡`                       | Congruence *mod q* unless another modulus is explicit | `a ≡ b (mod q)` |
 | `‖`                       | Concatenation of byte strings                         | `x‖y`           |
-| `Σ`, `Π`                  | Field‑sum / product in 𝔽\_q (wrap at *q*)            | `Σ_i x_i mod q` |
-| `NTT_k`                   | Length‑*k* forward Number‑Theoretic Transform         | `ntt64()`       |
-
-All integers, vectors, and matrices are interpreted **little‑endian** unless indicated otherwise.
 
 ### 0.2 Dial Parameters
 
@@ -46,18 +42,9 @@ A **dial profile** defines the core cryptographic parameters.
 Every on‑chain 32‑byte digest begins with a **version triple**
 
 ```
-Version = {major : u8 = 0x02, minor : u8 = 0x00, patch : u8 = 0x00}
+Version = {major : u8 = 0x02, minor : u8 = 0x01, patch : u8 = 0x00}
 digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 ```
-
-### 0.4 Domain Identifiers
-
-`DomainID : u16` partitions digests by purpose.
-
-| ID (hex)  | Domain                             | Source section |
-| --------- | ---------------------------------- | -------------- |
-|  `0x0000` | Internal primitives                | § 2–5          |
-|  `0x0300` | Nil‑VRF transcripts                | § 5            |
 
 ---
 
@@ -82,7 +69,7 @@ For a given `EpochID` and `DealID`:
 
 ### 4.2 Tiered Rewards (Proof-of-Inclusion-Latency)
 
-Instead of a strict "1.1 second" wall-clock deadline, NilStore uses **Block-Height Tiered Rewards**.
+Instead of a strict wall-clock deadline, NilStore uses **Block-Height Tiered Rewards**.
 
 **Let `H_challenge` be the block height where the Challenge is issued.**
 **Let `H_proof` be the block height where the `MsgSubmitProof` is included.**
@@ -90,7 +77,7 @@ Instead of a strict "1.1 second" wall-clock deadline, NilStore uses **Block-Heig
 
 | Tier | Latency (Blocks) | Reward Multiplier | Description |
 | :--- | :--- | :--- | :--- |
-| **Platinum** | `L <= 1` | **100%** | Immediate inclusion. Requires hot storage and low network latency. |
+| **Platinum** | `L <= 1` | **100%** | Immediate inclusion. Requires hot storage. |
 | **Gold** | `L <= 5` | **80%** | Fast inclusion. Tolerates minor network jitter. |
 | **Silver** | `L <= 10` | **50%** | Slow inclusion. Standard HDD or congested network. |
 | **Fail** | `L > 20` | **0% + Slash** | "Cold" storage (Glacier) or offline. Treated as data loss. |
@@ -100,38 +87,11 @@ Instead of a strict "1.1 second" wall-clock deadline, NilStore uses **Block-Heig
 1) **PoUD — KZG‑PDP (content correctness):** Provide KZG **multi‑open** at the chosen `Z` indices proving membership in `C_root`.
 2) **Submission:** Broadcast `MsgSubmitProof` immediately to secure the highest Tier.
 
-### 4.4 Verifier (On‑chain)
-
-* **On‑chain:** Verify **KZG multi‑open** against `C_root` at point `Z`.
-* **Tiering:** Calculate `Latency` based on inclusion height and award tokens/slashing accordingly.
-
 ---
 
 ## § 5 Nil‑VRF / Epoch Beacon (`nilvrf`)
 
-We use a BLS12‑381‑based **verifiable random function (VRF)** to derive unbiased epoch randomness.
-
-### 5.1 Notation & Parameters
-
-| Object | Group | Encoding   | Comment                             |
-| ------ | ----- | ---------- | ----------------------------------- |
-| `pk`   | `G1`  | 48 B comp. | `pk = sk·G₁`                        |
-| `π`    | `G2`  | 96 B comp. | Proof (BLS signature)               |
-| `H`    | `G2`  | 96 B       | `H = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", msg)` |
-| `e`    | —     | —          | Optimal Ate pairing `e: G1×G2→G_T`  |
-| `Hash` | —     | 32 B       | Blake2s‑256, domain `"NIL_VRF_OUT"` |
-
-Curve: **BLS12‑381**; subgroup order
-`r = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001`.
-
-### 5.3 Epoch Beacon
-
-For epoch counter `ctr`:
-
-```
-(y, π)   = vrf_eval(sk, pk, int_to_bytes_le(ctr, 8));
-beacon_t = Blake2s‑256("NIL_BEACON" ‖ y);
-```
+We use a BLS12‑381‑based **verifiable random function (VRF)** to derive unbiased epoch randomness. (Standard BLS signatures on `hash_to_G2`).
 
 The 32‑byte `beacon_t` feeds **§ 4.1** challenge derivation.
 
@@ -149,11 +109,39 @@ To prevent "Self-Dealing" (where an attacker acts as both client and provider), 
     `Idx_i = Hash(DealID || BlockHash || i) % AP_List.Length`
 3.  **Diversity Constraint:** The selected set MUST satisfy diversity rules (e.g., distinct ASN/Subnet).
 
-### 6.1 Deal Lifecycle
+### 6.1 Retrieval Economy (User-Pays & Auto-Scaling)
 
-1.  **Creation:** User sends `MsgCreateDeal`. Chain runs **System-Defined Placement**. `DealCreated` event emitted with assigned SPs.
-2.  **Execution:** Every Epoch, chain derives new `Z` challenges. SPs submit proofs.
-3.  **Settlement:** Validator verifies KZG, calculates **Tier** based on inclusion height, credits SP balance from Deal Escrow.
+Retrievals are initiated by the User (or their Edge delegates) and settled via the protocol.
+
+#### 6.1.1 Bandwidth Escrow & Quota
+*   **Included Quota:** Every `MsgCreateDeal` includes a `PrepaidBandwidth` amount (e.g., 1TB). This is added to the Deal's escrow.
+*   **Spend Cap:** Users set a `MaxMonthlySpend`. The protocol rejects retrievals exceeding this cap unless explicitly authorized.
+*   **Decryption:** Retrieval delivers **Ciphertext**. Users/Edge Nodes utilize the `FMK` (File Master Key) to decrypt client-side.
+
+#### 6.1.2 Verifiable Retrieval & Decaying Sampling
+To minimize gas costs while maintaining security, the protocol uses **Decaying Probabilistic Verification**.
+
+1.  **Receipts:** Users sign `RetrievalReceipt(Bytes, Timestamp, ProviderID)` upon successful download.
+2.  **Aggregation:** SPs aggregate receipts into a Merkle Root and submit `MsgClaimBandwidth(Root, TotalBytes)` once per epoch.
+3.  **Sampling Logic:**
+    *   The chain calculates a verification probability `P`.
+    *   `P = BaseRate / (1 + log(TotalVerifiedBytes_SP))`.
+    *   *Effect:* New or low-volume SPs face high audit rates (e.g., 10%). High-volume, trusted SPs face asymptotically lower rates (e.g., <0.1%), optimizing gas.
+4.  **Challenge:** If sampled, the Chain requests specific receipts from the Merkle Tree.
+5.  **Settlement:** Valid proofs unlock $STOR from the Deal Escrow to the SP.
+
+#### 6.1.3 Automatic Scaling (Hot Replicas)
+*   **Trigger:** If `ServedBytes > Threshold` for a specific DU in an epoch.
+*   **Action:** The protocol automatically triggers `SystemPlacement` to assign **Hot Replicas** to additional high-performance SPs.
+*   **Funding:** These replicas are funded from the Deal's "Surge Budget" (if enabled by User).
+
+### 6.2 Deal Lifecycle
+
+1.  **Creation:** User sends `MsgCreateDeal`. Chain runs **System-Defined Placement**. `DealCreated` event emitted.
+2.  **Execution:** Every Epoch, chain derives `Z`. SPs submit proofs.
+3.  **Retrieval:** Users fetch data. SPs accumulate receipts.
+4.  **Settlement:** Validator verifies KZG and Bandwidth Receipts.
+5.  **Expiry:** Deal ends, remaining escrow returned.
 
 ## Appendix A: Core Cryptographic Primitives
 
