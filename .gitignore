@@ -5,3 +5,5 @@ target/
 proof.json
 test_data.bin
 **/*.log
+nilchain/nilchaind
+nilchain/.nilchain/

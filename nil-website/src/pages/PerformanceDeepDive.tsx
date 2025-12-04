@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Trophy, Clock, Zap } from "lucide-react";
+import { Trophy, Zap } from "lucide-react";
 
 export const PerformanceDeepDive = () => {
   return (

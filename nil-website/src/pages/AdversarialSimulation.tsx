@@ -26,7 +26,7 @@ export const AdversarialSimulation = () => {
         >
           <h1 className="text-5xl font-bold mb-6 text-foreground">The "Lazy Provider" Attack</h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Can a storage node cheat by outsourcing storage to a cheap, slow cloud service (like S3) instead of using high-performance local hardware? 
+            Can a storage node cheat by outsourcing storage to a cheap, slow, centralized cloud service (like S3) instead of using high-performance local hardware? 
             <br/>
             <strong>Spoiler: The math makes it unprofitable.</strong>
           </p>
@@ -167,7 +167,7 @@ export const AdversarialSimulation = () => {
             <div className="mb-4 p-3 bg-purple-500/10 w-fit rounded-lg"><Clock className="w-6 h-6 text-purple-500" /></div>
             <h4 className="font-bold text-foreground mb-2">2. The Execution</h4>
             <p className="text-sm text-muted-foreground">
-                Every epoch, the network challenges the nodes. The Honest node replies instantly (<1s). The Attacker must fetch data, incurring latency (>1s) and Egress Fees ($0.05/GB).
+                Every epoch, the network challenges the nodes. The Honest node replies instantly (&lt;1s). The Attacker must fetch data, incurring latency (&gt;1s) and Egress Fees ($0.05/GB).
             </p>
         </div>
         <div className="p-6 rounded-xl border border-border bg-card">
