@@ -113,7 +113,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
     *   Add EVM modules to `AppConfig` (using `depinject` overrides).
     *   *Note:* EVM Modules are temporarily disabled in `app.go` manual wiring for simulation tests due to a `MsgEthereumTx` signer panic in the Cosmos SDK runtime. They must be re-enabled for production binaries.
 *   [x] **AnteHandler:** Implement a hybrid AnteHandler to support both Cosmos (Keplr) and Ethereum (MetaMask) signatures.
-*   [ ] **Genesis:** Update `genesis.json` generation to include EVM parameters (ChainID, Gas Limits). (Auto-generated usually).
+*   [x] **Genesis:** Update `genesis.json` generation to include EVM parameters (ChainID, Gas Limits). (Auto-generated usually).
 
 ### Step 2: Smart Contract Deployment
 *   [ ] **Deploy `NilBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
@@ -169,6 +169,14 @@ We have executed a major refactor of the protocol specification to replace "Phys
 2.  **CI/CD Hygiene:** Updated `Makefile` to strictly fail on "ERROR" logs, ensuring test failures aren't masked.
 3.  **Rust Core:** Implemented `debug-print` feature flag in `nil_core` to silence verbose error logging during standard tests.
 4.  **EVM Workaround:** Temporarily disabled EVM module wiring in `app.go` and `app_config.go` to bypass a `depinject` panic (`no cosmos.msg.v1.signer option`) affecting simulation tests (`TestFullAppSimulation`). This allows verifying the core storage logic via simulation while the upstream EVM signer issue is addressed.
+
+## Change Log (Session 3: EVM Integration & Chain Configuration)
+
+**EVM & Chain Stabilization**
+1.  **Module Wiring:** Successfully manually wired `evm` and `feemarket` modules in `app.go`, resolving `depinject` conflicts and initialization ordering issues.
+2.  **Runtime Panic Fix:** Implemented a custom `ProvideCustomGetSigner` injection in `root.go` to bypass a critical runtime panic (`MsgEthereumTx` signer option missing) caused by `depinject` strict validation.
+3.  **Initialization Order:** Fixed `SetOrderBeginBlockers` and `SetOrderInitGenesis` panics by manually enforcing module load order after `app.Load()` to handle manually registered modules (IBC, EVM).
+4.  **Blocker Identified:** The `collect-gentxs` CLI command crashes with a segmentation fault, preventing automatic genesis validator creation.
 
 ## Phase 3: Implementation Plan (To-Do List)
 
