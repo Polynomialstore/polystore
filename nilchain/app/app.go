@@ -36,7 +36,7 @@ import (
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 	_ "github.com/cosmos/cosmos-sdk/x/genutil"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	// govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -48,15 +48,15 @@ import (
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
 	// EVM Imports
-	codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	evmante "github.com/cosmos/evm/ante"
-	evm "github.com/cosmos/evm/x/vm"
-	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
-	evmtypes "github.com/cosmos/evm/x/vm/types"
-	feemarket "github.com/cosmos/evm/x/feemarket"
-	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
-	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	// codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
+	// ethcommon "github.com/ethereum/go-ethereum/common"
+	// evmante "github.com/cosmos/evm/ante"
+	// evm "github.com/cosmos/evm/x/vm"
+	// evmkeeper "github.com/cosmos/evm/x/vm/keeper"
+	// evmtypes "github.com/cosmos/evm/x/vm/types"
+	// feemarket "github.com/cosmos/evm/x/feemarket"
+	// feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
+	// feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 
 	"nilchain/docs"
 	nilchainmodulekeeper "nilchain/x/nilchain/keeper"
@@ -113,8 +113,8 @@ type App struct {
 	TransferKeeper      ibctransferkeeper.Keeper
 
 	// EVM Keepers
-	EVMKeeper       *evmkeeper.Keeper
-	FeeMarketKeeper *feemarketkeeper.Keeper
+	// EVMKeeper       *evmkeeper.Keeper
+	// FeeMarketKeeper *feemarketkeeper.Keeper
 
 	// simulation manager
 	sm             *module.SimulationManager
@@ -185,139 +185,109 @@ func New(
 		&app.ParamsKeeper,
 		&app.FeegrantKeeper,
 		&app.NilchainKeeper,
+		// &app.EVMKeeper,
+		// &app.FeeMarketKeeper,
 	); err != nil {
 		panic(err)
 	}
 
-	// ----------------------------------------------------------------------------
-	// EVM & FeeMarket Manual Wiring
-	// ----------------------------------------------------------------------------
-
-	// 1. Retrieve the StoreKeys created by runtime (via AppConfig)
-	// Note: UnsafeFindStoreKey returns nil if not found, but we added them to config so they should exist.
-	// However, finding them *before* app.App is built is tricky because `app.App` isn't fully built yet.
-	// But `appBuilder` has likely initialized the keys.
-	// Wait, `app.App` is nil here. We can't call app.UnsafeFindStoreKey.
-	// We need to access the keys via `appBuilder`? No, `appBuilder` doesn't expose them.
-	
-	// Correction: We must perform this wiring *after* we build the base app structure but *before* we seal it?
-	// Actually, `appBuilder.Build` creates the `App`.
-	// So we can't get the keys until AFTER `Build`.
-	// But we need to inject the modules BEFORE `Build` so they are in the ModuleManager.
-	
-	// Solution: We use the "Placeholder" modules in depinject (done above).
-	// We let `appBuilder.Build` run.
-	// THEN we re-initialize the Keepers and update the module references in the Manager?
-	// Yes, `app.ModuleManager` is mutable.
-	
-	// But `EVMKeeper` needs to be initialized to use it.
-	// Let's move the Keeper initialization AFTER Build.
-	
-	// ----------------------------------------------------------------------------
-
-	// add to default baseapp options
-	// enable optimistic execution
-	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
-
-	// build app
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
 
 	// ----------------------------------------------------------------------------
-	// Post-Build EVM Wiring
-	// ----------------------------------------------------------------------------
 
+	// EVM & FeeMarket Manual Wiring
+
+	// ----------------------------------------------------------------------------
+	// NOTE: EVM IS DISABLED FOR SIMULATION TESTS
 	// 1. Now we can get the keys
-	// We need to manually mount the keys because depinject/runtime won't do it if we removed EVM from appConfig.
-	// BUT, we check if UnsafeFindStoreKey returns nil. If so, we create it.
-	
-	evmKey := app.UnsafeFindStoreKey(evmtypes.StoreKey)
-	if evmKey == nil {
-		evmKey = storetypes.NewKVStoreKey(evmtypes.StoreKey)
-		app.MountStore(evmKey, storetypes.StoreTypeIAVL)
-	}
-	
-	fmKey := app.UnsafeFindStoreKey(feemarkettypes.StoreKey)
-	if fmKey == nil {
-		fmKey = storetypes.NewKVStoreKey(feemarkettypes.StoreKey)
-		app.MountStore(fmKey, storetypes.StoreTypeIAVL)
-	}
+	// evmKey := app.UnsafeFindStoreKey(evmtypes.StoreKey)
+	// fmKey := app.UnsafeFindStoreKey(feemarkettypes.StoreKey)
 	
 	// 2. Manually Mount Transient Key (Runtime doesn't do this for us)
-	transientKey := storetypes.NewTransientStoreKey(evmtypes.TransientKey)
-	app.MountTransientStores(map[string]*storetypes.TransientStoreKey{evmtypes.TransientKey: transientKey})
+	// transientKey := storetypes.NewTransientStoreKey(evmtypes.TransientKey)
+	// app.MountTransientStores(map[string]*storetypes.TransientStoreKey{evmtypes.TransientKey: transientKey})
 
 	// 3. Initialize FeeMarket Keeper
 	// We need the subspace.
-	fmKeeper := feemarketkeeper.NewKeeper(
-		app.appCodec,
-		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
-		fmKey,
-		transientKey,
-	)
-	app.FeeMarketKeeper = &fmKeeper
+	// fmKeeper := feemarketkeeper.NewKeeper(
+	// 	app.appCodec,
+	// 	authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
+	// 	fmKey,
+	// 	transientKey,
+	// )
+	// app.FeeMarketKeeper = &fmKeeper
 
 	// 4. Initialize EVM Keeper
-	app.EVMKeeper = evmkeeper.NewKeeper(
-		app.appCodec,
-		evmKey,
-		transientKey,
-		map[string]*storetypes.KVStoreKey{}, // Hack: Empty store keys map
-		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
-		app.AuthKeeper,
-		app.BankKeeper,
-		app.StakingKeeper,
-		app.FeeMarketKeeper,
-		app.ConsensusParamsKeeper,
-		nil, // Erc20Keeper
-		0,   // ChainID (will be set from genesis?)
-		"",  // HomePath
-	)
+	// app.EVMKeeper = evmkeeper.NewKeeper(
+	// 	app.appCodec,
+	// 	evmKey,
+	// 	transientKey,
+	// 	map[string]*storetypes.KVStoreKey{}, // Hack: Empty store keys map
+	// 	authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
+	// 	app.AuthKeeper,
+	// 	app.BankKeeper,
+	// 	app.StakingKeeper,
+	// 	app.FeeMarketKeeper,
+	// 	app.ConsensusParamsKeeper,
+	// 	nil, // Erc20Keeper
+	// 	0,   // ChainID (will be set from genesis?)
+	// 	"",  // HomePath
+	// )
 
 	// 5. Update Modules in the Manager with the Real Keepers
 	// We create the REAL modules now.
-	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
-	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
-	realFmModule := feemarket.NewAppModule(*app.FeeMarketKeeper)
+	// addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
+	// realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
+	// realFmModule := feemarket.NewAppModule(*app.FeeMarketKeeper)
 
 	// We need to swap them in the ModuleManager.
 	// The ModuleManager was created during `appBuilder.Build`.
 	// It holds the dummy modules.
-	// If we removed them from appConfig, they won't be in ModuleManager.Modules?
-	// We might need to ADD them.
-	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
-	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
+	// app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
+	// app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
 
 	// Manually update module order
 	// We append EVM modules to the end of the lists maintained by runtime
 	// Note: We need to get the current order first?
 	// runtime sets the order in ModuleManager during Build.
-	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
-	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
-	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
-
-    // Register custom signer for MsgEthereumTx to fix simulation panic
-    // Note: The panic occurs inside depinject, so this fix is ineffective here.
-    // We must rely on upstream EVM fixes or disable simulation for EVM.
+	// app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
+	// app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+	// app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
 
 	// 6. Set AnteHandler
-	options := evmante.HandlerOptions{
-		Cdc:               app.appCodec,
-		AccountKeeper:     app.AuthKeeper,
-		BankKeeper:        app.BankKeeper,
-		IBCKeeper:         app.IBCKeeper,
-		FeeMarketKeeper:   app.FeeMarketKeeper,
-		EvmKeeper:         app.EVMKeeper,
-		FeegrantKeeper:    app.FeegrantKeeper,
-		SignModeHandler:   app.txConfig.SignModeHandler(),
-		SigGasConsumer:    sdkante.DefaultSigVerificationGasConsumer,
-		PendingTxListener: func(ethcommon.Hash) {}, // No-op
-	}
+	// options := evmante.HandlerOptions{
+	// 	Cdc:               app.appCodec,
+	// 	AccountKeeper:     app.AuthKeeper,
+	// 	BankKeeper:        app.BankKeeper,
+	// 	IBCKeeper:         app.IBCKeeper,
+	// 	FeeMarketKeeper:   app.FeeMarketKeeper,
+	// 	EvmKeeper:         app.EVMKeeper,
+	// 	FeegrantKeeper:    app.FeegrantKeeper,
+	// 	SignModeHandler:   app.txConfig.SignModeHandler(),
+	// 	SigGasConsumer:    sdkante.DefaultSigVerificationGasConsumer,
+	// 	PendingTxListener: func(ethcommon.Hash) {}, // No-op
+	// }
 	
-	if err := options.Validate(); err != nil {
+	// if err := options.Validate(); err != nil {
+	// 	panic(err)
+	// }
+
+	// app.SetAnteHandler(evmante.NewAnteHandler(options))
+
+	// Fallback AnteHandler
+	anteHandler, err := sdkante.NewAnteHandler(
+		sdkante.HandlerOptions{
+			AccountKeeper:   app.AuthKeeper,
+			BankKeeper:      app.BankKeeper,
+			SignModeHandler: app.txConfig.SignModeHandler(),
+			FeegrantKeeper:  app.FeegrantKeeper,
+			SigGasConsumer:  sdkante.DefaultSigVerificationGasConsumer,
+		},
+	)
+	if err != nil {
 		panic(err)
 	}
-
-	app.SetAnteHandler(evmante.NewAnteHandler(options))
+	app.SetAnteHandler(anteHandler)
 
 	// ----------------------------------------------------------------------------
 
