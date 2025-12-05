@@ -1,5 +1,5 @@
 import simulationData from '../data/adversarial_simulation.json';
-import { ShieldAlert, Server, Wifi, Database, Lock, Clock } from 'lucide-react';
+import { ShieldAlert, Server, Wifi, Database, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const AdversarialSimulation = () => {

@@ -1,21 +1,7 @@
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { File, Hash, Layers, ArrowRightLeft, Spline } from "lucide-react";
 
 export const ShardingDeepDive = () => {
-  const [isReversed, setIsReversed] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsReversed((prev) => !prev);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const indices = [0, 1, 2, 3, 4, 5, 6, 7];
-  const reversedIndices = [0, 4, 2, 6, 1, 5, 3, 7];
-  const currentOrder = isReversed ? reversedIndices : indices;
-
   return (
     <div className="w-full">      
       <motion.div
