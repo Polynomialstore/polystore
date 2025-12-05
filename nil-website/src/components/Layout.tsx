@@ -13,6 +13,7 @@ export const Layout = () => {
   const navLinks = [
     { name: "Technology", path: "/technology" },
     { name: "Leaderboard", path: "/leaderboard" },
+    { name: "Performance", path: "/performance" },
     { name: "Economy", path: "/economy" },
     { name: "Security", path: "/security" },
     { name: "S3 Adapter", path: "/s3-adapter" },

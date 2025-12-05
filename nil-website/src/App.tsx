@@ -13,6 +13,7 @@ import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
 import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
+import { PerformanceReport } from "./pages/PerformanceReport";
 import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
@@ -29,6 +30,7 @@ function App() {
               <Route index element={<Home />} />
               <Route path="testnet" element={<TestnetDocs />} />
               <Route path="leaderboard" element={<Leaderboard />} />
+              <Route path="performance" element={<PerformanceReport />} />
               <Route path="s3-adapter" element={<S3AdapterDocs />} />
               <Route path="governance" element={<GovernanceDocs />} />
               <Route path="economy" element={<EconomyDashboard />} />
