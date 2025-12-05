@@ -13,13 +13,18 @@ export function FileSharder() {
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
   const { addSimulatedProof } = useProofs();
 
   const connectWallet = () => {
-      // Simulate Keplr connection
-      setWalletConnected(true);
-      setWalletAddress("nil1user...");
+      setIsConnecting(true);
+      // Simulate delay
+      setTimeout(() => {
+          setWalletConnected(true);
+          setWalletAddress("nil1user" + Math.random().toString(36).substring(2, 8));
+          setIsConnecting(false);
+      }, 1500);
   };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -126,12 +131,26 @@ export function FileSharder() {
   return (
     <div className="w-full space-y-6">
       {!walletConnected ? (
-          <button onClick={connectWallet} className="w-full py-12 border-2 border-dashed border-slate-700 hover:border-primary/50 hover:bg-primary/5 rounded-xl text-slate-400 font-bold transition-all flex flex-col items-center gap-4">
-              <div className="text-4xl">🔌</div>
-              Connect Wallet to Start
+          <button 
+            onClick={connectWallet} 
+            disabled={isConnecting}
+            className={`w-full py-12 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 font-bold transition-all flex flex-col items-center gap-4
+                ${isConnecting ? 'opacity-50 cursor-not-allowed animate-pulse' : 'hover:border-primary/50 hover:bg-primary/5'}
+            `}
+          >
+              <div className="text-4xl">{isConnecting ? '🔄' : '🔌'}</div>
+              {isConnecting ? 'Connecting Wallet...' : 'Connect Wallet to Start'}
           </button>
       ) : (
       <>
+      <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-green-400">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
+              Connected: <span className="font-mono font-bold">{walletAddress}</span>
+          </div>
+          <button onClick={() => setWalletConnected(false)} className="text-xs text-muted-foreground hover:text-foreground">Disconnect</button>
+      </div>
+
       {/* Dropzone */}
       <div
         onDragEnter={handleDrag}
