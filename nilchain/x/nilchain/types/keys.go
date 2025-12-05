@@ -30,4 +30,5 @@ var (
 	DealsKey      = collections.NewPrefix("Deals/value/")
 	ProvidersKey  = collections.NewPrefix("Providers/value/")
 	DealProviderStatusKey = collections.NewPrefix("DealProviderStatus/value/")
+	ProviderRewardsKey    = collections.NewPrefix("ProviderRewards/value/")
 )

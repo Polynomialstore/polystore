@@ -10,6 +10,7 @@ import (
 	corestore "cosmossdk.io/core/store"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types" // ADDED for Context
+	"cosmossdk.io/math" // ADDED
 	"nilchain/x/nilchain/types"
 )
 
@@ -34,6 +35,7 @@ type Keeper struct {
 	Deals      collections.Map[uint64, types.Deal]
 	Providers  collections.Map[string, types.Provider] // Key by address string
 	DealProviderStatus collections.Map[collections.Pair[uint64, string], uint64]
+	ProviderRewards collections.Map[string, math.Int]
 }
 
 func NewKeeper(
@@ -67,6 +69,7 @@ func NewKeeper(
 		Deals:        collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
 		Providers:    collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
 		DealProviderStatus: collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		ProviderRewards: collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
 	}
 
 	schema, err := sb.Build()

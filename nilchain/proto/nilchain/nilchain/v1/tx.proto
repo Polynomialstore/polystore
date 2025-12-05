@@ -29,6 +29,12 @@ service Msg {
 
   // MsgSignalSaturation allows a Storage Provider to signal high load for a deal.
   rpc SignalSaturation(MsgSignalSaturation) returns (MsgSignalSaturationResponse);
+
+  // MsgAddCredit allows a user to top up the escrow balance for a deal.
+  rpc AddCredit(MsgAddCredit) returns (MsgAddCreditResponse);
+
+  // MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
+  rpc WithdrawRewards(MsgWithdrawRewards) returns (MsgWithdrawRewardsResponse);
 }
 
 // MsgUpdateParams is the Msg/UpdateParams request type.
@@ -123,4 +129,32 @@ message MsgSignalSaturationResponse {
   bool success = 1;
   string message = 2;
   repeated string new_providers = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Newly spawned hot replica providers
+}
+
+// MsgAddCredit allows a user to top up the escrow balance for a deal.
+message MsgAddCredit {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgAddCredit";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  string amount = 3 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
+}
+
+// MsgAddCreditResponse defines the response structure for adding credit.
+message MsgAddCreditResponse {
+  string new_balance = 1 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
+}
+
+// MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
+message MsgWithdrawRewards {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgWithdrawRewards";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+// MsgWithdrawRewardsResponse defines the response structure for withdrawing rewards.
+message MsgWithdrawRewardsResponse {
+  string amount_withdrawn = 1 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
 }

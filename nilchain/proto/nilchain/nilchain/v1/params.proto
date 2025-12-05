@@ -10,5 +10,7 @@ option go_package = "nilchain/x/nilchain/types";
 message Params {
   option (amino.name) = "nilchain/x/nilchain/Params";
   option (gogoproto.equal) = true;
-  
+
+  uint64 base_stripe_cost = 1; // NIL per epoch
+  uint64 halving_interval = 2; // Blocks
 }
