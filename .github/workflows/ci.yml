@@ -1,0 +1,110 @@
+name: NilStore CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ------------------------------------------------------------------
+  # GO SERVICES (NilChain, Faucet, S3, Relayer)
+  # ------------------------------------------------------------------
+  go-test:
+    name: Go Test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [nilchain, nil_faucet, nil_s3, nil_relayer]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # Using modern Go
+          cache-dependency-path: ${{ matrix.service }}/go.sum
+
+      - name: Test ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: go test ./... -v
+
+  # ------------------------------------------------------------------
+  # RUST CRATES (Core, CLI, P2P, Mock L1)
+  # ------------------------------------------------------------------
+  rust-test:
+    name: Rust Test (${{ matrix.crate }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [nil_core, nil_cli, nil_p2p, nil_mock_l1]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ matrix.crate }}/target
+          key: ${{ runner.os }}-cargo-${{ matrix.crate }}-${{ hashFiles(format('{0}/Cargo.lock', matrix.crate)) }}
+
+      - name: Test ${{ matrix.crate }}
+        working-directory: ${{ matrix.crate }}
+        run: cargo test --verbose
+
+  # ------------------------------------------------------------------
+  # FRONTEND (Nil Website)
+  # ------------------------------------------------------------------
+  frontend-build:
+    name: Website Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: nil-website/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: nil-website
+        run: npm ci
+
+      - name: Type Check & Build
+        working-directory: nil-website
+        run: npm run build
+
+      - name: Lint
+        working-directory: nil-website
+        run: npm run lint
+
+  # ------------------------------------------------------------------
+  # SMART CONTRACTS (Foundry)
+  # ------------------------------------------------------------------
+  foundry-test:
+    name: Solidity Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Tests
+        working-directory: nil_bridge
+        run: forge test -vv
