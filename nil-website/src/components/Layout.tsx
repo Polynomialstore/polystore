@@ -33,7 +33,7 @@ export const Layout = () => {
             <Link to="/s3-adapter" className="hover:text-foreground transition-colors">S3 Adapter</Link>
             <Link to="/governance" className="hover:text-foreground transition-colors">Governance</Link>
             <Link to="/faq" className="hover:text-foreground transition-colors">FAQ</Link>
-            <a href="#" className="hover:text-foreground transition-colors">GitHub</a>
+            <a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">GitHub</a>
             <div className="pl-4 border-l">
                 <ModeToggle />
             </div>
@@ -64,7 +64,7 @@ export const Layout = () => {
               <ul className="space-y-2">
                 <li><Link to="/testnet">Testnet Guide</Link></li>
                 <li><a href="#">Whitepaper</a></li>
-                <li><a href="#">GitHub</a></li>
+                <li><a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer">GitHub</a></li>
                 <li><a href="#">CLI Tool</a></li>
               </ul>
             </div>
