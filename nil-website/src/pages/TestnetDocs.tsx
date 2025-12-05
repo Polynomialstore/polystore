@@ -74,11 +74,11 @@ export const TestnetDocs = () => {
           </div>
         </section>
 
-        {/* Interactive Playground */}
+        {/* Section 0: Playground */}
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-green-400">Interactive Playground</h2>
           <p className="text-muted-foreground">
-            Test the flow directly in your browser. This tool simulates connecting your wallet, requesting funds from the faucet, and performing client-side sharding.
+            Experience the "Sharding & Binding" process directly in your browser. Upload any file to see how the NilStore protocol splits it into 8 MiB Data Units (DUs) and computes the cryptographic binding for each.
           </p>
           <FileSharder />
         </section>

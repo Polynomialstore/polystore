@@ -43,7 +43,7 @@ export function FileSharder() {
     
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    const chunkSize = 131072; // 128 KiB
+    const chunkSize = 8 * 1024 * 1024; // 8 MiB
     const totalChunks = Math.ceil(bytes.length / chunkSize);
     const newShards: Shard[] = [];
 
@@ -156,7 +156,7 @@ export function FileSharder() {
               Or <label className="text-green-400 hover:underline cursor-pointer">
                 browse
                 <input type="file" className="hidden" onChange={handleFileSelect} />
-              </label> to split it into 128 KiB Data Units (DUs).
+              </label> to split it into 8 MiB Data Units (DUs).
             </p>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function FileSharder() {
               >
                 <div className="flex justify-between opacity-50">
                   <span>#{shard.id}</span>
-                  <span>128KB</span>
+                  <span>8MB</span>
                 </div>
                 <div className="truncate text-[8px] opacity-75">
                   {shard.status === 'sealed' ? shard.hash.substring(0, 8) : '...'}

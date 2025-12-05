@@ -76,7 +76,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
     *   **The L2 Bridge:** [x] Contract implemented & verified. Relayer pending.
     *   **Incentives:** [x] L1 Proof Verification (Rust FFI) & Rewards (Minting) active.
     *   **Block Explorer:** [x] "Lattice" Visualizer & Interactive Playground live.
-    *   **System Upgrade:** [x] 128 KiB Data Units (EIP-4844 aligned).
+    *   **System Upgrade:** [x] 8 MiB Mega-Data Units (Optimized for Throughput).
 *   **Validate:**
     *   **Game Theory:** [x] Slashing implemented for invalid proofs (Anti-spam/Anti-fraud).
     *   **Economics:** [x] Token Minting (Rewards) and Burning (Slashing) active.
@@ -170,7 +170,7 @@ We have executed a major refactor of the protocol specification to replace "Phys
 
 ### 3. Spec Alignment: Core Cryptography (Rust)
 *   [x] **Audit nil_core: Remove Argon2id (PoDE) logic as it is now deprecated.**
-*   [x] **Audit nil_core: Verify KZG Blob size constants and ensure support for 8 MiB MDUs (likely via batching 64 blobs).**
+*   [x] **Audit nil_core: Verify KZG Blob size constants and ensure support for 8 MiB MDUs.**
 *   [x] **Batch Verification**: Expose a `verify_batch` FFI function to allow verifying an entire 8 MiB MDU proof efficiently.
 
 ### 4. Simulation & Testing

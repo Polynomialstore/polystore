@@ -26,7 +26,7 @@ export const S3AdapterDocs = () => {
               <Database className="w-8 h-8 text-green-400 mb-4" />
               <h3 className="font-bold text-lg text-foreground">2. Sharding & Binding</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                The file is split into 128 KiB chunks. The adapter calls `nil-cli` (linked to Rust core) to generate KZG commitments for each chunk.
+                The file is split into 8 MiB chunks. The adapter calls `nil-cli` (linked to Rust core) to generate KZG commitments for each chunk.
               </p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">

@@ -132,7 +132,7 @@ export const ShardingDeepDive = () => {
             </h3>
             <div className="bg-card p-6 rounded-xl border border-border mb-6">
               <p className="text-muted-foreground mb-4">
-                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each 128 KiB data unit to an integer modulo a massive prime number $r$. This is the input to our commitment scheme.
+                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each 8 MiB data unit to an integer modulo a massive prime number $r$. This is the input to our commitment scheme.
               </p>
               <div className="font-mono bg-background/50 text-foreground p-4 rounded-lg text-sm overflow-x-auto mb-4 border border-border shadow-inner">
                 r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001

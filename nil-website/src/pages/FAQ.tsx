@@ -33,7 +33,7 @@ const faqs = [
     questions: [
       {
         q: "What are KZG Commitments?",
-        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a file. We can compress a 128KB chunk of data into a tiny 48-byte signature. This signature mathematically proves the data exists and hasn't been tampered with, without needing to reveal the whole file. It's the magic that makes our network so lightweight."
+        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a file. We can compress an 8 MiB chunk of data into a tiny 48-byte signature. This signature mathematically proves the data exists and hasn't been tampered with, without needing to reveal the whole file. It's the magic that makes our network so lightweight."
       },
       {
         q: "What is 'Proof-of-Delayed-Encode' (PoDE)?",
@@ -45,7 +45,7 @@ const faqs = [
       },
       {
         q: "Why 8 MiB Data Units?",
-        a: "We moved from 128 KB to 8 MiB Mega-Data Units (MDUs) to optimize throughput. Larger units mean fewer on-chain transactions per Terabyte, allowing the network to scale to Petabytes without clogging the blockchain."
+        a: "We use 8 MiB Mega-Data Units (MDUs) to optimize throughput. Larger units mean fewer on-chain transactions per Terabyte, allowing the network to scale to Petabytes without clogging the blockchain."
       },
       {
         q: "Can I delete my data?",
