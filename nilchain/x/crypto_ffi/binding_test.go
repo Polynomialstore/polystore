@@ -20,17 +20,19 @@ func TestInit(t *testing.T) {
     }
 }
 
-func TestVerify(t *testing.T) {
+func TestVerifyMduProof(t *testing.T) {
     // This test depends on Init being called (Global state).
     // Tests run in same process usually.
     
     // Dummy data (should fail verification but return false, not error)
+    mduRoot := make([]byte, 32)
     comm := make([]byte, 48)
+    merklePath := make([]byte, 32) // Minimal path
     z := make([]byte, 32)
     y := make([]byte, 32)
     proof := make([]byte, 48)
 
-    valid, err := VerifyProof(comm, z, y, proof)
+    valid, err := VerifyMduProof(mduRoot, comm, merklePath, 0, z, y, proof)
     if err != nil {
         // It might return error if internal check fails, but here we expect false
         // Actually invalid points (all zeros) might cause C-KZG error?

@@ -34,8 +34,6 @@ import (
 	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
 	consensuskeeper "github.com/cosmos/cosmos-sdk/x/consensus/keeper"
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
-	"github.com/cosmos/cosmos-sdk/x/genutil"
-	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
@@ -131,26 +129,9 @@ func init() {
 	}
 }
 
-// ProvideEVM returns placeholder modules to satisfy depinject.
-// The real initialization happens in New() where we have access to StoreKeys.
-func ProvideEVM() (evm.AppModule, feemarket.AppModule) {
-	return evm.NewAppModule(nil, nil, nil, nil), feemarket.NewAppModule(feemarketkeeper.Keeper{})
-}
-
 // AppConfig returns the default app config.
 func AppConfig() depinject.Config {
-	return depinject.Configs(
-		appConfig,
-		depinject.Supply(
-			// supply custom module basics
-			map[string]module.AppModuleBasic{
-				genutiltypes.ModuleName: genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
-				evmtypes.ModuleName:       evm.AppModuleBasic{},
-				feemarkettypes.ModuleName: feemarket.AppModuleBasic{},
-			},
-			ProvideEVM,
-		),
-	)
+	return appConfig
 }
 
 // New returns a reference to an initialized App.
@@ -290,6 +271,14 @@ func New(
 	// It holds the dummy modules.
 	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
 	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
+
+	// Manually update module order
+	// We append EVM modules to the end of the lists maintained by runtime
+	// Note: We need to get the current order first?
+	// runtime sets the order in ModuleManager during Build.
+	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
+	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
 
 	// 6. Set AnteHandler
 	options := evmante.HandlerOptions{
