@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, ShieldCheck, Coins, Network } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, ShieldCheck, Coins, Network, Scale } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const faqs = [
@@ -15,15 +15,42 @@ const faqs = [
         </>
       },
       {
-        q: "How is this different from Filecoin or Arweave?",
+        q: "What is the 'Nilmanifold'?",
+        a: "It is a precise mathematical metaphor for our network's architecture. In geometry, a Nilmanifold is a compact, homogeneous space derived from a nilpotent Lie group. 'Homogeneous' means the space looks the same from every point—there are no privileged centers. NilStore mirrors this: every node is topologically equal, and data flows fluidly across the network to balance load and heal failures, governed by equations analogous to Ricci Flow (which smooths out irregularities/curvature over time)."
+      }
+    ]
+  },
+  {
+    category: "Comparison",
+    icon: <Scale className="w-5 h-5 text-purple-500" />,
+    questions: [
+      {
+        q: "How does NilStore compare to Filecoin?",
         a: <>
-          <p><strong>Speed and Efficiency.</strong> Most legacy decentralized storage networks require 'sealing'—a slow, energy-intensive process to secure data. This makes them slow to write to and requires specialized mining rigs.</p>
-          <p>NilStore uses <strong>KZG Commitments</strong> (the same tech scaling Ethereum) and <strong>Proof-of-Delayed-Encode (PoDE)</strong> to verify data instantly without sealing. This means you can run a node on a standard server and users get cloud-like performance.</p>
+          <p><strong>The Hardware Barrier.</strong> Filecoin relies on "Proof of Replication" (PoRep), which requires massive GPU clusters to seal data. This limits mining to industrial data centers.</p>
+          <p className="mt-2"><strong>NilStore's Advantage:</strong> We replaced sealing with <strong>KZG Commitments</strong>. This math is 100x lighter to compute. You can run a NilStore node on a standard server or high-end gaming PC, democratizing access.</p>
         </>
       },
       {
-        q: "What is the 'Nilmanifold'?",
-        a: "It is a precise mathematical metaphor for our network's architecture. In geometry, a Nilmanifold is a compact, homogeneous space derived from a nilpotent Lie group. 'Homogeneous' means the space looks the same from every point—there are no privileged centers. NilStore mirrors this: every node is topologically equal, and data flows fluidly across the network to balance load and heal failures, governed by equations analogous to Ricci Flow (which smooths out irregularities/curvature over time)."
+        q: "How does NilStore compare to Arweave?",
+        a: <>
+          <p><strong>The Endowment Model.</strong> Arweave focuses on "Permanence" via a one-time endowment fee. This is great for NFTs but expensive for dynamic data or high-performance retrieval.</p>
+          <p className="mt-2"><strong>NilStore's Advantage:</strong> We focus on <strong>Performance</strong>. Our Unified Liveness model treats storage as a high-speed CDN. We are built for dynamic applications (AI models, videos, dApps) that need speed and predictable monthly billing, not just archival.</p>
+        </>
+      },
+      {
+        q: "How does NilStore compare to Walrus (Sui)?",
+        a: <>
+          <p><strong>The Blob Approach.</strong> Walrus uses "Red Stuff" erasure coding for blobs on Sui. It's efficient but tightly coupled to the Sui ecosystem.</p>
+          <p className="mt-2"><strong>NilStore's Advantage:</strong> We are an <strong>AppChain</strong> built on Cosmos. This gives us sovereignty over our consensus and economics. Our "Unified Liveness" (User Retrieval = Storage Proof) is a unique economic innovation that ensures providers are paid for <em>serving</em> data, not just hoarding it.</p>
+        </>
+      },
+      {
+        q: "How does NilStore compare to Storj?",
+        a: <>
+          <p><strong>Centralized Coordination.</strong> Storj offers great S3 compatibility but relies on centralized "Satellites" for metadata and payments. It's "Decentralized Storage, Centralized Management."</p>
+          <p className="mt-2"><strong>NilStore's Advantage:</strong> We are <strong>Fully Decentralized</strong>. The blockchain itself manages metadata, payments, and repair logic. There is no central "Satellite" to shut down or censor your account.</p>
+        </>
       }
     ]
   },
