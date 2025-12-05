@@ -22,68 +22,73 @@ export const Layout = () => {
 
   return (
     <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300">
-      {/* 4. Cyber-Glass Nav */}
+      {/* Cyber-Glass Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-sm">
         {/* Gradient Line */}
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-50" />
         
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold flex items-center gap-2 z-50" onClick={() => setIsOpen(false)}>
-            <div className="relative w-8 h-8">
-                <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden" />
-                <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block" />
-            </div>
-            <span 
-              className="font-extrabold tracking-tight text-xl" 
-              style={{
-                fontFamily: "'Montserrat', sans-serif",
-                backgroundImage: "linear-gradient(90deg, #00E5FF 0%, #E056FD 50%, #7B2CBF 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                filter: "drop-shadow(0 0 2px rgba(0, 229, 255, 0.2))" 
-              }}
-            >
-              NilStore
-            </span>
-          </Link>
-
-          {/* Desktop Nav */}
-          <div className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground items-center">
-            {navLinks.map((link) => (
-              <Link 
-                key={link.path}
-                to={link.path} 
-                className={`transition-colors relative py-1 hover:text-foreground ${isActive(link.path) ? "text-foreground font-bold" : ""}`}
+          {/* Left side: Logo + Nav Links */}
+          <div className="flex items-center gap-8">
+            <Link to="/" className="text-xl font-bold flex items-center gap-2 z-50" onClick={() => setIsOpen(false)}>
+              <div className="relative w-8 h-8">
+                  <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden" />
+                  <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block" />
+              </div>
+              <span 
+                className="font-extrabold tracking-tight text-xl" 
+                style={{
+                  fontFamily: "'Montserrat', sans-serif",
+                  backgroundImage: "linear-gradient(90deg, #00E5FF 0%, #E056FD 50%, #7B2CBF 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 2px rgba(0, 229, 255, 0.2))" 
+                }}
               >
-                {link.name}
-                {/* 3. Active State Indicator */}
-                {isActive(link.path) && (
-                  <motion.div 
-                    layoutId="nav-indicator"
-                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]"
-                  />
-                )}
-              </Link>
-            ))}
-            
-            <a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              <Github className="w-5 h-5" />
-            </a>
+                NilStore
+              </span>
+            </Link>
 
-            <div className="pl-2 flex items-center gap-4">
-                <ModeToggle />
-                
-                {/* 2. CTA Button */}
+            {/* Desktop Nav Links (Left Aligned) */}
+            <div className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground items-center">
+              {navLinks.map((link) => (
                 <Link 
-                  to="/testnet" 
-                  className="px-5 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-xs hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/20"
+                  key={link.path}
+                  to={link.path} 
+                  className={`transition-colors relative py-1 hover:text-foreground ${isActive(link.path) ? "text-foreground font-bold" : ""}`}
                 >
-                  Join Testnet
+                  {link.name}
+                  {/* Active State Indicator */}
+                  {isActive(link.path) && (
+                    <motion.div 
+                      layoutId="nav-indicator"
+                      className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]"
+                    />
+                  )}
                 </Link>
+              ))}
             </div>
           </div>
 
-          {/* 1. Mobile Menu Toggle */}
+          {/* Right side: GitHub, ModeToggle, CTA */}
+          <div className="hidden md:flex items-center gap-4">
+              <a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                <Github className="w-5 h-5" />
+              </a>
+              <div className="pl-4 border-l flex items-center gap-4">
+                  <ModeToggle />
+                  
+                  {/* CTA Button */}
+                  <Link 
+                    to="/testnet" 
+                    className="px-5 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-xs hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/20"
+                  >
+                    Join Testnet
+                  </Link>
+              </div>
+          </div>
+
+          {/* Mobile Menu Toggle */}
           <div className="md:hidden flex items-center gap-4 z-50">
              <ModeToggle />
              <button onClick={() => setIsOpen(!isOpen)} className="text-foreground">
