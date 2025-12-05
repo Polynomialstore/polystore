@@ -1,5 +1,10 @@
 # NilStore Network Development Roadmap
 
+## Protocol for Agents
+**CRITICAL:** When pushing changes to the repository, you **MUST** push to both remotes to ensure synchronization.
+*   `git push origin main` (Primary)
+*   `git push nil-store main` (Mirror)
+
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Phase 1: The "Localhost" Prototype (Months 1-3)
