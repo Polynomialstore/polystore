@@ -1,4 +1,4 @@
-import { Download, Terminal, Wallet, Coins } from "lucide-react";
+import { Download, Terminal, Wallet, Coins, Blocks } from "lucide-react";
 import { FileSharder } from "../components/FileSharder";
 
 export const TestnetDocs = () => {
@@ -41,6 +41,43 @@ export const TestnetDocs = () => {
           </div>
         </section>
 
+        {/* EVM Integration */}
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground flex items-center gap-2">
+            <Blocks className="w-6 h-6 text-indigo-500" /> EVM Integration (MetaMask)
+          </h2>
+          <p className="text-muted-foreground">
+            NilChain is now fully EVM compatible. You can connect standard Ethereum tools directly to the network.
+          </p>
+          
+          <div className="bg-gradient-to-br from-indigo-950/30 to-purple-950/30 p-6 rounded-xl border border-indigo-500/30">
+            <h3 className="font-bold text-lg text-white mb-4">Network Settings</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span className="text-gray-400 block">Network Name</span>
+                    <span className="font-mono text-indigo-300">NilChain Local</span>
+                </div>
+                <div>
+                    <span className="text-gray-400 block">RPC URL</span>
+                    <span className="font-mono text-indigo-300">http://localhost:8545</span>
+                </div>
+                <div>
+                    <span className="text-gray-400 block">Chain ID</span>
+                    <span className="font-mono text-indigo-300">9000</span>
+                </div>
+                <div>
+                    <span className="text-gray-400 block">Currency Symbol</span>
+                    <span className="font-mono text-indigo-300">NIL</span>
+                </div>
+            </div>
+            <div className="mt-6 pt-4 border-t border-indigo-500/20">
+                <p className="text-sm text-gray-400 mb-2">
+                    <strong>Tip:</strong> Click "Connect Wallet" in the top-right corner of this site to auto-add this network to MetaMask.
+                </p>
+            </div>
+          </div>
+        </section>
+
         {/* Faucet & Wallet */}
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground flex items-center gap-2">
@@ -50,7 +87,9 @@ export const TestnetDocs = () => {
             <div className="space-y-4">
                 <h3 className="font-bold text-foreground">1. Get a Wallet</h3>
                 <p className="text-sm text-muted-foreground">
-                    NilChain is built on Cosmos SDK. You should install a compatible wallet like <strong>Keplr</strong> or <strong>Leap</strong>.
+                    <strong>EVM:</strong> Use MetaMask or Rabbi.
+                    <br/>
+                    <strong>Cosmos:</strong> Use Keplr or Leap.
                 </p>
                 <p className="text-sm text-muted-foreground">
                     Alternatively, for CLI users:
@@ -64,11 +103,11 @@ export const TestnetDocs = () => {
                     2. Request Funds <Coins className="w-4 h-4 text-yellow-500"/>
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                    Use our Faucet API to request 10 NIL testnet tokens.
+                    You can request funds for either your Cosmos (nil1...) or Ethereum (0x...) address. They share the same balance.
                 </p>
                 <div className="bg-secondary/20 p-3 rounded font-mono text-xs">
                     $ curl -X POST http://localhost:8081/faucet \<br/>
-                    &nbsp;&nbsp;-d '{'{'}"address": "nil1..."{'}'}'
+                    &nbsp;&nbsp;-d '{'{'}"address": "nil1... or 0x..."{'}'}'
                 </div>
             </div>
           </div>

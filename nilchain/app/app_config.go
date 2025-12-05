@@ -66,6 +66,8 @@ import (
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	_ "github.com/cosmos/cosmos-sdk/x/staking" // import for side-effects
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
 	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
 	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
@@ -84,6 +86,8 @@ var (
 		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: icatypes.ModuleName},
 		{Account: nilchainmoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
+		{Account: evmtypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
+		{Account: feemarkettypes.ModuleName},
 	}
 
 	// blocked account addresses
@@ -127,6 +131,8 @@ var (
 						ibcexported.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
+						feemarkettypes.ModuleName,
+						evmtypes.ModuleName,
 // this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
@@ -134,6 +140,8 @@ var (
 						stakingtypes.ModuleName,
 						feegrant.ModuleName,
 						group.ModuleName,
+						evmtypes.ModuleName,
+						feemarkettypes.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
 // this line is used by starport scaffolding # stargate/app/endBlockers
@@ -143,6 +151,14 @@ var (
 						{
 							ModuleName: authtypes.ModuleName,
 							KvStoreKey: "acc",
+						},
+						{
+							ModuleName: evmtypes.ModuleName,
+							KvStoreKey: evmtypes.StoreKey,
+						},
+						{
+							ModuleName: feemarkettypes.ModuleName,
+							KvStoreKey: feemarkettypes.StoreKey,
 						},
 					},
 					// NOTE: The genutils module must occur after staking so that pools are
@@ -171,6 +187,8 @@ var (
 						ibcexported.ModuleName,
 						ibctransfertypes.ModuleName,
 						icatypes.ModuleName,
+						evmtypes.ModuleName,
+						feemarkettypes.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
 // this line is used by starport scaffolding # stargate/app/initGenesis
@@ -272,6 +290,14 @@ var (
 			{
 				Name:   nilchainmoduletypes.ModuleName,
 				Config: appconfig.WrapAny(&nilchainmoduletypes.Module{}),
+			},
+			{
+				Name:   evmtypes.ModuleName,
+				Config: appconfig.WrapAny(&runtimev1alpha1.Module{}),
+			},
+			{
+				Name:   feemarkettypes.ModuleName,
+				Config: appconfig.WrapAny(&runtimev1alpha1.Module{}),
 			},
 // this line is used by starport scaffolding # stargate/app/moduleConfig
 		},

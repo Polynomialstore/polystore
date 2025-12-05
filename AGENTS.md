@@ -103,6 +103,27 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 
 ---
 
+## Phase 5: EVM Integration (Ethermint) - "The Bi-Lingual Chain"
+**Goal:** Make `nilchain` compatible with MetaMask and Solidity to serve as a robust Testnet and simplify onboarding.
+
+### Step 1: Dependencies & Configuration
+*   [x] **Update `go.mod`:** Add `github.com/cosmos/evm` (v0.5.1) and `github.com/cosmos/go-ethereum`.
+*   [x] **Configure App (`app.go`):**
+    *   Register `EVMKeeper` and `FeeMarketKeeper`.
+    *   Add EVM modules to `AppConfig` (using `depinject` overrides).
+*   [x] **AnteHandler:** Implement a hybrid AnteHandler to support both Cosmos (Keplr) and Ethereum (MetaMask) signatures.
+*   [ ] **Genesis:** Update `genesis.json` generation to include EVM parameters (ChainID, Gas Limits). (Auto-generated usually).
+
+### Step 2: Smart Contract Deployment
+*   [ ] **Deploy `NilBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
+*   [ ] **Test Interaction:** Verify that calling the contract from MetaMask works.
+
+### Step 3: Frontend Integration
+*   [ ] **Wallet Connection:** Add `wagmi` / `viem` to `nil-website`.
+*   [ ] **"Connect MetaMask" Button:** Allow users to see their balance and interact with the bridge contract.
+
+---
+
 ### Recommended Work Stream Categories (Organizational)
 
 To manage this, it is recommended to organize development efforts into these three ongoing streams:
@@ -131,7 +152,7 @@ To manage this, it is recommended to organize development efforts into these thr
 
 **Architectural Pivot: The Performance Market**
 
-We have executed a major refactor of the protocol specification to replace "Physics Policing" with "Economic Incentives."
+We have executed a major refactor of the protocol specification to replace "Physics-Policed" with "Economic Incentives."
 
 1.  **PoDE Deprecation:** Removed `Argon2id` and strict 1.1s timing checks. The mechanism was deemed brittle and unverifiable on-chain.
 2.  **Tiered Rewards:** Introduced **Block-Height Latency** tiers (Platinum/Gold/Silver). Speed is now priced by the market.

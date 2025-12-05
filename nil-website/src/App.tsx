@@ -18,6 +18,7 @@ import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
 import { ThemeProvider } from "./context/ThemeContext";
+import { Dashboard } from "./components/Dashboard";
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/brand" element={<LogoShowcase />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="testnet" element={<TestnetDocs />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="performance" element={<PerformanceReport />} />

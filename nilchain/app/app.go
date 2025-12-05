@@ -10,6 +10,7 @@ import (
 	storetypes "cosmossdk.io/store/types"
 	circuitkeeper "cosmossdk.io/x/circuit/keeper"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
+	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	dbm "github.com/cosmos/cosmos-db"
@@ -25,6 +26,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	sdkante "github.com/cosmos/cosmos-sdk/x/auth/ante"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authsims "github.com/cosmos/cosmos-sdk/x/auth/simulation"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -35,6 +37,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -44,6 +47,17 @@ import (
 	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
+
+	// EVM Imports
+	codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	evmante "github.com/cosmos/evm/ante"
+	evm "github.com/cosmos/evm/x/vm"
+	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
+	feemarket "github.com/cosmos/evm/x/feemarket"
+	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 
 	"nilchain/docs"
 	nilchainmodulekeeper "nilchain/x/nilchain/keeper"
@@ -91,12 +105,17 @@ type App struct {
 	ConsensusParamsKeeper consensuskeeper.Keeper
 	CircuitBreakerKeeper  circuitkeeper.Keeper
 	ParamsKeeper          paramskeeper.Keeper
+	FeegrantKeeper        feegrantkeeper.Keeper
 
 	// ibc keepers
 	IBCKeeper           *ibckeeper.Keeper
 	ICAControllerKeeper icacontrollerkeeper.Keeper
 	ICAHostKeeper       icahostkeeper.Keeper
 	TransferKeeper      ibctransferkeeper.Keeper
+
+	// EVM Keepers
+	EVMKeeper       *evmkeeper.Keeper
+	FeeMarketKeeper *feemarketkeeper.Keeper
 
 	// simulation manager
 	sm             *module.SimulationManager
@@ -112,6 +131,12 @@ func init() {
 	}
 }
 
+// ProvideEVM returns placeholder modules to satisfy depinject.
+// The real initialization happens in New() where we have access to StoreKeys.
+func ProvideEVM() (evm.AppModule, feemarket.AppModule) {
+	return evm.NewAppModule(nil, nil, nil, nil), feemarket.NewAppModule(feemarketkeeper.Keeper{})
+}
+
 // AppConfig returns the default app config.
 func AppConfig() depinject.Config {
 	return depinject.Configs(
@@ -120,7 +145,10 @@ func AppConfig() depinject.Config {
 			// supply custom module basics
 			map[string]module.AppModuleBasic{
 				genutiltypes.ModuleName: genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
+				evmtypes.ModuleName:       evm.AppModuleBasic{},
+				feemarkettypes.ModuleName: feemarket.AppModuleBasic{},
 			},
+			ProvideEVM,
 		),
 	)
 }
@@ -173,10 +201,37 @@ func New(
 		&app.ConsensusParamsKeeper,
 		&app.CircuitBreakerKeeper,
 		&app.ParamsKeeper,
+		&app.FeegrantKeeper,
 		&app.NilchainKeeper,
 	); err != nil {
 		panic(err)
 	}
+
+	// ----------------------------------------------------------------------------
+	// EVM & FeeMarket Manual Wiring
+	// ----------------------------------------------------------------------------
+
+	// 1. Retrieve the StoreKeys created by runtime (via AppConfig)
+	// Note: UnsafeFindStoreKey returns nil if not found, but we added them to config so they should exist.
+	// However, finding them *before* app.App is built is tricky because `app.App` isn't fully built yet.
+	// But `appBuilder` has likely initialized the keys.
+	// Wait, `app.App` is nil here. We can't call app.UnsafeFindStoreKey.
+	// We need to access the keys via `appBuilder`? No, `appBuilder` doesn't expose them.
+	
+	// Correction: We must perform this wiring *after* we build the base app structure but *before* we seal it?
+	// Actually, `appBuilder.Build` creates the `App`.
+	// So we can't get the keys until AFTER `Build`.
+	// But we need to inject the modules BEFORE `Build` so they are in the ModuleManager.
+	
+	// Solution: We use the "Placeholder" modules in depinject (done above).
+	// We let `appBuilder.Build` run.
+	// THEN we re-initialize the Keepers and update the module references in the Manager?
+	// Yes, `app.ModuleManager` is mutable.
+	
+	// But `EVMKeeper` needs to be initialized to use it.
+	// Let's move the Keeper initialization AFTER Build.
+	
+	// ----------------------------------------------------------------------------
 
 	// add to default baseapp options
 	// enable optimistic execution
@@ -184,6 +239,79 @@ func New(
 
 	// build app
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
+
+	// ----------------------------------------------------------------------------
+	// Post-Build EVM Wiring
+	// ----------------------------------------------------------------------------
+
+	// 1. Now we can get the keys
+	evmKey := app.UnsafeFindStoreKey(evmtypes.StoreKey)
+	fmKey := app.UnsafeFindStoreKey(feemarkettypes.StoreKey)
+	
+	// 2. Manually Mount Transient Key (Runtime doesn't do this for us)
+	transientKey := storetypes.NewTransientStoreKey(evmtypes.TransientKey)
+	app.MountTransientStores(map[string]*storetypes.TransientStoreKey{evmtypes.TransientKey: transientKey})
+
+	// 3. Initialize FeeMarket Keeper
+	// We need the subspace.
+	fmKeeper := feemarketkeeper.NewKeeper(
+		app.appCodec,
+		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
+		fmKey,
+		transientKey,
+	)
+	app.FeeMarketKeeper = &fmKeeper
+
+	// 4. Initialize EVM Keeper
+	app.EVMKeeper = evmkeeper.NewKeeper(
+		app.appCodec,
+		evmKey,
+		transientKey,
+		map[string]*storetypes.KVStoreKey{}, // Hack: Empty store keys map
+		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
+		app.AuthKeeper,
+		app.BankKeeper,
+		app.StakingKeeper,
+		app.FeeMarketKeeper,
+		app.ConsensusParamsKeeper,
+		nil, // Erc20Keeper
+		0,   // ChainID (will be set from genesis?)
+		"",  // HomePath
+	)
+
+	// 5. Update Modules in the Manager with the Real Keepers
+	// We create the REAL modules now.
+	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
+	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
+	realFmModule := feemarket.NewAppModule(*app.FeeMarketKeeper)
+
+	// We need to swap them in the ModuleManager.
+	// The ModuleManager was created during `appBuilder.Build`.
+	// It holds the dummy modules.
+	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
+	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
+
+	// 6. Set AnteHandler
+	options := evmante.HandlerOptions{
+		Cdc:               app.appCodec,
+		AccountKeeper:     app.AuthKeeper,
+		BankKeeper:        app.BankKeeper,
+		IBCKeeper:         app.IBCKeeper,
+		FeeMarketKeeper:   app.FeeMarketKeeper,
+		EvmKeeper:         app.EVMKeeper,
+		FeegrantKeeper:    app.FeegrantKeeper,
+		SignModeHandler:   app.txConfig.SignModeHandler(),
+		SigGasConsumer:    sdkante.DefaultSigVerificationGasConsumer,
+		PendingTxListener: func(ethcommon.Hash) {}, // No-op
+	}
+	
+	if err := options.Validate(); err != nil {
+		panic(err)
+	}
+
+	app.SetAnteHandler(evmante.NewAnteHandler(options))
+
+	// ----------------------------------------------------------------------------
 
 	// register legacy modules
 	if err := app.registerIBCModules(appOpts); err != nil {
@@ -195,6 +323,8 @@ func New(
 	// create the simulation manager and define the order of the modules for deterministic simulations
 	overrideModules := map[string]module.AppModuleSimulation{
 		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, nil),
+		evmtypes.ModuleName:       realEvmModule,
+		feemarkettypes.ModuleName: realFmModule,
 	}
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 

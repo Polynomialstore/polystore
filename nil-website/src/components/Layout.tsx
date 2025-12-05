@@ -3,6 +3,7 @@ import { ModeToggle } from "./ModeToggle";
 import { useState } from "react";
 import { Menu, X, Github } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ConnectWallet } from "./ConnectWallet";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,6 +12,7 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   const navLinks = [
+    { name: "Dashboard", path: "/dashboard" },
     { name: "Technology", path: "/technology" },
     { name: "Leaderboard", path: "/leaderboard" },
     { name: "Performance", path: "/performance" },
@@ -51,7 +53,7 @@ export const Layout = () => {
             </Link>
 
             {/* Desktop Nav Links (Left Aligned) */}
-            <div className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground items-center">
+            <div className="hidden lg:flex gap-6 text-sm font-medium text-muted-foreground items-center">
               {navLinks.map((link) => (
                 <Link 
                   key={link.path}
@@ -73,6 +75,7 @@ export const Layout = () => {
 
           {/* Right side: GitHub, ModeToggle, CTA */}
           <div className="hidden md:flex items-center gap-4">
+              <ConnectWallet />
               <a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
                 <Github className="w-5 h-5" />
               </a>
@@ -91,6 +94,7 @@ export const Layout = () => {
 
           {/* Mobile Menu Toggle */}
           <div className="md:hidden flex items-center gap-4 z-50">
+             <ConnectWallet />
              <ModeToggle />
              <button onClick={() => setIsOpen(!isOpen)} className="text-foreground">
                {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
