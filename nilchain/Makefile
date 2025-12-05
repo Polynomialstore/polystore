@@ -25,7 +25,12 @@ BUILD_FLAGS := -ldflags '$(ldflags)'
 
 test-unit:
 	@echo Running unit tests...
-	@go test -mod=readonly -v -timeout 30m ./...
+	@test_output=$$(go test -mod=readonly -v -timeout 30m ./... 2>&1) ; \
+	echo "$$test_output" ; \
+	if echo "$$test_output" | grep -q "ERROR:" ; then \
+		echo "Detected 'ERROR:' in test output. Marking test-unit as failed." ; \
+		exit 1 ; \
+	fi
 
 test-race:
 	@echo Running unit tests with race condition reporting...
