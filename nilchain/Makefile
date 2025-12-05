@@ -25,12 +25,16 @@ BUILD_FLAGS := -ldflags '$(ldflags)'
 
 test-unit:
 	@echo Running unit tests...
-	@test_output=$$(go test -mod=readonly -v -timeout 30m ./... 2>&1) ; \
+	@test_output=$$(go test -mod=readonly -v -timeout 30m -short ./... 2>&1) ; \
 	echo "$$test_output" ; \
 	if echo "$$test_output" | grep -q "ERROR:" ; then \
 		echo "Detected 'ERROR:' in test output. Marking test-unit as failed." ; \
 		exit 1 ; \
 	fi
+
+test-simulation:
+	@echo Running simulation tests...
+	@go test -mod=readonly -v -timeout 30m ./app -Enabled=true -NumBlocks=100 -BlockSize=200 -Commit=true -Period=5
 
 test-race:
 	@echo Running unit tests with race condition reporting...
@@ -46,9 +50,9 @@ bench:
 	@echo Running unit tests with benchmarking...
 	@go test -mod=readonly -v -timeout 30m -bench=. ./...
 
-test: govet govulncheck test-unit
+test: govet govulncheck test-unit test-simulation
 
-.PHONY: test test-unit test-race test-cover bench
+.PHONY: test test-unit test-race test-cover bench test-simulation
 
 #################
 ###  Install  ###
@@ -104,7 +108,7 @@ govet:
 
 govulncheck:
 	@echo Running govulncheck...
-	@go tool golang.org/x/vuln/cmd/govulncheck@latest
-	@govulncheck ./...
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@$(shell go env GOPATH)/bin/govulncheck ./...
 
 .PHONY: govet govulncheck
