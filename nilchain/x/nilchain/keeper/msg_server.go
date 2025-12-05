@@ -48,12 +48,14 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		return nil, err
 	}
 
+	// Create new Provider object
 	provider := types.Provider{
 		Address: creatorAddr.String(),
 		TotalStorage: msg.TotalStorage,
-		UsedStorage: 0,
+		UsedStorage: 0, // Initially 0
 		Capabilities: msg.Capabilities,
-		Status: "Active",
+		Status: "Active", // Initially active
+        ReputationScore: 100, // Initial Score
 	}
 
 	if err := k.Providers.Set(ctx, provider.Address, provider); err != nil {
@@ -234,25 +236,37 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
         err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, slashAmt)
         
         if err != nil {
+            // 2. If slash fails (insufficient funds), Jail the provider
             ctx.Logger().Info("Slashing failed (insufficient funds), Jailing provider", "provider", msg.Creator)
             
             provider, errGet := k.Providers.Get(ctx, msg.Creator)
             if errGet == nil {
                 provider.Status = "Jailed"
+                provider.ReputationScore -= 50 // Heavy penalty
                 if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
                      ctx.Logger().Error("Failed to update provider status to Jailed", "error", errSet)
                 }
             }
         } else {
+            // 3. If slash succeeds, burn the tokens
             if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, slashAmt); err != nil {
                 ctx.Logger().Error("Failed to burn slashed coins", "error", err)
+            }
+            // Update reputation for slash
+            provider, errGet := k.Providers.Get(ctx, msg.Creator)
+            if errGet == nil {
+                provider.ReputationScore -= 10 // Standard penalty
+                if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
+                     ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
+                }
             }
         }
 		return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 	}
 
+    // 4. Calculate Tier based on block height latency
 	hProof := ctx.BlockHeight()
-	latency := hProof - hChallenge
+	latency := hProof - hChallenge // Latency in blocks (Block difference from challenge start to proof inclusion)
 
 	var tier uint32
 	var rewardMultiplier math.LegacyDec
@@ -274,7 +288,20 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		tier = 3 // Fail
 		rewardMultiplier = math.LegacyNewDecWithPrec(0, 2) // 0.00
 		tierName = "Fail"
+		// Slashing already handled above for !valid proofs.
+		// For valid but too slow proofs, no reward, potentially still a small slash based on spec.
 	}
+    
+    // Update reputation for success
+    if tier < 3 {
+        provider, errGet := k.Providers.Get(ctx, msg.Creator)
+        if errGet == nil {
+            provider.ReputationScore += 1
+            if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
+                    ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
+            }
+        }
+    }
 
     params := k.GetParams(ctx)
 

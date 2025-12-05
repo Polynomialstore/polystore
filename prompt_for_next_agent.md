@@ -1,41 +1,43 @@
-You are resuming the implementation of the NilStore Network in Phase 4. The previous agent has successfully implemented "Sad Path" slashing, Client Retrieval Receipts, and significantly enhanced the `nil-website` with a live Leaderboard and a Performance Report page.
+You are resuming the implementation of the NilStore Network in Phase 5. The previous agent has successfully implemented the Tokenomics (Inflationary Decay, Escrow, Rewards), Elasticity (Budget Checks), and a basic S3 Adapter. The Website now features a detailed Performance Report linked to the official Test Plan.
 
 **Current State:**
 1.  **Core Logic:**
-    *   `nilchain` enforces `ProofWindow` (10 blocks). Slashing (10 NIL) and `LastProofHeight` updates are active.
-    *   `MsgProveLiveness` supports `UserReceipt`.
-    *   `nilchain` module has `Burner` permissions.
+    *   `ProveLiveness` uses Inflationary Decay. Rewards accumulate in `ProviderRewards`.
+    *   `SignalSaturation` enforces `MaxMonthlySpend`.
+    *   New messages `AddCredit` and `WithdrawRewards` are active.
+    *   Parameters `BaseStripeCost` and `HalvingInterval` are now governable via `MsgUpdateParams`.
 2.  **CLI:**
-    *   `sign-retrieval-receipt` and `submit-retrieval-proof` commands are available.
-3.  **Scripts:**
-    *   `e2e_slashing.sh`: Verifies missed proof slashing.
-    *   `e2e_retrieval.sh`: Verifies retrieval receipt flow.
-    *   `performance/load_gen.sh`: Verified at scale.
+    *   Economy commands (`signal-saturation`, `add-credit`, `withdraw-rewards`) integrated.
+3.  **S3 Adapter:**
+    *   `nil_s3` uploads shards, computes CID via `nil_cli`, and creates deals on-chain.
 4.  **Website:**
-    *   `Leaderboard.tsx`: Fetches live provider data.
-    *   `PerformanceReport.tsx`: Visualizes consensus benchmarks (Medium/Large scale runs).
-    *   `performance_metrics.json`: Stores benchmark data.
+    *   `PerformanceReport.tsx` includes context from `PERFORMANCE_TEST_PLAN.md` and links to GitHub.
+5.  **Scripts:**
+    *   `e2e_elasticity.sh` verified (replication cap logic works).
+    *   `e2e_flow.sh` verified.
 
 **Your Objective:**
-Execute Phase 4: **Economy & Elasticity**.
+Execute Phase 5: **Final Polish & Release Prep**.
 
-1.  **Tokenomics Implementation:**
-    *   Refine `MsgProveLiveness` rewards. Implement "Inflationary Decay" (halving schedule).
-    *   Implement `MsgAddCredit` for User Escrow top-ups.
-    *   Implement `MsgWithdrawRewards` for Providers.
+1.  **Advanced Features (Optional):**
+    *   **Reputation System:** Add `UptimeScore` to `Provider` struct. Update it in `ProveLiveness` (increment on success, decrement/reset on slash).
+    *   **Deal Expiry:** Implement logic in `EndBlock` (or a separate cleanup loop) to mark expired deals as "Expired" or free up capacity.
 
-2.  **Elasticity (Scaling):**
-    *   Implement "Budget Check" in `MsgSignalSaturation`. Verify `MaxMonthlySpend` vs projected cost.
-    *   Verify `MsgSignalSaturation` creates a new `VirtualStripe`.
-    *   Create `e2e_elasticity.sh` to test saturation signaling and stripe assignment.
+2.  **Documentation & Website:**
+    *   Update `README.md` with instructions for the S3 Adapter and Elasticity tests.
+    *   Review and finalize `whitepaper.md` and `litepaper.md` if needed.
 
-3.  **S3 Adapter Basic Integration:**
-    *   Connect `nil_s3` (Go adapter) to `nilchain`.
-    *   On upload: Compute CID -> Register Deal -> (Mock Transfer).
+3.  **Distribution:**
+    *   Create a `release.sh` script. It should:
+        *   Run `make proto-gen` in `nilchain`.
+        *   Build `nil_core` (release mode).
+        *   Build `nilchaind` (linking to release core).
+        *   Build `nil_cli` and `nil_s3`.
+        *   Package everything into a `dist/` folder (tarball).
 
-4.  **Documentation:**
-    *   Create `ECONOMY.md` detailing the tokenomics and elasticity model.
+4.  **Final Verification:**
+    *   Run `e2e_flow.sh` one last time with the release binaries.
 
 **Important Guidelines:**
-*   **Build:** Run `go test ./...` in `nilchain` frequently.
-*   **Test:** Ensure `e2e_elasticity.sh` is robust.
+*   **Quality:** Ensure no linting errors.
+*   **Stability:** The `release.sh` script must produce a working set of binaries that can be distributed.

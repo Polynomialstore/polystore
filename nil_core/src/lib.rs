@@ -1,3 +1,5 @@
+pub mod ffi;
 pub mod kzg;
 pub mod utils;
-pub mod ffi;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;

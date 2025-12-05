@@ -12,7 +12,15 @@ export function FileSharder() {
   const [shards, setShards] = useState<Shard[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
   const { addSimulatedProof } = useProofs();
+
+  const connectWallet = () => {
+      // Simulate Keplr connection
+      setWalletConnected(true);
+      setWalletAddress("nil1user...");
+  };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -25,6 +33,11 @@ export function FileSharder() {
   }, []);
 
   const processFile = async (file: File) => {
+    if (!walletConnected) {
+        alert("Please connect wallet first!");
+        return;
+    }
+    
     setProcessing(true);
     setShards([]);
     
@@ -33,6 +46,18 @@ export function FileSharder() {
     const chunkSize = 131072; // 128 KiB
     const totalChunks = Math.ceil(bytes.length / chunkSize);
     const newShards: Shard[] = [];
+
+    // 1. Request Faucet Funds (Simulation of gas/storage payment)
+    try {
+        await fetch('http://localhost:8081/faucet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: "user" }) // In real app, use real address
+        });
+        console.log("Faucet funds requested");
+    } catch (e) {
+        console.error("Faucet error", e);
+    }
 
     for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
@@ -56,10 +81,14 @@ export function FileSharder() {
     setProcessing(false);
     
     // Simulate "Sealing" animation
-    simulateSealing(newShards);
+    simulateSealing(newShards, file.name);
   };
 
-  const simulateSealing = async (items: Shard[]) => {
+  const simulateSealing = async (items: Shard[], filename: string) => {
+    // 2. "Upload" to S3 Adapter (Simulation)
+    // In a real app, we would PUT to /api/v1/object/{filename}
+    // Here we simulate the chain effect
+    
     for (let i = 0; i < items.length; i++) {
         await new Promise(r => setTimeout(r, 50)); // Fast ripple effect
         setShards(prev => prev.map((s, idx) => 
@@ -70,8 +99,8 @@ export function FileSharder() {
     // Add to shared map state (Visual Feedback)
     if (items.length > 0) {
         addSimulatedProof({
-            id: `sim-${Date.now()}`,
-            creator: "You (Browser)",
+            id: `tx-${Date.now().toString().substring(6)}`,
+            creator: walletAddress,
             commitment: items[0].hash, // Using SHA256 hash as proxy for commitment
             block_height: "Pending",
             source: "simulated"
@@ -96,6 +125,13 @@ export function FileSharder() {
 
   return (
     <div className="w-full space-y-6">
+      {!walletConnected ? (
+          <button onClick={connectWallet} className="w-full py-12 border-2 border-dashed border-slate-700 hover:border-primary/50 hover:bg-primary/5 rounded-xl text-slate-400 font-bold transition-all flex flex-col items-center gap-4">
+              <div className="text-4xl">🔌</div>
+              Connect Wallet to Start
+          </button>
+      ) : (
+      <>
       {/* Dropzone */}
       <div
         onDragEnter={handleDrag}
@@ -129,6 +165,7 @@ export function FileSharder() {
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          {/* ... existing visualization code ... */}
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"/>
@@ -169,8 +206,10 @@ export function FileSharder() {
                 <p>Processing file...</p>
             ) : shards.length > 0 ? (
                 <div className="space-y-1">
+                    <p>{'>'} Connected as {walletAddress}</p>
                     <p>{'>'} File split into {shards.length} Data Units.</p>
                     <p>{'>'} Binding values (SHA-256) computed.</p>
+                    <p>{'>'} Requesting Faucet Funds...</p>
                     <p>{'>'} Distributing to Storage Nodes...</p>
                     {shards.filter(s => s.status === 'sealed').length === shards.length && (
                         <p className="text-green-400">{'>'} All shards verified and sealed.</p>
@@ -181,6 +220,8 @@ export function FileSharder() {
             )}
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

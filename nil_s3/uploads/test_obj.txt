@@ -1,1 +1,0 @@
-Hello NilStore S3 World!

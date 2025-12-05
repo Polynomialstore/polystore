@@ -29,6 +29,7 @@ message Provider {
   uint64 used_storage = 3; // Used storage capacity in bytes
   string capabilities = 4; // "Archive", "General", "Edge"
   string status = 5; // "Active", "Offline", "Jailed"
+  int64 reputation_score = 6; // Uptime/Performance score
 }
 
 // VirtualStripe tracks overlay replicas for a deal, used for elasticity.
