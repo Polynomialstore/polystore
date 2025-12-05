@@ -62,8 +62,12 @@ export const Home = () => {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            A decentralized storage network where <strong>Speed is Consensus</strong>. 
-            Data flows fluidly across a homogeneous Nilmanifold, scaling instantly to meet demand.
+		    <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+              <strong className="text-purple-600 dark:text-purple-400">NilStore</strong> is a <strong className="text-purple-600 dark:text-purple-400">Decentralized</strong>, <strong className="text-purple-600 dark:text-purple-400">Autonomous</strong> and <strong className="text-purple-600 dark:text-purple-400">Self-Governing</strong><br/><strong className="text-purple-600 dark:text-purple-400">Storage</strong> and <strong className="text-purple-600 dark:text-purple-400">Distribution Network</strong>.
+            </p>
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+              The design is inspired by the <strong className="text-purple-600 dark:text-purple-400">Isotropic</strong> and <strong className="text-purple-600 dark:text-purple-400">Homogeneous Geometry</strong> of a <a href="https://en.wikipedia.org/wiki/Nilmanifold" target="_blank" rel="noopener noreferrer" className="text-primary/70 dark:text-blue-400 hover:text-primary dark:hover:text-foreground hover:underline transition-colors">Nilmanifold</a>, creating a <strong className="text-purple-600 dark:text-purple-400">Uniform Topology</strong> that naturally enables <strong className="text-purple-600 dark:text-purple-400">True Decentralization</strong>.
+            </p>
           </motion.p>
 
           <motion.div 
