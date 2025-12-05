@@ -81,10 +81,10 @@ export function FileSharder() {
     setProcessing(false);
     
     // Simulate "Sealing" animation
-    simulateSealing(newShards, file.name);
+    simulateSealing(newShards);
   };
 
-  const simulateSealing = async (items: Shard[], filename: string) => {
+  const simulateSealing = async (items: Shard[]) => {
     // 2. "Upload" to S3 Adapter (Simulation)
     // In a real app, we would PUT to /api/v1/object/{filename}
     // Here we simulate the chain effect
