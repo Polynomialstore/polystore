@@ -19,23 +19,43 @@ export const TestnetDocs = () => {
             <Download className="w-6 h-6 text-blue-500" /> Quick Start
           </h2>
           <p className="text-muted-foreground">
-            We provide pre-compiled binaries for macOS (Apple Silicon) and Linux (AMD64/ARM64).
+            Since the network is in active development, we recommend building from source.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6">
-            <a href="#" className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all group">
-              <h3 className="font-bold text-lg text-foreground group-hover:text-primary">Download Release Tarball</h3>
-              <p className="text-sm text-muted-foreground mt-2">Includes `nilchaind`, `nil_cli`, and `nil_faucet`.</p>
-              <div className="mt-4 text-xs font-mono bg-secondary/50 p-2 rounded">
-                v0.1.0-rc1-Darwin-arm64.tar.gz (73MB)
+            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
+              <h3 className="font-bold text-lg text-foreground">1. Build & Run Chain</h3>
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p className="text-green-400"># Clone Repository</p>
+                <p>$ git clone https://github.com/Nil-Store/nil-store.git</p>
+                <p>$ cd nil-store/nilchain</p>
+                <br/>
+                <p className="text-green-400"># Build & Install</p>
+                <p>$ make install</p>
+                <br/>
+                <p className="text-green-400"># Initialize & Start</p>
+                <p>$ nilchaind init my-node --chain-id nilchain</p>
+                <p>$ nilchaind start</p>
               </div>
-            </a>
-            <div className="bg-card p-6 rounded-xl border border-border">
-              <h3 className="font-bold text-lg text-foreground">Installation</h3>
-              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2">
-                <p>$ tar -xvf nilstore-*.tar.gz</p>
-                <p>$ cd dist</p>
-                <p>$ ./bin/nilchaind start</p>
+            </div>
+            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
+              <h3 className="font-bold text-lg text-foreground">2. Run Faucet</h3>
+              <p className="text-sm text-muted-foreground mb-2">To use the website's "Get Funds" button, you must run the local faucet API.</p>
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p className="text-green-400"># In a new terminal window</p>
+                <p>$ cd nil-store/nil_faucet</p>
+                <p>$ go run main.go</p>
+                <br/>
+                <p className="text-yellow-500 text-xs"># Note: Ensure 'faucet' key exists in keychain</p>
+              </div>
+            </div>
+            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all md:col-span-2">
+              <h3 className="font-bold text-lg text-foreground">3. Deploy Contracts (Optional)</h3>
+              <p className="text-sm text-muted-foreground mb-2">To enable future bridge features, deploy the smart contracts to the local EVM.</p>
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p className="text-green-400"># Requires Foundry (forge)</p>
+                <p>$ cd nil-store/nil_bridge</p>
+                <p>$ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>
           </div>
