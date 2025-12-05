@@ -5,6 +5,10 @@
 *   `git push origin main` (Primary)
 *   `git push nil-store main` (Mirror)
 
+### Git Best Practices for Agents
+*   **Commit Regularly:** Always commit your work frequently, in small, logical chunks.
+*   **Prohibited Commands:** Agents are strictly forbidden from running aggressive Git commands like `git clean` or `git reset --hard` as these can lead to irreversible data loss of uncommitted work. If such commands are necessary, confirm with the user first.
+
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Phase 1: The "Localhost" Prototype (Months 1-3)

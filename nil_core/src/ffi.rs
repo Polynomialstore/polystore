@@ -1,4 +1,4 @@
-use crate::kzg::{KzgContext, BLOB_SIZE, BLOBS_PER_MDU};
+use crate::kzg::{KzgContext, BLOB_SIZE, BLOBS_PER_MDU}; // Added BLOB_SIZE back
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;

@@ -5,7 +5,7 @@ pub use c_kzg; // Re-export the crate or types
 use std::path::Path;
 use thiserror::Error;
 use blake2::{Blake2s256, Digest};
-use rs_merkle::{MerkleTree, MerkleProof};
+use rs_merkle::{MerkleTree, MerkleProof, Hasher};
 
 // Define MDU (Mega-Data Unit) and Shard sizes
 pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
@@ -44,13 +44,6 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 
     fn hash(data: &[u8]) -> [u8; 32] {
         Blake2s256::digest(data).into()
-    }
-
-    fn concat(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-        let mut hasher = Blake2s256::new();
-        hasher.update(left);
-        hasher.update(right);
-        hasher.finalize().into()
     }
 }
 
@@ -142,13 +135,15 @@ impl KzgContext {
         let indices = vec![challenged_kzg_commitment_index];
         let leaves = vec![leaf_hash];
 
-        merkle_proof.verify(
-            *Bytes32::from_bytes(mdu_merkle_root).map_err(KzgError::Internal)?.as_array(), // Convert Bytes32 to [u8;32]
+        let root_bytes32 = Bytes32::from_bytes(mdu_merkle_root).map_err(KzgError::Internal)?;
+        let root_array: [u8; 32] = root_bytes32.as_slice().try_into().map_err(|_| KzgError::InvalidDataLength)?;
+
+        Ok(merkle_proof.verify(
+            root_array,
             &indices,
             &leaves,
             num_leaves,
-        )
-        .map_err(|e| KzgError::MerkleTreeError(format!("Merkle proof verification failed: {:?}", e)))
+        ))
     }
 
     pub fn compute_proof(

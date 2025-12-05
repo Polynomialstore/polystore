@@ -16,5 +16,5 @@ num-traits = "0.2.19"
 rand = "0.9.2"
 sha2 = "0.10.9"
 thiserror = "2.0.17"
-rs-merkle = "1.0.0" # Added for Merkle Tree functionality
+rs_merkle = "1.5.0" # Added for Merkle Tree functionality
 blake2 = "0.10.6" # Added for Blake2s-256 hashing

@@ -42,6 +42,7 @@ func initFixture(t *testing.T) *fixture {
 		addressCodec,
 		authority,
 		MockBankKeeper{},
+		MockAccountKeeper{}, // Pass the mock account keeper
 	)
 
 	// Initialize params

@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"context"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"cosmossdk.io/core/address"
 )
 
 type MockBankKeeper struct {}
@@ -24,5 +25,15 @@ func (m MockBankKeeper) SendCoinsFromAccountToModule(ctx context.Context, sender
 }
 
 func (m MockBankKeeper) BurnCoins(ctx context.Context, moduleName string, amt sdk.Coins) error {
+    return nil
+}
+
+type MockAccountKeeper struct {}
+
+func (m MockAccountKeeper) AddressCodec() address.Codec {
+    return nil
+}
+
+func (m MockAccountKeeper) GetAccount(ctx context.Context, addr sdk.AccAddress) sdk.AccountI {
     return nil
 }

@@ -12,14 +12,14 @@ message Deal {
   string cid = 2; // Root CID of the file manifest
   uint64 size = 3; // Total size in bytes
   string owner = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Address of the deal creator
-  int64 escrow_balance = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // Remaining $STOR for payments
+  string escrow_balance = 5 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Remaining $STOR for payments
   uint64 start_block = 6; // Block height when deal became active
   uint64 end_block = 7; // Block height when deal expires
   repeated string providers = 8 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // List of assigned SP addresses (Base Layer)
   uint32 redundancy_mode = 9; // e.g., 1 = Standard (RS(12,8))
   uint64 current_replication = 10; // e.g., 12 for base layer, increases with hot replicas
   string service_hint = 11; // "Hot" or "Cold"
-  uint64 max_monthly_spend = 12 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
+  string max_monthly_spend = 12 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
 }
 
 // Provider represents a Storage Provider in the network.

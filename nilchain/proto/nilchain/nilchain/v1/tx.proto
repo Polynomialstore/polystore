@@ -77,8 +77,8 @@ message MsgCreateDeal {
   uint64 size = 3; // Total size in bytes
   uint64 duration_blocks = 4; // Duration of the deal in blocks
   string service_hint = 5; // "Hot" or "Cold"
-  uint64 max_monthly_spend = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
-  string initial_escrow_amount = 7 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Int", (gogoproto.nullable) = false]; // Initial $STOR amount
+  string max_monthly_spend = 6 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
+  string initial_escrow_amount = 7 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Initial $STOR amount
 }
 
 // MsgCreateDealResponse defines the response structure for creating a deal.

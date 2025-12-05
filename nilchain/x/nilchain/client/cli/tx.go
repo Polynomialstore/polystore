@@ -19,7 +19,8 @@ func GetTxCmd() *cobra.Command {
 		RunE:                       client.ValidateCmd,
 	}
 
-	cmd.AddCommand(CmdSubmitProof())
-
+	cmd.AddCommand(CmdProveLivenessLocal())
+    cmd.AddCommand(CmdRegisterProvider())
+    cmd.AddCommand(CmdCreateDeal())
 	return cmd
 }

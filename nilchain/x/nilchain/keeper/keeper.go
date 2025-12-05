@@ -10,8 +10,6 @@ import (
 	corestore "cosmossdk.io/core/store"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types" // ADDED for Context
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors" // ADDED for errors
-
 	"nilchain/x/nilchain/types"
 )
 
@@ -24,6 +22,7 @@ type Keeper struct {
 	authority []byte
 	
 	BankKeeper types.BankKeeper
+	AccountKeeper types.AuthKeeper
 
 	Schema collections.Schema
 	Params collections.Item[types.Params]
@@ -42,6 +41,7 @@ func NewKeeper(
 	addressCodec address.Codec,
 	authority []byte,
 	bankKeeper types.BankKeeper,
+	accountKeeper types.AuthKeeper,
     
 ) Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
@@ -56,6 +56,7 @@ func NewKeeper(
 		addressCodec: addressCodec,
 		authority:    authority,
 		BankKeeper:   bankKeeper,
+		AccountKeeper: accountKeeper,
 		
 		Params:       collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProofCount:   collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
@@ -78,7 +79,7 @@ func NewKeeper(
 // AssignProviders deterministically assigns providers for a new deal.
 // It uses a hash-based approach to select `types.DealBaseReplication` providers
 // from the active provider list, respecting service hints and diversity constraints.
-func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string) ([]string, error) {
+func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string, count uint64) ([]string, error) {
 	var allProviders []types.Provider
 	
 	// Collect all providers
@@ -112,11 +113,11 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		}
 	}
 
-	if len(candidateProviders) < types.DealBaseReplication {
-		return nil, fmt.Errorf("not enough suitable providers (%d/%d) for service hint '%s' to satisfy deal replication", len(candidateProviders), types.DealBaseReplication, serviceHint)
+	if uint64(len(candidateProviders)) < count {
+		return nil, fmt.Errorf("not enough suitable providers (%d/%d) for service hint '%s' to satisfy deal replication", len(candidateProviders), count, serviceHint)
 	}
 
-	assignedProviders := make([]string, types.DealBaseReplication)
+	assignedProviders := make([]string, count)
 	selectedIndices := make(map[int]struct{})       // To ensure unique providers from candidateProviders slice
 	selectedAddresses := make(map[string]struct{})   // To ensure unique provider addresses
 
@@ -124,12 +125,12 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	seedBase = append(seedBase, sdk.Uint64ToBigEndian(dealID)...)
 	seedBase = append(seedBase, blockHash...)
 
-	for i := uint64(0); i < types.DealBaseReplication; {
+	for i := uint64(0); i < count; {
 		// Deterministic seed for this selection round
 		currentHash := sha256.Sum256(append(seedBase, sdk.Uint64ToBigEndian(i)...))
 		
 		// Use the hash as a random source to pick an index
-		idx := int(binary.BigEndian.Uint64(currentHash[:8])) % len(candidateProviders)
+		idx := int(binary.BigEndian.Uint64(currentHash[:8]) % uint64(len(candidateProviders)))
 
 		provider := candidateProviders[idx]
 
@@ -137,26 +138,27 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if _, exists := selectedIndices[idx]; exists {
 			// Already selected, re-seed and try again to find a new unique provider.
 			// This might loop if not enough unique providers are available, but that's caught by len(candidateProviders) check.
-			seedBase = sha256.Sum256(currentHash[:]) 
+			newSeed := sha256.Sum256(currentHash[:])
+			seedBase = newSeed[:]
 			continue
 		}
 		
 		// Ensure unique provider addresses. This implicitly handles diversity (for now)
 		// as it ensures each provider address is distinct.
 		if _, exists := selectedAddresses[provider.Address]; exists {
-			seedBase = sha256.Sum256(currentHash[:]) 
+			newSeed := sha256.Sum256(currentHash[:])
+			seedBase = newSeed[:]
 			continue
 		}
 
 		assignedProviders[i] = provider.Address
-		selectedIndices[idx] = struct{}{}
-		selectedAddresses[provider.Address] = struct{}{}
+		selectedIndices[idx] = struct{}{}       
+		selectedAddresses[provider.Address] = struct{}{}   
 		i++
 	}
 
 	return assignedProviders, nil
 }
-
 // GetAuthority returns the module's authority.
 func (k Keeper) GetAuthority() []byte {
 	return k.authority

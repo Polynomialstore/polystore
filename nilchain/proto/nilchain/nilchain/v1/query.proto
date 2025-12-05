@@ -7,6 +7,7 @@ import "google/api/annotations.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
 import "nilchain/nilchain/v1/params.proto";
 import "nilchain/nilchain/v1/proof.proto";
+import "nilchain/nilchain/v1/types.proto"; // ADDED
 
 option go_package = "nilchain/x/nilchain/types";
 
@@ -20,6 +21,26 @@ service Query {
   // Queries a list of Proof items.
   rpc ListProofs(QueryListProofsRequest) returns (QueryListProofsResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/proofs";
+  }
+
+  // Queries a list of Deal items.
+  rpc ListDeals(QueryListDealsRequest) returns (QueryListDealsResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals";
+  }
+
+  // Queries a Deal by id.
+  rpc GetDeal(QueryGetDealRequest) returns (QueryGetDealResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{id}";
+  }
+
+  // Queries a list of Provider items.
+  rpc ListProviders(QueryListProvidersRequest) returns (QueryListProvidersResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/providers";
+  }
+
+  // Queries a Provider by address.
+  rpc GetProvider(QueryGetProviderRequest) returns (QueryGetProviderResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}";
   }
 }
 
@@ -42,4 +63,38 @@ message QueryListProofsRequest {
 message QueryListProofsResponse {
   repeated Proof proof = 1;
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryListDealsRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+message QueryListDealsResponse {
+  repeated Deal deals = 1;
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryGetDealRequest {
+  uint64 id = 1;
+}
+
+message QueryGetDealResponse {
+  Deal deal = 1;
+}
+
+message QueryListProvidersRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+message QueryListProvidersResponse {
+  repeated Provider providers = 1;
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryGetProviderRequest {
+  string address = 1;
+}
+
+message QueryGetProviderResponse {
+  Provider provider = 1;
 }
