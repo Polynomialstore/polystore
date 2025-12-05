@@ -31,6 +31,7 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
              0
         },
         Err(e) => {
+            #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to load KzgContext: {:?}", e); // Use eprintln for errors
             -3 // Failed to load
         }
@@ -65,11 +66,13 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
                 0 // Success
             },
             Err(e) => {
+                #[cfg(feature = "debug-print")]
                 eprintln!("ERROR: Failed to create MDU Merkle root: {:?}", e);
                 -4 // Merkle root creation failed
             }
         },
         Err(e) => {
+            #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to get KZG commitments for MDU: {:?}", e);
             -3 // Commitment calculation failed
         }
@@ -119,11 +122,13 @@ pub extern "C" fn nil_verify_mdu_proof(
     ) {
         Ok(true) => { /* Merkle proof valid, proceed to KZG verification */ },
         Ok(false) => {
-            // eprintln!("ERROR: Merkle proof invalid.");
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: Merkle proof invalid.");
             return 0; // Merkle proof invalid
         },
         Err(e) => {
-            // eprintln!("ERROR: Merkle proof verification error: {:?}", e);
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: Merkle proof verification error: {:?}", e);
             return -3; // Internal Merkle proof error
         }
     }
@@ -137,11 +142,13 @@ pub extern "C" fn nil_verify_mdu_proof(
     ) {
         Ok(true) => 1, // Both proofs valid
         Ok(false) => {
-            // eprintln!("ERROR: KZG opening proof invalid.");
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: KZG opening proof invalid.");
             0 // KZG proof invalid
         },
         Err(e) => {
-            // eprintln!("ERROR: KZG verification error: {:?}", e);
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: KZG verification error: {:?}", e);
             -4 // Internal KZG verification error
         }
     }
