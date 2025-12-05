@@ -48,7 +48,10 @@ import (
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	icacontrollerkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/keeper"
 	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
+	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
+	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
+	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
 	// EVM Imports
@@ -199,6 +202,11 @@ func New(
 
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
 
+	// register legacy modules
+	if err := app.registerIBCModules(appOpts); err != nil {
+		panic(err)
+	}
+
 	// ----------------------------------------------------------------------------
 
 	// EVM & FeeMarket Manual Wiring
@@ -256,9 +264,8 @@ func New(
 	// We append EVM modules to the end of the lists maintained by runtime
 	// Note: We need to get the current order first?
 	// runtime sets the order in ModuleManager during Build.
-	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
-	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
-	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+	// app.ModuleManager.OrderBeginBlockers does not contain manually registered modules (IBC), so we must add them.
+	// MOVED AFTER LOAD
 
 	// 6. Set AnteHandler
 	options := evmante.HandlerOptions{
@@ -297,11 +304,6 @@ func New(
 
 	// ----------------------------------------------------------------------------
 
-	// register legacy modules
-	if err := app.registerIBCModules(appOpts); err != nil {
-		panic(err)
-	}
-
 	/****  Module Options ****/
 
 	// create the simulation manager and define the order of the modules for deterministic simulations
@@ -326,9 +328,59 @@ func New(
 		return app.App.InitChainer(ctx, req)
 	})
 
+	// WORKAROUND: Temporarily remove manually wired modules from ModuleManager
+	// to pass validation in app.Load() which resets module order based on AppConfig.
+	manualModules := []string{
+		ibcexported.ModuleName,
+		ibctransfertypes.ModuleName,
+		icatypes.ModuleName,
+		evmtypes.ModuleName,
+		feemarkettypes.ModuleName,
+		"07-tendermint",  // ibctm.ModuleName
+		"07-tendermint",  // ibctm.ModuleName
+		"06-solomachine", // solomachine.ModuleName
+	}
+	cachedModules := make(map[string]interface{})
+	for _, name := range manualModules {
+		if mod, ok := app.ModuleManager.Modules[name]; ok {
+			cachedModules[name] = mod
+			delete(app.ModuleManager.Modules, name)
+		}
+	}
+
 	if err := app.Load(loadLatest); err != nil {
 		panic(err)
 	}
+
+	// RESTORE manually wired modules
+	for name, mod := range cachedModules {
+		// We can cast it back to AppModule if needed, but Modules map seems to be interface{}
+		if appMod, ok := mod.(module.AppModule); ok {
+			app.ModuleManager.Modules[name] = appMod
+		} else {
+			// Fallback if it's not AppModule (e.g. AppModuleBasic only? shouldn't happen for Modules map)
+			// Actually if Modules is map[string]AppModule, then mod IS AppModule.
+			// If Modules is map[string]interface{}, we can just assign it back.
+			// But compiler complained 'mod' is 'any'.
+			// So Modules IS map[string]interface{} (or similar).
+			// Let's try direct assignment if compiler allows.
+			// But I can't assign 'any' to 'AppModule' if Modules is map[string]AppModule.
+			// The error said: "cannot use mod (variable of interface type any) as ...AppModule value in assignment"
+			// This confirms target IS AppModule, but source IS any.
+			// So app.ModuleManager.Modules IS map[string]AppModule?
+			// NO. The error said: "cannot use mod (variable of interface type any) as ...AppModule".
+			// This happens if I try to assign TO cachedModules (which I defined as map[string]AppModule).
+			// So 'mod' (from app.ModuleManager.Modules[name]) IS 'any'.
+			// So app.ModuleManager.Modules IS map[string]any.
+			// So I should define cachedModules as map[string]any.
+			app.ModuleManager.Modules[name] = mod
+		}
+	}
+
+	// Manually update module order lists to include restored modules
+	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, ibcexported.ModuleName, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
+	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, ibcexported.ModuleName, ibctransfertypes.ModuleName, icatypes.ModuleName, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
 
 	return app
 }

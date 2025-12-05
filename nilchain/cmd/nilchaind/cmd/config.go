@@ -3,6 +3,7 @@ package cmd
 import (
 	cmtcfg "github.com/cometbft/cometbft/config"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
+	evmconfig "github.com/cosmos/evm/server/config"
 )
 
 // initCometBFTConfig helps to override default CometBFT Config values.
@@ -23,6 +24,9 @@ func initAppConfig() (string, interface{}) {
 	// The following code snippet is just for reference.
 	type CustomAppConfig struct {
 		serverconfig.Config `mapstructure:",squash"`
+		EVM                 evmconfig.EVMConfig     `mapstructure:"evm"`
+		JSONRPC             evmconfig.JSONRPCConfig `mapstructure:"json-rpc"`
+		TLS                 evmconfig.TLSConfig     `mapstructure:"tls"`
 	}
 
 	// Optionally allow the chain developer to overwrite the SDK's default
@@ -42,20 +46,16 @@ func initAppConfig() (string, interface{}) {
 	// In tests, we set the min gas prices to 0.
 	// srvCfg.MinGasPrices = "0stake"
 
+	evmCfg := evmconfig.DefaultConfig()
+
 	customAppConfig := CustomAppConfig{
-		Config: *srvCfg,
+		Config:  *srvCfg,
+		EVM:     evmCfg.EVM,
+		JSONRPC: evmCfg.JSONRPC,
+		TLS:     evmCfg.TLS,
 	}
 
-	customAppTemplate := serverconfig.DefaultConfigTemplate
-	// Edit the default template file
-	//
-	// customAppTemplate := serverconfig.DefaultConfigTemplate + `
-	// [wasm]
-	// # This is the maximum sdk gas (wasm and storage) that we allow for any x/wasm "smart" queries
-	// query_gas_limit = 300000
-	// # This is the number of wasm vm instances we keep cached in memory for speed-up
-	// # Warning: this is currently unstable and may lead to crashes, best to keep for 0 unless testing locally
-	// lru_size = 0`
+	customAppTemplate := serverconfig.DefaultConfigTemplate + evmconfig.DefaultEVMConfigTemplate
 
 	return customAppTemplate, customAppConfig
 }

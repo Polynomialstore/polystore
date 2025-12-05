@@ -125,7 +125,12 @@ func ProvideClientContext(
 	interfaceRegistry codectypes.InterfaceRegistry,
 	txConfigOpts tx.ConfigOptions,
 	legacyAmino *codec.LegacyAmino,
+	basicManager module.BasicManager,
 ) client.Context {
+	basicManager.RegisterInterfaces(interfaceRegistry)
+	basicManager.RegisterLegacyAminoCodec(legacyAmino)
+	legacyAmino.RegisterConcrete(&authtypes.AccountRetriever{}, "cosmos-sdk/AccountRetriever", nil)
+
 	clientCtx := client.Context{}.
 		WithCodec(appCodec).
 		WithInterfaceRegistry(interfaceRegistry).
