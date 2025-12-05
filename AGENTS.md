@@ -23,7 +23,6 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
         *   [x] **Result:** ~0.94ms per proof on current hardware. Well within < 10ms budget.
     *   **Argon2id Timing:** Does the Argon2id timing actually prevent on-demand generation?
         *   [x] **Result:** ~191ms per 1KB block (15MB/2 passes).
-        *   *Analysis:* For a 1GB file (1M blocks), total seal time would be ~191,000 seconds (53 hours) if serial. This is a significant "Seal" cost, preventing cheap on-demand generation, while verification (checking the seal) is just a hash check (fast) or implies the prover must have stored the sealed data. Wait, PoDE verification is usually just checking the proof on the *sealed* data. The "Seal" is the encoding cost. 191ms/KB is very slow (5KB/s). We might need to tune this for production (e.g. larger block size or lower cost if we want faster sealing, or this is intended). For "Localhost" phase, this confirms the mechanism works.
 *   **Market (Narrative):**
     *   **"Building in Public":** Publish the `core-crypto` repo.
     *   **Content:** Write a blog post: *"Why we chose PoDE over Filecoin's Seal"* (Comparatives sell well).
@@ -64,9 +63,9 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
     *   *New:* `MsgCreateDeal` creates a `Deal` object. Proofs must match Deal ID.
 
 **Immediate Tasks:**
-1.  [ ] Implement `MsgCreateDeal` in `nilchain`.
-2.  [ ] Implement `ActiveProviderList` Keeper.
-3.  [ ] Implement Deterministic Slotting Logic.
+1.  [x] Implement `MsgCreateDeal` in `nilchain`.
+2.  [x] Implement `ActiveProviderList` Keeper.
+3.  [x] Implement Deterministic Slotting Logic.
 
 ---
 
@@ -130,214 +129,51 @@ To manage this, it is recommended to organize development efforts into these thr
 
 ## Change Log (Session 1)
 
-
-
-
-
-
-
 **Architectural Pivot: The Performance Market**
-
-
 
 We have executed a major refactor of the protocol specification to replace "Physics Policing" with "Economic Incentives."
 
-
-
-
-
-
-
 1.  **PoDE Deprecation:** Removed `Argon2id` and strict 1.1s timing checks. The mechanism was deemed brittle and unverifiable on-chain.
-
-
-
 2.  **Tiered Rewards:** Introduced **Block-Height Latency** tiers (Platinum/Gold/Silver). Speed is now priced by the market.
-
-
-
 3.  **Unified Liveness:** Merged "Storage" and "Retrieval." User `RetrievalReceipts` now count as valid storage proofs.
-
-
-
 4.  **System-Defined Placement:** Implemented deterministic slotting (`Hash(Deal+Block)`) to prevent Sybil attacks.
-
-
-
 5.  **Elasticity:** Added "Saturation Signals" and "User-Funded Scaling" to handle viral content dynamically.
-
-
-
 6.  **Risk Analysis:** Documented meta-risks including Cold Start fragility and Data Gravity in `metaspec.md`.
-
-
-
-
-
-
-
----
-
-
-
-
-
-
 
 ## Phase 3: Implementation Plan (To-Do List)
 
-
-
-
-
-
-
 ### 1. Spec Alignment: Protobuf Definitions (Go)
-
-
-
-*   [ ] **`nilchain/proto/nilchain/nilchain/v1/types.proto`**: Create this file.
-
-
-
+*   [x] **`nilchain/proto/nilchain/nilchain/v1/types.proto`**: Create this file.
     *   Define `message Deal`: `{id, cid, size, owner, escrow, start_block, end_block, providers, redundancy_mode, service_hint}`.
-
-
-
     *   Define `message Provider`: `{address, total_storage, used_storage, capabilities (archive/general/edge), status}`.
-
-
-
     *   Define `message VirtualStripe`: `{deal_id, stripe_index, overlay_providers[]}` (For Elasticity tracking).
-
-
-
-*   [ ] **`nilchain/proto/nilchain/nilchain/v1/tx.proto`**: Update Service definitions.
-
-
-
+*   [x] **`nilchain/proto/nilchain/nilchain/v1/tx.proto`**: Update Service definitions.
     *   Add `MsgRegisterProvider`: `(creator, capabilities)`.
-
-
-
     *   Add `MsgCreateDeal`: `(creator, cid, size, duration, hint, max_monthly_spend)`.
-
-
-
     *   Rename `MsgSubmitProof` to `MsgProveLiveness`: `(creator, deal_id, epoch_id, proof_type {RetrievalReceipt | KzgProof})`.
-
-
-
     *   Add `MsgSignalSaturation`: `(creator, deal_id)`.
 
-
-
-
-
-
-
 ### 2. Spec Alignment: Keeper Logic (Go)
-
-
-
-*   [ ] **Provider Registry**: Implement `Keepers` to store/retrieve Providers. Support filtering by `Capabilities` (Hot/Cold).
-
-
-
-*   [ ] **Placement Engine**: Implement `AssignProviders(deal_id, block_hash, hint)` using the deterministic hashing algorithm.
-
-
-
+*   [x] **Provider Registry**: Implement `Keepers` to store/retrieve Providers. Support filtering by `Capabilities` (Hot/Cold).
+*   [x] **Placement Engine**: Implement `AssignProviders(deal_id, block_hash, hint)` using the deterministic hashing algorithm.
     *   *Constraint:* Enforce distinct IP/ASN diversity (mocked for now).
-
-
-
-*   [ ] **Deal Lifecycle**: Implement `MsgCreateDeal` handler.
-
-
-
+*   [x] **Deal Lifecycle**: Implement `MsgCreateDeal` handler.
     *   Deduct escrow.
-
-
-
     *   Run placement.
-
-
-
     *   Save Deal state.
-
-
-
     *   Emit `DealCreated` event.
-
-
-
-*   [ ] **Unified Verification**: Implement `MsgProveLiveness` handler.
-
-
-
+*   [x] **Unified Verification**: Implement `MsgProveLiveness` handler.
     *   Verify KZG (via FFI).
-
-
-
     *   Verify Signature (if RetrievalReceipt).
-
-
-
     *   Calculate **Tier** based on `ctx.BlockHeight() - challenge_block`.
-
-
-
     *   Distribute Rewards (Storage vs Bandwidth split).
 
-
-
-
-
-
-
 ### 3. Spec Alignment: Core Cryptography (Rust)
-
-
-
-
-
-
-
 *   [x] **Audit nil_core: Remove Argon2id (PoDE) logic as it is now deprecated.**
-
-
-
-
-
-
-
 *   [x] **Audit nil_core: Verify KZG Blob size constants and ensure support for 8 MiB MDUs (likely via batching 64 blobs).**
-
-
-
-
-
-
-
 *   [x] **Batch Verification**: Expose a `verify_batch` FFI function to allow verifying an entire 8 MiB MDU proof efficiently.
 
-
-
-
-
-
-
 ### 4. Simulation & Testing
-
-
-
-*   [ ] **Unit Test**: `Placement_test.go`: Verify determinism and distribution of `AssignProviders`.
-
-
-
-*   [ ] **Integration Test**: `e2e_deal_lifecycle.sh`: Register -> Create Deal -> Submit Proof -> Check Balance.
-
-
-
-
+*   [x] **Unit Test**: `Placement_test.go`: Verify determinism and distribution of `AssignProviders`.
+*   [x] **Integration Test**: `e2e_flow.sh`: Register -> Create Deal -> Submit Proof -> Check Balance.
+*   [x] **Performance Test**: `load_gen.sh`: Baseline Small Scale simulation passing (12 blocks, 15 txs).
