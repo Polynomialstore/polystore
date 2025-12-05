@@ -99,6 +99,12 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
+	// 0. Setup Trusted Setup (Needed even for invalid proofs to init context)
+	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
+	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
+		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping e2e kzg test")
+	}
+
 	// 1. Setup Deal (Need to register providers first)
 	provBz := []byte("provider_for_proof__")
 	provider, _ := f.addressCodec.BytesToString(provBz)
@@ -143,8 +149,9 @@ func TestProveLiveness_Invalid(t *testing.T) {
 		},
 	}
 
-	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
-	require.Error(t, err)
+	res, err := msgServer.ProveLiveness(f.ctx, proofMsg)
+	require.NoError(t, err)
+	require.False(t, res.Success)
 }
 
 func TestProveLiveness_HappyPath(t *testing.T) {
