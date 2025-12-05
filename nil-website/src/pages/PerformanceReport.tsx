@@ -105,7 +105,7 @@ export const PerformanceReport = () => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-secondary/50 to-background border border-border rounded-2xl p-8 md:p-12"
+        className="bg-gradient-to-br from-secondary/50 to-background border border-border rounded-2xl p-8 md:p-12 mb-16"
       >
         <div className="flex items-start gap-6">
           <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20 hidden md:block">
@@ -127,6 +127,52 @@ export const PerformanceReport = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* Methodology Context */}
+      <section className="grid md:grid-cols-2 gap-12">
+        <div>
+            <h3 className="text-2xl font-bold text-foreground mb-6">Test Methodology</h3>
+            <div className="space-y-6 text-muted-foreground">
+                <p>
+                    These benchmarks were conducted using a local `nilchain` devnet. We utilized a custom load generator script (`load_gen.sh`) to simulate varying network conditions.
+                </p>
+                <ul className="space-y-4">
+                    <li className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</div>
+                        <div>
+                            <strong className="text-foreground">Small Scale (Baseline):</strong> Functional verification with 10 providers and 10 deals to establish baseline latency.
+                        </div>
+                    </li>
+                    <li className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</div>
+                        <div>
+                            <strong className="text-foreground">Medium Scale (Throughput):</strong> 50 providers and 100 deals. Concurrent proof submission (50+ txs in mempool) to measure average TPS and Block Time under moderate congestion.
+                        </div>
+                    </li>
+                    <li className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</div>
+                        <div>
+                            <strong className="text-foreground">Large Scale (Stress):</strong> 200 providers and 500+ deals. Rapid-fire creation and proving to identify CPU/IO bottlenecks.
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div className="bg-card p-8 rounded-2xl border border-border">
+            <h3 className="text-xl font-bold text-foreground mb-4">Full Test Plan</h3>
+            <p className="text-muted-foreground mb-6">
+                For a deep dive into our testing strategy, including detailed environment setup, specific simulation flows, and success criteria, please refer to the official documentation on GitHub.
+            </p>
+            <a 
+                href="https://github.com/Nil-Store/nil-store/tree/main/performance" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+            >
+                View Performance Test Plan <Activity className="w-4 h-4" />
+            </a>
+        </div>
+      </section>
 
     </div>
   );
