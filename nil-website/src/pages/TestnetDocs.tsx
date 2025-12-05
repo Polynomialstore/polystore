@@ -1,5 +1,6 @@
-import { Download, Terminal, Wallet, Coins, Blocks } from "lucide-react";
+import { Download, Terminal, Wallet, Blocks } from "lucide-react";
 import { FileSharder } from "../components/FileSharder";
+import { FaucetWidget } from "../components/FaucetWidget";
 
 export const TestnetDocs = () => {
   return (
@@ -120,14 +121,16 @@ export const TestnetDocs = () => {
             </div>
             <div className="space-y-4">
                 <h3 className="font-bold text-foreground flex items-center gap-2">
-                    2. Request Funds <Coins className="w-4 h-4 text-yellow-500"/>
+                    2. Request Funds
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                    You can request funds for either your Cosmos (nil1...) or Ethereum (0x...) address. They share the same balance.
+                    Click below to receive 10 NIL testnet tokens directly to your connected wallet (EVM or Cosmos).
                 </p>
-                <div className="bg-secondary/20 p-3 rounded font-mono text-xs">
-                    $ curl -X POST http://localhost:8081/faucet \<br/>
-                    &nbsp;&nbsp;-d '{'{'}"address": "nil1... or 0x..."{'}'}'
+                <div className="p-4 bg-secondary/10 rounded-xl border border-border/50 flex flex-col items-center justify-center gap-2">
+                    <FaucetWidget />
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                        Works with both 0x... and nil1... addresses.
+                    </p>
                 </div>
             </div>
           </div>

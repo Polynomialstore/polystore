@@ -2,6 +2,7 @@ import { useAccount } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useEffect, useState } from 'react'
 import { Coins, RefreshCw, UploadCloud } from 'lucide-react'
+import { useFaucet } from '../hooks/useFaucet'
 
 interface Deal {
   id: string
@@ -14,9 +15,9 @@ interface Deal {
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()
+  const { requestFunds, loading: faucetLoading } = useFaucet()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(false)
-  const [faucetLoading, setFaucetLoading] = useState(false)
   const [nilAddress, setNilAddress] = useState('')
 
   useEffect(() => {
@@ -48,22 +49,13 @@ export function Dashboard() {
     }
   }
 
-  async function requestFunds() {
-    if (!nilAddress) return
-    setFaucetLoading(true)
-    try {
-        const response = await fetch('http://localhost:8081/faucet', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: nilAddress })
-        })
-        if (!response.ok) throw new Error('Faucet failed')
-        alert('Funds requested! Wait a few seconds for the transaction to confirm.')
-    } catch (e) {
-        alert('Failed to request funds. Is the faucet running?')
-    } finally {
-        setFaucetLoading(false)
-    }
+  const handleRequestFunds = async () => {
+      try {
+          await requestFunds(address)
+          alert('Funds requested! Wait a few seconds for the transaction to confirm.')
+      } catch (e) {
+          alert('Failed to request funds. Is the faucet running?')
+      }
   }
 
   if (!isConnected) return (
@@ -90,7 +82,7 @@ export function Dashboard() {
                     Upload File
                 </button>
                 <button 
-                    onClick={requestFunds}
+                    onClick={handleRequestFunds}
                     disabled={faucetLoading}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-md transition-colors disabled:opacity-50"
                 >
