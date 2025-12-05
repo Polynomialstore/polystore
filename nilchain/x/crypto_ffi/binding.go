@@ -17,6 +17,17 @@ int nil_verify_mdu_proof(
     const unsigned char* y_value,
     const unsigned char* kzg_opening_proof
 );
+int nil_compute_mdu_proof_test(
+    const unsigned char* mdu_bytes,
+    size_t mdu_bytes_len,
+    unsigned int chunk_index,
+    unsigned char* out_commitment,
+    unsigned char* out_merkle_proof,
+    size_t* out_merkle_proof_len,
+    unsigned char* out_z,
+    unsigned char* out_y,
+    unsigned char* out_kzg_proof
+);
 */
 import "C"
 import (
@@ -100,4 +111,53 @@ func VerifyMduProof(
 	} else {
 		return false, fmt.Errorf("nil_verify_mdu_proof failed with code: %d", res)
 	}
+}
+
+// ComputeMduProofTest is a helper for integration testing.
+// It computes all components required for a valid MsgProveLiveness proof.
+func ComputeMduProofTest(mdu_bytes []byte, chunk_index uint32) (
+    commitment []byte,
+    merkle_proof []byte,
+    z []byte,
+    y []byte,
+    kzg_proof []byte,
+    err error,
+) {
+    if len(mdu_bytes) != types.MDU_SIZE {
+        return nil, nil, nil, nil, nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mdu_bytes))
+    }
+
+    // Allocate output buffers
+    commitment = make([]byte, 48)
+    merkle_proof_buf := make([]byte, 32 * 10) // Sufficient for depth 6 tree (64 leaves)
+    var merkle_proof_len C.size_t = C.size_t(len(merkle_proof_buf))
+    z = make([]byte, 32)
+    y = make([]byte, 32)
+    kzg_proof = make([]byte, 48)
+
+    cMduBytes := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
+    cCommitment := (*C.uchar)(unsafe.Pointer(&commitment[0]))
+    cMerkleProof := (*C.uchar)(unsafe.Pointer(&merkle_proof_buf[0]))
+    cZ := (*C.uchar)(unsafe.Pointer(&z[0]))
+    cY := (*C.uchar)(unsafe.Pointer(&y[0]))
+    cKzgProof := (*C.uchar)(unsafe.Pointer(&kzg_proof[0]))
+
+    res := C.nil_compute_mdu_proof_test(
+        cMduBytes,
+        C.size_t(len(mdu_bytes)),
+        C.uint(chunk_index),
+        cCommitment,
+        cMerkleProof,
+        &merkle_proof_len,
+        cZ,
+        cY,
+        cKzgProof,
+    )
+
+    if res != 0 {
+        return nil, nil, nil, nil, nil, fmt.Errorf("nil_compute_mdu_proof_test failed with code: %d", res)
+    }
+
+    merkle_proof = merkle_proof_buf[:merkle_proof_len]
+    return commitment, merkle_proof, z, y, kzg_proof, nil
 }
