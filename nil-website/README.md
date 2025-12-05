@@ -1,30 +1,45 @@
-# React + TypeScript + Vite
+# NilStore Website & Explorer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The official frontend for the NilStore Network. This application serves as the marketing landing page, documentation hub, and interactive block explorer for the Incentivized Testnet ("Store Wars").
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+*   **Interactive Simulations:**
+    *   **Security:** "The Bankruptcy Model" visualizes how the network economically punishes lazy providers.
+    *   **Economy:** Agent-based simulation of token supply, inflation, and slashing events.
+*   **Documentation:** Renders Markdown versions of the Whitepaper and Litepaper using `@tailwindcss/typography`.
+*   **Lattice Map:** Visualizes real-time proof submissions on the local testnet.
+*   **Deep Dives:** Interactive explanations of Sharding, KZG Commitments, and the Performance Market.
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+*   **Framework:** React (Vite)
+*   **Language:** TypeScript
+*   **Styling:** Tailwind CSS
+*   **Animations:** Framer Motion
+*   **Icons:** Lucide React
 
-- Configure the top-level `parserOptions` property like this:
+## Development
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+### Setup
+```bash
+npm install
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+### Run Locally
+```bash
+npm run dev
+```
+The site will launch at `http://localhost:5173`.
+
+### Build for Production
+```bash
+npm run build
+```
+Output is generated in the `dist/` directory.
+
+## Deployment
+
+This project is configured for **Netlify** via `netlify.toml`.
+*   **Build Command:** `npm run build`
+*   **Publish Directory:** `dist`
