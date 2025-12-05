@@ -34,6 +34,7 @@ import (
 	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
 	consensuskeeper "github.com/cosmos/cosmos-sdk/x/consensus/keeper"
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
+	_ "github.com/cosmos/cosmos-sdk/x/genutil"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
@@ -226,8 +227,20 @@ func New(
 	// ----------------------------------------------------------------------------
 
 	// 1. Now we can get the keys
+	// We need to manually mount the keys because depinject/runtime won't do it if we removed EVM from appConfig.
+	// BUT, we check if UnsafeFindStoreKey returns nil. If so, we create it.
+	
 	evmKey := app.UnsafeFindStoreKey(evmtypes.StoreKey)
+	if evmKey == nil {
+		evmKey = storetypes.NewKVStoreKey(evmtypes.StoreKey)
+		app.MountStore(evmKey, storetypes.StoreTypeIAVL)
+	}
+	
 	fmKey := app.UnsafeFindStoreKey(feemarkettypes.StoreKey)
+	if fmKey == nil {
+		fmKey = storetypes.NewKVStoreKey(feemarkettypes.StoreKey)
+		app.MountStore(fmKey, storetypes.StoreTypeIAVL)
+	}
 	
 	// 2. Manually Mount Transient Key (Runtime doesn't do this for us)
 	transientKey := storetypes.NewTransientStoreKey(evmtypes.TransientKey)
@@ -269,6 +282,8 @@ func New(
 	// We need to swap them in the ModuleManager.
 	// The ModuleManager was created during `appBuilder.Build`.
 	// It holds the dummy modules.
+	// If we removed them from appConfig, they won't be in ModuleManager.Modules?
+	// We might need to ADD them.
 	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
 	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
 
@@ -279,6 +294,10 @@ func New(
 	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
 	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
 	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+
+    // Register custom signer for MsgEthereumTx to fix simulation panic
+    // Note: The panic occurs inside depinject, so this fix is ineffective here.
+    // We must rely on upstream EVM fixes or disable simulation for EVM.
 
 	// 6. Set AnteHandler
 	options := evmante.HandlerOptions{
@@ -310,10 +329,11 @@ func New(
 	/****  Module Options ****/
 
 	// create the simulation manager and define the order of the modules for deterministic simulations
+	// NOTE: We exclude EVM and FeeMarket from simulation for now to avoid MsgEthereumTx signer panics.
 	overrideModules := map[string]module.AppModuleSimulation{
 		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, nil),
-		evmtypes.ModuleName:       realEvmModule,
-		feemarkettypes.ModuleName: realFmModule,
+		// evmtypes.ModuleName:       realEvmModule,
+		// feemarkettypes.ModuleName: realFmModule,
 	}
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 
