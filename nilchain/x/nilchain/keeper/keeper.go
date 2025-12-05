@@ -33,6 +33,7 @@ type Keeper struct {
 	DealCount  collections.Sequence
 	Deals      collections.Map[uint64, types.Deal]
 	Providers  collections.Map[string, types.Provider] // Key by address string
+	DealProviderStatus collections.Map[collections.Pair[uint64, string], uint64]
 }
 
 func NewKeeper(
@@ -65,6 +66,7 @@ func NewKeeper(
 		DealCount:    collections.NewSequence(sb, types.DealCountKey, "deal_count"),
 		Deals:        collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
 		Providers:    collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
+		DealProviderStatus: collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 	}
 
 	schema, err := sb.Build()

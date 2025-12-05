@@ -20,6 +20,8 @@ func GetTxCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(CmdProveLivenessLocal())
+    cmd.AddCommand(CmdSignRetrievalReceipt())
+    cmd.AddCommand(CmdSubmitRetrievalProof())
     cmd.AddCommand(CmdRegisterProvider())
     cmd.AddCommand(CmdCreateDeal())
 	return cmd

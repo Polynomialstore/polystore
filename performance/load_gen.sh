@@ -28,7 +28,7 @@ else
     exit 1
 fi
 
-BINARY="../nilchaind"
+BINARY="$(pwd)/../nilchaind"
 CHAIN_ID="nilchain"
 HOME_DIR="$(pwd)/.nilchain_perf"
 MDU_FILE="./perf_mdu.dat"
@@ -46,9 +46,9 @@ echo ">>> Building binaries..."
     go clean -cache -modcache
     CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o "../nilchaind" ./cmd/nilchaind # Build to project root
 )
-echo "Binary info for $(pwd)/../nilchaind:"
-file "$(pwd)/../nilchaind"
-ls -l "$(pwd)/../nilchaind"
+echo "Binary info for $BINARY:"
+file "$BINARY"
+ls -l "$BINARY"
 
 # 1. Setup Chain
 
@@ -73,24 +73,24 @@ set +x # Turn off debug shell execution
 "$BINARY" config keyring-backend test --home "$HOME_DIR"
 
 # 2. Create User Account
-yes | "$BINARY" keys add user --home "$HOME_DIR" "$KEYRING" > /dev/null 2>&1
-USER_ADDR=$("$BINARY" keys show user -a --home "$HOME_DIR" "$KEYRING")
+yes | "$BINARY" keys add user --home "$HOME_DIR" $KEYRING > /dev/null 2>&1
+USER_ADDR=$("$BINARY" keys show user -a --home "$HOME_DIR" $KEYRING)
 
 # 3. Create Provider Accounts (Sequential for reliability)
 echo ">>> Creating $NUM_PROVIDERS Provider Accounts..."
 for i in $(seq 1 "$NUM_PROVIDERS"); do
-    yes | "$BINARY" keys add "provider$i" --home "$HOME_DIR" "$KEYRING" > /dev/null 2>&1
+    yes | "$BINARY" keys add "provider$i" --home "$HOME_DIR" $KEYRING > /dev/null 2>&1
 done
 
 # 4. Genesis Setup
 echo ">>> preparing genesis..."
 "$BINARY" genesis add-genesis-account "$USER_ADDR" 1000000000000token,1000000000stake --home "$HOME_DIR"
 for i in $(seq 1 "$NUM_PROVIDERS"); do
-    PROV_ADDR=$("$BINARY" keys show "provider$i" -a --home "$HOME_DIR" "$KEYRING")
+    PROV_ADDR=$("$BINARY" keys show "provider$i" -a --home "$HOME_DIR" $KEYRING)
     "$BINARY" genesis add-genesis-account "$PROV_ADDR" 1000000000token,1000000stake --home "$HOME_DIR"
     echo "Added provider$i ($PROV_ADDR) to genesis"
 done
-"$BINARY" genesis gentx user 100000000stake --chain-id "$CHAIN_ID" --home "$HOME_DIR" "$KEYRING"
+"$BINARY" genesis gentx user 100000000stake --chain-id "$CHAIN_ID" --home "$HOME_DIR" $KEYRING
 "$BINARY" genesis collect-gentxs --home "$HOME_DIR"
 
 # Debug: Check genesis accounts
@@ -139,12 +139,12 @@ fi
 echo ">>> Registering Providers..."
 # Debug: Query user (validator) account
 echo ">>> Debug: Querying user (validator) account..."
-"$(pwd)/../nilchaind" query auth account $("$(pwd)/../nilchaind" keys show user -a --home "$HOME_DIR" "$KEYRING") --home "$HOME_DIR" --node tcp://127.0.0.1:26657
+"$BINARY" query auth account $("$BINARY" keys show user -a --home "$HOME_DIR" $KEYRING) --home "$HOME_DIR" --node tcp://127.0.0.1:26657
 echo ">>> Debug: Querying provider1 account..."
-"$(pwd)/../nilchaind" query auth account $("$(pwd)/../nilchaind" keys show provider1 -a --home "$HOME_DIR" "$KEYRING") --home "$HOME_DIR" --node tcp://127.0.0.1:26657
+"$BINARY" query auth account $("$BINARY" keys show provider1 -a --home "$HOME_DIR" $KEYRING) --home "$HOME_DIR" --node tcp://127.0.0.1:26657
 
 for i in $(seq 1 "$NUM_PROVIDERS"); do
-    yes | "$(pwd)/../nilchaind" tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" "$KEYRING" --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
 done
 # If async, wait a bit for inclusion
 if [ "$BROADCAST_MODE" == "async" ]; then sleep 5; fi
@@ -156,7 +156,7 @@ dd if=/dev/zero of="$MDU_FILE" bs=1M count=8 2>/dev/null
 
 DEAL_START_TIME=$(date +%s)
 for i in $(seq 1 "$NUM_DEALS"); do
-    yes | "$(pwd)/../nilchaind" tx nilchain create-deal "QmPerf$i" 8388608 100 1000 100 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" "$KEYRING" --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx nilchain create-deal "QmPerf$i" 8388608 100 1000 100 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
     # Sequential to handle nonce correctly for single user
 done
 DEAL_END_TIME=$(date +%s)
@@ -168,7 +168,7 @@ for i in $(seq 1 "$NUM_DEALS"); do
     P_IDX=$(( (i % NUM_PROVIDERS) + 1 ))
     DEAL_ID=$((i - 1))
     
-    yes | "$(pwd)/../nilchaind" tx nilchain prove-liveness-local "$DEAL_ID" "$MDU_FILE" "$TRUSTED_SETUP" --from "provider$P_IDX" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" "$KEYRING" --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx nilchain prove-liveness-local "$DEAL_ID" "$MDU_FILE" "$TRUSTED_SETUP" --from "provider$P_IDX" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
 done
 PROOF_END_TIME=$(date +%s)
 

@@ -382,6 +382,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, fmt.Errorf("failed to update deal state: %w", err)
 	}
 
+	// Update LastProofHeight
+	if err := k.DealProviderStatus.Set(ctx, collections.Join(msg.DealId, msg.Creator), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to update proof status: %w", err)
+	}
+
 	// 6. Emit Event
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(

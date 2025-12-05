@@ -8,3 +8,4 @@ test_data.bin
 nilchain/nilchaind
 nilchain/.nilchain/
 nilchaind
+performance/.nilchain_perf/

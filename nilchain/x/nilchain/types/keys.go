@@ -29,4 +29,5 @@ var (
 	DealCountKey  = collections.NewPrefix("DealCount/value/")
 	DealsKey      = collections.NewPrefix("Deals/value/")
 	ProvidersKey  = collections.NewPrefix("Providers/value/")
+	DealProviderStatusKey = collections.NewPrefix("DealProviderStatus/value/")
 )
