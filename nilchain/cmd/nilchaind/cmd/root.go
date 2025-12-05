@@ -14,8 +14,19 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtxconfig "github.com/cosmos/cosmos-sdk/x/auth/tx/config"
-	"github.com/cosmos/cosmos-sdk/x/auth/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/genutil"
 	"github.com/spf13/cobra"
+
+	// Module Basic Managers Types (for minimal genutil)
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	evidencetypes "cosmossdk.io/x/evidence/types"
 
 	"nilchain/app"
 )
@@ -33,6 +44,7 @@ func NewRootCmd() *cobra.Command {
 			depinject.Supply(log.NewNopLogger()),
 			depinject.Provide(
 				ProvideClientContext,
+				app.ProvideCustomGetSigner,
 			),
 		),
 		&autoCliOpts,
@@ -83,7 +95,21 @@ func NewRootCmd() *cobra.Command {
 		autoCliOpts.Modules[name] = mod
 	}
 
-	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
+	// Create a minimal BasicManager for genutilcli commands.
+	// This includes only the core modules that genutilcli expects for genesis commands.
+	genutilBasicManager := module.BasicManager{
+		authtypes.ModuleName:    moduleBasicManager[authtypes.ModuleName],
+		banktypes.ModuleName:    moduleBasicManager[banktypes.ModuleName],
+		stakingtypes.ModuleName: moduleBasicManager[stakingtypes.ModuleName],
+		minttypes.ModuleName:    moduleBasicManager[minttypes.ModuleName],
+		distrtypes.ModuleName:   moduleBasicManager[distrtypes.ModuleName],
+		genutiltypes.ModuleName: genutil.AppModuleBasic{},
+		govtypes.ModuleName:     moduleBasicManager[govtypes.ModuleName],
+		slashingtypes.ModuleName: moduleBasicManager[slashingtypes.ModuleName],
+		evidencetypes.ModuleName: moduleBasicManager[evidencetypes.ModuleName],
+	}
+
+	initRootCmd(rootCmd, clientCtx.TxConfig, genutilBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {
 		panic(err)
@@ -105,7 +131,7 @@ func ProvideClientContext(
 		WithInterfaceRegistry(interfaceRegistry).
 		WithLegacyAmino(legacyAmino).
 		WithInput(os.Stdin).
-		WithAccountRetriever(types.AccountRetriever{}).
+		WithAccountRetriever(authtypes.AccountRetriever{}).
 		WithHomeDir(app.DefaultNodeHome).
 		WithViper(app.Name) // env variable prefix
 
@@ -122,3 +148,4 @@ func ProvideClientContext(
 
 	return clientCtx
 }
+
