@@ -119,11 +119,11 @@ pub extern "C" fn nil_verify_mdu_proof(
     ) {
         Ok(true) => { /* Merkle proof valid, proceed to KZG verification */ },
         Ok(false) => {
-            eprintln!("ERROR: Merkle proof invalid.");
+            // eprintln!("ERROR: Merkle proof invalid.");
             return 0; // Merkle proof invalid
         },
         Err(e) => {
-            eprintln!("ERROR: Merkle proof verification error: {:?}", e);
+            // eprintln!("ERROR: Merkle proof verification error: {:?}", e);
             return -3; // Internal Merkle proof error
         }
     }
@@ -137,11 +137,11 @@ pub extern "C" fn nil_verify_mdu_proof(
     ) {
         Ok(true) => 1, // Both proofs valid
         Ok(false) => {
-            eprintln!("ERROR: KZG opening proof invalid.");
+            // eprintln!("ERROR: KZG opening proof invalid.");
             0 // KZG proof invalid
         },
         Err(e) => {
-            eprintln!("ERROR: KZG verification error: {:?}", e);
+            // eprintln!("ERROR: KZG verification error: {:?}", e);
             -4 // Internal KZG verification error
         }
     }
