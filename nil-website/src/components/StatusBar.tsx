@@ -10,9 +10,15 @@ function Badge({ label, status }: { label: string; status: ServiceStatus }) {
       : status === 'warn'
       ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
       : 'bg-red-500/10 text-red-300 border-red-500/30'
+  const text =
+    status === 'ok'
+      ? 'OK'
+      : status === 'warn'
+      ? 'WARN'
+      : 'ERROR'
   return (
     <span className={`px-2 py-1 text-xs rounded border ${colors} font-medium`}>
-      {label}
+      {label}: {text}
     </span>
   )
 }

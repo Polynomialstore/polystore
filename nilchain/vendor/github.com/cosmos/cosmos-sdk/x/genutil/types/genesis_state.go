@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -123,19 +122,26 @@ func DefaultMessageValidator(msgs []sdk.Msg) error {
 // ValidateAndGetGenTx validates the genesis transaction and returns GenTx if valid
 // it cannot verify the signature as it is stateless validation
 func ValidateAndGetGenTx(genTx json.RawMessage, txJSONDecoder sdk.TxDecoder, validator MessageValidator) (sdk.Tx, error) {
-	if txJSONDecoder == nil {
-		return nil, fmt.Errorf("tx decoder is nil for gentx: %s", string(genTx))
+	if len(genTx) == 0 {
+		return nil, fmt.Errorf("empty gentx payload")
 	}
+
+	if txJSONDecoder == nil {
+		return nil, fmt.Errorf("nil tx decoder for gentx")
+	}
+
 	tx, err := txJSONDecoder(genTx)
 	if err != nil {
 		return tx, fmt.Errorf("failed to decode gentx: %s, error: %w", genTx, err)
 	}
 	if tx == nil {
-		return nil, fmt.Errorf("failed to decode gentx: decoder returned nil tx for %s", string(genTx))
-	}
-	if val := reflect.ValueOf(tx); val.Kind() == reflect.Ptr && val.IsNil() {
-		return nil, fmt.Errorf("failed to decode gentx: decoder returned typed nil tx for %s", string(genTx))
+		return nil, fmt.Errorf("decoded gentx is nil")
 	}
 
-	return tx, validator(tx.GetMsgs())
+	msgs := tx.GetMsgs()
+	if validator == nil {
+		validator = DefaultMessageValidator
+	}
+
+	return tx, validator(msgs)
 }

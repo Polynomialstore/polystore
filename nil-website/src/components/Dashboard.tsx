@@ -216,7 +216,18 @@ export function Dashboard() {
               <div className="bg-gray-950/40 border border-gray-800 rounded p-2">
                 <div className="text-gray-500 uppercase tracking-wide">EVM (atom)</div>
                 <div className="font-mono text-green-300">
-                  {evmBalance ? `${evmBalance.formatted} ${evmBalance.symbol}` : '—'}
+                  {(() => {
+                    if (!evmBalance) return '—'
+                    const anyBal = evmBalance as any
+                    const symbol = anyBal.symbol ?? 'AATOM'
+                    const raw = anyBal.value as bigint | undefined
+                    const decimals = typeof anyBal.decimals === 'number' ? anyBal.decimals : 18
+                    if (raw == null) {
+                      return anyBal.formatted ? `${anyBal.formatted} ${symbol}` : `0 ${symbol}`
+                    }
+                    const asNumber = Number(raw) / 10 ** decimals
+                    return `${asNumber} ${symbol}`
+                  })()}
                 </div>
               </div>
               <div className="bg-gray-950/40 border border-gray-800 rounded p-2">

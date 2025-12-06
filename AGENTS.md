@@ -8,6 +8,8 @@
 ### Git Best Practices for Agents
 *   **Commit Regularly:** Always commit your work frequently, in small, logical chunks.
 *   **Prohibited Commands:** Agents are strictly forbidden from running aggressive Git commands like `git clean` or `git reset --hard` as these can lead to irreversible data loss of uncommitted work. If such commands are necessary, confirm with the user first.
+*   **Tests Before Push:** For every non-trivial change, run the most relevant unit/e2e tests before committing. Do not push code that you haven't at least smoke-tested locally.
+*   **Commit & Push Cadence:** Treat this file as the canonical TODO list. As you complete tasks, update the checklist, commit your work with a descriptive message, and push to both remotes (`origin` and `nil-store`) in small, verified increments.
 
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
@@ -201,6 +203,12 @@ We have executed a major refactor of the protocol specification to replace "Phys
 2.  **EVM JSON-RPC Bridge:** Added `tools/evm_jsonrpc_bridge` (read-only) exposing `eth_chainId`, `eth_blockNumber`, `eth_getBalance`, and `eth_gasPrice` by proxying LCD. CORS is wide open for the web UI.
 3.  **Stack Runner:** `scripts/run_local_stack.sh` now boots the bridge with liveness checks so port 8545 is up immediately after `start`.
 
+**Change Log (Session 7: Native EVM JSON-RPC)**
+
+1.  **Cosmos EVM Server Integration:** Switched `nilchaind` to use the Cosmos EVM server stack (`github.com/cosmos/evm/server`), so the node now exposes a native Ethereum JSON-RPC endpoint directly from the binary.
+2.  **EVM Mempool Wiring:** Implemented an `ExperimentalEVMMempool` configuration in `nilchain/app`, wired into the ante handler’s pending-tx listener and BaseApp proposal pipeline to support full EVM transaction flow.
+3.  **Bridge Decommissioned:** `scripts/run_local_stack.sh` no longer starts the read-only `tools/evm_jsonrpc_bridge`; local EVM clients should connect directly to `nilchaind` on port `8545`.
+
 ## Phase 3: Implementation Plan (To-Do List)
 
 ### 1. Spec Alignment: Protobuf Definitions (Go)
@@ -238,3 +246,46 @@ We have executed a major refactor of the protocol specification to replace "Phys
 *   [x] **Unit Test**: `Placement_test.go`: Verify determinism and distribution of `AssignProviders`.
 *   [x] **Integration Test**: `e2e_flow.sh`: Register -> Create Deal -> Submit Proof -> Check Balance.
 *   [x] **Performance Test**: `load_gen.sh`: Baseline Small Scale simulation passing (12 blocks, 15 txs).
+
+## Phase 3.1: Web E2E Storage Deals (TODO List)
+
+**Goal:** Make the storage deal flow fully usable from the web UI, including file ingest → sharding/MDUs → CID derivation → deal creation on `nilchain`, while keeping supply (providers) and demand (users) clearly modeled.
+
+### A. Backend Gateway & Sharding
+*   [ ] **Gateway Service:** Introduce or extend a small Go HTTP service ("gateway") that:
+    *   Accepts file uploads from the web UI.
+    *   Invokes `nil_cli shard` (or equivalent) to compute MDUs, commitments, and a Root CID compatible with the spec.
+    *   Returns `{root_cid, size_bytes, manifest_metadata}` to the client.
+*   [ ] **Configurable Paths:** Make the gateway configurable via env (paths to `nil_cli`, trusted setup, upload directory) to keep it portable.
+*   [ ] **Chain Deal Creation:** Add an HTTP endpoint that accepts `{creator, cid, size_bytes, duration_blocks, service_hint, initial_escrow, max_monthly_spend}` and creates a `MsgCreateDeal` on-chain (initially signed by the faucet/system key for simplicity).
+*   [ ] **Gateway Tests:** Add minimal Go tests (or a small e2e script) exercising:
+    *   Happy-path upload → shard → CID extraction.
+    *   Deal creation endpoint returning a valid `tx_hash`.
+
+### B. Website Integration (Demand Side)
+*   [ ] **Config Wiring:** Extend `nil-website/src/config.ts` with a dedicated `gatewayBase` (e.g. `VITE_GATEWAY_BASE`, defaulting to `http://localhost:8080` or the chosen port).
+*   [ ] **Upload Hook:** Implement a `useUpload` hook that:
+    *   Accepts a `File` and the connected wallet address.
+    *   Converts `0x` → `nil...` via `ethToNil`.
+    *   Calls the gateway upload endpoint and returns `{cid, size_bytes}`.
+*   [ ] **Dashboard UX:** Update the Dashboard to:
+    *   Let users select a file, call `useUpload`, and pre-fill the "Create Storage Deal" form with CID + size.
+    *   Keep the existing tuning knobs for `duration`, `service_hint`, `initialEscrow`, `maxMonthlySpend`.
+*   [ ] **Deal Submission Path:** Point the "Create Storage Deal" button at the new gateway deal-creation endpoint (or cleanly wrap the existing faucet `/create-deal` so that the UI always uses spec-derived CIDs/sizes).
+*   [ ] **UI Tests / Smoke:** At minimum, verify via `run_local_stack.sh start` that:
+    *   Upload → CID derivation works from the browser.
+    *   "Create Storage Deal" completes and a new deal appears in the `GET /nilchain/nilchain/v1/deals` response.
+
+### C. Supply Side & Visibility
+*   [ ] **Provider Surfacing:** Add a simple read-only view (CLI or UI) that lists registered providers and their capabilities (`Archive/General/Edge`) from the provider registry.
+*   [ ] **Deal Detail View:** Extend the "My Storage Deals" table to show:
+    *   `service_hint`, `current_replication`, `escrow_balance`, `max_monthly_spend`.
+    *   Assigned `providers[]` for each deal (where available).
+*   [ ] **Spec Notes:** Document in this file which parts of the metaspec are currently satisfied by the web flow (file → MDUs → CID → deal) and which parts remain TODO (client-side encryption, WASM `nil_core`, user-signed `MsgCreateDeal`, full liveness/saturation UI).
+
+### D. Process Requirements for Agents (for this phase)
+*   [ ] For each of the A/B/C tasks above:
+    *   Implement the smallest coherent slice.
+    *   Run the most relevant tests (`go test ./...`, targeted e2e shell scripts, or UI smoke checks via `run_local_stack.sh`) before committing.
+    *   Commit with a descriptive message (e.g. `feat(gateway): add upload->CID endpoint`).
+    *   Push to **both** remotes after green tests: `git push origin main` and `git push nil-store main`.

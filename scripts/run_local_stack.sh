@@ -53,6 +53,7 @@ init_chain() {
   perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
   perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
   perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
   # Fallback patcher in case formats change (pure string replace to avoid extra deps)
   python3 - "$APP_TOML" <<'PY' || true
 import sys, pathlib
@@ -62,6 +63,7 @@ for src, dst in [
     ('address = "127.0.0.1:8545"', 'address = "0.0.0.0:8545"'),
     ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
     ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
+    ('enabled-unsafe-cors = false', 'enabled-unsafe-cors = true'),
 ]:
     txt = txt.replace(src, dst)
 path.write_text(txt)
@@ -153,35 +155,18 @@ start_web() {
   echo "web pid $(cat "$PID_DIR/website.pid"), logs: $LOG_DIR/website.log"
 }
 
-start_evm_bridge() {
-  banner "Starting EVM JSON-RPC bridge (read-only)"
-  (
-    cd "$ROOT_DIR/tools/evm_jsonrpc_bridge"
-    nohup "$GO_BIN" run . >"$LOG_DIR/evm_bridge.log" 2>&1 &
-    echo $! > "$PID_DIR/evm_bridge.pid"
-  )
-  sleep 0.5
-  if ! kill -0 "$(cat "$PID_DIR/evm_bridge.pid")" 2>/dev/null; then
-    echo "evm bridge failed; check $LOG_DIR/evm_bridge.log"
-    tail -n 40 "$LOG_DIR/evm_bridge.log" || true
-    exit 1
-  fi
-  echo "bridge pid $(cat "$PID_DIR/evm_bridge.pid"), logs: $LOG_DIR/evm_bridge.log"
-}
-
 start_all() {
   stop_all
   ensure_nilchaind
   init_chain
   start_chain
   start_faucet
-  start_evm_bridge
   start_web
   banner "Stack ready"
   cat <<EOF
 RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (Chain ID $CHAIN_ID / 262144 default)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 262144 default)
 Faucet:      http://localhost:8081/faucet
 Web UI:      http://localhost:5173/#/dashboard
 Home:        $CHAIN_HOME
@@ -191,7 +176,7 @@ EOF
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet evm_bridge website; do
+  for svc in nilchaind faucet website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")

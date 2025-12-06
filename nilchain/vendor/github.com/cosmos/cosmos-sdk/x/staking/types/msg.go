@@ -35,16 +35,8 @@ func NewMsgCreateValidator(
 			return nil, err
 		}
 	}
-	delegatorAddr := valAddr
-	if valAddr != "" {
-		// Preserve legacy behavior where delegator/validator share the same key but differ in bech32 prefix.
-		if valBytes, err := sdk.ValAddressFromBech32(valAddr); err == nil {
-			delegatorAddr = sdk.AccAddress(valBytes).String()
-		}
-	}
 	return &MsgCreateValidator{
 		Description:       description,
-		DelegatorAddress:  delegatorAddr,
 		ValidatorAddress:  valAddr,
 		Pubkey:            pkAny,
 		Value:             selfDelegation,

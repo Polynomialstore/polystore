@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -17,12 +16,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdkruntime "github.com/cosmos/cosmos-sdk/runtime"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	bankexported "github.com/cosmos/cosmos-sdk/x/bank/exported"
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/genutil/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	evmtypes "github.com/cosmos/evm/x/vm/types"
 )
 
 // GenAppStateFromConfig gets the genesis app state from the config
@@ -30,18 +26,9 @@ func GenAppStateFromConfig(cdc codec.JSONCodec, txEncodingConfig client.TxEncodi
 	config *cfg.Config, initCfg types.InitConfig, genesis *types.AppGenesis, genBalIterator types.GenesisBalancesIterator,
 	validator types.MessageValidator, valAddrCodec sdkruntime.ValidatorAddressCodec,
 ) (appState json.RawMessage, err error) {
-	txJSONDecoder := txEncodingConfig.TxJSONDecoder()
-	if txJSONDecoder == nil {
-		if fullCodec, ok := cdc.(codec.Codec); ok {
-			txJSONDecoder = authtx.DefaultJSONTxDecoder(fullCodec)
-		} else {
-			return appState, fmt.Errorf("tx JSON decoder is nil and codec assertion failed")
-		}
-	}
-
 	// process genesis transactions, else create default genesis.json
 	appGenTxs, persistentPeers, err := CollectTxs(
-		cdc, txJSONDecoder, config.Moniker, initCfg.GenTxsDir, genesis, genBalIterator, validator, valAddrCodec)
+		cdc, txEncodingConfig.TxJSONDecoder(), config.Moniker, initCfg.GenTxsDir, genesis, genBalIterator, validator, valAddrCodec)
 	if err != nil {
 		return appState, err
 	}
@@ -56,10 +43,6 @@ func GenAppStateFromConfig(cdc codec.JSONCodec, txEncodingConfig client.TxEncodi
 
 	// create the app state
 	appGenesisState, err := types.GenesisStateFromAppGenesis(genesis)
-	if err != nil {
-		return appState, err
-	}
-	appGenesisState, err = ensureEvmDenomMetadata(cdc, appGenesisState)
 	if err != nil {
 		return appState, err
 	}
@@ -127,19 +110,9 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 			return appGenTxs, persistentPeers, err
 		}
 
-		genTx, err := txJSONDecoder(jsonRawTx)
+		genTx, err := types.ValidateAndGetGenTx(jsonRawTx, txJSONDecoder, validator)
 		if err != nil {
-			return appGenTxs, persistentPeers, fmt.Errorf("failed to decode gentx %s: %w", fo.Name(), err)
-		}
-		if genTx == nil || (reflect.ValueOf(genTx).Kind() == reflect.Ptr && reflect.ValueOf(genTx).IsNil()) {
-			return appGenTxs, persistentPeers, fmt.Errorf("decoded nil gentx for %s", fo.Name())
-		}
-
-		msgs := genTx.GetMsgs()
-		if validator != nil {
-			if err := validator(msgs); err != nil {
-				return appGenTxs, persistentPeers, err
-			}
+			return appGenTxs, persistentPeers, err
 		}
 
 		appGenTxs = append(appGenTxs, genTx)
@@ -155,10 +128,16 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 		nodeAddrIP := memoTx.GetMemo()
 
 		// genesis transactions must be single-message
-		// msgs already decoded above
+		msgs := genTx.GetMsgs()
+		if len(msgs) == 0 {
+			return appGenTxs, persistentPeers, fmt.Errorf("gentx contains no messages")
+		}
 
 		// TODO abstract out staking message validation back to staking
-		msg := msgs[0].(*stakingtypes.MsgCreateValidator)
+		msg, ok := msgs[0].(*stakingtypes.MsgCreateValidator)
+		if !ok {
+			return appGenTxs, persistentPeers, fmt.Errorf("unexpected GenTx message type; expected MsgCreateValidator, got: %T", msgs[0])
+		}
 
 		// validate validator addresses and funds against the accounts in the state
 		valAddr, err := valAddrCodec.StringToBytes(msg.ValidatorAddress)
@@ -167,6 +146,12 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 		}
 
 		valAccAddr := sdk.AccAddress(valAddr).String()
+
+		// If the delegator address is missing in the MsgCreateValidator, default
+		// it to the account-form of the validator address so the gentx is well-formed.
+		if msg.DelegatorAddress == "" {
+			msg.DelegatorAddress = valAccAddr
+		}
 
 		delBal, delOk := balancesMap[valAccAddr]
 		if !delOk {
@@ -204,37 +189,4 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 	persistentPeers = strings.Join(addressesIPs, ",")
 
 	return appGenTxs, persistentPeers, nil
-}
-
-func ensureEvmDenomMetadata(cdc codec.JSONCodec, genesis map[string]json.RawMessage) (map[string]json.RawMessage, error) {
-	bankState, ok := genesis[banktypes.ModuleName]
-	if !ok {
-		return genesis, nil
-	}
-
-	var bankGen banktypes.GenesisState
-	if err := cdc.UnmarshalJSON(bankState, &bankGen); err != nil {
-		return genesis, err
-	}
-
-	for _, md := range bankGen.DenomMetadata {
-		if md.Base == evmtypes.DefaultEVMExtendedDenom {
-			return genesis, nil
-		}
-	}
-
-	metadata := banktypes.Metadata{
-		Description: "EVM fee token metadata",
-		Base:        evmtypes.DefaultEVMExtendedDenom,
-		Display:     evmtypes.DefaultEVMDisplayDenom,
-		DenomUnits: []*banktypes.DenomUnit{
-			{Denom: evmtypes.DefaultEVMExtendedDenom, Exponent: 0, Aliases: []string{evmtypes.DefaultEVMDenom}},
-			{Denom: evmtypes.DefaultEVMDisplayDenom, Exponent: uint32(evmtypes.DefaultEVMDecimals)},
-		},
-	}
-
-	bankGen.DenomMetadata = append(bankGen.DenomMetadata, metadata)
-	genesis[banktypes.ModuleName] = cdc.MustMarshalJSON(&bankGen)
-
-	return genesis, nil
 }

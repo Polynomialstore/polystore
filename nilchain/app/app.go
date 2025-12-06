@@ -19,6 +19,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
+	gogogrpc "github.com/cosmos/gogoproto/grpc"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -28,6 +29,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkmempool "github.com/cosmos/cosmos-sdk/types/mempool"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	sdkante "github.com/cosmos/cosmos-sdk/x/auth/ante"
@@ -123,9 +125,18 @@ type App struct {
 	EVMKeeper       *evmkeeper.Keeper
 	FeeMarketKeeper *feemarketkeeper.Keeper
 
+	// EVM JSON-RPC integration
+	clientCtx          client.Context
+	pendingTxListeners []evmante.PendingTxListener
+	evmMempool         sdkmempool.ExtMempool
+
 	// simulation manager
 	sm             *module.SimulationManager
 	NilchainKeeper nilchainmodulekeeper.Keeper
+
+	// cached server options and logger (used by runtime-wired components like the EVM mempool)
+	appOpts servertypes.AppOptions
+	logger  log.Logger
 }
 
 func init() {
@@ -152,7 +163,10 @@ func New(
 	baseAppOptions ...func(*baseapp.BaseApp),
 ) *App {
 	var (
-		app        = &App{}
+		app        = &App{
+			appOpts: appOpts,
+			logger:  logger,
+		}
 		appBuilder *runtime.AppBuilder
 
 		// merge the AppConfig and other configuration in one config
@@ -204,6 +218,25 @@ func New(
 	// register legacy modules
 	if err := app.registerIBCModules(appOpts); err != nil {
 		panic(err)
+	}
+
+	// Ensure the GRPC query router and msg service router are initialized so we can
+	// register additional gRPC services (such as the EVM query and msg servers)
+	// before the gRPC server is started.
+	//
+	// The underlying BaseApp already initializes these, but we defensively ensure
+	// they are non-nil and implement the expected gogo grpc Server interface.
+	if app.GRPCQueryRouter() == nil {
+		app.SetGRPCQueryRouter(baseapp.NewGRPCQueryRouter())
+	}
+	if app.MsgServiceRouter() == nil {
+		app.SetMsgServiceRouter(baseapp.NewMsgServiceRouter())
+	}
+	if _, ok := any(app.GRPCQueryRouter()).(gogogrpc.Server); !ok {
+		panic("GRPCQueryRouter does not implement gogogrpc.Server")
+	}
+	if _, ok := any(app.MsgServiceRouter()).(gogogrpc.Server); !ok {
+		panic("MsgServiceRouter does not implement gogogrpc.Server")
 	}
 
 	// Manually register EVM and FeeMarket stores and keepers (not wired via depinject).
@@ -259,8 +292,9 @@ func New(
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
 	realFmModule := feemarket.NewAppModule(*app.FeeMarketKeeper)
 
-	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
-	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
+	if err := app.RegisterModules(realEvmModule, realFmModule); err != nil {
+		panic(err)
+	}
 
 	// Set EVM ante handler using the DI-provided keepers.
 	options := evmante.HandlerOptions{
@@ -270,10 +304,12 @@ func New(
 		IBCKeeper:         app.IBCKeeper,
 		FeeMarketKeeper:   app.FeeMarketKeeper,
 		EvmKeeper:         app.EVMKeeper,
-		FeegrantKeeper:    app.FeegrantKeeper,
-		SignModeHandler:   app.txConfig.SignModeHandler(),
-		SigGasConsumer:    sdkante.DefaultSigVerificationGasConsumer,
-		PendingTxListener: func(ethcommon.Hash) {}, // No-op
+		FeegrantKeeper:  app.FeegrantKeeper,
+		SignModeHandler: app.txConfig.SignModeHandler(),
+		SigGasConsumer:  sdkante.DefaultSigVerificationGasConsumer,
+		// Wire the pending tx listener so the JSON-RPC server can stream new
+		// Ethereum transactions from the mempool.
+		PendingTxListener: app.onPendingTx,
 	}
 
 	if err := options.Validate(); err != nil {
@@ -369,6 +405,43 @@ func New(
 func (app *App) GetSubspace(moduleName string) paramstypes.Subspace {
 	subspace, _ := app.ParamsKeeper.GetSubspace(moduleName)
 	return subspace
+}
+
+// RegisterPendingTxListener is used by the Cosmos EVM JSON-RPC server to
+// subscribe to pending Ethereum transactions.
+func (app *App) RegisterPendingTxListener(listener func(ethcommon.Hash)) {
+	if listener == nil {
+		return
+	}
+	app.pendingTxListeners = append(app.pendingTxListeners, listener)
+}
+
+// onPendingTx fan-outs a pending Ethereum tx hash to all registered listeners.
+func (app *App) onPendingTx(hash ethcommon.Hash) {
+	for _, listener := range app.pendingTxListeners {
+		listener(hash)
+	}
+}
+
+// GetMempool returns the underlying mempool used for EVM transactions.
+func (app *App) GetMempool() sdkmempool.ExtMempool {
+	return app.evmMempool
+}
+
+// SetClientCtx is called by the Cosmos EVM server stack once a client.Context
+// is available; we use this as a hook to lazily configure the EVM mempool.
+func (app *App) SetClientCtx(clientCtx client.Context) {
+	app.clientCtx = clientCtx
+
+	if app.evmMempool == nil {
+		if err := app.configureEVMMempool(); err != nil {
+			if app.logger != nil {
+				app.logger.Error("failed to configure EVM mempool", "err", err)
+			}
+		}
+	} else if app.logger != nil {
+		app.logger.Debug("EVM mempool already configured; skipping re-init")
+	}
 }
 
 // LegacyAmino returns App's amino codec.

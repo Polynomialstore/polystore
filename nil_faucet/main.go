@@ -170,9 +170,22 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
 
-var txHashRe = regexp.MustCompile(`txhash:\\s*([A-F0-9]+)`)
+var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
 
 func extractTxHash(out string) string {
+	// Prefer a line-based parse for robustness against formatting changes.
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "txhash:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			return strings.TrimSpace(fields[1])
+		}
+	}
+
+	// Fallback to regex search across the full output.
 	if m := txHashRe.FindStringSubmatch(out); len(m) == 2 {
 		return m[1]
 	}
