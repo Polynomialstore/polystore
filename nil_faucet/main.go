@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -92,15 +93,20 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	)
 
 	output, err := cmd.CombinedOutput()
+	outStr := string(output)
 	if err != nil {
-		log.Printf("Faucet tx failed: %s", string(output))
+		log.Printf("Faucet tx failed: %s", outStr)
 		http.Error(w, fmt.Sprintf("Tx failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Success: %s", string(output))
+	txHash := extractTxHash(outStr)
+	log.Printf("Success: %s txhash=%s", outStr, txHash)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "tx_hash": "check logs"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"tx_hash": txHash,
+	})
 }
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +168,15 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+var txHashRe = regexp.MustCompile(`txhash:\\s*([A-F0-9]+)`)
+
+func extractTxHash(out string) string {
+	if m := txHashRe.FindStringSubmatch(out); len(m) == 2 {
+		return m[1]
+	}
+	return ""
 }
 
 func envDefault(key, def string) string {

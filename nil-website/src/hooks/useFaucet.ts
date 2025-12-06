@@ -4,11 +4,13 @@ import { appConfig } from '../config'
 
 export function useFaucet() {
   const [loading, setLoading] = useState(false)
+  const [lastTx, setLastTx] = useState<string | null>(null)
 
   async function requestFunds(address: string | undefined) {
     if (!address) return
 
     setLoading(true)
+    setLastTx(null)
     try {
         // Convert to Bech32 if it's an 0x address
         const targetAddress = address.startsWith('0x') ? ethToNil(address) : address
@@ -23,8 +25,9 @@ export function useFaucet() {
             const err = await response.text()
             throw new Error(err || 'Faucet request failed')
         }
-        
-        return true
+        const json = await response.json().catch(() => ({}))
+        if (json.tx_hash) setLastTx(json.tx_hash)
+        return json
     } catch (e) {
         console.error(e)
         throw e
@@ -33,5 +36,5 @@ export function useFaucet() {
     }
   }
 
-  return { requestFunds, loading }
+  return { requestFunds, loading, lastTx }
 }

@@ -1,13 +1,14 @@
 import { useAccount } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useEffect, useState } from 'react'
-import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2 } from 'lucide-react'
+import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2, ArrowDownRight } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
 import { useConnect, useDisconnect } from 'wagmi'
 import { injected } from 'wagmi/connectors'
+import { useBalance } from 'wagmi'
 
 interface Deal {
   id: string
@@ -22,7 +23,7 @@ export function Dashboard() {
   const { address, isConnected } = useAccount()
   const { connectAsync } = useConnect()
   const { disconnect } = useDisconnect()
-  const { requestFunds, loading: faucetLoading } = useFaucet()
+  const { requestFunds, loading: faucetLoading, lastTx: faucetTx } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx } = useCreateDeal()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(false)
@@ -38,6 +39,7 @@ export function Dashboard() {
       const cosmosAddress = ethToNil(address)
       setNilAddress(cosmosAddress)
       fetchDeals(cosmosAddress)
+      fetchBalances(cosmosAddress)
     } else {
         setDeals([])
     }
@@ -60,9 +62,36 @@ export function Dashboard() {
     }
   }
 
+  const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
+  const { data: evmBalance, refetch: refetchEvm } = useBalance({
+    address,
+    chainId: appConfig.chainId,
+    watch: true,
+  })
+
+  async function fetchBalances(owner: string) {
+    try {
+      const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${owner}`)
+      const json = await res.json()
+      const bal = Array.isArray(json?.balances) ? json.balances : []
+      const getAmt = (denom: string) => {
+        const hit = bal.find((b: any) => b.denom === denom)
+        return hit ? hit.amount : undefined
+      }
+      setBankBalances({
+        atom: getAmt('aatom'),
+        stake: getAmt('stake'),
+      })
+    } catch (e) {
+      console.error('fetchBalances failed', e)
+    }
+  }
+
   const handleRequestFunds = async () => {
       try {
           await requestFunds(address)
+          if (nilAddress) fetchBalances(nilAddress)
+          refetchEvm?.()
           alert('Funds requested! Wait a few seconds for the transaction to confirm.')
       } catch (e) {
           alert('Failed to request funds. Is the faucet running?')
@@ -75,19 +104,22 @@ export function Dashboard() {
       return
     }
     try {
-      await submitDeal({
-        creator: address || nilAddress,
-        cid: cid.trim(),
-        size: Number(size || '0'),
-        duration: Number(duration || '0'),
-        initialEscrow,
-        maxMonthlySpend,
-      })
-      alert('Deal submitted for creation. Check wallet balance and blocks for confirmation.')
-      if (nilAddress) fetchDeals(nilAddress)
-    } catch (e) {
-      alert('Deal submission failed. Check faucet server logs.')
-    }
+          await submitDeal({
+            creator: address || nilAddress,
+            cid: cid.trim(),
+            size: Number(size || '0'),
+            duration: Number(duration || '0'),
+            initialEscrow,
+            maxMonthlySpend,
+          })
+          alert('Deal submitted for creation. Check wallet balance and blocks for confirmation.')
+          if (nilAddress) {
+            fetchDeals(nilAddress)
+            fetchBalances(nilAddress)
+          }
+        } catch (e) {
+          alert('Deal submission failed. Check faucet server logs.')
+        }
   }
 
   if (!isConnected) return (
@@ -122,6 +154,12 @@ export function Dashboard() {
                     {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
                     {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
                 </button>
+                {faucetTx && (
+                  <div className="flex items-center gap-2 text-xs text-green-400">
+                    <ArrowDownRight className="w-3 h-3" />
+                    Faucet tx: <span className="font-mono">{faucetTx}</span>
+                  </div>
+                )}
                 <div className="text-right">
                     <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
                     <div className="font-mono text-indigo-400 bg-indigo-950/30 px-3 py-1 rounded text-sm border border-indigo-500/20">
@@ -138,8 +176,28 @@ export function Dashboard() {
             <Coins className="w-4 h-4 text-yellow-400" />
             Wallet & Funds
           </div>
-          <div className="text-sm text-gray-400 space-y-2">
+          <div className="text-sm text-gray-400 space-y-3">
             <div className="font-mono text-indigo-300 break-all">Address: {address || nilAddress}</div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-gray-950/40 border border-gray-800 rounded p-2">
+                <div className="text-gray-500 uppercase tracking-wide">EVM (atom)</div>
+                <div className="font-mono text-green-300">
+                  {evmBalance ? `${evmBalance.formatted} ${evmBalance.symbol}` : '—'}
+                </div>
+              </div>
+              <div className="bg-gray-950/40 border border-gray-800 rounded p-2">
+                <div className="text-gray-500 uppercase tracking-wide">Cosmos stake</div>
+                <div className="font-mono text-blue-300">
+                  {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
+                </div>
+              </div>
+              <div className="bg-gray-950/40 border border-gray-800 rounded p-2 col-span-2">
+                <div className="text-gray-500 uppercase tracking-wide">Cosmos atom</div>
+                <div className="font-mono text-emerald-300">
+                  {bankBalances.atom ? `${bankBalances.atom} aatom` : '—'}
+                </div>
+              </div>
+            </div>
             <button
               onClick={() => disconnect()}
               className="text-xs text-gray-500 hover:text-white underline"
