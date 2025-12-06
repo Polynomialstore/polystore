@@ -615,6 +615,19 @@ export function Dashboard() {
                   /nilchain/nilchain/v1/deals/{selectedDeal.id}
                 </a>
               </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    if (!selectedDeal?.cid) return
+                    const url = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(selectedDeal.cid)}`
+                    window.open(url, '_blank')
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-indigo-600/80 hover:bg-indigo-500 text-white rounded-md"
+                >
+                  <ArrowDownRight className="w-3 h-3" />
+                  Download file
+                </button>
+              </div>
             </div>
           )}
 

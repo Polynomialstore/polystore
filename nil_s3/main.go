@@ -31,6 +31,13 @@ var (
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
 
+type fileIndexEntry struct {
+	CID      string `json:"cid"`
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+	Size     uint64 `json:"size"`
+}
+
 func main() {
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
@@ -45,6 +52,7 @@ func main() {
 	// Gateway endpoints used by the web UI
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -145,6 +153,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record this file in a simple local index so we can serve it back
+	// by Root CID in Mode 1 (FullReplica) fetch flows.
+	if err := recordFileInIndex(cid, path, header.Filename, size); err != nil {
+		log.Printf("GatewayUpload: failed to record file index: %v", err)
+	}
+
 	resp := map[string]any{
 		"cid":        cid,
 		"size_bytes": size,
@@ -229,6 +243,42 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GatewayFetch serves back a stored file by its Root CID.
+// This is a Mode 1 (FullReplica) helper for local/testnet flows where
+// the gateway acts as both ingress and provider.
+func GatewayFetch(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	cid := strings.TrimSpace(vars["cid"])
+	if cid == "" {
+		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := lookupFileInIndex(cid)
+	if err != nil {
+		log.Printf("GatewayFetch: lookup failed for cid %s: %v", cid, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if entry == nil {
+		http.Error(w, "file not found for cid", http.StatusNotFound)
+		return
+	}
+
+	// Serve as attachment so browsers will download instead of inline JSON.
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if entry.Filename != "" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", entry.Filename))
+	}
+	http.ServeFile(w, r, entry.Path)
+}
+
 // shardFile runs nil-cli shard on the given path and extracts the DU root CID
 // and file size.
 func shardFile(path string) (string, uint64, error) {
@@ -274,7 +324,7 @@ func shardFile(path string) (string, uint64, error) {
 
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
 
@@ -300,4 +350,68 @@ func envDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func indexPath() string {
+	return filepath.Join(uploadDir, "index.json")
+}
+
+func loadFileIndex() (map[string]fileIndexEntry, error) {
+	path := indexPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]fileIndexEntry{}, nil
+		}
+		return nil, err
+	}
+	var entries []fileIndexEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
+	}
+	index := make(map[string]fileIndexEntry, len(entries))
+	for _, e := range entries {
+		if e.CID == "" {
+			continue
+		}
+		index[e.CID] = e
+	}
+	return index, nil
+}
+
+func saveFileIndex(index map[string]fileIndexEntry) error {
+	entries := make([]fileIndexEntry, 0, len(index))
+	for _, e := range index {
+		entries = append(entries, e)
+	}
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(indexPath(), data, 0o644)
+}
+
+func recordFileInIndex(cid, path, filename string, size uint64) error {
+	idx, err := loadFileIndex()
+	if err != nil {
+		return err
+	}
+	idx[cid] = fileIndexEntry{
+		CID:      cid,
+		Path:     path,
+		Filename: filename,
+		Size:     size,
+	}
+	return saveFileIndex(idx)
+}
+
+func lookupFileInIndex(cid string) (*fileIndexEntry, error) {
+	idx, err := loadFileIndex()
+	if err != nil {
+		return nil, err
+	}
+	if e, ok := idx[cid]; ok {
+		return &e, nil
+	}
+	return nil, nil
 }

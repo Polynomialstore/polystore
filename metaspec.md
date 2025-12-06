@@ -64,6 +64,27 @@ The `Deal` is the central state object.
 
 ## 5. Implementation Gaps
 
+This section tracks implementation details specific to the current **Mode 1 – FullReplica** devnet.
+
+### 5.1 Retrieval Receipts (Mode 1 Path)
+
+*   **Client‑Side Flow:**
+    *   Users fetch encrypted MDUs from a single assigned Provider (HTTP/S3 gateway or P2P).
+    *   After verifying the KZG proof for the served chunk, the Data Owner constructs a `RetrievalReceipt` containing:
+        *   `deal_id`, `epoch_id`, `provider`, `bytes_served`, `KzgProof`, and `user_signature`.
+*   **On‑Chain Flow:**
+    *   Providers submit receipts via `MsgProveLiveness{ ProofType = UserReceipt }`.
+    *   The keeper verifies:
+        *   Provider ∈ `Deal.providers[]`.
+        *   KZG proof is valid (trusted setup + Merkle path).
+        *   `user_signature` corresponds to the Deal Owner’s account (prevents SP‑only self‑dealing).
+    *   Rewards and observability:
+        *   Storage reward is computed with an inflationary decay schedule and latency‑tier multiplier.
+        *   Bandwidth payment is debited from `Deal.EscrowBalance`.
+        *   A compact `Proof` record is appended for UI consumption (`commitment = "deal:<id>/epoch:<epoch>/tier:<tier>"`).
+
+In this phase, retrieval receipts are primarily driven by CLI tooling. Web‑based downloads are treated as an auxiliary path until user‑signed EVM→Cosmos flows are available.
+
 ## 6. System Constraints & Meta-Risks
 
 This section documents accepted architectural risks and necessary safeguards.

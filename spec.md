@@ -92,3 +92,37 @@ NilStore uses a content‑addressed file manifest.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
   * **Encryption:** All data is encrypted client-side before ingress.
   * **Deletion:** Achieved via key destruction (Crypto-Erasure).
+
+## § 7 Retrieval Semantics (Mode 1 Implementation)
+
+This section norms the retrieval path for **Mode 1 – FullReplica** in the current devnet implementation.
+
+### 7.1 Data Plane: Fetching From Providers
+
+1.  **Lookup:** Given a Root CID, the client resolves the corresponding `Deal` (via LCD/CLI or an index) and reads `Deal.providers[]`.
+2.  **Selection:** The client selects a single Provider from `Deal.providers[]` (e.g., the nearest or least loaded). In Mode 1, each Provider holds a full replica, so any assigned Provider is sufficient.
+3.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material.
+
+In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 will extend this to true parallel, stripe‑aware fetching.
+
+### 7.2 Control Plane: Retrieval Receipts & On‑Chain State
+
+NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Liveness** handler:
+
+1.  **Receipt Construction (Client):**
+    *   After verifying the KZG proof for a served chunk, the Data Owner constructs a `RetrievalReceipt`:
+        *   `{deal_id, epoch_id, provider, bytes_served, proof_details (KzgProof), user_signature}`.
+    *   The signed message covers `(deal_id, epoch_id, provider, bytes_served)` so SPs cannot forge receipts.
+2.  **On‑Chain Submission (Provider):**
+    *   The Provider wraps the receipt in `MsgProveLiveness{ ProofType = UserReceipt }` and submits it to the chain.
+    *   The module verifies:
+        *   Provider is assigned in `Deal.providers[]`.
+        *   KZG proof is valid for the challenged MDU chunk.
+        *   `user_signature` matches the Deal Owner’s on‑chain key.
+3.  **Book‑Keeping & Rewards:**
+    *   The keeper computes the latency tier from inclusion height (Platinum/Gold/Silver/Fail) and updates `ProviderRewards`.
+    *   It debits `Deal.EscrowBalance` for the bandwidth component and records a lightweight `Proof` summary:
+        *   `commitment = "deal:<id>/epoch:<epoch>/tier:<tier>"`.
+    *   `Proof` entries are exposed via `Query/ListProofs` (LCD: `/nilchain/nilchain/v1/proofs`) for dashboards and analytics.
+
+In the current devnet, the CLI (`sign-retrieval-receipt` and `submit-retrieval-proof`) drives receipt creation and submission. Web flows may fetch data over HTTP without yet emitting on‑chain receipts; this is considered **non‑normative** and will be aligned with this section as the EVM→Cosmos bridge and user‑signed deals mature.

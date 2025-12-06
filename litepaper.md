@@ -54,8 +54,8 @@ We don't ban S3. We just pay for speed.
 3.  **Upload:** User streams data to the assigned nodes.
 
 ### Step 2: The Loop
-*   **Traffic:** Users request data. SPs serve it and submit receipts.
-*   **Silence:** Chain issues challenges. SPs submit proofs.
+*   **Traffic (Mode 1):** Users request data from one of the assigned Providers. After verifying the KZG proof for a served chunk, the user (or their client) signs a **Retrieval Receipt** which the Provider submits to the chain as a liveness proof. Rewards and bandwidth fees are computed from this receipt.
+*   **Silence:** When nobody requests the file, the chain issues synthetic challenges. SPs respond with proofs derived from their stored MDUs.
 
 ### Step 3: Scaling
 *   **Saturation:** If a Platinum node is overwhelmed, it signals the chain.

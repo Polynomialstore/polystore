@@ -309,3 +309,19 @@ We have executed a major refactor of the protocol specification to replace "Phys
 *   [ ] **Next Step (Future Agents):** Upgrade from logical ownership to fully user-signed deals:
     *   Replace the hint-based owner override with a first-class `owner` field once proto tooling (`buf`/Ignite) is stable under the Go toolchain in this repo.
     *   Introduce an EVM→Cosmos bridge or module wiring so MetaMask-signed EVM txs can directly result in `MsgCreateDeal` calls funded from the user’s escrow, not the faucet.
+
+## Phase 3.3: Mode 1 Fetch & Retrieval (Current)
+
+**Goal:** Provide a full Mode 1 (FullReplica) read path from the web UI while keeping the protocol forward-compatible with future StripeReplica (Mode 2) fetching.
+
+*   [x] **Spec & Meta-Spec Fetch Semantics:** Update `spec.md`, `metaspec.md`, `whitepaper.md`, and `litepaper.md` to norm Mode 1 retrieval semantics:
+    *   Single-provider fetch from `Deal.providers[]`.
+    *   Retrieval Receipts (`RetrievalReceipt` + `MsgProveLiveness`) as the canonical on-chain record.
+    *   `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) as the observability surface for UIs.
+*   [x] **Gateway Fetch Endpoint (Mode 1):** Extend `nil_s3` with a `GET /gateway/fetch/{cid}` route that:
+    *   Indexes uploaded files by Root CID on `GatewayUpload`.
+    *   Serves the original file back as an `application/octet-stream` attachment for devnet flows where the gateway acts as the Provider.
+*   [x] **Web Download Button:** Wire a "Download file" action into the Dashboard deal detail panel in `nil-website`, pointing at the gateway fetch endpoint so users can round-trip a stored file from the browser.
+*   [ ] **On-Chain Receipts from Web (Future):** Extend the web/gateway path so that successful downloads:
+    *   Construct a `RetrievalReceipt` tied to the end-user’s key (via an EVM→Cosmos bridge or native Cosmos signing).
+    *   Submit `MsgProveLiveness` on behalf of the Provider, closing the loop between HTTP downloads and on-chain liveness accounting.

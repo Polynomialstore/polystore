@@ -40,6 +40,19 @@ Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is ineffi
 4.  **Consensus:** SP submits proof to chain.
 5.  **Result:** SP earns **Storage Reward** (for proving liveness).
 
+### 2.3 On-Chain Observability in Mode 1
+
+In the current **FullReplica (Mode 1)** implementation, retrieval events are surfaced on-chain via **Retrieval Receipts**:
+
+*   **User Signature:** After verifying a KZG proof for a served chunk, the Data Owner signs a receipt containing `{deal_id, epoch_id, provider, bytes_served}` and the proof details. This prevents SP-only self-dealing.
+*   **Provider Submission:** The Storage Provider wraps the receipt in `MsgProveLiveness` and submits it to the chain. The module verifies:
+    *   Provider is assigned to the Deal.
+    *   The KZG proof is valid for the challenged MDU.
+    *   The signature corresponds to the Deal Owner’s key.
+*   **Proof Stream:** The chain aggregates a compact stream of `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) which can be rendered in dashboards to show liveness and performance over time.
+
+Future StripeReplica modes preserve this pattern but allow multiple Providers to contribute receipts for different stripes of the same file.
+
 ---
 
 ## 3. Traffic Management (Elasticity)
