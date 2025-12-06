@@ -265,8 +265,8 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.Cid == "" || req.DealID == 0 {
-		http.Error(w, "cid and deal_id are required", http.StatusBadRequest)
+	if req.Cid == "" {
+		http.Error(w, "cid is required", http.StatusBadRequest)
 		return
 	}
 

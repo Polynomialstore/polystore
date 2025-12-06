@@ -629,7 +629,7 @@ export function Dashboard() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             cid: selectedDeal.cid,
-                            deal_id: parseInt(selectedDeal.id, 10) || undefined,
+                            deal_id: Number(selectedDeal.id),
                           }),
                         })
                         if (res.ok) {
