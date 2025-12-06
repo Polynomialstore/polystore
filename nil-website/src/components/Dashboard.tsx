@@ -17,6 +17,7 @@ interface Deal {
   owner: string
   escrow: string
   end_block: string
+  start_block?: string
   service_hint?: string
   current_replication?: string
   max_monthly_spend?: string
@@ -42,6 +43,7 @@ export function Dashboard() {
   const [deals, setDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [cid, setCid] = useState('')
   const [size, setSize] = useState('1048576')
@@ -56,7 +58,7 @@ export function Dashboard() {
     if (address) {
       const cosmosAddress = ethToNil(address)
       setNilAddress(cosmosAddress)
-      fetchDeals()
+      fetchDeals(cosmosAddress)
       fetchBalances(cosmosAddress)
       fetchProviders()
     } else {
@@ -65,7 +67,7 @@ export function Dashboard() {
     }
   }, [address])
 
-  async function fetchDeals() {
+  async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
     try {
         const response = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals`)
@@ -74,25 +76,29 @@ export function Dashboard() {
             // For the current devnet, deals are created by the faucet
             // on behalf of users, so we surface all active deals here
             // and normalise the LCD payload shape.
-            const normalised: Deal[] = data.deals.map((d: any) => ({
+            const all: Deal[] = data.deals.map((d: any) => ({
               id: String(d.id ?? ''),
               cid: String(d.cid ?? ''),
               size: String(d.size ?? d.size_bytes ?? '0'),
               owner: String(d.owner ?? ''),
               escrow: String(d.escrow_balance ?? d.escrow ?? ''),
               end_block: String(d.end_block ?? ''),
+              start_block: String(d.start_block ?? ''),
               service_hint: d.service_hint,
               current_replication: d.current_replication,
               max_monthly_spend: d.max_monthly_spend,
               providers: Array.isArray(d.providers) ? d.providers : [],
             }))
-            setDeals(normalised)
+            const filtered = owner ? all.filter((d) => d.owner === owner) : all
+            setDeals(filtered)
+            return filtered
         }
     } catch (e) {
         console.error("Failed to fetch deals", e)
     } finally {
         setLoading(false)
     }
+    return []
   }
 
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
@@ -183,13 +189,24 @@ export function Dashboard() {
         setStatusTone('success')
         setStatusMsg('Deal submitted. Track tx in your wallet and blocks.')
         if (nilAddress) {
-          fetchDeals()
-          fetchBalances(nilAddress)
+          await refreshDealsAfterCreate(nilAddress)
+          await fetchBalances(nilAddress)
         }
       } catch (e) {
         setStatusTone('error')
         setStatusMsg('Deal submission failed. Check faucet server logs.')
       }
+  }
+
+  async function refreshDealsAfterCreate(owner: string) {
+    const maxAttempts = 5
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const list = await fetchDeals(owner)
+      if (list.length > 0) {
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   }
 
   useEffect(() => {
@@ -418,9 +435,18 @@ export function Dashboard() {
                   </thead>
                   <tbody className="divide-y divide-gray-800">
                       {deals.map((deal) => (
-                          <tr key={deal.id} className="hover:bg-white/5 transition-colors">
+                          <tr
+                            key={deal.id}
+                            className="hover:bg-white/5 transition-colors cursor-pointer"
+                            onClick={() => setSelectedDeal(deal)}
+                          >
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">#{deal.id}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-indigo-400">{deal.cid.slice(0, 16)}...{deal.cid.slice(-6)}</td>
+                              <td
+                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-indigo-400"
+                                title={deal.cid}
+                              >
+                                {deal.cid.slice(0, 18)}...{deal.cid.slice(-8)}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{deal.service_hint || '—'}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -476,6 +502,91 @@ export function Dashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Deal Details */}
+          {selectedDeal && (
+            <div className="mt-6 rounded-xl border border-gray-800 bg-gray-900/60 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">Selected Deal</div>
+                  <div className="text-sm font-semibold text-white">#{selectedDeal.id}</div>
+                </div>
+                <button
+                  onClick={() => setSelectedDeal(null)}
+                  className="text-xs text-gray-400 hover:text-gray-200 underline"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3 text-xs text-gray-300">
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Content Hash (CID)</div>
+                  <div className="font-mono break-all bg-gray-950/40 border border-gray-800 rounded px-3 py-2">
+                    {selectedDeal.cid}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Owner</div>
+                  <div className="font-mono text-[11px] bg-gray-950/40 border border-gray-800 rounded px-3 py-2">
+                    {selectedDeal.owner}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Size</div>
+                  <div>
+                    {(parseInt(selectedDeal.size) / 1024 / 1024).toFixed(2)} MB
+                    <span className="text-gray-500"> ({selectedDeal.size} bytes)</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Escrow</div>
+                  <div>{selectedDeal.escrow ? `${selectedDeal.escrow} stake` : '—'}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Service Hint</div>
+                  <div>{selectedDeal.service_hint || '—'}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Replication</div>
+                  <div>
+                    {selectedDeal.current_replication ||
+                      (selectedDeal.providers?.length ? String(selectedDeal.providers.length) : '—')}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Blocks</div>
+                  <div>
+                    {selectedDeal.start_block ?? '—'} → {selectedDeal.end_block}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500 uppercase tracking-wide">Providers</div>
+                  <div className="space-y-1">
+                    {selectedDeal.providers && selectedDeal.providers.length > 0 ? (
+                      selectedDeal.providers.map((p) => (
+                        <div key={p} className="font-mono text-[11px] text-indigo-300">
+                          {p}
+                        </div>
+                      ))
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 text-[11px] text-gray-500">
+                LCD detail:{' '}
+                <a
+                  href={`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${selectedDeal.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-400 hover:text-indigo-200 underline"
+                >
+                  /nilchain/nilchain/v1/deals/{selectedDeal.id}
+                </a>
+              </div>
             </div>
           )}
 
