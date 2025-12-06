@@ -50,7 +50,7 @@ We don't ban S3. We just pay for speed.
 
 ### Step 1: Ingestion
 1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)`.
-2.  **Placement:** The Chain deterministically assigns 12 Providers for **8 MiB MDUs**.
+2.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned across shard indices for 8 MiB MDUs.
 3.  **Upload:** User streams data to the assigned nodes.
 
 ### Step 2: The Loop

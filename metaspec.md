@@ -24,10 +24,14 @@ The `Deal` is the central state object.
 *   **Placement:** System-assigned SP list.
 *   **Escrow:** Combined Storage + Bandwidth balance.
 *   **ServiceHint:** `Hot | Cold`.
-*   **Replication:**
-    *   `Base`: Fixed (e.g., 12 for RS(12,8)).
-    *   `Current`: Dynamic (e.g., 12 to 24).
-    *   `Max`: User-Defined Cap (e.g., 50).
+*   **Replication (Redundancy Modes):**
+    *   **Mode 1 – FullReplica (Implemented):**
+        *   `Base`: Target replica count for full copies of the file (e.g., 12 Providers per Deal).
+        *   `Current`: Dynamic number of full replicas (e.g., 1 to 24), tracked on-chain as `Deal.CurrentReplication`.
+    *   **Mode 2 – StripeReplica (Planned):**
+        *   `Base`: Fixed stripe width (e.g., 12 for RS(12,8)).
+        *   `Current`: Number of overlay stripes currently allocated across shard indices.
+        *   `Max`: User-Defined Cap (e.g., 50 stripes or equivalent replica budget).
 *   **Budget:** `MaxMonthlySpend`.
 *   **MDU Size:** 8 MiB (8,388,608 bytes).
 *   **Shard Size:** 1 MiB (1,048,576 bytes).
@@ -50,7 +54,8 @@ The `Deal` is the central state object.
 
 ### 4.2 Saturation & Scaling
 *   **Signal:** `MsgSignalSaturation` or Protocol-Detected High Load (EMA).
-*   **Strategy:** **Stripe-Aligned Scaling.** When increasing replication, add `n` new Overlay Providers simultaneously, each hosting a replica of a distinct shard index.
+*   **Strategy (Mode 2 – Planned):** **Stripe-Aligned Scaling.** When increasing replication, add `n` new Overlay Providers simultaneously, each hosting a replica of a distinct shard index.
+*   **Mode 1 Approximation (Current Implementation):** `MsgSignalSaturation` increases `Deal.CurrentReplication` and appends additional providers to `Deal.providers[]`. Each new provider is expected to store a full copy of the file, so elasticity is expressed as “more full replicas” rather than per-stripe overlays.
 *   **Damping:** Use Hysteresis (80% Up / 30% Down) based on EMA of `ReceiptVolume`.
 *   **Gravity:** Enforce **Minimum TTL** (e.g., 24h) on new Overlay Replicas.
 

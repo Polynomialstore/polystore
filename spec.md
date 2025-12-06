@@ -55,11 +55,18 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 ### 6.2 Auto-Scaling (Stripe-Aligned Elasticity)
 
+NilStore supports two redundancy modes at the policy level:
+
+*   **Mode 1 – FullReplica (Alpha, Implemented):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`. This is the current implementation and the default for the devnet.
+*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is split into **Stripes** (e.g., RS(12,8) across shard indices). Scaling operates at the stripe layer: for each stripe index, the protocol recruits additional overlay providers. Retrieval can aggregate bandwidth across multiple providers in parallel.
+
+For v2.4, **Mode 1** is normative and **Mode 2** is specified as a forward-compatible extension.
+
 To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
 
 #### 6.2.1 The Stripe Unit
 *   **Principle:** Increasing the capacity of Shard #1 does not help if Shards #2-12 are saturated.
-*   **Mechanism:** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` (e.g., 12) new Overlay Providers, creating one new replica for *each* shard index.
+*   **Mechanism (Mode 2 – Planned):** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` (e.g., 12) new Overlay Providers, creating one new replica for *each* shard index. In Mode 1, this is approximated by adding `n` full replicas (additional providers in `Deal.providers[]`) without per-stripe awareness.
 
 #### 6.2.2 Damping & Hysteresis (Intelligent Triggers)
 To prevent oscillation (rapidly spinning nodes up and down) and account for the cost of data transfer:

@@ -58,13 +58,22 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 
 ## 4. The Lifecycle of a File
 
+NilStore supports two redundancy modes conceptually:
+
+*   **Mode 1 – FullReplica (Alpha, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
+*   **Mode 2 – StripeReplica (Planned):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer.
+
 ### Step 1: Ingestion & Placement
 1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)`.
-2.  **Assignment:** Chain deterministically assigns 12 SPs for **8 MiB MDUs**.
+2.  **Assignment:**
+    *   In the current **FullReplica (Mode 1)** implementation, the chain deterministically assigns a set of SPs to hold *full replicas* of the file (targeting 12 in the general case, capped by the number of available providers).
+    *   In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned into stripes across shard indices for 8 MiB MDUs.
 3.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`. Chain spawns 5 more **Stripe-Aligned** replicas.
+*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`.
+    *   In **Mode 1**, the chain increases `Deal.CurrentReplication` and assigns additional Providers to store full replicas.
+    *   In **Mode 2**, the chain spawns additional **Stripe-Aligned** overlays, recruiting new Providers per shard index.
 *   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges.
 
 ---
