@@ -177,6 +177,14 @@ We have executed a major refactor of the protocol specification to replace "Phys
 2.  **Runtime Panic Fix:** Implemented a custom `ProvideCustomGetSigner` injection in `root.go` to bypass a critical runtime panic (`MsgEthereumTx` signer option missing) caused by `depinject` strict validation.
 3.  **Initialization Order:** Fixed `SetOrderBeginBlockers` and `SetOrderInitGenesis` panics by manually enforcing module load order after `app.Load()` to handle manually registered modules (IBC, EVM).
 4.  **Blocker Identified:** The `collect-gentxs` CLI command crashes with a segmentation fault, preventing automatic genesis validator creation.
+5.  **Manual Wiring Issues:** Attempted manual wiring for EVM/IBC modules led to complex store key and keeper initialization issues (`kv store with key <nil> has not been registered`). This approach was abandoned in favor of a full `depinject` strategy for these modules.
+
+**Change Log (Session 4: Genesis Rebuild & EVM Bring-up)**
+
+1.  **Gentx Decoder Hardening:** Patched the genesis pipeline to guard against nil decoders/typed-nil txs, decode gentxs directly, and validate messages without panicking.
+2.  **Validator Gentx Fix:** `MsgCreateValidator` now sets the delegator (account prefix) alongside the validator address so gentx files are well-formed.
+3.  **EVM Metadata Auto-Injection:** `collect-gentxs` auto-adds `aatom/atom` denom metadata (with `uatom` alias), unblocking EVM init.
+4.  **Clean Genesis Flow:** `nilchaind genesis` now runs end-to-end again (init -> add-genesis-account -> gentx -> collect-gentxs). Start nodes with `--minimum-gas-prices=0.001aatom` to match the EVM/feemarket defaults.
 
 ## Phase 3: Implementation Plan (To-Do List)
 

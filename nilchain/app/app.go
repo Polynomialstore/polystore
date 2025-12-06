@@ -9,9 +9,9 @@ import (
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	circuitkeeper "cosmossdk.io/x/circuit/keeper"
-	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 	"cosmossdk.io/x/tx/signing"
+	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	gogoproto "github.com/cosmos/gogoproto/proto"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -56,14 +56,14 @@ import (
 
 	// EVM Imports
 	codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	evmante "github.com/cosmos/evm/ante"
-	evm "github.com/cosmos/evm/x/vm"
-	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
-	evmtypes "github.com/cosmos/evm/x/vm/types"
 	feemarket "github.com/cosmos/evm/x/feemarket"
 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	evm "github.com/cosmos/evm/x/vm"
+	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"nilchain/docs"
 	nilchainmodulekeeper "nilchain/x/nilchain/keeper"
@@ -155,22 +155,23 @@ func New(
 		app        = &App{}
 		appBuilder *runtime.AppBuilder
 
-		        // merge the AppConfig and other configuration in one config
-				appConfig = depinject.Configs(
-					AppConfig(),
-					depinject.Supply(
-						appOpts, // supply app options
-						logger,  // supply logger
-						// here alternative options can be supplied to the DI container.
-						// those options can be used f.e to override the default behavior of some modules.
-						// for instance supplying a custom address codec for not using bech32 addresses.
-						// read the depinject documentation and depinject module wiring for more information
-						// on available options and how to use them.
-					),
-					depinject.Provide(
-						ProvideCustomGetSigner,
-					),
-				)	)
+		// merge the AppConfig and other configuration in one config
+		appConfig = depinject.Configs(
+			AppConfig(),
+			depinject.Supply(
+				appOpts, // supply app options
+				logger,  // supply logger
+				// here alternative options can be supplied to the DI container.
+				// those options can be used f.e to override the default behavior of some modules.
+				// for instance supplying a custom address codec for not using bech32 addresses.
+				// read the depinject documentation and depinject module wiring for more information
+				// on available options and how to use them.
+			),
+			depinject.Provide(
+				ProvideCustomGetSigner,
+			),
+		)
+	)
 
 	var appModules map[string]appmodule.AppModule
 	if err := depinject.Inject(appConfig,
@@ -194,8 +195,6 @@ func New(
 		&app.ParamsKeeper,
 		&app.FeegrantKeeper,
 		&app.NilchainKeeper,
-		// &app.EVMKeeper,
-		// &app.FeeMarketKeeper,
 	); err != nil {
 		panic(err)
 	}
@@ -207,22 +206,23 @@ func New(
 		panic(err)
 	}
 
-	// ----------------------------------------------------------------------------
+	// Manually register EVM and FeeMarket stores and keepers (not wired via depinject).
+	if err := app.RegisterStores(
+		storetypes.NewKVStoreKey(evmtypes.StoreKey),
+		storetypes.NewKVStoreKey(feemarkettypes.StoreKey),
+	); err != nil {
+		panic(err)
+	}
 
-	// EVM & FeeMarket Manual Wiring
+	evmKey, _ := app.UnsafeFindStoreKey(evmtypes.StoreKey).(*storetypes.KVStoreKey)
+	fmKey, _ := app.UnsafeFindStoreKey(feemarkettypes.StoreKey).(*storetypes.KVStoreKey)
+	if evmKey == nil || fmKey == nil {
+		panic("failed to register EVM/FeeMarket store keys")
+	}
 
-	// ----------------------------------------------------------------------------
-	// NOTE: EVM IS DISABLED FOR SIMULATION TESTS
-	// 1. Now we can get the keys
-	evmKey := app.UnsafeFindStoreKey(evmtypes.StoreKey)
-	fmKey := app.UnsafeFindStoreKey(feemarkettypes.StoreKey)
-	
-	// 2. Manually Mount Transient Key (Runtime doesn't do this for us)
 	transientKey := storetypes.NewTransientStoreKey(evmtypes.TransientKey)
 	app.MountTransientStores(map[string]*storetypes.TransientStoreKey{evmtypes.TransientKey: transientKey})
 
-	// 3. Initialize FeeMarket Keeper
-	// We need the subspace.
 	fmKeeper := feemarketkeeper.NewKeeper(
 		app.appCodec,
 		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
@@ -231,12 +231,11 @@ func New(
 	)
 	app.FeeMarketKeeper = &fmKeeper
 
-	// 4. Initialize EVM Keeper
-	app.EVMKeeper = evmkeeper.NewKeeper(
+	evmKeeper := evmkeeper.NewKeeper(
 		app.appCodec,
 		evmKey,
 		transientKey,
-		map[string]*storetypes.KVStoreKey{}, // Hack: Empty store keys map
+		map[string]*storetypes.KVStoreKey{evmtypes.StoreKey: evmKey},
 		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
 		app.AuthKeeper,
 		app.BankKeeper,
@@ -244,30 +243,26 @@ func New(
 		app.FeeMarketKeeper,
 		app.ConsensusParamsKeeper,
 		nil, // Erc20Keeper
-		0,   // ChainID (will be set from genesis?)
-		"",  // HomePath
+		evmtypes.DefaultEVMChainID,
+		"",
+	)
+	app.EVMKeeper = evmKeeper.WithDefaultEvmCoinInfo(
+		evmtypes.EvmCoinInfo{
+			Denom:         evmtypes.DefaultEVMExtendedDenom,
+			ExtendedDenom: evmtypes.DefaultEVMExtendedDenom,
+			DisplayDenom:  evmtypes.DefaultEVMDisplayDenom,
+			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
+		},
 	)
 
-	// 5. Update Modules in the Manager with the Real Keepers
-	// We create the REAL modules now.
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
 	realFmModule := feemarket.NewAppModule(*app.FeeMarketKeeper)
 
-	// We need to swap them in the ModuleManager.
-	// The ModuleManager was created during `appBuilder.Build`.
-	// It holds the dummy modules.
 	app.ModuleManager.Modules[evmtypes.ModuleName] = realEvmModule
 	app.ModuleManager.Modules[feemarkettypes.ModuleName] = realFmModule
 
-	// Manually update module order
-	// We append EVM modules to the end of the lists maintained by runtime
-	// Note: We need to get the current order first?
-	// runtime sets the order in ModuleManager during Build.
-	// app.ModuleManager.OrderBeginBlockers does not contain manually registered modules (IBC), so we must add them.
-	// MOVED AFTER LOAD
-
-	// 6. Set AnteHandler
+	// Set EVM ante handler using the DI-provided keepers.
 	options := evmante.HandlerOptions{
 		Cdc:               app.appCodec,
 		AccountKeeper:     app.AuthKeeper,
@@ -280,27 +275,12 @@ func New(
 		SigGasConsumer:    sdkante.DefaultSigVerificationGasConsumer,
 		PendingTxListener: func(ethcommon.Hash) {}, // No-op
 	}
-	
+
 	if err := options.Validate(); err != nil {
 		panic(err)
 	}
 
 	app.SetAnteHandler(evmante.NewAnteHandler(options))
-
-	// Fallback AnteHandler
-	// anteHandler, err := sdkante.NewAnteHandler(
-	// 	sdkante.HandlerOptions{
-	// 		AccountKeeper:   app.AuthKeeper,
-	// 		BankKeeper:      app.BankKeeper,
-	// 		SignModeHandler: app.txConfig.SignModeHandler(),
-	// 		FeegrantKeeper:  app.FeegrantKeeper,
-	// 		SigGasConsumer:  sdkante.DefaultSigVerificationGasConsumer,
-	// 	},
-	// )
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// app.SetAnteHandler(anteHandler)
 
 	// ----------------------------------------------------------------------------
 
@@ -380,7 +360,7 @@ func New(
 	// Manually update module order lists to include restored modules
 	app.ModuleManager.SetOrderBeginBlockers(append(app.ModuleManager.OrderBeginBlockers, ibcexported.ModuleName, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
 	app.ModuleManager.SetOrderEndBlockers(append(app.ModuleManager.OrderEndBlockers, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
-	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, ibcexported.ModuleName, ibctransfertypes.ModuleName, icatypes.ModuleName, evmtypes.ModuleName, feemarkettypes.ModuleName)...)
+	app.ModuleManager.SetOrderInitGenesis(append(app.ModuleManager.OrderInitGenesis, ibcexported.ModuleName, ibctransfertypes.ModuleName, icatypes.ModuleName, feemarkettypes.ModuleName, evmtypes.ModuleName)...)
 
 	return app
 }

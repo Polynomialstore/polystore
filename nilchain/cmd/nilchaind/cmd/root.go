@@ -16,17 +16,14 @@ import (
 	authtxconfig "github.com/cosmos/cosmos-sdk/x/auth/tx/config"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/genutil"
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/spf13/cobra"
 
 	// Module Basic Managers Types (for minimal genutil)
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
-	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
-	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	evidencetypes "cosmossdk.io/x/evidence/types"
+	feemarket "github.com/cosmos/evm/x/feemarket"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	evm "github.com/cosmos/evm/x/vm"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 
 	"nilchain/app"
 )
@@ -55,8 +52,8 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:   app.Name + "d",
-		Short: "nilchain node",
+		Use:           app.Name + "d",
+		Short:         "nilchain node",
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// set the default command outputs
@@ -85,7 +82,6 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
-
 	// Since the IBC modules don't support dependency injection, we need to
 	// manually register the modules on the client side.
 	// This needs to be removed after IBC supports App Wiring.
@@ -95,21 +91,12 @@ func NewRootCmd() *cobra.Command {
 		autoCliOpts.Modules[name] = mod
 	}
 
-	// Create a minimal BasicManager for genutilcli commands.
-	// This includes only the core modules that genutilcli expects for genesis commands.
-	genutilBasicManager := module.BasicManager{
-		authtypes.ModuleName:    moduleBasicManager[authtypes.ModuleName],
-		banktypes.ModuleName:    moduleBasicManager[banktypes.ModuleName],
-		stakingtypes.ModuleName: moduleBasicManager[stakingtypes.ModuleName],
-		minttypes.ModuleName:    moduleBasicManager[minttypes.ModuleName],
-		distrtypes.ModuleName:   moduleBasicManager[distrtypes.ModuleName],
-		genutiltypes.ModuleName: genutil.AppModuleBasic{},
-		govtypes.ModuleName:     moduleBasicManager[govtypes.ModuleName],
-		slashingtypes.ModuleName: moduleBasicManager[slashingtypes.ModuleName],
-		evidencetypes.ModuleName: moduleBasicManager[evidencetypes.ModuleName],
-	}
+	// Manually register EVM basics so default genesis includes EVM/feemarket state.
+	moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
+	moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
+	moduleBasicManager[genutiltypes.ModuleName] = genutil.AppModuleBasic{}
 
-	initRootCmd(rootCmd, clientCtx.TxConfig, genutilBasicManager)
+	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {
 		panic(err)
@@ -153,4 +140,3 @@ func ProvideClientContext(
 
 	return clientCtx
 }
-

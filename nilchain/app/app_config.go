@@ -131,7 +131,7 @@ var (
 						ibcexported.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
-// this line is used by starport scaffolding # stargate/app/beginBlockers
+						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
 						govtypes.ModuleName,
@@ -140,7 +140,7 @@ var (
 						group.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
-// this line is used by starport scaffolding # stargate/app/endBlockers
+						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
 					OverrideStoreKeys: []*runtimev1alpha1.StoreKeyConfig{
@@ -177,7 +177,7 @@ var (
 						icatypes.ModuleName,
 						// chain modules
 						nilchainmoduletypes.ModuleName,
-// this line is used by starport scaffolding # stargate/app/initGenesis
+						// this line is used by starport scaffolding # stargate/app/initGenesis
 					},
 				}),
 			},
@@ -277,17 +277,7 @@ var (
 				Name:   nilchainmoduletypes.ModuleName,
 				Config: appconfig.WrapAny(&nilchainmoduletypes.Module{}),
 			},
-            // EVM modules excluded from appConfig to avoid depinject-based simulation panic (MsgEthereumTx signer).
-            // They are manually wired in app.go.
-			// {
-			// 	Name:   evmtypes.ModuleName,
-			// 	Config: appconfig.WrapAny(&evmtypes.Module{}),
-			// },
-			// {
-			// 	Name:   feemarkettypes.ModuleName,
-			// 	Config: appconfig.WrapAny(&feemarkettypes.Module{}),
-			// },
-// this line is used by starport scaffolding # stargate/app/moduleConfig
+			// this line is used by starport scaffolding # stargate/app/moduleConfig
 		},
 	})
 )

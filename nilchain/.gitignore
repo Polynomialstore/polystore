@@ -8,3 +8,14 @@ release/
 *.log
 *.ign
 vendor
+!vendor/github.com/
+!vendor/github.com/cosmos/
+!vendor/github.com/cosmos/cosmos-sdk/
+!vendor/github.com/cosmos/cosmos-sdk/x/
+!vendor/github.com/cosmos/cosmos-sdk/x/genutil/
+!vendor/github.com/cosmos/cosmos-sdk/x/genutil/collect.go
+!vendor/github.com/cosmos/cosmos-sdk/x/genutil/types/
+!vendor/github.com/cosmos/cosmos-sdk/x/genutil/types/genesis_state.go
+!vendor/github.com/cosmos/cosmos-sdk/x/staking/
+!vendor/github.com/cosmos/cosmos-sdk/x/staking/types/
+!vendor/github.com/cosmos/cosmos-sdk/x/staking/types/msg.go
