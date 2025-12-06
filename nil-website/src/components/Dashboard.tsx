@@ -33,6 +33,8 @@ export function Dashboard() {
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
 
   useEffect(() => {
     if (address) {
@@ -89,12 +91,17 @@ export function Dashboard() {
 
   const handleRequestFunds = async () => {
       try {
-          await requestFunds(address)
+          const resp = await requestFunds(address)
           if (nilAddress) fetchBalances(nilAddress)
           refetchEvm?.()
-          alert('Funds requested! Wait a few seconds for the transaction to confirm.')
+          setStatusTone('success')
+          setStatusMsg('Faucet requested. Wait a few seconds for inclusion; balances will update automatically.')
+          if (resp?.tx_hash) {
+            setStatusMsg(`Faucet requested. Tx: ${resp.tx_hash}`)
+          }
       } catch (e) {
-          alert('Failed to request funds. Is the faucet running?')
+          setStatusTone('error')
+          setStatusMsg('Faucet request failed. Is the faucet running?')
       }
   }
 
@@ -103,23 +110,25 @@ export function Dashboard() {
       alert('CID is required')
       return
     }
-    try {
-          await submitDeal({
-            creator: address || nilAddress,
-            cid: cid.trim(),
-            size: Number(size || '0'),
+      try {
+        await submitDeal({
+          creator: address || nilAddress,
+          cid: cid.trim(),
+          size: Number(size || '0'),
             duration: Number(duration || '0'),
             initialEscrow,
-            maxMonthlySpend,
-          })
-          alert('Deal submitted for creation. Check wallet balance and blocks for confirmation.')
-          if (nilAddress) {
-            fetchDeals(nilAddress)
-            fetchBalances(nilAddress)
-          }
-        } catch (e) {
-          alert('Deal submission failed. Check faucet server logs.')
+          maxMonthlySpend,
+        })
+        setStatusTone('success')
+        setStatusMsg('Deal submitted. Track tx in your wallet and blocks.')
+        if (nilAddress) {
+          fetchDeals(nilAddress)
+          fetchBalances(nilAddress)
         }
+      } catch (e) {
+        setStatusTone('error')
+        setStatusMsg('Deal submission failed. Check faucet server logs.')
+      }
   }
 
   if (!isConnected) return (
@@ -169,6 +178,18 @@ export function Dashboard() {
             </div>
         </div>
       </div>
+
+      {statusMsg && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          statusTone === 'error'
+            ? 'border-red-800 bg-red-900/30 text-red-200'
+            : statusTone === 'success'
+            ? 'border-green-800 bg-green-900/20 text-green-200'
+            : 'border-slate-800 bg-slate-900/40 text-slate-200'
+        }`}>
+          {statusMsg}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 space-y-4">
