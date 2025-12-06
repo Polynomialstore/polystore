@@ -9,6 +9,7 @@ export interface CreateDealInput {
   duration: number
   initialEscrow: string
   maxMonthlySpend: string
+  replication: number
 }
 
 export function useCreateDeal() {
@@ -20,7 +21,8 @@ export function useCreateDeal() {
     setLastTx(null)
     try {
       const creator = input.creator.startsWith('0x') ? ethToNil(input.creator) : input.creator
-      const serviceHint = `General:owner=${creator}`
+      const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
+      const serviceHint = `General:owner=${creator}:replicas=${replicas}`
       const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

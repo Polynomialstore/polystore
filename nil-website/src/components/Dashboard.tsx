@@ -50,6 +50,7 @@ export function Dashboard() {
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
+  const [replication, setReplication] = useState('1')
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const { proofs, loading: proofsLoading } = useProofs()
@@ -187,9 +188,10 @@ export function Dashboard() {
           creator: address || nilAddress,
           cid: cid.trim(),
           size: Number(size || '0'),
-            duration: Number(duration || '0'),
-            initialEscrow,
+          duration: Number(duration || '0'),
+          initialEscrow,
           maxMonthlySpend,
+          replication: Number(replication || '1'),
         })
         setStatusTone('success')
         setStatusMsg('Deal submitted. Track tx in your wallet and blocks.')
@@ -378,6 +380,20 @@ export function Dashboard() {
             <label className="space-y-1 text-gray-400">
               <span className="text-xs uppercase tracking-wide text-gray-500">Duration (blocks)</span>
               <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Replication (providers)</span>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={replication}
+                onChange={e => setReplication(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm"
+              />
+              <p className="text-[11px] text-gray-500">
+                For local testnet, 1 is recommended. The chain will cap this by the number of available providers and the base replication factor.
+              </p>
             </label>
             <label className="space-y-1 text-gray-400">
               <span className="text-xs uppercase tracking-wide text-gray-500">Initial Escrow (stake)</span>

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"cosmossdk.io/collections"
@@ -90,20 +91,53 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
 	}
 
-	// Decode any owner override embedded in the service hint.
-	// For web flows, the gateway encodes hints as e.g. "General:owner=<nilAddress>"
-	// so that the logical Deal owner can differ from the tx signer (faucet).
+	// Decode any overrides embedded in the service hint.
+	// Format used by the web gateway:
+	//   "<Hint>[:owner=<nilAddress>][:replicas=<N>]"
 	rawHint := strings.TrimSpace(msg.ServiceHint)
 	serviceHint := rawHint
 	ownerAddrStr := msg.Creator
-	if idx := strings.Index(rawHint, ":owner="); idx != -1 {
-		base := strings.TrimSpace(rawHint[:idx])
-		ownerPart := strings.TrimSpace(rawHint[idx+len(":owner="):])
-		if ownerPart != "" {
-			if _, err := sdk.AccAddressFromBech32(ownerPart); err != nil {
-				return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", ownerPart)
+	requestedReplicas := uint64(types.DealBaseReplication)
+
+	if rawHint != "" {
+		base := rawHint
+		if idx := strings.Index(rawHint, ":"); idx != -1 {
+			base = strings.TrimSpace(rawHint[:idx])
+			extras := strings.Split(rawHint[idx+1:], ":")
+			for _, token := range extras {
+				token = strings.TrimSpace(token)
+				if token == "" {
+					continue
+				}
+				parts := strings.SplitN(token, "=", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				key := strings.ToLower(strings.TrimSpace(parts[0]))
+				val := strings.TrimSpace(parts[1])
+				switch key {
+				case "owner":
+					if val == "" {
+						continue
+					}
+					if _, err := sdk.AccAddressFromBech32(val); err != nil {
+						return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", val)
+					}
+					ownerAddrStr = val
+				case "replicas":
+					if val == "" {
+						continue
+					}
+					n, err := strconv.ParseUint(val, 10, 64)
+					if err != nil || n == 0 {
+						return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid replicas value in service hint: %s", val)
+					}
+					if n > uint64(types.DealBaseReplication) {
+						n = uint64(types.DealBaseReplication)
+					}
+					requestedReplicas = n
+				}
 			}
-			ownerAddrStr = ownerPart
 		}
 		if base != "" {
 			serviceHint = base
@@ -111,7 +145,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, types.DealBaseReplication)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, requestedReplicas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}

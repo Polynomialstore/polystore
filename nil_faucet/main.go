@@ -110,6 +110,7 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 }
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }

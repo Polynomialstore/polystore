@@ -141,6 +141,49 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 	require.Equal(t, "General", deal.ServiceHint, "service hint should be normalised to base value")
 }
 
+// TestCreateDeal_ReplicationViaHint verifies that the requested replication
+// factor can be provided via the service hint and that the keeper respects
+// it (capped by DealBaseReplication and available providers).
+func TestCreateDeal_ReplicationViaHint(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register more providers than we will request.
+	for i := 0; i < 10; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_repl______%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_repl___________")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	// Request 3 replicas via the hint.
+	msg := &types.MsgCreateDeal{
+		Creator:             user,
+		Cid:                 "bafyreplicationcid",
+		Size_:               8 * 1024 * 1024,
+		DurationBlocks:      100,
+		ServiceHint:         "General:replicas=3",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+
+	res, err := msgServer.CreateDeal(f.ctx, msg)
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), uint64(len(res.AssignedProviders)))
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), deal.CurrentReplication)
+	require.Equal(t, "General", deal.ServiceHint)
+}
+
 // TestCreateDeal_BootstrapReplication verifies that on small devnets where the
 // active provider set is smaller than DealBaseReplication, we still create a
 // deal and cap replication at the number of available providers (bootstrap
