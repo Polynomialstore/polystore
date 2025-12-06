@@ -40,6 +40,18 @@ ensure_nil_cli() {
   fi
 }
 
+register_demo_provider() {
+  banner "Registering demo storage provider (faucet)"
+  # Use the faucet key as a General-capability provider with a large capacity.
+  "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+    --from faucet \
+    --chain-id "$CHAIN_ID" \
+    --yes \
+    --home "$CHAIN_HOME" \
+    --keyring-backend test \
+    --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || echo "Warning: demo provider registration failed (see nilchaind logs)"
+}
+
 init_chain() {
   rm -rf "$CHAIN_HOME"
   banner "Initializing chain at $CHAIN_HOME"
@@ -186,6 +198,7 @@ start_all() {
   ensure_nilchaind
   init_chain
   start_chain
+  register_demo_provider
   start_faucet
   start_gateway
   start_web
