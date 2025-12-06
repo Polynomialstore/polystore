@@ -9,3 +9,7 @@ nilchain/nilchaind
 nilchain/.nilchain/
 nilchaind
 performance/.nilchain_perf/
+_artifacts/
+nilchain/nilchain_data/
+nilchain/validator_key.json
+validator_key.json
