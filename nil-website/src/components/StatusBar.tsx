@@ -28,6 +28,7 @@ export function StatusBar() {
     faucet: 'warn' as ServiceStatus,
     chainIdMatch: 'warn' as ServiceStatus,
   })
+  const [evmChainId, setEvmChainId] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     fetchStatus(appConfig.chainId).then((res) => {
@@ -39,6 +40,7 @@ export function StatusBar() {
       })
       setHeight(res.height)
       setChainName(res.networkName)
+      setEvmChainId(res.evmChainId)
     })
   }, [])
 
@@ -57,7 +59,10 @@ export function StatusBar() {
       <Badge label={`Chain ID`} status={summary.chainIdMatch} />
       {walletBadge}
       {height && <span className="text-slate-400">Height: {height}</span>}
-      {chainName && <span className="text-slate-500">Chain: {chainName}</span>}
+      {chainName && <span className="text-slate-500">LCD Chain: {chainName}</span>}
+      {evmChainId !== undefined && (
+        <span className="text-slate-500">EVM Chain: {evmChainId}</span>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ export interface StatusSummary {
   chainIdMatch: ServiceStatus
   height?: number
   networkName?: string
+  evmChainId?: number
   error?: string
 }
 
@@ -40,6 +41,7 @@ export async function fetchStatus(expectedChainId: number): Promise<StatusSummar
       const chainId = chainIdHex ? parseInt(chainIdHex, 16) : undefined
       summary.evm = chainId ? 'ok' : 'warn'
       summary.chainIdMatch = chainId === expectedChainId ? 'ok' : 'error'
+      summary.evmChainId = chainId
     } else {
       summary.evm = 'error'
     }
