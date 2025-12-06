@@ -47,7 +47,21 @@ init_chain() {
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
   perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
+  perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
   perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  # Fallback patcher in case formats change (pure string replace to avoid extra deps)
+  python3 - "$APP_TOML" <<'PY' || true
+import sys, pathlib
+path = pathlib.Path(sys.argv[1])
+txt = path.read_text()
+for src, dst in [
+    ('address = "127.0.0.1:8545"', 'address = "0.0.0.0:8545"'),
+    ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
+    ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
+]:
+    txt = txt.replace(src, dst)
+path.write_text(txt)
+PY
 }
 
 ensure_metadata() {
