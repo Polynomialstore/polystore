@@ -193,6 +193,7 @@ We have executed a major refactor of the protocol specification to replace "Phys
 1.  **Always-Fresh Genesis:** `run_local_stack.sh start` now wipes the chain home and rebuilds genesis every run (new deterministic faucet mnemonic: `course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole`).
 2.  **EVM Denom Safety:** Injects `aatom` denom metadata and matching supply into genesis before start, eliminating the `evm coin info: denom metadata aatom could not be found` panic.
 3.  **Start/Stop Hardening:** Removed data directory nuking (keeps `priv_validator_state.json`), added liveness checks for nilchaind/faucet, and added port-based cleanup in `stop` to avoid stale faucet/web processes.
+4.  **Faucet Defaults:** Faucet now dispenses both `aatom` (1e18) and `stake` (1e6) per request with gas priced in `aatom`, so MetaMask accounts get usable EVM gas immediately.
 
 ## Phase 3: Implementation Plan (To-Do List)
 

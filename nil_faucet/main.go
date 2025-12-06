@@ -18,9 +18,9 @@ import (
 var (
 	chainID   = envDefault("NIL_CHAIN_ID", "test-1")
 	homeDir   = envDefault("NIL_HOME", "../.nilchain")
-	amount    = envDefault("NIL_AMOUNT", "1000000stake")
+	amount    = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
 	denom     = envDefault("NIL_DENOM", "stake")
-	gasPrices = envDefault("NIL_GAS_PRICES", "0.001stake")
+	gasPrices = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	cooldown  = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
 )
 
