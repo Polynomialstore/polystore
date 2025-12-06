@@ -63,13 +63,20 @@ func CmdCreateDeal() *cobra.Command {
             if !ok { return strconv.ErrSyntax }
             maxMonthly, ok := math.NewIntFromString(args[4])
             if !ok { return strconv.ErrSyntax }
+            hint, err := cmd.Flags().GetString("service-hint")
+            if err != nil {
+                return err
+            }
+            if hint == "" {
+                hint = "General"
+            }
 
             msg := types.MsgCreateDeal{
                 Creator:             clientCtx.GetFromAddress().String(),
                 Cid:                 cid,
                 Size_:               size,
                 DurationBlocks:      duration,
-                ServiceHint:         "General", // Default
+                ServiceHint:         hint,
                 InitialEscrowAmount: initialEscrow,
                 MaxMonthlySpend:     maxMonthly,
             }
@@ -77,6 +84,7 @@ func CmdCreateDeal() *cobra.Command {
             return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
         },
     }
+    cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General:owner=<nilAddress>:replicas=<N>)")
     flags.AddTxFlagsToCmd(cmd)
     return cmd
 }

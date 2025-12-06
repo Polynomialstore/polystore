@@ -213,6 +213,10 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	if durationStr == "0" {
 		durationStr = defaultDuration
 	}
+	hint := strings.TrimSpace(req.ServiceHint)
+	if hint == "" {
+		hint = "General"
+	}
 
 	// NOTE: We sign as the faucet/system key for now. The logical creator is
 	// provided in req.Creator and can be wired into on-chain state later.
@@ -224,6 +228,7 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		durationStr,
 		req.InitialEscrow,
 		req.MaxMonthlySpend,
+		"--service-hint", hint,
 		"--chain-id", chainID,
 		"--from", "faucet",
 		"--yes",
