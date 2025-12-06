@@ -1,14 +1,13 @@
-import { useAccount } from 'wagmi'
+import { useAccount, useBalance, useConnect, useDisconnect } from 'wagmi'
+import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useState } from 'react'
-import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2, ArrowDownRight } from 'lucide-react'
+import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2, ArrowDownRight, Upload } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
+import { useUpload } from '../hooks/useUpload'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
-import { useConnect, useDisconnect } from 'wagmi'
-import { injected } from 'wagmi/connectors'
-import { useBalance } from 'wagmi'
 
 interface Deal {
   id: string
@@ -25,9 +24,11 @@ export function Dashboard() {
   const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx } = useCreateDeal()
+  const { upload, loading: uploadLoading } = useUpload()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(false)
   const [nilAddress, setNilAddress] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [cid, setCid] = useState('')
   const [size, setSize] = useState('1048576')
   const [duration, setDuration] = useState('100')
@@ -86,6 +87,26 @@ export function Dashboard() {
       })
     } catch (e) {
       console.error('fetchBalances failed', e)
+    }
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !address) {
+      setSelectedFile(null)
+      return
+    }
+    setSelectedFile(file)
+    try {
+      const result = await upload(file, address)
+      setCid(result.cid)
+      setSize(String(result.sizeBytes))
+      setStatusTone('neutral')
+      setStatusMsg(`File uploaded. Root CID derived from shard: ${result.cid.slice(0, 16)}...`)
+    } catch (e) {
+      console.error(e)
+      setStatusTone('error')
+      setStatusMsg('File upload/sharding failed. Check gateway logs.')
     }
   }
 
@@ -269,6 +290,21 @@ export function Dashboard() {
             Create Storage Deal
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <label className="space-y-1 text-gray-400 sm:col-span-2">
+              <span className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                <Upload className="w-3 h-3 text-indigo-400" />
+                Source File (optional)
+              </span>
+              <input
+                type="file"
+                onChange={handleFileChange}
+                disabled={uploadLoading}
+                className="w-full text-xs text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
+              />
+              <p className="text-xs text-gray-500">
+                If provided, the gateway will shard this file via <code>nil_cli shard</code> and derive a Root CID and size for you.
+              </p>
+            </label>
             <label className="space-y-1 text-gray-400">
               <span className="text-xs uppercase tracking-wide text-gray-500">Root CID</span>
               <input value={cid} onChange={e => setCid(e.target.value)} placeholder="bafy..." className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />

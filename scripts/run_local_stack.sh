@@ -33,6 +33,13 @@ ensure_nilchaind() {
   fi
 }
 
+ensure_nil_cli() {
+  if [ ! -x "$ROOT_DIR/nil_cli/target/debug/nil_cli" ]; then
+    banner "Building nil_cli (debug)"
+    (cd "$ROOT_DIR/nil_cli" && cargo build)
+  fi
+}
+
 init_chain() {
   rm -rf "$CHAIN_HOME"
   banner "Initializing chain at $CHAIN_HOME"
@@ -131,7 +138,7 @@ start_faucet() {
   (
     cd "$ROOT_DIR/nil_faucet"
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="$FAUCET_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
-      go run . \
+      "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! > "$PID_DIR/faucet.pid"
   )
@@ -142,6 +149,25 @@ start_faucet() {
     exit 1
   fi
   echo "faucet pid $(cat "$PID_DIR/faucet.pid"), logs: $LOG_DIR/faucet.log"
+}
+
+start_gateway() {
+  banner "Starting gateway service"
+  ensure_nil_cli
+  (
+    cd "$ROOT_DIR/nil_s3"
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/debug/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" \
+      "$GO_BIN" run . \
+      >"$LOG_DIR/gateway.log" 2>&1 &
+    echo $! > "$PID_DIR/gateway.pid"
+  )
+  sleep 0.5
+  if ! kill -0 "$(cat "$PID_DIR/gateway.pid")" 2>/dev/null; then
+    echo "gateway failed to start; check $LOG_DIR/gateway.log"
+    tail -n 20 "$LOG_DIR/gateway.log" || true
+    exit 1
+  fi
+  echo "gateway pid $(cat "$PID_DIR/gateway.pid"), logs: $LOG_DIR/gateway.log"
 }
 
 start_web() {
@@ -161,6 +187,7 @@ start_all() {
   init_chain
   start_chain
   start_faucet
+  start_gateway
   start_web
   banner "Stack ready"
   cat <<EOF
@@ -168,6 +195,7 @@ RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 262144 default)
 Faucet:      http://localhost:8081/faucet
+Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard
 Home:        $CHAIN_HOME
 To stop:     ./scripts/run_local_stack.sh stop
@@ -176,7 +204,7 @@ EOF
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet website; do
+  for svc in nilchaind faucet gateway website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
@@ -187,7 +215,7 @@ stop_all() {
       rm -f "$pid_file"
     fi
   done
-  for port in 26657 26656 1317 8545 8081 5173; do
+  for port in 26657 26656 1317 8545 8080 8081 5173; do
     pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true

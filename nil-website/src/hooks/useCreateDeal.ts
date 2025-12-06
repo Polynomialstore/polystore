@@ -20,16 +20,17 @@ export function useCreateDeal() {
     setLastTx(null)
     try {
       const creator = input.creator.startsWith('0x') ? ethToNil(input.creator) : input.creator
-      const response = await fetch(`${appConfig.apiBase}/create-deal`, {
+      const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           creator,
           cid: input.cid,
-          size: input.size,
-          duration: input.duration,
-          initialEscrow: input.initialEscrow,
-          maxMonthlySpend: input.maxMonthlySpend,
+          size_bytes: input.size,
+          duration_blocks: input.duration,
+          service_hint: 'General',
+          initial_escrow: input.initialEscrow,
+          max_monthly_spend: input.maxMonthlySpend,
         }),
       })
 
