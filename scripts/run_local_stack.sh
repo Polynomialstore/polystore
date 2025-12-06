@@ -43,13 +43,29 @@ ensure_nil_cli() {
 register_demo_provider() {
   banner "Registering demo storage provider (faucet)"
   # Use the faucet key as a General-capability provider with a large capacity.
-  "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
-    --from faucet \
-    --chain-id "$CHAIN_ID" \
-    --yes \
-    --home "$CHAIN_HOME" \
-    --keyring-backend test \
-    --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || echo "Warning: demo provider registration failed (see nilchaind logs)"
+  # We retry a few times to avoid races with node startup.
+  local attempts=10
+  local i
+  for i in $(seq 1 "$attempts"); do
+    "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+      --from faucet \
+      --chain-id "$CHAIN_ID" \
+      --yes \
+      --home "$CHAIN_HOME" \
+      --keyring-backend test \
+      --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
+
+    # Check if a provider now exists.
+    if "$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -q "address:"; then
+      echo "Demo provider registered successfully."
+      return 0
+    fi
+
+    echo "Demo provider not yet registered (attempt $i/$attempts); retrying in 1s..."
+    sleep 1
+  done
+
+  echo "Warning: demo provider registration failed after $attempts attempts (see nilchaind logs)"
 }
 
 init_chain() {
