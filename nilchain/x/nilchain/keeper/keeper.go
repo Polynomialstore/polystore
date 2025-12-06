@@ -118,8 +118,15 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		}
 	}
 
-	if uint64(len(candidateProviders)) < count {
-		return nil, fmt.Errorf("not enough suitable providers (%d/%d) for service hint '%s' to satisfy deal replication", len(candidateProviders), count, serviceHint)
+	available := uint64(len(candidateProviders))
+	if available == 0 {
+		return nil, fmt.Errorf("no suitable providers for service hint '%s'", serviceHint)
+	}
+	// Bootstrap mode: on small devnets we may have fewer active providers than
+	// DealBaseReplication. Instead of failing the deal entirely, cap the
+	// replication factor at the number of available candidates.
+	if available < count {
+		count = available
 	}
 
 	assignedProviders := make([]string, count)

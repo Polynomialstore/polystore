@@ -38,8 +38,8 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				sdkCtx := sdk.UnwrapSDKContext(ctx)
 				sdkCtx.Logger().Info("Slashing provider for downtime", "provider", providerAddr, "deal", dealID, "last_proof", lastProof, "current", currentHeight)
 
-				// Slash Amount: 10 NIL (placeholder)
-				slashAmt := sdk.NewCoins(sdk.NewInt64Coin("token", 10000000))
+				// Slash Amount: 10 stake (placeholder)
+				slashAmt := sdk.NewCoins(sdk.NewInt64Coin("stake", 10000000))
 				
 				pAddr, err := sdk.AccAddressFromBech32(providerAddr)
 				if err != nil {

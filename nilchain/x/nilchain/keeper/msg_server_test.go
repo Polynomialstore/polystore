@@ -95,6 +95,48 @@ func TestCreateDeal(t *testing.T) {
 	require.Equal(t, int(types.DealBaseReplication), len(unique))
 }
 
+// TestCreateDeal_BootstrapReplication verifies that on small devnets where the
+// active provider set is smaller than DealBaseReplication, we still create a
+// deal and cap replication at the number of available providers (bootstrap
+// mode) instead of failing placement.
+func TestCreateDeal_BootstrapReplication(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register a single provider.
+	addrBz := []byte("single_provider_____")
+	addr, _ := f.addressCodec.BytesToString(addrBz)
+	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		Creator:      addr,
+		Capabilities: "General",
+		TotalStorage: 100000000000,
+	})
+	require.NoError(t, err)
+
+	// Create a Deal; placement should succeed with a single assigned provider.
+	userBz := []byte("user_bootstrap______")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	msg := &types.MsgCreateDeal{
+		Creator:             user,
+		Cid:                 "bafybootstrapcid",
+		Size_:               8 * 1024 * 1024,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+
+	res, err := msgServer.CreateDeal(f.ctx, msg)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), uint64(len(res.AssignedProviders)))
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), deal.CurrentReplication)
+	require.Equal(t, 1, len(deal.Providers))
+}
+
 func TestProveLiveness_Invalid(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)

@@ -117,10 +117,13 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", msg.MaxMonthlySpend)
 	}
 	
-	escrowCoin := sdk.NewCoins(sdk.NewCoin("token", initialEscrowAmount))
+	// For the local devnet, we denominate escrow in the staking token ("stake").
+	escrowCoin := sdk.NewCoins(sdk.NewCoin("stake", initialEscrowAmount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, escrowCoin); err != nil {
 		return nil, err
 	}
+
+	currentReplication := uint64(len(assignedProviders))
 
 	deal := types.Deal{
 		Id:                 dealID,
@@ -132,7 +135,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		EndBlock:           uint64(ctx.BlockHeight()) + msg.DurationBlocks,
 		Providers:          assignedProviders,
 		RedundancyMode:     1,
-		CurrentReplication: types.DealBaseReplication,
+		CurrentReplication: currentReplication,
 		ServiceHint:        msg.ServiceHint,
 		MaxMonthlySpend:    maxMonthlySpend,
 	}
@@ -232,7 +235,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	if !valid {
 		ctx.Logger().Info("KZG Proof INVALID: Slashing Sender")
-        slashAmt := sdk.NewCoins(sdk.NewInt64Coin("token", 10000000)) 
+        slashAmt := sdk.NewCoins(sdk.NewInt64Coin("stake", 10000000)) 
         err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, slashAmt)
         
         if err != nil {
@@ -504,7 +507,7 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
         return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid amount")
     }
     
-    coins := sdk.NewCoins(sdk.NewCoin("token", amount))
+    coins := sdk.NewCoins(sdk.NewCoin("stake", amount))
     if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, senderAddr, types.ModuleName, coins); err != nil {
         return nil, err
     }
@@ -580,7 +583,7 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
     // Net result: Supply change = +Y.
     // The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
     
-    coins := sdk.NewCoins(sdk.NewCoin("token", rewards))
+    coins := sdk.NewCoins(sdk.NewCoin("stake", rewards))
     if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
         return nil, err
     }
