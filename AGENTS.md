@@ -309,6 +309,7 @@ We have executed a major refactor of the protocol specification to replace "Phys
 *   [ ] **Next Step (Future Agents):** Upgrade from logical ownership to fully user-signed deals:
     *   Replace the hint-based owner override with a first-class `owner` field once proto tooling (`buf`/Ignite) is stable under the Go toolchain in this repo.
     *   Introduce an EVM→Cosmos bridge or module wiring so MetaMask-signed EVM txs can directly result in `MsgCreateDeal` calls funded from the user’s escrow, not the faucet.
+    *   Tighten `MsgProveLiveness` so retrieval receipts are **always** checked against the real owner’s public key (today the devnet path skips signature verification when the owner account has no on-chain pubkey, which is acceptable only for local testing).
 
 ## Phase 3.3: Mode 1 Fetch & Retrieval (Current)
 
@@ -322,6 +323,6 @@ We have executed a major refactor of the protocol specification to replace "Phys
     *   Indexes uploaded files by Root CID on `GatewayUpload`.
     *   Serves the original file back as an `application/octet-stream` attachment for devnet flows where the gateway acts as the Provider.
 *   [x] **Web Download Button:** Wire a "Download file" action into the Dashboard deal detail panel in `nil-website`, pointing at the gateway fetch endpoint so users can round-trip a stored file from the browser.
-*   [ ] **On-Chain Receipts from Web (Future):** Extend the web/gateway path so that successful downloads:
-    *   Construct a `RetrievalReceipt` tied to the end-user’s key (via an EVM→Cosmos bridge or native Cosmos signing).
-    *   Submit `MsgProveLiveness` on behalf of the Provider, closing the loop between HTTP downloads and on-chain liveness accounting.
+*   [x] **On-Chain Receipts from Web (Devnet Mode 1):** Extend the web/gateway path so that "Download file":
+    *   Calls a new `POST /gateway/prove-retrieval` endpoint with `{cid, deal_id}`, which uses the faucet key as a demo Provider to run `sign-retrieval-receipt` + `submit-retrieval-proof` and returns the `tx_hash`.
+    *   Leaves real end-user signing (MetaMask → Cosmos) and strict owner signature validation as a future hardening step once the EVM→Cosmos bridge is in place.

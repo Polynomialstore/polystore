@@ -53,6 +53,7 @@ func main() {
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -183,6 +184,12 @@ type createDealRequest struct {
 	MaxMonthlySpend string `json:"max_monthly_spend"`
 }
 
+type proveRetrievalRequest struct {
+	Cid    string `json:"cid"`
+	DealID uint64 `json:"deal_id"`
+	Epoch  uint64 `json:"epoch_id,omitempty"`
+}
+
 func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -240,6 +247,127 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		"tx_hash": txHash,
 	}); err != nil {
 		log.Printf("GatewayCreateDeal encode error: %v", err)
+	}
+}
+
+// GatewayProveRetrieval constructs a RetrievalReceipt for a stored file and
+// submits it as a MsgProveLiveness on-chain. This is a devnet Mode 1 helper:
+// the gateway plays both "user" and "provider" using the faucet key.
+func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var req proveRetrievalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Cid == "" || req.DealID == 0 {
+		http.Error(w, "cid and deal_id are required", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := lookupFileInIndex(req.Cid)
+	if err != nil {
+		log.Printf("GatewayProveRetrieval: index lookup failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if entry == nil {
+		http.Error(w, "file not found for cid", http.StatusNotFound)
+		return
+	}
+
+	epoch := req.Epoch
+	if epoch == 0 {
+		epoch = 1
+	}
+
+	// For the devnet, we use the faucet key as both the logical user and provider.
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerAddr, err := resolveKeyAddress(providerKeyName)
+	if err != nil {
+		log.Printf("GatewayProveRetrieval: resolveKeyAddress failed: %v", err)
+		http.Error(w, "failed to resolve provider address", http.StatusInternalServerError)
+		return
+	}
+
+	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
+	dealIDStr := strconv.FormatUint(req.DealID, 10)
+	epochStr := strconv.FormatUint(epoch, 10)
+	signCmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "sign-retrieval-receipt",
+		dealIDStr,
+		providerAddr,
+		epochStr,
+		entry.Path,
+		trustedSetup,
+		"--from", providerKeyName,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--offline",
+	)
+	signOut, err := signCmd.CombinedOutput()
+	if err != nil {
+		log.Printf("GatewayProveRetrieval: sign-retrieval-receipt failed: %s", string(signOut))
+		http.Error(w, "failed to sign retrieval receipt (check nilchaind logs)", http.StatusInternalServerError)
+		return
+	}
+
+	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
+	if err != nil {
+		log.Printf("GatewayProveRetrieval: CreateTemp failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(signOut); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		log.Printf("GatewayProveRetrieval: writing receipt file failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		log.Printf("GatewayProveRetrieval: closing receipt file failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	// 2) Submit the receipt as a retrieval proof.
+	submitCmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpPath,
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas-prices", gasPrices,
+	)
+	submitOut, err := submitCmd.CombinedOutput()
+	outStr := string(submitOut)
+	if err != nil {
+		log.Printf("GatewayProveRetrieval: submit-retrieval-proof failed: %s", outStr)
+		http.Error(w, "failed to submit retrieval proof (check nilchaind logs)", http.StatusInternalServerError)
+		return
+	}
+
+	txHash := extractTxHash(outStr)
+	log.Printf("GatewayProveRetrieval success: txhash=%s", txHash)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"tx_hash": txHash,
+	}); err != nil {
+		log.Printf("GatewayProveRetrieval encode error: %v", err)
 	}
 }
 
@@ -414,4 +542,20 @@ func lookupFileInIndex(cid string) (*fileIndexEntry, error) {
 		return &e, nil
 	}
 	return nil, nil
+}
+
+// resolveKeyAddress returns the bech32 address for a key name in the local keyring.
+func resolveKeyAddress(name string) (string, error) {
+	cmd := exec.Command(
+		nilchaindBin,
+		"keys", "show", name,
+		"-a",
+		"--home", homeDir,
+		"--keyring-backend", "test",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("keys show failed: %v (%s)", err, string(out))
+	}
+	return strings.TrimSpace(string(out)), nil
 }
