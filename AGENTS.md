@@ -321,8 +321,9 @@ We have executed a major refactor of the protocol specification to replace "Phys
     *   `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) as the observability surface for UIs.
 *   [x] **Gateway Fetch Endpoint (Mode 1):** Extend `nil_s3` with a `GET /gateway/fetch/{cid}` route that:
     *   Indexes uploaded files by Root CID on `GatewayUpload`.
-    *   Serves the original file back as an `application/octet-stream` attachment for devnet flows where the gateway acts as the Provider.
-*   [x] **Web Download Button:** Wire a "Download file" action into the Dashboard deal detail panel in `nil-website`, pointing at the gateway fetch endpoint so users can round-trip a stored file from the browser.
+    *   Serves the original file back as an `application/octet-stream` attachment for devnet flows where the gateway acts as the Provider, after atomically validating the deal owner via LCD and submitting a retrieval proof on-chain.
+*   [x] **Web Download Button:** Wire a "Download file" action into the Dashboard deal detail panel in `nil-website`, pointing at the gateway fetch endpoint so users can round-trip a stored file from the browser using a single owner-gated, proof-generating request.
 *   [x] **On-Chain Receipts from Web (Devnet Mode 1):** Extend the web/gateway path so that "Download file":
-    *   Calls a new `POST /gateway/prove-retrieval` endpoint with `{cid, deal_id}`, which uses the faucet key as a demo Provider to run `sign-retrieval-receipt` + `submit-retrieval-proof` and returns the `tx_hash`.
+    *   Uses `GET /gateway/fetch/{cid}?deal_id=<id>&owner=<nilAddress>` which both checks ownership and runs `sign-retrieval-receipt` + `submit-retrieval-proof` under a demo Provider key (faucet) before streaming the file.
     *   Leaves real end-user signing (MetaMask → Cosmos) and strict owner signature validation as a future hardening step once the EVM→Cosmos bridge is in place.
+*   [x] **Proofs Polling:** Add lightweight polling in `useProofs` so the Dashboard’s "Liveness & Performance" table refreshes periodically (default 10s) without requiring a manual page reload.

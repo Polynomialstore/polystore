@@ -32,13 +32,16 @@ function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId
   }
 }
 
-export function useProofs() {
+export function useProofs(pollMs: number = 10000) {
   const [proofs, setProofs] = useState<ProofRow[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
+    let timer: number | undefined
+
     async function load() {
+      if (cancelled) return
       setLoading(true)
       try {
         const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/proofs`)
@@ -63,12 +66,20 @@ export function useProofs() {
         if (!cancelled) setLoading(false)
       }
     }
-    load()
+    ;(async () => {
+      await load()
+      if (pollMs > 0) {
+        timer = window.setInterval(load, pollMs)
+      }
+    })()
+
     return () => {
       cancelled = true
+      if (timer !== undefined) {
+        window.clearInterval(timer)
+      }
     }
-  }, [])
+  }, [pollMs])
 
   return { proofs, loading }
 }
-
