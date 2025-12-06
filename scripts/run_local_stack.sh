@@ -61,8 +61,8 @@ register_demo_provider() {
       return 0
     fi
 
-    echo "Demo provider not yet registered (attempt $i/$attempts); retrying in 1s..."
-    sleep 1
+    echo "Demo provider not yet registered (attempt $i/$attempts); retrying in 4s..."
+    sleep 4
   done
 
   echo "Warning: demo provider registration failed after $attempts attempts (see nilchaind logs)"
