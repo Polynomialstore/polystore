@@ -23,7 +23,7 @@ export function Dashboard() {
   const { address, isConnected } = useAccount()
   const { connectAsync } = useConnect()
   const { disconnect } = useDisconnect()
-  const { requestFunds, loading: faucetLoading, lastTx: faucetTx } = useFaucet()
+  const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx } = useCreateDeal()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(false)
@@ -94,10 +94,11 @@ export function Dashboard() {
           const resp = await requestFunds(address)
           if (nilAddress) fetchBalances(nilAddress)
           refetchEvm?.()
-          setStatusTone('success')
-          setStatusMsg('Faucet requested. Wait a few seconds for inclusion; balances will update automatically.')
+          setStatusTone('neutral')
           if (resp?.tx_hash) {
-            setStatusMsg(`Faucet requested. Tx: ${resp.tx_hash}`)
+            setStatusMsg(`Faucet tx ${resp.tx_hash} pending...`)
+          } else {
+            setStatusMsg('Faucet requested. Awaiting inclusion...')
           }
       } catch (e) {
           setStatusTone('error')
@@ -130,6 +131,18 @@ export function Dashboard() {
         setStatusMsg('Deal submission failed. Check faucet server logs.')
       }
   }
+
+  useEffect(() => {
+    if (faucetTxStatus === 'confirmed' && faucetTx) {
+      setStatusTone('success')
+      setStatusMsg(`Faucet tx ${faucetTx} confirmed.`)
+      if (nilAddress) fetchBalances(nilAddress)
+      refetchEvm?.()
+    } else if (faucetTxStatus === 'failed' && faucetTx) {
+      setStatusTone('error')
+      setStatusMsg(`Faucet tx ${faucetTx} failed.`)
+    }
+  }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm])
 
   if (!isConnected) return (
     <div className="p-12 text-center">
@@ -166,7 +179,7 @@ export function Dashboard() {
                 {faucetTx && (
                   <div className="flex items-center gap-2 text-xs text-green-400">
                     <ArrowDownRight className="w-3 h-3" />
-                    Faucet tx: <span className="font-mono">{faucetTx}</span>
+                    Faucet tx: <span className="font-mono">{faucetTx}</span> ({faucetTxStatus})
                   </div>
                 )}
                 <div className="text-right">
