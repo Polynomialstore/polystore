@@ -26,7 +26,7 @@ export const Layout = () => {
   return (
     <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300">
       {/* Cyber-Glass Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-sm">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 md:bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-sm">
         {/* Gradient Line */}
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-50" />
         
@@ -144,7 +144,7 @@ export const Layout = () => {
         </AnimatePresence>
       </nav>
 
-      <main>
+      <main className="pt-20">
         <Outlet />
       </main>
 
