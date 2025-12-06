@@ -89,7 +89,12 @@ export function Dashboard() {
               max_monthly_spend: d.max_monthly_spend,
               providers: Array.isArray(d.providers) ? d.providers : [],
             }))
-            const filtered = owner ? all.filter((d) => d.owner === owner) : all
+            let filtered = owner ? all.filter((d) => d.owner === owner) : all
+            // Fallback: if no owner-matched deals but there are deals on-chain
+            // (e.g. older faucet-owned deals), show all so the UI never lies.
+            if (owner && filtered.length === 0 && all.length > 0) {
+              filtered = all
+            }
             setDeals(filtered)
             return filtered
         }
@@ -353,6 +358,7 @@ export function Dashboard() {
               </span>
               <input
                 type="file"
+                id="deal-file-input"
                 onChange={handleFileChange}
                 disabled={uploadLoading}
                 className="w-full text-xs text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
@@ -413,8 +419,14 @@ export function Dashboard() {
             </div>
             <h3 className="text-lg font-medium text-white mb-2">No active deals</h3>
             <p className="text-gray-400 mb-6 max-w-md mx-auto">You haven't stored any files on the NilNetwork yet. Upload a file to get started.</p>
-            <button className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium transition-all">
-                Upload New File
+            <button
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium transition-all"
+              onClick={() => {
+                const el = document.getElementById('deal-file-input') as HTMLInputElement | null
+                if (el) el.click()
+              }}
+            >
+              Upload New File
             </button>
         </div>
       ) : (
