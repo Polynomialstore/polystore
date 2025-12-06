@@ -49,8 +49,7 @@ export const TestnetDocs = () => {
               <p className="text-sm text-muted-foreground mb-2">To use the website's "Get Funds" button, you must run the local faucet API.</p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># In a new terminal window</p>
-                <p>$ cd nil-store/nil_faucet</p>
-                <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
+                <p>$ ./scripts/run_local_stack.sh start</p>
                 <br/>
                 <p className="text-yellow-500 text-xs"># Note: Ensure 'faucet' key exists in keyring (keyring-backend test)</p>
               </div>

@@ -1,10 +1,13 @@
 import { useAccount } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useEffect, useState } from 'react'
-import { Coins, RefreshCw, UploadCloud, SendHorizonal } from 'lucide-react'
+import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2 } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { appConfig } from '../config'
+import { StatusBar } from './StatusBar'
+import { useConnect, useDisconnect } from 'wagmi'
+import { injected } from 'wagmi/connectors'
 
 interface Deal {
   id: string
@@ -17,6 +20,8 @@ interface Deal {
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()
+  const { connectAsync } = useConnect()
+  const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx } = useCreateDeal()
   const [deals, setDeals] = useState<Deal[]>([])
@@ -88,12 +93,20 @@ export function Dashboard() {
   if (!isConnected) return (
     <div className="p-12 text-center">
         <h2 className="text-xl font-semibold text-gray-300 mb-2">Connect Your Wallet</h2>
-        <p className="text-gray-500">Access your storage deals and manage your files.</p>
+        <p className="text-gray-500 mb-4">Access your storage deals and manage your files.</p>
+        <button
+          onClick={() => connectAsync({ connector: injected() })}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md shadow"
+        >
+          <Wallet className="w-4 h-4" />
+          Connect MetaMask
+        </button>
     </div>
   )
 
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
+      <StatusBar />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-900/30 p-6 rounded-xl border border-gray-800">
         <div>
             <h2 className="text-2xl font-bold text-white">My Storage Deals</h2>
@@ -101,13 +114,6 @@ export function Dashboard() {
         </div>
         <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-3">
-                <button 
-                    onClick={() => alert("File upload via Web Interface coming in v0.2. Please use 'nil_cli upload' for now.")}
-                    className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors shadow-lg shadow-indigo-500/20"
-                >
-                    <UploadCloud className="w-3 h-3" />
-                    Upload File
-                </button>
                 <button 
                     onClick={handleRequestFunds}
                     disabled={faucetLoading}
@@ -129,8 +135,35 @@ export function Dashboard() {
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 space-y-4">
           <div className="flex items-center gap-2 text-white font-semibold">
+            <Coins className="w-4 h-4 text-yellow-400" />
+            Wallet & Funds
+          </div>
+          <div className="text-sm text-gray-400 space-y-2">
+            <div className="font-mono text-indigo-300 break-all">Address: {address || nilAddress}</div>
+            <button
+              onClick={() => disconnect()}
+              className="text-xs text-gray-500 hover:text-white underline"
+            >
+              Disconnect
+            </button>
+          </div>
+          <button 
+            onClick={handleRequestFunds}
+            disabled={faucetLoading}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-md transition-colors disabled:opacity-50"
+          >
+            {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
+            {faucetLoading ? 'Requesting...' : 'Get Testnet NIL'}
+          </button>
+          <div className="text-xs text-gray-500">
+            Uses faucet service at {appConfig.apiBase}/faucet (keyring: faucet)
+          </div>
+        </div>
+
+        <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-white font-semibold">
             <SendHorizonal className="w-4 h-4 text-indigo-400" />
-            Create Storage Deal (beta)
+            Create Storage Deal
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <label className="space-y-1 text-gray-400">
@@ -157,7 +190,7 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div className="text-xs text-gray-500">
               From: <span className="font-mono text-indigo-300">{address || nilAddress}</span>
-              {lastTx && <div className="text-green-400 mt-1">Last tx: {lastTx}</div>}
+              {lastTx && <div className="text-green-400 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Tx: {lastTx}</div>}
             </div>
             <button
               onClick={handleCreateDeal}
