@@ -6,25 +6,25 @@ import React from 'react'
 
 // Define the local NilChain network
 export const nilChain = defineChain({
-  id: 9000, // Standard Ethermint devnet ID, confirm with 'nild status'
-  name: 'NilChain Testnet',
+  id: 262144, // DefaultEVMChainID from nilchaind
+  name: 'NilChain Local',
   nativeCurrency: {
     decimals: 18,
-    name: 'Nil',
-    symbol: 'NIL',
+    name: 'AATOM',
+    symbol: 'AATOM',
   },
   rpcUrls: {
     default: { http: ['http://localhost:8545'] },
   },
   blockExplorers: {
-    default: { name: 'NilExplorer', url: 'http://localhost:5173' }, // Self-referential for now
+    default: { name: 'NilExplorer', url: 'http://localhost:5173' },
   },
 })
 
 export const config = createConfig({
   chains: [nilChain, mainnet, sepolia],
   transports: {
-    [nilChain.id]: http(),
+    [nilChain.id]: http('http://localhost:8545'),
     [mainnet.id]: http(),
     [sepolia.id]: http(),
   },

@@ -1,8 +1,10 @@
 import { useAccount } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useEffect, useState } from 'react'
-import { Coins, RefreshCw, UploadCloud } from 'lucide-react'
+import { Coins, RefreshCw, UploadCloud, SendHorizonal } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
+import { useCreateDeal } from '../hooks/useCreateDeal'
+import { appConfig } from '../config'
 
 interface Deal {
   id: string
@@ -16,9 +18,15 @@ interface Deal {
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const { requestFunds, loading: faucetLoading } = useFaucet()
+  const { submitDeal, loading: dealLoading, lastTx } = useCreateDeal()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(false)
   const [nilAddress, setNilAddress] = useState('')
+  const [cid, setCid] = useState('')
+  const [size, setSize] = useState('1048576')
+  const [duration, setDuration] = useState('100')
+  const [initialEscrow, setInitialEscrow] = useState('1000000')
+  const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
 
   useEffect(() => {
     if (address) {
@@ -33,9 +41,7 @@ export function Dashboard() {
   async function fetchDeals(owner: string) {
     setLoading(true)
     try {
-        // Assuming default Cosmos REST port 1317
-        // In production this should be an env var
-        const response = await fetch('http://localhost:1317/nilchain/nilchain/v1/deals')
+        const response = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals`)
         const data = await response.json()
         if (data.deals) {
             // Filter client-side for now as discussed
@@ -56,6 +62,27 @@ export function Dashboard() {
       } catch (e) {
           alert('Failed to request funds. Is the faucet running?')
       }
+  }
+
+  const handleCreateDeal = async () => {
+    if (!cid.trim()) {
+      alert('CID is required')
+      return
+    }
+    try {
+      await submitDeal({
+        creator: address || nilAddress,
+        cid: cid.trim(),
+        size: Number(size || '0'),
+        duration: Number(duration || '0'),
+        initialEscrow,
+        maxMonthlySpend,
+      })
+      alert('Deal submitted for creation. Check wallet balance and blocks for confirmation.')
+      if (nilAddress) fetchDeals(nilAddress)
+    } catch (e) {
+      alert('Deal submission failed. Check faucet server logs.')
+    }
   }
 
   if (!isConnected) return (
@@ -96,6 +123,53 @@ export function Dashboard() {
                     </div>
                 </div>
             </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-white font-semibold">
+            <SendHorizonal className="w-4 h-4 text-indigo-400" />
+            Create Storage Deal (beta)
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Root CID</span>
+              <input value={cid} onChange={e => setCid(e.target.value)} placeholder="bafy..." className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Size (bytes)</span>
+              <input value={size} onChange={e => setSize(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Duration (blocks)</span>
+              <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Initial Escrow (stake)</span>
+              <input value={initialEscrow} onChange={e => setInitialEscrow(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+            <label className="space-y-1 text-gray-400">
+              <span className="text-xs uppercase tracking-wide text-gray-500">Max Monthly Spend (stake)</span>
+              <input value={maxMonthlySpend} onChange={e => setMaxMonthlySpend(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-gray-500">
+              From: <span className="font-mono text-indigo-300">{address || nilAddress}</span>
+              {lastTx && <div className="text-green-400 mt-1">Last tx: {lastTx}</div>}
+            </div>
+            <button
+              onClick={handleCreateDeal}
+              disabled={dealLoading}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-md disabled:opacity-50"
+            >
+              {dealLoading ? 'Submitting...' : 'Submit Deal'}
+            </button>
+          </div>
+          <p className="text-xs text-yellow-400">
+            Note: The faucet service broadcasts this tx using its local keyring. Ensure the faucet is running with funds.
+          </p>
         </div>
       </div>
 

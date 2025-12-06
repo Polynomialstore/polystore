@@ -185,6 +185,7 @@ We have executed a major refactor of the protocol specification to replace "Phys
 2.  **Validator Gentx Fix:** `MsgCreateValidator` now sets the delegator (account prefix) alongside the validator address so gentx files are well-formed.
 3.  **EVM Metadata Auto-Injection:** `collect-gentxs` auto-adds `aatom/atom` denom metadata (with `uatom` alias), unblocking EVM init.
 4.  **Clean Genesis Flow:** `nilchaind genesis` now runs end-to-end again (init -> add-genesis-account -> gentx -> collect-gentxs). Start nodes with `--minimum-gas-prices=0.001aatom` to match the EVM/feemarket defaults.
+5.  **Frontend & Faucet:** Added MetaMask-compatible chain config (chain-id 262144), wired faucet + deal submission endpoints, and shipped a browser form to request funds and create storage deals via the faucet service.
 
 ## Phase 3: Implementation Plan (To-Do List)
 

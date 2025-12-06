@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ethToNil } from '../lib/address'
+import { appConfig } from '../config'
 
 export function useFaucet() {
   const [loading, setLoading] = useState(false)
@@ -12,7 +13,7 @@ export function useFaucet() {
         // Convert to Bech32 if it's an 0x address
         const targetAddress = address.startsWith('0x') ? ethToNil(address) : address
 
-        const response = await fetch('http://localhost:8081/faucet', {
+        const response = await fetch(`${appConfig.apiBase}/faucet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: targetAddress })

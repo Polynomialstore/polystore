@@ -6,7 +6,7 @@ export const TestnetDocs = () => {
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-4xl">
       <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-4 text-foreground">Testnet Launch Guide (v0.1.0-rc1)</h1>
+        <h1 className="text-4xl font-bold mb-4 text-foreground">Testnet Launch Guide (v0.1.1)</h1>
         <p className="text-xl text-muted-foreground">
           Welcome to "Store Wars". This guide covers everything you need to participate: installing the release binaries, getting testnet funds, and running your first deal.
         </p>
@@ -25,7 +25,7 @@ export const TestnetDocs = () => {
           
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
-              <h3 className="font-bold text-lg text-foreground">1. Build & Run Chain</h3>
+              <h3 className="font-bold text-lg text-foreground">1. Build & Run Chain (EVM enabled)</h3>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># Clone Repository</p>
                 <p>$ git clone https://github.com/Nil-Store/nil-store.git</p>
@@ -35,8 +35,13 @@ export const TestnetDocs = () => {
                 <p>$ make install</p>
                 <br/>
                 <p className="text-green-400"># Initialize & Start</p>
-                <p>$ nilchaind init my-node --chain-id nilchain</p>
-                <p>$ nilchaind start</p>
+                <p>$ nilchaind init my-node --chain-id test-1</p>
+                <p>$ nilchaind genesis add-genesis-account $WALLET 100000000000stake,1000000000000000000000aatom --home ~/.nilchain --keyring-backend test</p>
+                <p>$ nilchaind genesis gentx $WALLET 50000000000stake --chain-id test-1 --keyring-backend test</p>
+                <p>$ nilchaind genesis collect-gentxs</p>
+                <p className="text-yellow-500"># Enable EVM/JSON-RPC in app.toml</p>
+                <p>$ sed -i '' 's/enable = false/enable = true/' ~/.nilchain/config/app.toml</p>
+                <p>$ nilchaind start --minimum-gas-prices 0.001aatom</p>
               </div>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
@@ -45,9 +50,9 @@ export const TestnetDocs = () => {
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># In a new terminal window</p>
                 <p>$ cd nil-store/nil_faucet</p>
-                <p>$ go run main.go</p>
+                <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
                 <br/>
-                <p className="text-yellow-500 text-xs"># Note: Ensure 'faucet' key exists in keychain</p>
+                <p className="text-yellow-500 text-xs"># Note: Ensure 'faucet' key exists in keyring (keyring-backend test)</p>
               </div>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all md:col-span-2">
@@ -59,6 +64,19 @@ export const TestnetDocs = () => {
                 <p>$ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Web Flow */}
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Faucet + Deal)</h2>
+          <p className="text-muted-foreground">
+            With the faucet running, the Dashboard now lets you connect MetaMask, request funds (0x or nil1 address), and submit a storage deal directly from the browser. Deals are broadcast by the faucet service using its local keyring for now.
+          </p>
+          <div className="bg-secondary/10 rounded-xl p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
+            <p>$ # in nil_faucet/</p>
+            <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
+            <p># Open http://localhost:5173/#/dashboard and click "Get Testnet NIL" then "Submit Deal"</p>
           </div>
         </section>
 
@@ -84,16 +102,16 @@ export const TestnetDocs = () => {
                 </div>
                 <div>
                     <span className="text-gray-400 block">Chain ID</span>
-                    <span className="font-mono text-indigo-300">9000</span>
+                    <span className="font-mono text-indigo-300">262144</span>
                 </div>
                 <div>
                     <span className="text-gray-400 block">Currency Symbol</span>
-                    <span className="font-mono text-indigo-300">NIL</span>
+                    <span className="font-mono text-indigo-300">AATOM</span>
                 </div>
             </div>
             <div className="mt-6 pt-4 border-t border-indigo-500/20">
                 <p className="text-sm text-gray-400 mb-2">
-                    <strong>Tip:</strong> Click "Connect Wallet" in the top-right corner of this site to auto-add this network to MetaMask.
+                    <strong>Tip:</strong> Click "Connect Wallet" in the top-right corner of this site to auto-add this network to MetaMask. The UI now drives faucet and storage-deal submission end-to-end.
                 </p>
             </div>
           </div>
