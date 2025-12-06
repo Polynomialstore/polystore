@@ -27,10 +27,8 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 banner() { printf '\n=== %s ===\n' "$*"; }
 
 ensure_nilchaind() {
-  if [ ! -x "$NILCHAIND_BIN" ]; then
-    banner "Building nilchaind (via $GO_BIN)"
-    (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build ./cmd/nilchaind)
-  fi
+  banner "Building nilchaind (via $GO_BIN)"
+  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build ./cmd/nilchaind)
 }
 
 ensure_nil_cli() {
