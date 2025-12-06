@@ -565,6 +565,15 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	epochStr := strconv.FormatUint(epoch, 10)
 
+	// Ensure we have a valid 8 MiB MDU file for the proof generator.
+	mduPath, isTemp, err := ensureMduFileForProof(filePath)
+	if err != nil {
+		return "", err
+	}
+	if isTemp {
+		defer os.Remove(mduPath)
+	}
+
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
 	signCmd := exec.Command(
 		nilchaindBin,
@@ -572,7 +581,7 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		dealIDStr,
 		providerAddr,
 		epochStr,
-		filePath,
+		mduPath,
 		trustedSetup,
 		"--from", providerKeyName,
 		"--home", homeDir,
@@ -652,4 +661,62 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 		cid = v
 	}
 	return owner, cid, nil
+}
+
+// ensureMduFileForProof ensures we have a file of exactly 8 MiB to feed into
+// the sign-retrieval-receipt CLI. If the original file is already 8 MiB, it is
+// used directly; otherwise a temporary padded/truncated copy is created.
+func ensureMduFileForProof(origPath string) (string, bool, error) {
+	const mduSize = 8 * 1024 * 1024 // 8 MiB
+
+	info, err := os.Stat(origPath)
+	if err != nil {
+		return "", false, fmt.Errorf("stat failed for %s: %w", origPath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("not a regular file: %s", origPath)
+	}
+
+	if info.Size() == mduSize {
+		return origPath, false, nil
+	}
+
+	data, err := os.ReadFile(origPath)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to read %s: %w", origPath, err)
+	}
+
+	tmp, err := os.CreateTemp(uploadDir, "mdu-*.bin")
+	if err != nil {
+		return "", false, fmt.Errorf("CreateTemp for MDU failed: %w", err)
+	}
+
+	// Copy or truncate to 8 MiB.
+	if int64(len(data)) >= mduSize {
+		if _, err := tmp.Write(data[:mduSize]); err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			return "", false, fmt.Errorf("failed to write truncated MDU: %w", err)
+		}
+	} else {
+		if _, err := tmp.Write(data); err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			return "", false, fmt.Errorf("failed to write MDU prefix: %w", err)
+		}
+		// Pad the remainder with zeros.
+		padding := make([]byte, int(mduSize)-len(data))
+		if _, err := tmp.Write(padding); err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			return "", false, fmt.Errorf("failed to write MDU padding: %w", err)
+		}
+	}
+
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return "", false, fmt.Errorf("failed to close MDU file: %w", err)
+	}
+
+	return tmp.Name(), true, nil
 }
