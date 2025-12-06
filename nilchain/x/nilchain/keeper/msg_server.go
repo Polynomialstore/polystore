@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -89,8 +90,28 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
 	}
 
+	// Decode any owner override embedded in the service hint.
+	// For web flows, the gateway encodes hints as e.g. "General:owner=<nilAddress>"
+	// so that the logical Deal owner can differ from the tx signer (faucet).
+	rawHint := strings.TrimSpace(msg.ServiceHint)
+	serviceHint := rawHint
+	ownerAddrStr := msg.Creator
+	if idx := strings.Index(rawHint, ":owner="); idx != -1 {
+		base := strings.TrimSpace(rawHint[:idx])
+		ownerPart := strings.TrimSpace(rawHint[idx+len(":owner="):])
+		if ownerPart != "" {
+			if _, err := sdk.AccAddressFromBech32(ownerPart); err != nil {
+				return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", ownerPart)
+			}
+			ownerAddrStr = ownerPart
+		}
+		if base != "" {
+			serviceHint = base
+		}
+	}
+
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, msg.ServiceHint, types.DealBaseReplication)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, types.DealBaseReplication)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
@@ -104,8 +125,8 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	if msg.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
 	}
-	if msg.ServiceHint != "Hot" && msg.ServiceHint != "Cold" && msg.ServiceHint != "General" && msg.ServiceHint != "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", msg.ServiceHint)
+	if serviceHint != "Hot" && serviceHint != "Cold" && serviceHint != "General" && serviceHint != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHint)
 	}
 
 	initialEscrowAmount := msg.InitialEscrowAmount
@@ -129,14 +150,14 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		Id:                 dealID,
 		Cid:                msg.Cid,
 		Size_:              msg.Size_,
-		Owner:              msg.Creator,
+		Owner:              ownerAddrStr,
 		EscrowBalance:      initialEscrowAmount,
 		StartBlock:         uint64(ctx.BlockHeight()),
 		EndBlock:           uint64(ctx.BlockHeight()) + msg.DurationBlocks,
 		Providers:          assignedProviders,
 		RedundancyMode:     1,
 		CurrentReplication: currentReplication,
-		ServiceHint:        msg.ServiceHint,
+		ServiceHint:        serviceHint,
 		MaxMonthlySpend:    maxMonthlySpend,
 	}
 
@@ -264,6 +285,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
                 }
             }
         }
+		// Record failed proof attempt for liveness/performance observability.
+		if err := k.recordProofSummary(ctx, msg, deal, "Fail", false); err != nil {
+			ctx.Logger().Error("failed to record proof summary", "error", err)
+		}
 		return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 	}
 
@@ -423,7 +448,36 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		),
 	)
 
+	// Record successful proof for liveness/performance observability.
+	if err := k.recordProofSummary(ctx, msg, deal, tierName, true); err != nil {
+		ctx.Logger().Error("failed to record proof summary", "error", err)
+	}
+
 	return &types.MsgProveLivenessResponse{Success: true, Tier: tier, RewardAmount: totalReward.String()}, nil
+}
+
+// recordProofSummary stores a lightweight Proof summary in state so that the
+// web UI can render recent liveness/performance events via the existing
+// ListProofs query.
+func (k msgServer) recordProofSummary(ctx sdk.Context, msg *types.MsgProveLiveness, deal types.Deal, tierName string, ok bool) error {
+	proofID, err := k.ProofCount.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get next proof id: %w", err)
+	}
+
+	summary := types.Proof{
+		Id:          proofID,
+		Creator:     msg.Creator,
+		Commitment:  fmt.Sprintf("deal:%d/epoch:%d/tier:%s", msg.DealId, msg.EpochId, tierName),
+		Valid:       ok,
+		BlockHeight: ctx.BlockHeight(),
+	}
+
+	if err := k.Proofs.Set(ctx, proofID, summary); err != nil {
+		return fmt.Errorf("failed to store proof summary: %w", err)
+	}
+
+	return nil
 }
 
 // SignalSaturation handles MsgSignalSaturation to trigger pre-emptive scaling.

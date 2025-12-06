@@ -20,6 +20,7 @@ export function useCreateDeal() {
     setLastTx(null)
     try {
       const creator = input.creator.startsWith('0x') ? ethToNil(input.creator) : input.creator
+      const serviceHint = `General:owner=${creator}`
       const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,7 +29,7 @@ export function useCreateDeal() {
           cid: input.cid,
           size_bytes: input.size,
           duration_blocks: input.duration,
-          service_hint: 'General',
+          service_hint: serviceHint,
           initial_escrow: input.initialEscrow,
           max_monthly_spend: input.maxMonthlySpend,
         }),

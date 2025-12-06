@@ -6,6 +6,7 @@ import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2, ArrowDownRight, 
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpload } from '../hooks/useUpload'
+import { useProofs } from '../hooks/useProofs'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
 
@@ -49,6 +50,7 @@ export function Dashboard() {
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const { proofs, loading: proofsLoading } = useProofs()
 
   useEffect(() => {
     if (address) {
@@ -472,6 +474,58 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Liveness & Performance */}
+          {proofs.length > 0 && (
+            <div className="mt-6 overflow-hidden rounded-xl border border-gray-800 bg-gray-900/40">
+              <div className="px-6 py-3 border-b border-gray-800 bg-gray-950/40 text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Liveness &amp; Performance</span>
+                {proofsLoading && <span className="text-[10px] text-gray-500">Syncing proofs…</span>}
+              </div>
+              <table className="min-w-full divide-y divide-gray-800 text-xs">
+                <thead className="bg-gray-950/30">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Deal</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Provider</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Tier</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Block</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Valid</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {(() => {
+                    const myDealIds = new Set(deals.map((d) => d.id))
+                    const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
+                    return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
+                      <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-2 text-gray-200">
+                          {p.dealId ? `#${p.dealId}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-indigo-300">
+                          {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-gray-200">
+                          {p.tier || '—'}
+                        </td>
+                        <td className="px-4 py-2 text-gray-400">
+                          {p.blockHeight || 0}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                            p.valid
+                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                              : 'border-red-500/40 bg-red-500/10 text-red-300'
+                          }`}>
+                            {p.valid ? 'OK' : 'FAIL'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  })()}
                 </tbody>
               </table>
             </div>

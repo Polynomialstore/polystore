@@ -95,6 +95,52 @@ func TestCreateDeal(t *testing.T) {
 	require.Equal(t, int(types.DealBaseReplication), len(unique))
 }
 
+// TestCreateDeal_UserOwnedViaHint verifies that the logical Deal owner can be
+// overridden via the service hint encoding (used by the web gateway), while
+// the tx signer (creator) remains a separate account (e.g. faucet/sponsor).
+func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register enough providers for placement.
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte(fmt.Sprintf("provider_userown____%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+		})
+		require.NoError(t, err)
+	}
+
+	// Distinct sponsor (creator) and end-user owner.
+	sponsorBz := []byte("sponsor_____________")
+	sponsor, _ := f.addressCodec.BytesToString(sponsorBz)
+	userBz := []byte("end_user____________")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	msg := &types.MsgCreateDeal{
+		Creator:             sponsor,
+		Cid:                 "bafyuserownedcid",
+		Size_:               8 * 1024 * 1024,
+		DurationBlocks:      100,
+		// Encode owner override into the service hint as used by the web gateway.
+		ServiceHint:         fmt.Sprintf("General:owner=%s", user),
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+
+	res, err := msgServer.CreateDeal(f.ctx, msg)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, res.DealId, uint64(0))
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, user, deal.Owner, "deal owner should be overridden via service hint")
+	require.Equal(t, "General", deal.ServiceHint, "service hint should be normalised to base value")
+}
+
 // TestCreateDeal_BootstrapReplication verifies that on small devnets where the
 // active provider set is smaller than DealBaseReplication, we still create a
 // deal and cap replication at the number of available providers (bootstrap

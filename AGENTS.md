@@ -289,8 +289,23 @@ We have executed a major refactor of the protocol specification to replace "Phys
     *   **Remaining TODOs:** Client-side encryption and manifest creation in the browser, WASM-compiled `nil_core` for in-browser verification/sharding, user-signed `MsgCreateDeal` via an EVM→Cosmos bridge (so deals are owned by the MetaMask account instead of the faucet), full liveness/saturation UI (visualising `MsgProveLiveness` tiers and `MsgSignalSaturation`), and richer deal history/escrow charts.
 
 ### D. Process Requirements for Agents (for this phase)
-*   [ ] For each of the A/B/C tasks above:
+*   [x] For each of the A/B/C tasks above:
     *   Implement the smallest coherent slice.
     *   Run the most relevant tests (`go test ./...`, targeted e2e shell scripts, or UI smoke checks via `run_local_stack.sh`) before committing.
     *   Commit with a descriptive message (e.g. `feat(gateway): add upload->CID endpoint`).
     *   Push to **both** remotes after green tests: `git push origin main` and `git push nil-store main`.
+
+### E. User-Owned Deals & Liveness UI (Phase 3.2)
+*   [x] **Logical User-Owned Deals:** Allow deals created via the web gateway to be owned by the connected wallet’s Cosmos address:
+    *   The front-end encodes the end-user owner into `service_hint` (e.g. `General:owner=<nilAddress>`).
+    *   `MsgCreateDeal` parses this hint, normalises `ServiceHint` back to `General`, and sets `Deal.Owner` to the encoded owner while the tx signer (faucet) remains the sponsor.
+    *   A dedicated test (`TestCreateDeal_UserOwnedViaHint`) verifies that owner override works and that the base hint is preserved.
+*   [x] **Proof Summaries:** Record lightweight proof summaries on-chain in the existing `Proofs` collection:
+    *   On every `MsgProveLiveness` (success or failure), append a `Proof` with `{id, creator, commitment="deal:<id>/epoch:<epoch>/tier:<tier>", valid, block_height}`.
+    *   These are exposed via the existing `Query/ListProofs` gRPC+LCD endpoint (`GET /nilchain/nilchain/v1/proofs`).
+*   [x] **Liveness & Performance UI:** Add a "Liveness & Performance" panel to the Dashboard:
+    *   New hook `useProofs` fetches proofs from LCD, parses the commitment string into `{dealId, epochId, tier}`.
+    *   The panel shows recent proofs (filtered to the user’s deals when available) with columns for Deal ID, Provider, Tier, Block Height, and Valid/Fail badge.
+*   [ ] **Next Step (Future Agents):** Upgrade from logical ownership to fully user-signed deals:
+    *   Replace the hint-based owner override with a first-class `owner` field once proto tooling (`buf`/Ignite) is stable under the Go toolchain in this repo.
+    *   Introduce an EVM→Cosmos bridge or module wiring so MetaMask-signed EVM txs can directly result in `MsgCreateDeal` calls funded from the user’s escrow, not the faucet.
