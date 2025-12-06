@@ -618,34 +618,10 @@ export function Dashboard() {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => {
-                    if (!selectedDeal?.cid) return
-                    const url = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(selectedDeal.cid)}`
-                    // Fire-and-forget: submit a retrieval proof for this deal
-                    // while also opening the download in a new tab.
-                    ;(async () => {
-                      try {
-                        const res = await fetch(`${appConfig.gatewayBase}/gateway/prove-retrieval`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            cid: selectedDeal.cid,
-                            deal_id: Number(selectedDeal.id),
-                          }),
-                        })
-                        if (res.ok) {
-                          const json = await res.json().catch(() => null)
-                          const txHash = json && typeof json.tx_hash === 'string' ? json.tx_hash : undefined
-                          setStatusTone('success')
-                          setStatusMsg(txHash ? `Retrieval proof submitted: ${txHash}` : 'Retrieval proof submitted.')
-                        } else {
-                          setStatusTone('error')
-                          setStatusMsg('Retrieval proof submission failed. Check gateway logs.')
-                        }
-                      } catch {
-                        setStatusTone('error')
-                        setStatusMsg('Retrieval proof submission failed. Is the gateway running?')
-                      }
-                    })()
+                    if (!selectedDeal?.cid || !nilAddress) return
+                    const url = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
+                      selectedDeal.cid,
+                    )}?deal_id=${encodeURIComponent(selectedDeal.id)}&owner=${encodeURIComponent(nilAddress)}`
                     window.open(url, '_blank')
                   }}
                   className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-indigo-600/80 hover:bg-indigo-500 text-white rounded-md"

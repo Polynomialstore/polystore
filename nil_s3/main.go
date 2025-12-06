@@ -26,6 +26,7 @@ var (
 	homeDir         = envDefault("NIL_HOME", "../_artifacts/nilchain_data")
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
+	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 )
 
 // Simple txhash extractor, shared with faucet-style flows.
@@ -270,17 +271,6 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := lookupFileInIndex(req.Cid)
-	if err != nil {
-		log.Printf("GatewayProveRetrieval: index lookup failed: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if entry == nil {
-		http.Error(w, "file not found for cid", http.StatusNotFound)
-		return
-	}
-
 	epoch := req.Epoch
 	if epoch == 0 {
 		epoch = 1
@@ -295,72 +285,24 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
-	dealIDStr := strconv.FormatUint(req.DealID, 10)
-	epochStr := strconv.FormatUint(epoch, 10)
-	signCmd := exec.Command(
-		nilchaindBin,
-		"tx", "nilchain", "sign-retrieval-receipt",
-		dealIDStr,
-		providerAddr,
-		epochStr,
-		entry.Path,
-		trustedSetup,
-		"--from", providerKeyName,
-		"--home", homeDir,
-		"--keyring-backend", "test",
-		"--offline",
-	)
-	signOut, err := signCmd.CombinedOutput()
+	entry, err := lookupFileInIndex(req.Cid)
 	if err != nil {
-		log.Printf("GatewayProveRetrieval: sign-retrieval-receipt failed: %s", string(signOut))
-		http.Error(w, "failed to sign retrieval receipt (check nilchaind logs)", http.StatusInternalServerError)
+		log.Printf("GatewayProveRetrieval: index lookup failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if entry == nil {
+		http.Error(w, "file not found for cid", http.StatusNotFound)
 		return
 	}
 
-	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
+	txHash, err := submitRetrievalProofWithParams(req.DealID, epoch, providerKeyName, providerAddr, entry.Path)
 	if err != nil {
-		log.Printf("GatewayProveRetrieval: CreateTemp failed: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	tmpPath := tmpFile.Name()
-	if _, err := tmpFile.Write(signOut); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		log.Printf("GatewayProveRetrieval: writing receipt file failed: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
-		log.Printf("GatewayProveRetrieval: closing receipt file failed: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	defer os.Remove(tmpPath)
-
-	// 2) Submit the receipt as a retrieval proof.
-	submitCmd := exec.Command(
-		nilchaindBin,
-		"tx", "nilchain", "submit-retrieval-proof",
-		tmpPath,
-		"--from", providerKeyName,
-		"--chain-id", chainID,
-		"--home", homeDir,
-		"--keyring-backend", "test",
-		"--yes",
-		"--gas-prices", gasPrices,
-	)
-	submitOut, err := submitCmd.CombinedOutput()
-	outStr := string(submitOut)
-	if err != nil {
-		log.Printf("GatewayProveRetrieval: submit-retrieval-proof failed: %s", outStr)
+		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		http.Error(w, "failed to submit retrieval proof (check nilchaind logs)", http.StatusInternalServerError)
 		return
 	}
 
-	txHash := extractTxHash(outStr)
 	log.Printf("GatewayProveRetrieval success: txhash=%s", txHash)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -373,7 +315,11 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 
 // GatewayFetch serves back a stored file by its Root CID.
 // This is a Mode 1 (FullReplica) helper for local/testnet flows where
-// the gateway acts as both ingress and provider.
+// the gateway acts as both ingress and provider. For devnet correctness,
+// it atomically:
+//   1) Verifies that the requested owner matches the on-chain Deal owner.
+//   2) Submits a retrieval proof (MsgProveLiveness) on-chain.
+//   3) Streams the file back to the caller.
 func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -388,6 +334,36 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	if dealIDStr == "" || owner == "" {
+		http.Error(w, "deal_id and owner query parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		return
+	}
+
+	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
+	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		log.Printf("GatewayFetch: failed to fetch deal %d: %v", dealID, err)
+		http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
+		return
+	}
+	if dealOwner == "" || dealOwner != owner {
+		http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+		return
+	}
+	if dealCID != "" && dealCID != cid {
+		http.Error(w, "cid does not match deal", http.StatusBadRequest)
+		return
+	}
+
 	entry, err := lookupFileInIndex(cid)
 	if err != nil {
 		log.Printf("GatewayFetch: lookup failed for cid %s: %v", cid, err)
@@ -396,6 +372,13 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	if entry == nil {
 		http.Error(w, "file not found for cid", http.StatusNotFound)
+		return
+	}
+
+	// 2) Submit the retrieval proof before serving the file.
+	if _, err := submitRetrievalProof(dealID, entry.Path); err != nil {
+		log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
+		http.Error(w, "failed to submit retrieval proof", http.StatusInternalServerError)
 		return
 	}
 
@@ -558,4 +541,110 @@ func resolveKeyAddress(name string) (string, error) {
 		return "", fmt.Errorf("keys show failed: %v (%s)", err, string(out))
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// submitRetrievalProof submits a retrieval proof for the given deal and file
+// using the default provider key and epoch.
+func submitRetrievalProof(dealID uint64, filePath string) (string, error) {
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerAddr, err := resolveKeyAddress(providerKeyName)
+	if err != nil {
+		return "", fmt.Errorf("resolveKeyAddress failed: %w", err)
+	}
+	return submitRetrievalProofWithParams(dealID, 1, providerKeyName, providerAddr, filePath)
+}
+
+// submitRetrievalProofWithParams generates a RetrievalReceipt via the CLI and
+// submits it as a retrieval proof, returning the tx hash.
+func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, providerAddr, filePath string) (string, error) {
+	dealIDStr := strconv.FormatUint(dealID, 10)
+	epochStr := strconv.FormatUint(epoch, 10)
+
+	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
+	signCmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "sign-retrieval-receipt",
+		dealIDStr,
+		providerAddr,
+		epochStr,
+		filePath,
+		trustedSetup,
+		"--from", providerKeyName,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--offline",
+	)
+	signOut, err := signCmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (%s)", err, string(signOut))
+	}
+
+	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
+	if err != nil {
+		return "", fmt.Errorf("CreateTemp failed: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(signOut); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("writing receipt file failed: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("closing receipt file failed: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	// 2) Submit the receipt as a retrieval proof.
+	submitCmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpPath,
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas-prices", gasPrices,
+	)
+	submitOut, err := submitCmd.CombinedOutput()
+	outStr := string(submitOut)
+	if err != nil {
+		return "", fmt.Errorf("submit-retrieval-proof failed: %w (%s)", err, outStr)
+	}
+
+	return extractTxHash(outStr), nil
+}
+
+// fetchDealOwnerAndCID calls the LCD to retrieve the deal owner and CID for a given deal ID.
+func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
+	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", "", fmt.Errorf("LCD request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload struct {
+		Deal map[string]any `json:"deal"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", "", fmt.Errorf("failed to decode LCD response: %w", err)
+	}
+	if payload.Deal == nil {
+		return "", "", fmt.Errorf("LCD response missing deal field")
+	}
+
+	if v, ok := payload.Deal["owner"].(string); ok {
+		owner = v
+	}
+	if v, ok := payload.Deal["cid"].(string); ok {
+		cid = v
+	}
+	return owner, cid, nil
 }
