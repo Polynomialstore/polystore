@@ -188,6 +188,12 @@ We have executed a major refactor of the protocol specification to replace "Phys
 5.  **Frontend & Faucet:** Added MetaMask-compatible chain config (chain-id 262144), wired faucet + deal submission endpoints, and shipped a browser form to request funds and create storage deals via the faucet service.
 6.  **Local Stack Runner:** Added `scripts/run_local_stack.sh` to spin up nilchaind (EVM/REST/JSON-RPC), the faucet, and the web UI with one command; supports `start|stop`.
 
+**Change Log (Session 5: Fresh Genesis + Stack Stability)**
+
+1.  **Always-Fresh Genesis:** `run_local_stack.sh start` now wipes the chain home and rebuilds genesis every run (new deterministic faucet mnemonic: `course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole`).
+2.  **EVM Denom Safety:** Injects `aatom` denom metadata and matching supply into genesis before start, eliminating the `evm coin info: denom metadata aatom could not be found` panic.
+3.  **Start/Stop Hardening:** Removed data directory nuking (keeps `priv_validator_state.json`), added liveness checks for nilchaind/faucet, and added port-based cleanup in `stop` to avoid stale faucet/web processes.
+
 ## Phase 3: Implementation Plan (To-Do List)
 
 ### 1. Spec Alignment: Protobuf Definitions (Go)
