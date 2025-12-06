@@ -195,6 +195,12 @@ We have executed a major refactor of the protocol specification to replace "Phys
 3.  **Start/Stop Hardening:** Removed data directory nuking (keeps `priv_validator_state.json`), added liveness checks for nilchaind/faucet, and added port-based cleanup in `stop` to avoid stale faucet/web processes.
 4.  **Faucet Defaults:** Faucet now dispenses both `aatom` (1e18) and `stake` (1e6) per request with gas priced in `aatom`, so MetaMask accounts get usable EVM gas immediately.
 
+**Change Log (Session 6: EVM JSON-RPC Bridge & Tooling)**
+
+1.  **Go Tooling:** Default local builds use `GO_BIN=/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go` (falls back to system `go`), aligning with the requested gvm toolchain.
+2.  **EVM JSON-RPC Bridge:** Added `tools/evm_jsonrpc_bridge` (read-only) exposing `eth_chainId`, `eth_blockNumber`, `eth_getBalance`, and `eth_gasPrice` by proxying LCD. CORS is wide open for the web UI.
+3.  **Stack Runner:** `scripts/run_local_stack.sh` now boots the bridge with liveness checks so port 8545 is up immediately after `start`.
+
 ## Phase 3: Implementation Plan (To-Do List)
 
 ### 1. Spec Alignment: Protobuf Definitions (Go)

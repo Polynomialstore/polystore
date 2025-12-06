@@ -17,6 +17,10 @@ DENOM="${NIL_DENOM:-stake}"
 FAUCET_AMOUNT="${NIL_AMOUNT:-1000000000000000000aatom,100000000stake}"
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
+if [ ! -x "$GO_BIN" ]; then
+  GO_BIN="$(command -v go)"
+fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
@@ -24,8 +28,8 @@ banner() { printf '\n=== %s ===\n' "$*"; }
 
 ensure_nilchaind() {
   if [ ! -x "$NILCHAIND_BIN" ]; then
-    banner "Building nilchaind (go1.25.5)"
-    (cd "$ROOT_DIR/nilchain" && GOTOOLCHAIN=go1.25.5 go build ./cmd/nilchaind)
+    banner "Building nilchaind (via $GO_BIN)"
+    (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build ./cmd/nilchaind)
   fi
 }
 
@@ -149,12 +153,29 @@ start_web() {
   echo "web pid $(cat "$PID_DIR/website.pid"), logs: $LOG_DIR/website.log"
 }
 
+start_evm_bridge() {
+  banner "Starting EVM JSON-RPC bridge (read-only)"
+  (
+    cd "$ROOT_DIR/tools/evm_jsonrpc_bridge"
+    nohup "$GO_BIN" run . >"$LOG_DIR/evm_bridge.log" 2>&1 &
+    echo $! > "$PID_DIR/evm_bridge.pid"
+  )
+  sleep 0.5
+  if ! kill -0 "$(cat "$PID_DIR/evm_bridge.pid")" 2>/dev/null; then
+    echo "evm bridge failed; check $LOG_DIR/evm_bridge.log"
+    tail -n 40 "$LOG_DIR/evm_bridge.log" || true
+    exit 1
+  fi
+  echo "bridge pid $(cat "$PID_DIR/evm_bridge.pid"), logs: $LOG_DIR/evm_bridge.log"
+}
+
 start_all() {
   stop_all
   ensure_nilchaind
   init_chain
   start_chain
   start_faucet
+  start_evm_bridge
   start_web
   banner "Stack ready"
   cat <<EOF
@@ -170,7 +191,7 @@ EOF
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet website; do
+  for svc in nilchaind faucet evm_bridge website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
