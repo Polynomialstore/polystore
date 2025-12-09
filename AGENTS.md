@@ -213,5 +213,11 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
     *   [x] **Task:** Update `useCreateDeal.ts` to call the new `GatewayCreateDeal` (with tiers).
     *   [x] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
 
-### 3. Work Stream: The Deputy System (Phase 2 - Optional)
-*   [x] **Task:** Implement the "Receiver" side of `AskForProxy` (fetch data from target and return to requester).
+### 4. Work Stream: Visualizations & Marketing
+*   [x] **Task:** Implement interactive Performance Market visualization in `nil-website` (The Latency Racer).
+*   [ ] **Task:** Visualize `DealHeatState` in Deal Explorer (pending HeatState query availability).
+
+## Future Phases
+*   **Web2 Wrapper:** S3 Adapter documentation and further integration.
+*   **Governance:** DAO & Council setup visualization.
+*   **Adversarial Simulation:** End-to-End attack simulation & visualization (P&L model).
