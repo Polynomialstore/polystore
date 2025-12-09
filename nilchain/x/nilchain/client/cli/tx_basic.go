@@ -95,20 +95,22 @@ func CmdCreateDeal() *cobra.Command {
 
 func CmdUpdateDealContent() *cobra.Command {
     cmd := &cobra.Command{
-        Use:   "update-deal-content [deal-id] [cid] [size]",
+        Use:   "update-deal-content",
         Short: "Update/Commit content for an existing deal",
-        Args:  cobra.ExactArgs(3),
+        Args:  cobra.NoArgs, // No positional arguments
         RunE: func(cmd *cobra.Command, args []string) (err error) {
             clientCtx, err := client.GetClientTxContext(cmd)
             if err != nil {
                 return err
             }
 
-            dealId, err := strconv.ParseUint(args[0], 10, 64)
+            dealId, err := cmd.Flags().GetUint64("deal-id")
             if err != nil { return err }
             
-            cid := args[1]
-            size, err := strconv.ParseUint(args[2], 10, 64)
+            cid, err := cmd.Flags().GetString("cid")
+            if err != nil { return err }
+
+            size, err := cmd.Flags().GetUint64("size")
             if err != nil { return err }
 
             msg := types.MsgUpdateDealContent{
@@ -121,6 +123,12 @@ func CmdUpdateDealContent() *cobra.Command {
             return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
         },
     }
+    cmd.Flags().Uint64("deal-id", 0, "ID of the deal to update")
+    cmd.Flags().String("cid", "", "New CID (manifest root) for the deal content")
+    cmd.Flags().Uint64("size", 0, "New size of the content in bytes")
+    _ = cmd.MarkFlagRequired("deal-id")
+    _ = cmd.MarkFlagRequired("cid")
+    _ = cmd.MarkFlagRequired("size")
     flags.AddTxFlagsToCmd(cmd)
     return cmd
 }

@@ -53,6 +53,7 @@ func main() {
 	// Gateway endpoints used by the web UI
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
@@ -278,6 +279,112 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type updateDealContentRequest struct {
+	Creator   string `json:"creator"`
+	DealID    uint64 `json:"deal_id"`
+	Cid       string `json:"cid"`
+	SizeBytes uint64 `json:"size_bytes"`
+}
+
+// GatewayUpdateDealContent is a legacy/devnet helper to commit content to a deal
+// using the faucet key. It only works if the deal is owned by the faucet (or
+// whoever the local keyring signs for).
+func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var req updateDealContentRequest
+	    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	        http.Error(w, "invalid JSON", http.StatusBadRequest)
+	        return
+	    }
+	    if req.Cid == "" || req.SizeBytes == 0 { // DealID can be 0, which is valid.
+	        http.Error(w, "missing fields", http.StatusBadRequest)
+	        return
+	    }
+	
+	    	dealIDStr := strconv.FormatUint(req.DealID, 10)
+	
+	    	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
+	
+	    
+	
+	    		log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
+	
+	    
+	
+	    		cmd := exec.Command(
+	
+	    
+	
+	    			nilchaindBin,
+	
+	    
+	
+	    			"tx", "nilchain", "update-deal-content",
+	
+	    
+	
+	    			"--deal-id", dealIDStr,
+	
+	    
+	
+	    			"--cid", req.Cid,
+	
+	    
+	
+	    			"--size", sizeStr,
+	
+	    
+	
+	    			"--chain-id", chainID,
+	
+	    
+	
+	    			"--from", "faucet",
+	
+	    
+	
+	    			"--yes",
+	
+	    
+	
+	    			"--keyring-backend", "test",
+	
+	    
+	
+	    			"--home", homeDir,
+	
+	    
+	
+	    			"--gas-prices", gasPrices,
+	
+	    
+	
+	    		)
+
+	out, err := cmd.CombinedOutput()
+	outStr := string(out)
+	if err != nil {
+		log.Printf("GatewayUpdateDealContent failed: %s", outStr)
+		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	txHash := extractTxHash(outStr)
+	log.Printf("GatewayUpdateDealContent success: txhash=%s", txHash)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"tx_hash": txHash,
+	}); err != nil {
+		log.Printf("GatewayUpdateDealContent encode error: %v", err)
+	}
+}
+
 // GatewayCreateDealFromEvm accepts an EVM-signed deal intent and forwards it
 // to nilchaind via the MsgCreateDealFromEvm CLI path. This is the primary
 // devnet/testnet entrypoint for user-signed deals.
@@ -418,6 +525,26 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize {
 		http.Error(w, "intent must include cid and size_bytes", http.StatusBadRequest)
 		return
+	}
+
+	// Best-effort numeric check for size_bytes > 0.
+	switch v := rawSize.(type) {
+	case float64:
+		if v <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
+	case int64:
+		if v <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil || n <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
 	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-update-*.json")

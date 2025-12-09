@@ -27,8 +27,10 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 banner() { printf '\n=== %s ===\n' "$*"; }
 
 ensure_nilchaind() {
-  banner "Building nilchaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build ./cmd/nilchaind)
+  banner "Building and installing nilchaind (via $GO_BIN)"
+  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$ROOT_DIR/nilchain/nilchaind" ./cmd/nilchaind)
+  # Also install to GOPATH/bin to ensure it's in PATH for arbitrary shell calls
+  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
 }
 
 ensure_nil_cli() {
