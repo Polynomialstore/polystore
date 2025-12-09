@@ -142,42 +142,45 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
 
 In the current devnet, the CLI (`sign-retrieval-receipt` and `submit-retrieval-proof`) drives receipt creation and submission. Web flows may fetch data over HTTP without yet emitting on‑chain receipts; this is considered **non‑normative** and will be aligned with this section as the EVM→Cosmos bridge and user‑signed deals mature.
 
-### 7.3 Data Commitment Binding (Normative)
+### 7.3 Data Commitment Binding (Normative: The Triple Proof)
 
-To prevent proofs over arbitrary data, all Mode 1 retrieval and storage proofs MUST be bound to the Deal’s on‑chain data commitment:
+To prevent proofs over arbitrary data while enabling scalability to Petabyte datasets, all Mode 1 retrieval and storage proofs MUST use the **Triple Proof (Chained Verification)** architecture. This mechanism enables the blockchain to verify a specific byte of data while storing only a single 48-byte commitment (`ManifestRoot`) for the entire Deal.
 
-1.  **Deal Commitments:** For each `Deal`, the chain MUST store one or more cryptographic commitments to the encrypted data, e.g.:
-    *   A Root CID for the File Manifest (as defined in Appendix A.3).
-    *   One or more MDU‑level Merkle roots over KZG blob commitments corresponding to the stored ciphertext.
-2.  **Proof Binding:** Any `KzgProof` used in `MsgProveLiveness` (either `system_proof` or `user_receipt.proof_details`) MUST be verified against the commitment(s) recorded in the corresponding `Deal`. A proof whose `mdu_merkle_root` does not match one of the Deal’s registered roots MUST be rejected.
-3.  **Forward Compatibility:** In future redundancy modes (StripeReplica), additional per‑stripe or overlay commitments MAY be added, but the binding rule remains: all KZG proofs MUST verify against the Deal’s active on‑chain commitments.
+1.  **Deal Commitments:** For each `Deal`, the chain stores only the **Manifest Root** (48-byte KZG Commitment). This root commits to a Manifest Polynomial $P(x)$ where each evaluation $y = P(i)$ corresponds to the scalar field representation of the Merkle Root of MDU $i$.
+    *   `Deal.manifest_root` is the anchor of trust for the entire file.
+2.  **Chained Proof Binding:** Any proof used in `MsgProveLiveness` (specifically `ChainedProof`) MUST bridge the gap from `Deal.manifest_root` to the specific data byte in three hops:
+    *   **Hop 1 (Identity - KZG):** Prove that the MDU Merkle Root (as a scalar `mdu_root_fr`) is committed in the Manifest Polynomial at the correct `mdu_index`.
+        *   `VerifyKZG(Deal.manifest_root, mdu_index, mdu_root_fr, manifest_opening)`
+    *   **Hop 2 (Structure - Merkle):** Prove that the 128KB Blob Commitment is a leaf in the MDU's Merkle Tree.
+        *   `VerifyMerkle(mdu_root_fr, blob_commitment, merkle_path)`
+    *   **Hop 3 (Data - KZG):** Prove that the Data Byte is the evaluation of the Blob Polynomial at the challenge point.
+        *   `VerifyKZG(blob_commitment, z_value, y_value, kzg_opening_proof)`
 
-### 7.4 Valid Retrieval Challenge (Mode 1 Mainnet Target)
+### 7.4 The Verification Algorithm
 
-For mainnet Mode 1, NilStore formalizes what it means for a retrieval to be a **valid challenge** against a particular `(Deal, Provider)` pair. This definition underpins both rewards and slashing.
+The verifier (Chain Node) executes the following logic inside the `MsgProveLiveness` handler to validate a `ChainedProof`.
 
-1.  **Epoch‑Scoped Randomness:** Each block epoch `e` has a randomness beacon `R_e` derived from consensus. SPs MUST NOT be able to bias or predict `R_e` far in advance.
-2.  **Challenge Tuple:** A retrieval initiated against `(deal_id, provider_id)` in epoch `e` is a valid challenge if it carries the tuple:
-    *   `deal_id`, `provider_id`
-    *   `epoch_e`
-    *   `offset`, `length` (byte range within the file)
-    *   `channel_id` (opaque payment channel identifier bound on‑chain to `(deal_id, provider_id)`)
-    *   `session_nonce` (fresh 32‑byte random chosen by the client)
-3.  **Deterministic KZG Checkpoint:** Both client and Provider derive a single KZG checkpoint for this retrieval:
+**Algorithm: `VerifyChainedProof(Deal, Challenge, Proof)`**
 
-    ```text
-    (mdu_index, blob_index, eval_x) =
-        DeriveCheckPoint(R_e, deal_id, channel_id, session_nonce, offset, length)
-    ```
+1.  **Input Sanity Check:**
+      * Ensure `Proof.mdu_index` matches the MDU index derived from `Challenge`.
+      * Ensure `Proof.mdu_index < Deal.total_mdus`.
 
-    *   `DeriveCheckPoint` is a public, deterministic function (e.g. a domain‑separated hash / PRF) whose exact encoding is specified in the implementation, but whose inputs MUST include `R_e`, `deal_id`, `channel_id`, `session_nonce`, and the requested range.
-    *   The Provider MUST return data plus a KZG proof that opens the committed blob at `(mdu_index, blob_index)` at point `eval_x`.
-4.  **Assignment & Capability Checks:** A retrieval counts as a valid protocol challenge only if:
-    *   `provider_id ∈ Deal.providers[]` at the time of the challenge, and
-    *   `channel_id` refers to a live on‑chain channel capability bound to `(deal_id, provider_id)` with sufficient remaining `limit_bytes` and a non‑expired `expiry_epoch`.
-5.  **Devnet/Testnet Approximation:** Current devnet/testnet flows MAY approximate `DeriveCheckPoint` (e.g. fixed `mdu_index = 0`) and avoid explicit `channel_id`s, but MUST evolve towards this definition. Any such approximations MUST be clearly documented in `AGENTS.md` and treated as temporary.
+2.  **Hop 1: Verify Identity (The Map) [KZG]**
+      * *Goal:* Prove that the SP isn't lying about the Merkle Root of the target MDU.
+      * *Check:* `VerifyKZG(Deal.manifest_root, Proof.mdu_index, Proof.mdu_root_fr, Proof.manifest_opening)` MUST return TRUE.
 
-This definition ensures that every retrieval has the **potential** to be used as a storage proof, and that SPs cannot know in advance which requests will later be used as evidence.
+3.  **Hop 2: Verify Structure (The MDU) [Merkle]**
+      * *Goal:* Prove that the specific 128KB Blob is actually part of that MDU.
+      * *Check:* `VerifyMerkle(Proof.mdu_root_fr, Proof.challenged_kzg_commitment, Proof.merkle_path)` MUST return TRUE.
+      * *Note:* `Proof.mdu_root_fr` is a scalar; it must be converted or hashed to match the Merkle root format.
+
+4.  **Hop 3: Verify Data (The Blob) [KZG]**
+      * *Goal:* Prove that the SP possesses the data inside that Blob.
+      * *Check:* `VerifyKZG(Proof.challenged_kzg_commitment, Proof.z_value, Proof.y_value, Proof.kzg_opening_proof)` MUST return TRUE.
+
+5.  **Result:**
+      * If all 3 hops pass, the proof is valid. The SP has proven possession of the specific byte requested by the protocol.
 
 ### 7.5 Evidence Types & Fraud Proofs
 

@@ -74,14 +74,18 @@ func CmdSignRetrievalReceipt() *cobra.Command {
                 merklePath = append(merklePath, merkleProof[i:i+32])
             }
 
-			kzgProof := types.KzgProof{
-				MduMerkleRoot:                     root,
-				ChallengedKzgCommitment:           commitment,
-				ChallengedKzgCommitmentMerklePath: merklePath,
-				ChallengedKzgCommitmentIndex:      chunkIndex,
-				ZValue:                            z,
-				YValue:                            y,
-				KzgOpeningProof:                   kzgProofBytes,
+			chainedProof := types.ChainedProof{
+				MduIndex:        0,    // Mock: Hop 1 placeholder
+				MduRootFr:       root, // Mock: using root bytes as scalar bytes for now
+				ManifestOpening: nil,  // Mock: Hop 1 placeholder
+				
+				BlobCommitment:  commitment,
+				MerklePath:      merklePath,
+				BlobIndex:       chunkIndex,
+				
+				ZValue:          z,
+				YValue:          y,
+				KzgOpeningProof: kzgProofBytes,
 			}
 
 			// 2. Prepare anti-replay fields
@@ -116,7 +120,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				EpochId:       epochId,
 				Provider:      providerAddr,
 				BytesServed:   bytesServed,
-				ProofDetails:  kzgProof,
+				ProofDetails:  chainedProof,
 				UserSignature: sig,
 				Nonce:         nonce,
 				ExpiresAt:     expiresAt,

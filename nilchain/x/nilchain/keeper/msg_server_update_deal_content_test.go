@@ -1,6 +1,8 @@
 package keeper_test
 
 import (
+	"encoding/hex"
+	"strings"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -40,13 +42,12 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2. Commit Content
-	cid := "bafyhappyupdate"
 	size := uint64(100 * 1024 * 1024) // 100 MB
 
 	resUpd, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator: user,
 		DealId:  resDeal.DealId,
-		Cid:     cid,
+		Cid:     validManifestCid,
 		Size_:   size,
 	})
 	require.NoError(t, err)
@@ -55,7 +56,9 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	// 3. Verify State
 	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, cid, deal.Cid)
+	
+	expectedRoot, _ := hex.DecodeString(strings.TrimPrefix(validManifestCid, "0x"))
+	require.Equal(t, expectedRoot, deal.ManifestRoot)
 	require.Equal(t, size, deal.Size_)
 }
 
@@ -94,7 +97,7 @@ func TestUpdateDealContent_Unauthorized(t *testing.T) {
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator: bob,
 		DealId:  resDeal.DealId,
-		Cid:     "bafyhack",
+		Cid:     validManifestCid,
 		Size_:   100,
 	})
 	require.Error(t, err)
@@ -136,7 +139,7 @@ func TestUpdateDealContent_CapacityExceeded(t *testing.T) {
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator: user,
 		DealId:  resDeal.DealId,
-		Cid:     "bafybig",
+		Cid:     validManifestCid,
 		Size_:   size,
 	})
 	require.Error(t, err)
@@ -179,7 +182,7 @@ func TestUpdateDealContent_InvalidInput(t *testing.T) {
 
 	// Zero Size
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: "bafyzero", Size_: 0,
+		Creator: user, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 0,
 	})
 	require.Error(t, err)
 }

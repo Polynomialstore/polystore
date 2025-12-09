@@ -194,7 +194,7 @@ message MsgProveLiveness {
 
   oneof proof_type {
     RetrievalReceipt user_receipt = 4; // Path A (Hot)
-    KzgProof system_proof = 5;         // Path B (Cold)
+    ChainedProof system_proof = 5;     // Path B (Cold)
   }
 }
 

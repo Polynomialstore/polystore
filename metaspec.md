@@ -72,7 +72,7 @@ This section tracks implementation details specific to the current **Mode 1 �
 *   **Client‑Side Flow:**
     *   Users fetch encrypted MDUs from a single assigned Provider (HTTP/S3 gateway or P2P).
     *   After verifying the KZG proof for the served chunk, the Data Owner constructs a `RetrievalReceipt` containing:
-        *   `deal_id`, `epoch_id`, `provider`, `bytes_served`, `nonce`, `expires_at`, `KzgProof`, and `user_signature`.
+        *   `deal_id`, `epoch_id`, `provider`, `bytes_served`, `nonce`, `expires_at`, `proof_details` (ChainedProof), and `user_signature`.
         *   `nonce` is a strictly increasing counter scoped to the Deal Owner (or payer). `expires_at` bounds the receipt’s validity in time or blocks.
 *   **On‑Chain Flow:**
     *   Providers submit receipts via `MsgProveLiveness{ ProofType = UserReceipt }`.
@@ -80,7 +80,7 @@ This section tracks implementation details specific to the current **Mode 1 �
         *   Provider ∈ `Deal.providers[]`.
         *   `expires_at` has not passed.
         *   `nonce` is strictly greater than the last accepted nonce for this owner (or payer), using persistent state (e.g. `LastReceiptNonce[owner_address]`).
-        *   KZG proof is valid (trusted setup + Merkle path).
+        *   `proof_details` (ChainedProof) successfully opens the `Deal.manifest_root` (3-hop verification: Manifest -> MDU -> Blob -> Data).
         *   `user_signature` corresponds to the Deal Owner’s account (prevents SP‑only self‑dealing).
     *   Rewards and observability:
         *   Storage reward is computed with an inflationary decay schedule and latency‑tier multiplier.
@@ -150,18 +150,21 @@ To support the invariants, the protocol uses three challenge families, all ultim
 
 Devnet/testnet deployments MAY implement only a subset of these (e.g., retrieval receipts without synthetic scheduling), but should evolve toward this three‑tier model.
 
-### 7.3 Evidence Model & Slashing
+### 7.3 Evidence Model & Slashing (Triple Proof Architecture)
 
-Evidence is always interpreted relative to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` and the Deal’s commitments. The main evidence types are:
+Evidence is always interpreted relative to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` and the Deal’s commitments. To ensure scalability, NilStore uses a **Triple Proof** architecture (normatively defined in `spec.md` § 7.3) that chains verification from the Deal Root down to the specific Data Byte.
 
-1.  **Synthetic Storage Proofs**
-    *   System‑initiated KZG/Merkle openings for `S_e(D,P)`.
-    *   Successful proofs increase the Provider’s storage rewards and improve health.
+1.  **Chained Storage Proofs**
+    *   Any proof of possession (whether synthetic or retrieval-based) MUST provide a `ChainedProof` that satisfies the 3-hop verification:
+        *   **Hop 1 (Identity):** Authenticates the MDU Merkle Root against the Deal's Manifest Root (KZG).
+        *   **Hop 2 (Structure):** Authenticates the Blob Commitment against the MDU Merkle Root (Merkle).
+        *   **Hop 3 (Data):** Authenticates the Data Byte against the Blob Commitment (KZG).
 2.  **Retrieval‑Based Proofs**
-    *   User or auditor retrievals that produce a valid `RetrievalReceipt` (see `spec.md` § 7.2–7.5) can be submitted as on‑chain `RetrievalProof`s.
+    *   User or auditor retrievals that produce a valid `RetrievalReceipt` can be submitted as on‑chain `RetrievalProof`s.
+    *   The receipt MUST contain the full `ChainedProof` required to traverse the 3 hops.
     *   When the derived checkpoint lies in `S_e(D,P)` and verification succeeds, the retrieval also satisfies a synthetic challenge.
 3.  **Fraud Proofs (Wrong Data)**
-    *   If a retrieval response fails KZG/Merkle verification against the Deal’s commitments, the client can submit a `FraudProof`.
+    *   If a retrieval response fails verification at any of the 3 hops (e.g., MDU Root doesn't match Manifest, or Data Byte doesn't match Blob), the client can submit a `FraudProof`.
     *   A confirmed fraud proof MUST result in slashing for the implicated `(Deal, Provider)` and a sharp degradation of that Provider’s global health.
 4.  **Non‑Response Evidence**
     *   Failure to answer an explicit on‑chain challenge, or a sustained pattern of missed synthetic/retrieval challenges, is treated as evidence of unavailability.

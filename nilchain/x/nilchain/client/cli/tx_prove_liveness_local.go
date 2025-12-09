@@ -70,14 +70,18 @@ func CmdProveLivenessLocal() *cobra.Command {
 				DealId:  dealId,
                 EpochId: 1, // Placeholder
                 ProofType: &types.MsgProveLiveness_SystemProof{
-                    SystemProof: &types.KzgProof{
-                        MduMerkleRoot:                     root,
-                        ChallengedKzgCommitment:           commitment,
-                        ChallengedKzgCommitmentMerklePath: merklePath,
-                        ChallengedKzgCommitmentIndex:      chunkIndex,
-                        ZValue:                            z,
-                        YValue:                            y,
-                        KzgOpeningProof:                   kzgProof,
+                    SystemProof: &types.ChainedProof{
+						MduIndex:        0,    // Mock
+						MduRootFr:       root, // Mock
+						ManifestOpening: nil,  // Mock
+                        
+						BlobCommitment:  commitment,
+						MerklePath:      merklePath,
+						BlobIndex:       chunkIndex,
+						
+                        ZValue:          z,
+                        YValue:          y,
+                        KzgOpeningProof: kzgProof,
                     },
                 },
 			}
