@@ -1,32 +1,28 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
 
-export interface CreateDealInput {
+export interface UpdateDealContentInput {
   creator: string
-  sizeTier: number // 1=4GiB, 2=32GiB, 3=512GiB
-  duration: number
-  initialEscrow: string
-  maxMonthlySpend: string
-  replication: number
+  dealId: number
+  cid: string
+  sizeBytes: number
 }
 
-export function useCreateDeal() {
+export function useUpdateDealContent() {
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
 
-  async function submitDeal(input: CreateDealInput) {
+  async function submitUpdate(input: UpdateDealContentInput) {
     setLoading(true)
     setLastTx(null)
     try {
       const isEvm = input.creator.startsWith('0x')
       const evmAddress = isEvm ? input.creator : ''
       if (!isEvm) {
-        throw new Error('EVM address required for EVM-bridged deal creation')
+        throw new Error('EVM address required for EVM-bridged update')
       }
-      const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
-      const serviceHint = `General:replicas=${replicas}`
 
-      // Build EvmCreateDealIntent payload.
+      // Build Intent
       const nonceKey = `nilstore:evmNonces:${evmAddress.toLowerCase()}`
       const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
       const nextNonce = currentNonce + 1
@@ -34,16 +30,14 @@ export function useCreateDeal() {
 
       const intent = {
         creator_evm: evmAddress,
-        size_tier: input.sizeTier,
-        duration_blocks: input.duration,
-        service_hint: serviceHint,
-        initial_escrow: input.initialEscrow,
-        max_monthly_spend: input.maxMonthlySpend,
+        deal_id: input.dealId,
+        cid: input.cid,
+        size_bytes: input.sizeBytes,
         nonce: nextNonce,
         chain_id: appConfig.cosmosChainId,
       }
 
-      const message = buildEvmCreateDealMessage(intent)
+      const message = buildEvmUpdateContentMessage(intent)
       const ethereum = (window as any).ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
@@ -54,7 +48,7 @@ export function useCreateDeal() {
         params: [message, evmAddress],
       })
 
-      const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal-evm`, {
+      const response = await fetch(`${appConfig.gatewayBase}/gateway/update-deal-content-evm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,7 +59,7 @@ export function useCreateDeal() {
 
       if (!response.ok) {
         const errText = await response.text()
-        throw new Error(errText || 'Deal submission failed')
+        throw new Error(errText || 'Update content submission failed')
       }
 
       const json = await response.json().catch(() => ({}))
@@ -76,16 +70,14 @@ export function useCreateDeal() {
     }
   }
 
-  return { submitDeal, loading, lastTx }
+  return { submitUpdate, loading, lastTx }
 }
 
-function buildEvmCreateDealMessage(intent: {
+function buildEvmUpdateContentMessage(intent: {
   creator_evm: string
-  size_tier: number
-  duration_blocks: number
-  service_hint: string
-  initial_escrow: string
-  max_monthly_spend: string
+  deal_id: number
+  cid: string
+  size_bytes: number
   nonce: number
   chain_id: string
 }): string {
@@ -94,13 +86,11 @@ function buildEvmCreateDealMessage(intent: {
     : `0x${intent.creator_evm.trim().toLowerCase()}`
 
   const parts = [
-    'NILSTORE_EVM_CREATE_DEAL',
+    'NILSTORE_EVM_UPDATE_CONTENT',
     creator,
-    String(intent.size_tier),
-    String(intent.duration_blocks),
-    intent.service_hint.trim(),
-    intent.initial_escrow,
-    intent.max_monthly_spend,
+    String(intent.deal_id),
+    intent.cid.trim(),
+    String(intent.size_bytes),
     String(intent.nonce),
     intent.chain_id.trim(),
   ]

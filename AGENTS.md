@@ -200,18 +200,18 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 **Goal:** Update the frontend to reflect the "Container vs Content" model and visualize the new architecture.
 
 *   **Step A: Dashboard Updates (`src/components/Dashboard.tsx`)**
-    *   [ ] **Task:** Refactor "Create Storage Deal" into a multi-step component:
+    *   [x] **Task:** Refactor "Create Storage Deal" into a multi-step component:
         *   **Tab 1 (Alloc):** "Allocate Capacity". Inputs: Size Tier, Duration, Escrow. Calls `create-deal`.
         *   **Tab 2 (Content):** "Commit Content". Inputs: Deal ID (Select), File (Upload). Calls `update-deal-content`.
-    *   [ ] **Task:** Update Deal List to distinguish between "Empty" (Capacity only) and "Active" (Content Committed) deals.
-    *   [ ] **Task:** Add "Bytes Served" column (Heat) to the Deal List using `DealHeatState`.
+    *   [x] **Task:** Update Deal List to distinguish between "Empty" (Capacity only) and "Active" (Content Committed) deals.
+    *   [x] **Task:** Add "Bytes Served" column (Heat) to the Deal List using `DealHeatState` (via `proofs` aggregation for now, pending full HeatState exposure).
 *   **Step B: Deal Explorer (New Component/Page)**
     *   [ ] **Task:** Create `src/components/DealDetail.tsx`.
     *   [ ] **Task:** Visualize the "Manifest" (List of MDUs) if available (fetched from gateway).
     *   [ ] **Task:** Show "Liveness History" (Heatmap of proofs) and "Heat" stats.
 *   **Step C: Integration Hooks (`src/hooks/`)**
-    *   [ ] **Task:** Update `useCreateDeal.ts` to call the new `GatewayCreateDeal` (with tiers).
-    *   [ ] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
+    *   [x] **Task:** Update `useCreateDeal.ts` to call the new `GatewayCreateDeal` (with tiers).
+    *   [x] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
 
 ### 3. Work Stream: The Deputy System (Phase 2 - Optional)
 *   [ ] **Task:** Implement the "Receiver" side of `AskForProxy` (fetch data from target and return to requester).
