@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
+import { useProofs } from '../hooks/useProofs'
+import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 
 interface DealDetailProps {
   deal: any
@@ -29,6 +31,10 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [loadingManifest, setLoadingManifest] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
+  const { proofs } = useProofs()
+
+  // Filter proofs for this deal
+  const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
@@ -269,10 +275,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                     </div>
                 )}
 
-                {/* Placeholder for future charts */}
-                <div className="h-32 bg-gray-950/20 border border-gray-800 border-dashed rounded flex items-center justify-center text-xs text-gray-600">
-                    Liveness Heatmap Visualization (Coming Soon)
-                </div>
+                <DealLivenessHeatmap proofs={dealProofs} />
             </div>
         )}
       </div>
