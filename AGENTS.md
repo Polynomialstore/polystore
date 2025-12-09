@@ -218,7 +218,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
 ## Future Phases
-*   **Web2 Wrapper:** S3 Adapter documentation and further integration.
+*   **Web2 Wrapper:** S3 Adapter documentation and further integration (Updated S3AdapterDocs page).
 *   **Governance:** DAO & Council setup visualization.
 *   **Adversarial Simulation:** End-to-End attack simulation & visualization (P&L model - *Completed*).
 *   **Unified Liveness:** Integrate user traffic directly into consensus via `RetrievalReceipt` aggregation (partially implemented in Phase 2).

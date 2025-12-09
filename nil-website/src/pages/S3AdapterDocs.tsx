@@ -26,14 +26,14 @@ export const S3AdapterDocs = () => {
               <Database className="w-8 h-8 text-green-400 mb-4" />
               <h3 className="font-bold text-lg text-foreground">2. Sharding & Binding</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                The file is split into 8 MiB chunks. The adapter calls `nil-cli` (linked to Rust core) to generate KZG commitments for each chunk.
+                The file is split into <strong>8 MiB Mega-Data Units (MDUs)</strong>. The adapter generates a <strong>Manifest</strong> containing KZG commitments for each MDU, producing a single 48-byte Root Hash.
               </p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">
               <Terminal className="w-8 h-8 text-purple-400 mb-4" />
-              <h3 className="font-bold text-lg text-foreground">3. Chain Submission</h3>
+              <h3 className="font-bold text-lg text-foreground">3. Content Commitment</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                The commitments are submitted to `nilchain` via `MsgSubmitProof`. Once finalized, the file is considered "Stored".
+                The Root Hash is returned to the user or automatically committed to an active Storage Deal via `MsgUpdateDealContent`, binding the data to the network's capacity.
               </p>
             </div>
           </div>
