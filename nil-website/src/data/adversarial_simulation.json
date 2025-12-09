@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp": 1764888361.4857569,
+    "timestamp": 1765314988.4639812,
     "parameters": {
       "storage_cost_nvme": 0.02,
       "storage_cost_s3": 0.004,
@@ -15,8 +15,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.046,
-        "tier": "Platinum"
+        "balance": 100.026,
+        "tier": "Gold"
       }
     },
     {
@@ -27,7 +27,7 @@
       },
       "attacker": {
         "balance": 100.072,
-        "tier": "Gold"
+        "tier": "Platinum"
       }
     },
     {
@@ -37,8 +37,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.098,
-        "tier": "Gold"
+        "balance": 100.118,
+        "tier": "Platinum"
       }
     },
     {
@@ -49,7 +49,7 @@
       },
       "attacker": {
         "balance": 100.144,
-        "tier": "Platinum"
+        "tier": "Gold"
       }
     },
     {
@@ -70,8 +70,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.216,
-        "tier": "Platinum"
+        "balance": 100.196,
+        "tier": "Gold"
       }
     },
     {
@@ -81,8 +81,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.262,
-        "tier": "Platinum"
+        "balance": 100.222,
+        "tier": "Gold"
       }
     },
     {
@@ -92,8 +92,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.288,
-        "tier": "Gold"
+        "balance": 100.268,
+        "tier": "Platinum"
       }
     },
     {
@@ -103,7 +103,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.314,
+        "balance": 100.294,
         "tier": "Gold"
       }
     },
@@ -114,7 +114,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.34,
+        "balance": 100.32,
         "tier": "Gold"
       }
     },
@@ -125,8 +125,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.386,
-        "tier": "Platinum"
+        "balance": 100.346,
+        "tier": "Gold"
       }
     },
     {
@@ -136,8 +136,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.412,
-        "tier": "Gold"
+        "balance": 100.392,
+        "tier": "Platinum"
       }
     },
     {
@@ -148,7 +148,7 @@
       },
       "attacker": {
         "balance": 100.438,
-        "tier": "Gold"
+        "tier": "Platinum"
       }
     },
     {
@@ -158,8 +158,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.464,
-        "tier": "Gold"
+        "balance": 100.484,
+        "tier": "Platinum"
       }
     },
     {
@@ -169,7 +169,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.51,
+        "balance": 100.53,
         "tier": "Platinum"
       }
     },
@@ -180,8 +180,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.536,
-        "tier": "Gold"
+        "balance": 100.576,
+        "tier": "Platinum"
       }
     },
     {
@@ -191,7 +191,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.562,
+        "balance": 100.602,
         "tier": "Gold"
       }
     },
@@ -202,7 +202,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.608,
+        "balance": 100.648,
         "tier": "Platinum"
       }
     },
@@ -213,7 +213,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.654,
+        "balance": 100.694,
         "tier": "Platinum"
       }
     },
@@ -224,7 +224,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.68,
+        "balance": 100.72,
         "tier": "Gold"
       }
     },
@@ -235,8 +235,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.726,
-        "tier": "Platinum"
+        "balance": 100.746,
+        "tier": "Gold"
       }
     },
     {
@@ -247,7 +247,7 @@
       },
       "attacker": {
         "balance": 100.772,
-        "tier": "Platinum"
+        "tier": "Gold"
       }
     },
     {
@@ -257,8 +257,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.818,
-        "tier": "Platinum"
+        "balance": 100.798,
+        "tier": "Gold"
       }
     },
     {
@@ -268,7 +268,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.864,
+        "balance": 100.844,
         "tier": "Platinum"
       }
     },
@@ -279,7 +279,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.89,
+        "balance": 100.87,
         "tier": "Gold"
       }
     },
@@ -290,7 +290,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.936,
+        "balance": 100.916,
         "tier": "Platinum"
       }
     },
@@ -301,7 +301,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 100.982,
+        "balance": 100.962,
         "tier": "Platinum"
       }
     },
@@ -312,8 +312,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.028,
-        "tier": "Platinum"
+        "balance": 100.988,
+        "tier": "Gold"
       }
     },
     {
@@ -323,8 +323,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.074,
-        "tier": "Platinum"
+        "balance": 101.014,
+        "tier": "Gold"
       }
     },
     {
@@ -334,8 +334,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.12,
-        "tier": "Platinum"
+        "balance": 101.04,
+        "tier": "Gold"
       }
     },
     {
@@ -345,7 +345,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.146,
+        "balance": 101.066,
         "tier": "Gold"
       }
     },
@@ -356,8 +356,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.172,
-        "tier": "Gold"
+        "balance": 101.112,
+        "tier": "Platinum"
       }
     },
     {
@@ -367,8 +367,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.218,
-        "tier": "Platinum"
+        "balance": 101.138,
+        "tier": "Gold"
       }
     },
     {
@@ -378,8 +378,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.244,
-        "tier": "Gold"
+        "balance": 101.184,
+        "tier": "Platinum"
       }
     },
     {
@@ -389,8 +389,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.29,
-        "tier": "Platinum"
+        "balance": 101.21,
+        "tier": "Gold"
       }
     },
     {
@@ -400,7 +400,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.316,
+        "balance": 101.236,
         "tier": "Gold"
       }
     },
@@ -411,7 +411,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.342,
+        "balance": 101.262,
         "tier": "Gold"
       }
     },
@@ -422,7 +422,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.388,
+        "balance": 101.308,
         "tier": "Platinum"
       }
     },
@@ -433,8 +433,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.434,
-        "tier": "Platinum"
+        "balance": 101.334,
+        "tier": "Gold"
       }
     },
     {
@@ -444,7 +444,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.46,
+        "balance": 101.36,
         "tier": "Gold"
       }
     },
@@ -455,7 +455,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.506,
+        "balance": 101.406,
         "tier": "Platinum"
       }
     },
@@ -466,8 +466,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.552,
-        "tier": "Platinum"
+        "balance": 101.432,
+        "tier": "Gold"
       }
     },
     {
@@ -477,8 +477,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.598,
-        "tier": "Platinum"
+        "balance": 101.458,
+        "tier": "Gold"
       }
     },
     {
@@ -488,7 +488,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.644,
+        "balance": 101.504,
         "tier": "Platinum"
       }
     },
@@ -499,7 +499,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.67,
+        "balance": 101.53,
         "tier": "Gold"
       }
     },
@@ -510,7 +510,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.696,
+        "balance": 101.556,
         "tier": "Gold"
       }
     },
@@ -521,7 +521,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.722,
+        "balance": 101.582,
         "tier": "Gold"
       }
     },
@@ -532,7 +532,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.748,
+        "balance": 101.608,
         "tier": "Gold"
       }
     },
@@ -543,7 +543,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.774,
+        "balance": 101.634,
         "tier": "Gold"
       }
     },
@@ -554,8 +554,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.82,
-        "tier": "Platinum"
+        "balance": 101.66,
+        "tier": "Gold"
       }
     },
     {
@@ -565,7 +565,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.866,
+        "balance": 101.706,
         "tier": "Platinum"
       }
     },
@@ -576,7 +576,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.912,
+        "balance": 101.752,
         "tier": "Platinum"
       }
     },
@@ -587,7 +587,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 101.958,
+        "balance": 101.798,
         "tier": "Platinum"
       }
     },
@@ -598,7 +598,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.004,
+        "balance": 101.844,
         "tier": "Platinum"
       }
     },
@@ -609,8 +609,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.03,
-        "tier": "Gold"
+        "balance": 101.89,
+        "tier": "Platinum"
       }
     },
     {
@@ -620,8 +620,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.056,
-        "tier": "Gold"
+        "balance": 101.936,
+        "tier": "Platinum"
       }
     },
     {
@@ -631,8 +631,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.102,
-        "tier": "Platinum"
+        "balance": 101.962,
+        "tier": "Gold"
       }
     },
     {
@@ -642,8 +642,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.128,
-        "tier": "Gold"
+        "balance": 102.008,
+        "tier": "Platinum"
       }
     },
     {
@@ -653,8 +653,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.174,
-        "tier": "Platinum"
+        "balance": 102.034,
+        "tier": "Gold"
       }
     },
     {
@@ -664,8 +664,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.22,
-        "tier": "Platinum"
+        "balance": 102.06,
+        "tier": "Gold"
       }
     },
     {
@@ -675,8 +675,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.246,
-        "tier": "Gold"
+        "balance": 102.106,
+        "tier": "Platinum"
       }
     },
     {
@@ -686,8 +686,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.272,
-        "tier": "Gold"
+        "balance": 102.152,
+        "tier": "Platinum"
       }
     },
     {
@@ -697,8 +697,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.298,
-        "tier": "Gold"
+        "balance": 102.198,
+        "tier": "Platinum"
       }
     },
     {
@@ -708,7 +708,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.324,
+        "balance": 102.224,
         "tier": "Gold"
       }
     },
@@ -719,7 +719,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.37,
+        "balance": 102.27,
         "tier": "Platinum"
       }
     },
@@ -730,8 +730,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.416,
-        "tier": "Platinum"
+        "balance": 102.296,
+        "tier": "Gold"
       }
     },
     {
@@ -741,7 +741,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.462,
+        "balance": 102.342,
         "tier": "Platinum"
       }
     },
@@ -752,8 +752,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.488,
-        "tier": "Gold"
+        "balance": 102.388,
+        "tier": "Platinum"
       }
     },
     {
@@ -763,8 +763,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.534,
-        "tier": "Platinum"
+        "balance": 102.414,
+        "tier": "Gold"
       }
     },
     {
@@ -774,7 +774,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.56,
+        "balance": 102.44,
         "tier": "Gold"
       }
     },
@@ -785,7 +785,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.586,
+        "balance": 102.466,
         "tier": "Gold"
       }
     },
@@ -796,7 +796,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.612,
+        "balance": 102.492,
         "tier": "Gold"
       }
     },
@@ -807,8 +807,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.638,
-        "tier": "Gold"
+        "balance": 102.538,
+        "tier": "Platinum"
       }
     },
     {
@@ -818,7 +818,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.684,
+        "balance": 102.584,
         "tier": "Platinum"
       }
     },
@@ -829,8 +829,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.73,
-        "tier": "Platinum"
+        "balance": 102.61,
+        "tier": "Gold"
       }
     },
     {
@@ -840,8 +840,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.776,
-        "tier": "Platinum"
+        "balance": 102.636,
+        "tier": "Gold"
       }
     },
     {
@@ -851,8 +851,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.802,
-        "tier": "Gold"
+        "balance": 102.682,
+        "tier": "Platinum"
       }
     },
     {
@@ -862,8 +862,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.828,
-        "tier": "Gold"
+        "balance": 102.728,
+        "tier": "Platinum"
       }
     },
     {
@@ -873,7 +873,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.854,
+        "balance": 102.754,
         "tier": "Gold"
       }
     },
@@ -884,7 +884,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.9,
+        "balance": 102.8,
         "tier": "Platinum"
       }
     },
@@ -895,8 +895,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.946,
-        "tier": "Platinum"
+        "balance": 102.826,
+        "tier": "Gold"
       }
     },
     {
@@ -906,8 +906,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 102.972,
-        "tier": "Gold"
+        "balance": 102.872,
+        "tier": "Platinum"
       }
     },
     {
@@ -917,8 +917,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.018,
-        "tier": "Platinum"
+        "balance": 102.898,
+        "tier": "Gold"
       }
     },
     {
@@ -928,7 +928,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.044,
+        "balance": 102.924,
         "tier": "Gold"
       }
     },
@@ -939,7 +939,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.07,
+        "balance": 102.95,
         "tier": "Gold"
       }
     },
@@ -950,7 +950,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.096,
+        "balance": 102.976,
         "tier": "Gold"
       }
     },
@@ -961,8 +961,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.142,
-        "tier": "Platinum"
+        "balance": 103.002,
+        "tier": "Gold"
       }
     },
     {
@@ -972,7 +972,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.188,
+        "balance": 103.048,
         "tier": "Platinum"
       }
     },
@@ -983,8 +983,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.234,
-        "tier": "Platinum"
+        "balance": 103.074,
+        "tier": "Gold"
       }
     },
     {
@@ -994,8 +994,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.26,
-        "tier": "Gold"
+        "balance": 103.12,
+        "tier": "Platinum"
       }
     },
     {
@@ -1005,8 +1005,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.286,
-        "tier": "Gold"
+        "balance": 103.166,
+        "tier": "Platinum"
       }
     },
     {
@@ -1016,8 +1016,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.312,
-        "tier": "Gold"
+        "balance": 103.212,
+        "tier": "Platinum"
       }
     },
     {
@@ -1027,8 +1027,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.338,
-        "tier": "Gold"
+        "balance": 103.258,
+        "tier": "Platinum"
       }
     },
     {
@@ -1038,8 +1038,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.384,
-        "tier": "Platinum"
+        "balance": 103.284,
+        "tier": "Gold"
       }
     },
     {
@@ -1049,7 +1049,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.41,
+        "balance": 103.31,
         "tier": "Gold"
       }
     },
@@ -1060,8 +1060,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.456,
-        "tier": "Platinum"
+        "balance": 103.336,
+        "tier": "Gold"
       }
     },
     {
@@ -1071,8 +1071,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.482,
-        "tier": "Gold"
+        "balance": 103.382,
+        "tier": "Platinum"
       }
     },
     {
@@ -1082,7 +1082,7 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.528,
+        "balance": 103.428,
         "tier": "Platinum"
       }
     },
@@ -1093,8 +1093,8 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.574,
-        "tier": "Platinum"
+        "balance": 103.454,
+        "tier": "Gold"
       }
     },
     {
@@ -1104,10 +1104,10 @@
         "tier": "Platinum"
       },
       "attacker": {
-        "balance": 103.6,
-        "tier": "Gold"
+        "balance": 103.5,
+        "tier": "Platinum"
       }
     }
   ],
-  "analysis": "Simulation of 100 epochs comparing Local NVMe vs S3 Wrapper. The Honest Node finished with $108.00, consistently hitting 'Platinum' tiers due to low latency. The Attacker finished with $103.60. While S3 storage is cheaper, the egress fees and latency penalties (dropping to 'Gold') drastically reduce margins. In a competitive market, the Honest Node outcompetes the Lazy Provider by a factor of 1.0x."
+  "analysis": "Simulation of 100 epochs comparing Local NVMe vs S3 Wrapper. The Honest Node finished with $108.00, consistently hitting 'Platinum' tiers due to low latency. The Attacker finished with $103.50. While S3 storage is cheaper, the egress fees and latency penalties (dropping to 'Gold') drastically reduce margins. In a competitive market, the Honest Node outcompetes the Lazy Provider by a factor of 1.0x."
 }

@@ -220,5 +220,5 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 ## Future Phases
 *   **Web2 Wrapper:** S3 Adapter documentation and further integration.
 *   **Governance:** DAO & Council setup visualization.
-*   **Adversarial Simulation:** End-to-End attack simulation & visualization (P&L model).
+*   **Adversarial Simulation:** End-to-End attack simulation & visualization (P&L model - *Completed*).
 *   **Unified Liveness:** Integrate user traffic directly into consensus via `RetrievalReceipt` aggregation (partially implemented in Phase 2).

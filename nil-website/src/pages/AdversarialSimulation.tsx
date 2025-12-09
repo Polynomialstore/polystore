@@ -1,18 +1,19 @@
 import simulationData from '../data/adversarial_simulation.json';
 import { ShieldAlert, Server, Wifi, Database, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export const AdversarialSimulation = () => {
   const { data, analysis } = simulationData;
   
-  // Calculate max balance for chart scaling
-  // Use a safe default if data is empty, though it shouldn't be.
-  // Assuming simulation always returns positive balances for Honest, but Attacker might go negative?
-  // Let's find the absolute max range.
-  const maxBalance = Math.max(
-    ...data.map(d => Math.max(d.honest.balance, d.attacker.balance)),
-    100 // Ensure at least 100 base
-  );
+  // Transform data for Recharts
+  const chartData = data.map(d => ({
+    epoch: d.epoch,
+    Honest: d.honest.balance,
+    Attacker: d.attacker.balance,
+    honestTier: d.honest.tier,
+    attackerTier: d.attacker.tier
+  }));
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
@@ -107,50 +108,56 @@ export const AdversarialSimulation = () => {
             </div>
         </div>
         
-        <div className="h-96 relative flex items-end gap-1 border-b border-l border-border p-4">
-            {/* Baseline (Break even) at roughly 50% height if we assume balanced start */}
-            {/* We map values relative to maxBalance. Range 0 to maxBalance. */}
-            
-            {data.map((d, i) => {
-                const hHeight = (d.honest.balance / maxBalance) * 90;
-                const aHeight = (d.attacker.balance / maxBalance) * 90;
-                
-                return (
-                    <div key={d.epoch} className="flex-1 flex flex-col justify-end gap-1 relative group h-full">
-                        {/* Honest Bar */}
-                        <motion.div 
-                            initial={{ height: 0 }}
-                            whileInView={{ height: `${Math.max(hHeight, 2)}%` }}
-                            transition={{ duration: 0.5, delay: i * 0.005 }}
-                            className="w-full bg-green-500/50 rounded-t-sm absolute bottom-0 z-10 group-hover:bg-green-400"
-                        />
-                        {/* Attacker Bar */}
-                        <motion.div 
-                            initial={{ height: 0 }}
-                            whileInView={{ height: `${Math.max(aHeight, 2)}%` }}
-                            transition={{ duration: 0.5, delay: i * 0.005 }}
-                            className="w-full bg-red-500/50 rounded-t-sm absolute bottom-0 z-20 mix-blend-multiply group-hover:bg-red-400"
-                        />
-                        
-                        {/* Tooltip */}
-                        <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-xs p-3 rounded-lg border border-border shadow-xl z-50 whitespace-nowrap mb-2">
-                            <div className="font-bold text-foreground mb-1">Epoch {d.epoch}</div>
-                            <div className="flex justify-between gap-4">
-                                <span className="text-green-500 font-mono">Honest: ${d.honest.balance.toFixed(2)}</span>
-                                <span className="text-xs opacity-70">{d.honest.tier}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                                <span className="text-red-500 font-mono">Attacker: ${d.attacker.balance.toFixed(2)}</span>
-                                <span className="text-xs opacity-70">{d.attacker.tier}</span>
-                            </div>
-                        </div>
-                    </div>
-                )
-            })}
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground mt-4 font-mono">
-            <span>Epoch 1</span>
-            <span>Epoch {data.length}</span>
+        <div className="h-96 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                    data={chartData}
+                    margin={{
+                        top: 10,
+                        right: 30,
+                        left: 0,
+                        bottom: 0,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                    <XAxis 
+                        dataKey="epoch" 
+                        stroke="#666" 
+                        tick={{fill: '#666', fontSize: 12}}
+                        tickLine={false}
+                        axisLine={false}
+                    />
+                    <YAxis 
+                        stroke="#666"
+                        tick={{fill: '#666', fontSize: 12}}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => `$${value}`}
+                    />
+                    <Tooltip 
+                        contentStyle={{ backgroundColor: '#111', borderColor: '#333', borderRadius: '8px' }}
+                        itemStyle={{ fontSize: '12px' }}
+                        labelStyle={{ color: '#888', marginBottom: '4px' }}
+                        formatter={(value: number) => [`$${value.toFixed(2)}`, ""]}
+                    />
+                    <Area 
+                        type="monotone" 
+                        dataKey="Honest" 
+                        stackId="1" 
+                        stroke="#22c55e" 
+                        fill="#22c55e" 
+                        fillOpacity={0.2} 
+                    />
+                    <Area 
+                        type="monotone" 
+                        dataKey="Attacker" 
+                        stackId="2" // Separate stacks to compare lines, actually we want comparison not stacking.
+                        stroke="#ef4444" 
+                        fill="#ef4444" 
+                        fillOpacity={0.2} 
+                    />
+                </AreaChart>
+            </ResponsiveContainer>
         </div>
       </div>
 
