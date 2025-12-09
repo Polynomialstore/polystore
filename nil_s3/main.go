@@ -54,6 +54,7 @@ func main() {
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
@@ -178,8 +179,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 // included in the request for future user-signed flows.
 type createDealRequest struct {
 	Creator         string `json:"creator"`
-	Cid             string `json:"cid"`
-	SizeBytes       uint64 `json:"size_bytes"`
+	DealSizeTier    uint32 `json:"size_tier"`
 	DurationBlocks  uint64 `json:"duration_blocks"`
 	ServiceHint     string `json:"service_hint"`
 	InitialEscrow   string `json:"initial_escrow"`
@@ -211,12 +211,12 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.Cid == "" || req.SizeBytes == 0 || req.InitialEscrow == "" || req.MaxMonthlySpend == "" {
+	if req.DealSizeTier == 0 || req.InitialEscrow == "" || req.MaxMonthlySpend == "" {
 		http.Error(w, "missing fields", http.StatusBadRequest)
 		return
 	}
 
-	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
+	tierStr := strconv.FormatUint(uint64(req.DealSizeTier), 10)
 	durationStr := strconv.FormatUint(req.DurationBlocks, 10)
 	if durationStr == "0" {
 		durationStr = defaultDuration
@@ -246,8 +246,7 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.Command(
 		nilchaindBin,
 		"tx", "nilchain", "create-deal",
-		req.Cid,
-		sizeStr,
+		tierStr,
 		durationStr,
 		req.InitialEscrow,
 		req.MaxMonthlySpend,
@@ -305,36 +304,31 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 
 	// Light validation of the intent shape.
 	rawCreator, okCreator := req.Intent["creator_evm"].(string)
-	rawCid, okCid := req.Intent["cid"].(string)
-	rawSize, okSize := req.Intent["size_bytes"]
-	if !okCreator || strings.TrimSpace(rawCreator) == "" ||
-		!okCid || strings.TrimSpace(rawCid) == "" ||
-		!okSize {
-		http.Error(w, "intent must include creator_evm, cid, and size_bytes", http.StatusBadRequest)
+	rawTier, okTier := req.Intent["size_tier"]
+	
+	if !okCreator || strings.TrimSpace(rawCreator) == "" || !okTier {
+		http.Error(w, "intent must include creator_evm and size_tier", http.StatusBadRequest)
 		return
 	}
 
-	// Best-effort numeric check for size_bytes > 0.
-	switch v := rawSize.(type) {
+	// Best-effort numeric check for size_tier > 0.
+	switch v := rawTier.(type) {
 	case float64:
 		if v <= 0 {
-			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
 			return
 		}
 	case int64:
 		if v <= 0 {
-			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
 			return
 		}
 	case json.Number:
 		n, err := v.Int64()
 		if err != nil || n <= 0 {
-			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
 			return
 		}
-	default:
-		// If it's some other type, we just skip the check; the on-chain
-		// keeper will perform strict validation.
 	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-deal-*.json")
@@ -392,6 +386,95 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("GatewayCreateDealFromEvm encode error: %v", err)
+	}
+}
+
+// GatewayUpdateDealContentFromEvm accepts an EVM-signed update content intent.
+func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var req createDealFromEvmRequest // Reuse same wrapper
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Intent == nil {
+		http.Error(w, "intent is required", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.EvmSignature) == "" {
+		http.Error(w, "evm_signature is required", http.StatusBadRequest)
+		return
+	}
+
+	// Light validation
+	rawCid, okCid := req.Intent["cid"].(string)
+	rawSize, okSize := req.Intent["size_bytes"]
+	
+	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize {
+		http.Error(w, "intent must include cid and size_bytes", http.StatusBadRequest)
+		return
+	}
+
+	tmp, err := os.CreateTemp(uploadDir, "evm-update-*.json")
+	if err != nil {
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+	tmpPath := tmp.Name()
+
+	payload := map[string]any{
+		"intent":        req.Intent,
+		"evm_signature": req.EvmSignature,
+	}
+	if err := json.NewEncoder(tmp).Encode(payload); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "failed to encode payload", http.StatusInternalServerError)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		http.Error(w, "failed to close temp file", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	cmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "update-deal-content-from-evm",
+		tmpPath,
+		"--chain-id", chainID,
+		"--from", "faucet",
+		"--yes",
+		"--keyring-backend", "test",
+		"--home", homeDir,
+		"--gas-prices", gasPrices,
+	)
+
+	out, err := cmd.CombinedOutput()
+	outStr := string(out)
+	if err != nil {
+		log.Printf("GatewayUpdateDealContentFromEvm failed: %s", outStr)
+		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	txHash := extractTxHash(outStr)
+	log.Printf("GatewayUpdateDealContentFromEvm success: txhash=%s", txHash)
+
+	resp := map[string]any{
+		"status":  "success",
+		"tx_hash": txHash,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("GatewayUpdateDealContentFromEvm encode error: %v", err)
 	}
 }
 

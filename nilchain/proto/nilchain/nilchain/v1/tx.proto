@@ -24,9 +24,16 @@ service Msg {
   // MsgCreateDeal allows a user to create a new storage deal.
   rpc CreateDeal(MsgCreateDeal) returns (MsgCreateDealResponse);
 
+  // MsgUpdateDealContent allows a user to commit or update the content (manifest) of a deal.
+  rpc UpdateDealContent(MsgUpdateDealContent) returns (MsgUpdateDealContentResponse);
+
   // MsgCreateDealFromEvm allows a user to create a new storage deal
   // using an EVM-signed intent bridged into nilchaind.
   rpc CreateDealFromEvm(MsgCreateDealFromEvm) returns (MsgCreateDealFromEvmResponse);
+
+  // MsgUpdateDealContentFromEvm allows a user to update deal content
+  // using an EVM-signed intent.
+  rpc UpdateDealContentFromEvm(MsgUpdateDealContentFromEvm) returns (MsgUpdateDealContentFromEvmResponse);
 
   // MsgProveLiveness allows a Storage Provider to submit a proof of data liveness.
   rpc ProveLiveness(MsgProveLiveness) returns (MsgProveLivenessResponse);
@@ -83,12 +90,13 @@ message MsgCreateDeal {
   option (amino.name) = "nilchain/x/nilchain/MsgCreateDeal";
 
   string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
-  string cid = 2; // Root CID of the file manifest
-  uint64 size = 3; // Total size in bytes
+  // string cid = 2; // REMOVED: Capacity is decoupled from content.
+  // uint64 size = 3; // REMOVED: Size is now defined by tier.
   uint64 duration_blocks = 4; // Duration of the deal in blocks
   string service_hint = 5; // "Hot" or "Cold"
   string max_monthly_spend = 6 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
   string initial_escrow_amount = 7 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Initial $STOR amount
+  DealSize deal_size = 8; // The authorized capacity tier (1=4GB, 2=32GB, 3=512GB)
 }
 
 // MsgCreateDealResponse defines the response structure for creating a deal.
@@ -97,12 +105,27 @@ message MsgCreateDealResponse {
   repeated string assigned_providers = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
 }
 
+// MsgUpdateDealContent allows a user to commit or update the manifest of a deal.
+message MsgUpdateDealContent {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgUpdateDealContent";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  string cid = 3; // New Root CID (Manifest)
+  uint64 size = 4; // Actual size of the content (must fit in deal_size tier)
+}
+
+message MsgUpdateDealContentResponse {
+  bool success = 1;
+}
+
 // EvmCreateDealIntent captures the fields that an EVM wallet signs over
 // when creating a storage deal via the bridge path.
 message EvmCreateDealIntent {
   string creator_evm = 1;       // 0x-prefixed EVM address
-  string cid = 2;               // Root CID
-  uint64 size_bytes = 3;        // Total size in bytes
+  // string cid = 2;            // REMOVED
+  // uint64 size_bytes = 3;     // REMOVED
   uint64 duration_blocks = 4;   // Duration of the deal in blocks
   string service_hint = 5;      // Service hint (e.g. General:replicas=N)
   string initial_escrow = 6 [
@@ -115,6 +138,17 @@ message EvmCreateDealIntent {
   ]; // Monthly spend cap (stake)
   uint64 nonce = 8;             // Per-EVM-address bridge nonce (strictly increasing)
   string chain_id = 9;          // nilchaind chain-id (e.g. "test-1")
+  uint32 size_tier = 10;        // Maps to DealSize enum (1, 2, 3)
+}
+
+// EvmUpdateContentIntent captures fields for updating deal content via EVM.
+message EvmUpdateContentIntent {
+  string creator_evm = 1;
+  uint64 deal_id = 2;
+  string cid = 3;
+  uint64 size_bytes = 4;
+  uint64 nonce = 5;
+  string chain_id = 6;
 }
 
 // MsgCreateDealFromEvm wraps a signed EVM intent and is executed on nilchaind.
@@ -133,6 +167,20 @@ message MsgCreateDealFromEvm {
 // MsgCreateDealFromEvmResponse returns the newly created deal ID.
 message MsgCreateDealFromEvmResponse {
   uint64 deal_id = 1;
+}
+
+// MsgUpdateDealContentFromEvm wraps a signed EVM intent for content update.
+message MsgUpdateDealContentFromEvm {
+  option (cosmos.msg.v1.signer) = "sender";
+  option (amino.name) = "nilchain/x/nilchain/MsgUpdateDealContentFromEvm";
+
+  string sender = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  EvmUpdateContentIntent intent = 2;
+  bytes evm_signature = 3;
+}
+
+message MsgUpdateDealContentFromEvmResponse {
+  bool success = 1;
 }
 
 // MsgProveLiveness allows a Storage Provider to submit a proof of data liveness.

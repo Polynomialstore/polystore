@@ -19,6 +19,13 @@ pub struct ShardAnnouncement {
     pub owner_peer_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskForProxy {
+    pub cid: String,
+    pub target_peer: String,
+    pub max_price: u64,
+}
+
 // --- Network Behaviour ---
 
 #[derive(NetworkBehaviour)]
@@ -37,6 +44,7 @@ pub struct NilNode {
 pub enum Command {
     AnnounceShard { shard_id: String },
     Dial { addr: Multiaddr },
+    RequestProxy { cid: String, deputy: String },
 }
 
 impl NilNode {
@@ -92,9 +100,11 @@ impl NilNode {
         let listen_addr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
         swarm.listen_on(listen_addr)?;
 
-        // Subscribe to default topic
+        // Subscribe to default topics
         swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-shards"))
-             .map_err(|_| anyhow::anyhow!("Failed to subscribe to topic"))?;
+             .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-shards"))?;
+        swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-proxy"))
+             .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-proxy"))?;
 
         Ok(Self { swarm, command_rx })
     }
@@ -126,6 +136,21 @@ impl NilNode {
                                  info!("📞 Dialing {}", addr);
                              }
                         }
+                        Command::RequestProxy { cid, deputy } => {
+                            let msg = AskForProxy {
+                                cid: cid.clone(),
+                                target_peer: deputy.clone(),
+                                max_price: 100,
+                            };
+                            let encoded = serde_json::to_vec(&msg)?;
+                            let topic = gossipsub::IdentTopic::new("nil-proxy");
+                            
+                            if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, encoded) {
+                                error!("Publish proxy error: {:?}", e);
+                            } else {
+                                info!("🕵️‍♀️ Requested proxy for {} via {}", cid, deputy);
+                            }
+                        }
                     }
                 }
 
@@ -152,8 +177,13 @@ impl NilNode {
                             message_id: _,
                             message,
                         })) => {
+                            // Try to decode as ShardAnnouncement
                             if let Ok(announcement) = serde_json::from_slice::<ShardAnnouncement>(&message.data) {
                                 info!("📨 Received announcement from {}: Shard {}", peer_id, announcement.shard_id);
+                            }
+                            // Try to decode as AskForProxy
+                            if let Ok(proxy_req) = serde_json::from_slice::<AskForProxy>(&message.data) {
+                                info!("🕵️‍♀️ Received PROXY REQUEST from {}: Need CID {} via Peer {}", peer_id, proxy_req.cid, proxy_req.target_peer);
                             }
                         }
                         _ => {}

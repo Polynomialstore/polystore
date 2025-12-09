@@ -6,11 +6,19 @@ import "cosmos_proto/cosmos.proto";
 
 option go_package = "nilchain/x/nilchain/types";
 
+// DealSize represents the authorized capacity tiers for storage deals.
+enum DealSize {
+  DEAL_SIZE_UNSPECIFIED = 0;
+  DEAL_SIZE_4GIB = 1;   // Developer Slab
+  DEAL_SIZE_32GIB = 2;  // Standard Slab (Filecoin Sector Aligned)
+  DEAL_SIZE_512GIB = 3; // Wholesale Slab
+}
+
 // Deal represents a storage deal between a user and the network.
 message Deal {
   uint64 id = 1;
-  string cid = 2; // Root CID of the file manifest
-  uint64 size = 3; // Total size in bytes
+  string cid = 2; // Root CID of the file manifest (Mutable - initially empty)
+  uint64 size = 3; // Actual size of current content in bytes (Mutable)
   string owner = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Address of the deal creator
   string escrow_balance = 5 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Remaining $STOR for payments
   uint64 start_block = 6; // Block height when deal became active
@@ -20,6 +28,15 @@ message Deal {
   uint64 current_replication = 10; // e.g., 12 for base layer, increases with hot replicas
   string service_hint = 11; // "Hot" or "Cold"
   string max_monthly_spend = 12 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
+  DealSize deal_size = 13; // The authorized capacity tier (Immutable)
+}
+
+// DealHeatState tracks aggregate traffic and performance metrics for a deal.
+// Used for "Heat" observability and potential future economic tilting.
+message DealHeatState {
+  uint64 bytes_served_total = 1;
+  uint64 failed_challenges_total = 2;
+  int64 last_update_height = 3;
 }
 
 // Provider represents a Storage Provider in the network.

@@ -53,6 +53,7 @@ The `Deal` is the central state object.
 *   **Fail (>H+20):** 0% + Slash
 
 ### 4.2 Saturation & Scaling
+*(Further details on measuring and utilizing dynamic demand ("Heat") are specified in [RFC: Heat & Dynamic Placement for Mode 1](rfcs/rfc-heat-and-dynamic-placement.md).)*
 *   **Signal:** `MsgSignalSaturation` or Protocol-Detected High Load (EMA).
 *   **Strategy (Mode 2 – Planned):** **Stripe-Aligned Scaling.** When increasing replication, add `n` new Overlay Providers simultaneously, each hosting a replica of a distinct shard index.
 *   **Mode 1 Approximation (Current Implementation):** `MsgSignalSaturation` increases `Deal.CurrentReplication` and appends additional providers to `Deal.providers[]`. Each new provider is expected to store a full copy of the file, so elasticity is expressed as “more full replicas” rather than per-stripe overlays.
@@ -112,6 +113,7 @@ This section documents accepted architectural risks and necessary safeguards.
     3.  **Burn Rate:** The `BurnRate > 0` ensures that even if an SP colludes with a Data Owner, wash-trading costs money.
 
 ## 7. Retrievability, Auditing, and Self‑Healing
+*(This section, particularly concerning Audit Debt and the core mechanisms of retrievability validation and self-healing, is elaborated upon in [RFC: Retrieval Validation & The Deputy System](rfcs/rfc-retrieval-validation.md).)*
 
 This section captures the long‑term Mode 1 mainnet design for retrievability and SP accountability. It is informed by `retrievability-memo.md` and the Mode 1 challenge/receipt design, and acts as the north‑star for devnet/testnet evolution.
 

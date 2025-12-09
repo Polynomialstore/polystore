@@ -18,6 +18,7 @@ It specifies:
 ---
 
 ## § 6 Product-Aligned Economics
+*(This section, particularly regarding Deal Sizing and economics, is formally defined and superseded by [RFC: Data Granularity & Economic Model](rfcs/rfc-data-granularity-and-economics.md).)*
 
 ### 6.0 System-Defined Placement (Anti-Sybil & Hints)
 
@@ -33,6 +34,16 @@ When registering, SPs declare their intended service mode via `MsgRegisterProvid
 `MsgCreateDeal` includes a `ServiceHint`:
 *   **Cold:** Biased towards `Archive` / `General`.
 *   **Hot:** Biased towards `General` / `Edge`.
+
+#### 6.0.3 Deal Sizing (Normative via RFC: Data Granularity)
+To manage chain state and prevent database dust, NilStore deals are created in specific, governance-approved increments, as defined in `rfcs/rfc-data-granularity-and-economics.md`. This separates the Financial Ledger Unit (`DEAL_SIZE`) from the Physical Retrieval Unit (`MDU_SIZE`).
+
+**Approved Tiers for `DEAL_SIZE`:**
+*   **Tier 1: Developer Slab (4 GiB):** Entry-level capacity for testing.
+*   **Tier 2: Standard Slab (32 GiB):** The baseline network unit, aligned with Filecoin sectors.
+*   **Tier 3: Wholesale Slab (512 GiB):** High-volume tier for Enterprise/Archive use cases.
+
+The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,388,608 bytes (8 MiB)**, as it is tied to cryptographic safety (KZG Trusted Setup).
 
 ### 6.1 The Unified Market & Elasticity
 

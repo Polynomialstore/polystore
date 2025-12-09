@@ -62,6 +62,13 @@ async fn main() -> Result<()> {
                      }
                 }
             }
+            "proxy" => {
+                if parts.len() > 2 {
+                    tx.send(Command::RequestProxy { cid: parts[1].to_string(), deputy: parts[2].to_string() }).await?;
+                } else {
+                    println!("Usage: proxy <cid> <deputy_peer_id>");
+                }
+            }
             "quit" | "exit" => break,
             _ => println!("Unknown command"),
         }

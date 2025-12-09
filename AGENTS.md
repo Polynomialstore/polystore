@@ -149,7 +149,59 @@ To manage this, it is recommended to organize development efforts into these thr
 
 *   *Output:* Research papers, Simulation reports.
 
+## Spring Roadmap (New!)
 
+This section outlines the immediate and medium-term implementation plan to align the codebase with the approved "Strict Data Granularity," "Deal as Collection," and "Self-Healing" specifications.
+
+### 1. Work Stream: Strict Data Granularity & Deal Decoupling
+**Goal:** Enforce `DealSize` tiers and decouple "Capacity Allocation" from "Content Commitment." A Deal is now a **Mutable Container** that holds **Immutable Content**.
+
+*   **Step A: Protobuf Definitions (Types)**
+    *   [ ] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
+    *   [ ] **Task:** Define `enum DealSize { DEAL_SIZE_UNSPECIFIED=0; DEAL_SIZE_4GIB=1; DEAL_SIZE_32GIB=2; DEAL_SIZE_512GIB=3; }`.
+    *   [ ] **Task:** Update `message Deal` to include `DealSize deal_size`.
+    *   [ ] **Task:** Update `message Deal` to make `string cid` optional/mutable (representing the current Manifest Root).
+*   **Step B: Transaction Messages (Tx)**
+    *   [ ] **File:** `nilchain/proto/nilchain/nilchain/v1/tx.proto`
+    *   [ ] **Task:** Refactor `MsgCreateDeal`: Replace `cid` and `size` with `DealSize deal_size`. (Creates the container).
+    *   [ ] **Task:** Create `MsgUpdateDealContent`: Accepts `{ deal_id, cid, size_bytes }`. (Commits the content/manifest).
+    *   [ ] **Task:** Mirror changes for EVM path: Update `EvmCreateDealIntent` (tiers) and create `EvmUpdateContentIntent`.
+*   **Step C: Chain Logic (Keeper)**
+    *   [ ] **File:** `nilchain/x/nilchain/keeper/msg_server_create_deal.go`
+    *   [ ] **Task:** Implement new `CreateDeal` logic: Deduct escrow based on Tier price, assign providers, but leave CID empty.
+    *   [ ] **Task:** Implement `UpdateDealContent`: Validate owner, ensure `size_bytes` fits in `deal_size` tier, commit CID, and enable "Active" status.
+    *   [ ] **Directive:** **Strict Slot Reservation.** Logic MUST reserve Index 0 for the Manifest MDU. All user data starts at Index 1.
+    *   [ ] **Directive:** **Atomic Swap.** `MsgUpdateDealContent` MUST atomically update the `ManifestRoot`. The old manifest and MDUs are instantly invalidated upon commit.
+    *   [ ] **Task:** Update `ProveLiveness`: Block proofs until a CID is committed.
+    *   [ ] **Directive:** **Recursive Verifier.** Update proof verification to check: 1. Manifest Integrity (against Deal Root), 2. Data Inclusion (Index X in Manifest), 3. Data Integrity (Chunk matches CID).
+*   **Step D: Client & CLI**
+    *   [ ] **File:** `nil_cli` & `nil-website`
+    *   [ ] **Task:** Update `nil-cli create-deal` to take `--tier`.
+    *   [ ] **Task:** Add `nil-cli commit-deal <id> <cid> <size>`.
+    *   [ ] **Task:** Update Web UI flow to matching two-step process (Capacity -> Content).
+
+### 2. Work Stream: Heat & Traffic Observability (Phase A)
+**Goal:** Instrument the chain to measure "Heat" (bytes served per deal) without changing economics yet.
+
+*   **Step A: State Objects**
+    *   [ ] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
+    *   [ ] **Task:** Define `message DealHeatState { uint64 bytes_served_total = 1; uint64 failed_challenges_total = 2; int64 last_update_height = 3; }`.
+*   **Step B: Keeper Storage**
+    *   [ ] **File:** `nilchain/x/nilchain/keeper/keeper.go`
+    *   [ ] **Task:** Register `DealHeatStates` collection/map.
+*   **Step C: Instrumentation Hook**
+    *   [ ] **File:** `nilchain/x/nilchain/keeper/msg_server_prove_liveness.go`
+    *   [ ] **Task:** Trigger `k.IncrementHeat` on valid retrieval proofs.
+
+### 3. Work Stream: The Deputy System (Phase 1)
+**Goal:** Enable proxied retrievals to support Audit Debt and Self-Healing.
+
+*   **Step A: P2P Definitions**
+    *   [ ] **Task:** Define `AskForProxy` message in the P2P layer.
+*   **Step B: CLI Proxy**
+    *   [ ] **Task:** Add `nil-cli proxy fetch` command to request a file via a deputy node.
+
+---
 
 ## Change Log (Session 1)
 

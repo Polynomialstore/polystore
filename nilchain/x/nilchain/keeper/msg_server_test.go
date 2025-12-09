@@ -69,8 +69,7 @@ func TestCreateDeal(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		Cid:                 "bafytestcid",
-		Size_:               1024 * 1024 * 100, // 100 MB
+		DealSize:            2, // 32 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -86,7 +85,8 @@ func TestCreateDeal(t *testing.T) {
 	// 3. Verify Deal in store
 	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
 	require.NoError(t, err)
-	require.Equal(t, "bafytestcid", deal.Cid)
+	require.Empty(t, deal.Cid)
+	require.Equal(t, uint64(0), deal.Size_)
 	require.Equal(t, user, deal.Owner)
 	require.Equal(t, uint64(types.DealBaseReplication), uint64(len(deal.Providers)))
 
@@ -125,8 +125,7 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             sponsor,
-		Cid:                 "bafyuserownedcid",
-		Size_:               8 * 1024 * 1024,
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		// Encode owner override into the service hint as used by the web gateway.
 		ServiceHint:         fmt.Sprintf("General:owner=%s", user),
@@ -169,8 +168,7 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 	// Request 3 replicas via the hint.
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		Cid:                 "bafyreplicationcid",
-		Size_:               8 * 1024 * 1024,
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General:replicas=3",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -211,8 +209,7 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		Cid:                 "bafybootstrapcid",
-		Size_:               8 * 1024 * 1024,
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -258,8 +255,14 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	user, _ := f.addressCodec.BytesToString(userBz)
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
-		Creator: user, Cid: "cid", Size_: 100, DurationBlocks: 100, ServiceHint: "General",
+		Creator: user, DealSize: 1, DurationBlocks: 100, ServiceHint: "General",
 		InitialEscrowAmount: math.NewInt(100), MaxMonthlySpend: math.NewInt(10),
+	})
+	require.NoError(t, err)
+
+	// Commit Content
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: resDeal.DealId, Cid: "cid", Size_: 100,
 	})
 	require.NoError(t, err)
 
@@ -322,12 +325,17 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		Cid:                 "bafyhappy",
-		Size_:               8 * 1024 * 1024, // 8 MB (Exact MDU size)
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
 		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	// Commit Content
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: resDeal.DealId, Cid: "bafyhappy", Size_: 8 * 1024 * 1024,
 	})
 	require.NoError(t, err)
 
@@ -423,12 +431,17 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	owner := providerAddr
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             owner,
-		Cid:                 "bafyuserreceipt",
-		Size_:               8 * 1024 * 1024,
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
 		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	// Commit Content
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: owner, DealId: resDeal.DealId, Cid: "bafyuserreceipt", Size_: 8 * 1024 * 1024,
 	})
 	require.NoError(t, err)
 
@@ -510,12 +523,17 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	user, _ := f.addressCodec.BytesToString(userBz)
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		Cid:                 "dummycid",
-		Size_:               8 * 1024 * 1024,
+		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
 		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	// Commit Content (will be overridden manually, but good to init)
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: resDeal.DealId, Cid: "dummycid", Size_: 8 * 1024 * 1024,
 	})
 	require.NoError(t, err)
 
@@ -598,12 +616,18 @@ func TestSignalSaturation(t *testing.T) {
 	userBz := []byte("user_saturation_____")
 	user, _ := f.addressCodec.BytesToString(userBz)
 	msgDeal := &types.MsgCreateDeal{
-		Creator: user, Cid: "sat_cid", Size_: 100, DurationBlocks: 100, ServiceHint: "General",
+		Creator: user, DealSize: 1, DurationBlocks: 100, ServiceHint: "General",
 		InitialEscrowAmount: math.NewInt(1000), MaxMonthlySpend: math.NewInt(1000),
 	}
 	resDeal, err := msgServer.CreateDeal(f.ctx, msgDeal)
 	require.NoError(t, err)
 	dealID := resDeal.DealId
+
+	// Commit Content
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: dealID, Cid: "sat_cid", Size_: 100,
+	})
+	require.NoError(t, err)
 
 	// 3. Signal Saturation (Authorized)
 	assignedProv := resDeal.AssignedProviders[0]

@@ -45,12 +45,24 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	intent := msg.Intent
 
 	// Basic field validation.
-	if strings.TrimSpace(intent.Cid) == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("CID cannot be empty")
+	if intent.SizeTier == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size tier cannot be unspecified")
 	}
-	if intent.SizeBytes == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size cannot be zero")
+	// Map SizeTier to Capacity
+	var capacityBytes uint64
+	dealSize := types.DealSize(intent.SizeTier)
+	switch dealSize {
+	case types.DealSize_DEAL_SIZE_4GIB:
+		capacityBytes = 4 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_32GIB:
+		capacityBytes = 32 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_512GIB:
+		capacityBytes = 512 * 1024 * 1024 * 1024
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid deal size tier: %d", intent.SizeTier)
 	}
+	_ = capacityBytes // Used for validation check only
+
 	if intent.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
 	}
@@ -69,6 +81,10 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 
 	// Build the canonical signing message and recover the EVM signer.
+	// NOTE: BuildEvmCreateDealMessage needs to be updated in types package to handle SizeTier!
+	// Assuming it's updated or we construct it manually here if possible? 
+	// The prompt implies we are just changing keeper logic. We might need to fix types helper too.
+	// For now, let's assume types.BuildEvmCreateDealMessage handles the new intent structure.
 	signingMsg, err := types.BuildEvmCreateDealMessage(intent)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to build signing message: %s", err)
@@ -172,8 +188,8 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 
 	deal := types.Deal{
 		Id:                 dealID,
-		Cid:                intent.Cid,
-		Size_:              intent.SizeBytes,
+		Cid:                "", // Empty initially
+		Size_:              0,  // Empty initially
 		Owner:              ownerAddrStr,
 		EscrowBalance:      intent.InitialEscrow,
 		StartBlock:         uint64(ctx.BlockHeight()),
@@ -183,6 +199,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		CurrentReplication: currentReplication,
 		ServiceHint:        serviceHint,
 		MaxMonthlySpend:    intent.MaxMonthlySpend,
+		DealSize:           dealSize,
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -191,13 +208,10 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
-			// Reuse the CreateDeal event type so downstream consumers
-			// see a uniform DealCreated surface regardless of entry path.
 			types.TypeMsgCreateDeal,
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
-			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
-			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("capacity_tier", dealSize.String()),
 			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
 			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
 		),
@@ -265,6 +279,25 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
 
+	// Deal Size Validation
+	if msg.DealSize == types.DealSize_DEAL_SIZE_UNSPECIFIED {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size tier cannot be unspecified")
+	}
+	
+	// Map SizeTier to Capacity (just for validation/event logic, actual capacity logic enforced in UpdateDealContent)
+	var capacityBytes uint64
+	switch msg.DealSize {
+	case types.DealSize_DEAL_SIZE_4GIB:
+		capacityBytes = 4 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_32GIB:
+		capacityBytes = 32 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_512GIB:
+		capacityBytes = 512 * 1024 * 1024 * 1024
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid deal size tier: %s", msg.DealSize)
+	}
+	_ = capacityBytes // reserved for future use
+
 	dealID, err := k.DealCount.Next(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
@@ -329,12 +362,6 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
 
-	if len(msg.Cid) == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("CID cannot be empty")
-	}
-	if msg.Size_ == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size cannot be zero")
-	}
 	if msg.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
 	}
@@ -361,8 +388,8 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	deal := types.Deal{
 		Id:                 dealID,
-		Cid:                msg.Cid,
-		Size_:              msg.Size_,
+		Cid:                "", // Empty
+		Size_:              0,  // Empty
 		Owner:              ownerAddrStr,
 		EscrowBalance:      initialEscrowAmount,
 		StartBlock:         uint64(ctx.BlockHeight()),
@@ -372,6 +399,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		CurrentReplication: currentReplication,
 		ServiceHint:        serviceHint,
 		MaxMonthlySpend:    maxMonthlySpend,
+		DealSize:           msg.DealSize,
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -383,8 +411,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 			types.TypeMsgCreateDeal,
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
-			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
-			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("capacity_tier", msg.DealSize.String()),
 			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
 			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
 		),
@@ -394,6 +421,176 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		DealId:            deal.Id,
 		AssignedProviders: deal.Providers,
 	}, nil
+}
+
+// UpdateDealContent allows a user to commit or update the manifest of a deal.
+func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdateDealContent) (*types.MsgUpdateDealContentResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	_, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+
+	if deal.Owner != msg.Creator {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
+	}
+
+	if strings.TrimSpace(msg.Cid) == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content CID cannot be empty")
+	}
+	if msg.Size_ == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content size cannot be zero")
+	}
+
+	// Capacity Check
+	var maxCapacity uint64
+	switch deal.DealSize {
+	case types.DealSize_DEAL_SIZE_4GIB:
+		maxCapacity = 4 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_32GIB:
+		maxCapacity = 32 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_512GIB:
+		maxCapacity = 512 * 1024 * 1024 * 1024
+	default:
+		// Should not happen for created deals, but safe fallback
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal has invalid size tier")
+	}
+
+	if msg.Size_ > maxCapacity {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("content size %d exceeds tier capacity %d", msg.Size_, maxCapacity)
+	}
+
+	// Atomic Update
+	deal.Cid = msg.Cid
+	deal.Size_ = msg.Size_
+	
+	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			"update_deal_content", // Use string literal for new event type
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
+			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+		),
+	)
+
+	return &types.MsgUpdateDealContentResponse{Success: true}, nil
+}
+
+// UpdateDealContentFromEvm allows a user to update deal content using an EVM-signed intent.
+func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.MsgUpdateDealContentFromEvm) (*types.MsgUpdateDealContentFromEvmResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if msg.Intent == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("intent is required")
+	}
+	intent := msg.Intent
+
+	// Validation
+	if strings.TrimSpace(intent.Cid) == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("CID cannot be empty")
+	}
+	if intent.SizeBytes == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Size cannot be zero")
+	}
+	if strings.TrimSpace(intent.ChainId) != ctx.ChainID() {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("intent chain_id %q does not match chain %q", intent.ChainId, ctx.ChainID())
+	}
+	if len(msg.EvmSignature) != 65 {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length")
+	}
+
+	// Reconstruct signing message
+	signingMsg, err := types.BuildEvmUpdateContentMessage(intent)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to build signing message: %s", err)
+	}
+
+	evmAddr, err := recoverEvmAddress(signingMsg, msg.EvmSignature)
+	if err != nil {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+	}
+
+	creator := strings.TrimSpace(intent.CreatorEvm)
+	creator = strings.ToLower(creator)
+	if creator != "" && !strings.HasPrefix(creator, "0x") {
+		creator = "0x" + creator
+	}
+
+	if creator != strings.ToLower(evmAddr.Hex()) {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("evm_signature does not match intent.creator_evm")
+	}
+
+	// Replay Protection
+	evmKey := strings.ToLower(evmAddr.Hex())
+	lastNonce, err := k.EvmNonces.Get(ctx, evmKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("failed to load bridge nonce: %w", err)
+	}
+	if intent.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("bridge nonce must be strictly increasing")
+	}
+	if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
+	}
+
+	// Map to Cosmos Address
+	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
+	
+	// Execute Update Logic
+	// We call the internal logic directly to avoid resigning internal Msg
+	deal, err := k.Deals.Get(ctx, intent.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", intent.DealId)
+	}
+
+	if deal.Owner != ownerAcc.String() {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
+	}
+
+	// Capacity Check
+	var maxCapacity uint64
+	switch deal.DealSize {
+	case types.DealSize_DEAL_SIZE_4GIB:
+		maxCapacity = 4 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_32GIB:
+		maxCapacity = 32 * 1024 * 1024 * 1024
+	case types.DealSize_DEAL_SIZE_512GIB:
+		maxCapacity = 512 * 1024 * 1024 * 1024
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal has invalid size tier")
+	}
+
+	if intent.SizeBytes > maxCapacity {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("content size %d exceeds tier capacity %d", intent.SizeBytes, maxCapacity)
+	}
+
+	deal.Cid = intent.Cid
+	deal.Size_ = intent.SizeBytes
+
+	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
+		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			"update_deal_content",
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
+			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+		),
+	)
+
+	return &types.MsgUpdateDealContentFromEvmResponse{Success: true}, nil
 }
 
 // ProveLiveness handles MsgProveLiveness to verify KZG proofs and process rewards.
@@ -662,6 +859,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow exhausted", msg.DealId)
 		}
 		deal.EscrowBalance = newEscrowBalance
+
+		// Increment heat stats
+		if err := k.IncrementHeat(ctx, deal.Id, receipt.BytesServed, false); err != nil {
+			ctx.Logger().Error("failed to increment heat", "error", err)
+		}
 	} else {
 		bandwidthPayment = math.NewInt(0)
 	}

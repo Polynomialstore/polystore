@@ -34,4 +34,5 @@ var (
 	ProviderRewardsKey      = collections.NewPrefix("ProviderRewards/value/")
 	ReceiptNonceKey         = collections.NewPrefix("ReceiptNonce/value/")
 	EvmNonceKey             = collections.NewPrefix("EvmNonce/value/")
+	DealHeatStateKey        = collections.NewPrefix("DealHeatState/value/")
 )

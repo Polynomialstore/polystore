@@ -43,8 +43,7 @@ func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		Cid:             "bafybridgedcid",
-		SizeBytes:       8 * 1024 * 1024,
+		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   initialEscrow,
@@ -80,6 +79,8 @@ func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 	expectedOwner := sdk.AccAddress(evmAddr.Bytes()).String()
 	require.Equal(t, expectedOwner, deal.Owner)
 	require.Equal(t, initialEscrow, deal.EscrowBalance)
+	require.Empty(t, deal.Cid)
+	require.Equal(t, uint64(0), deal.Size_)
 
 	// Nonce should be stored.
 	storedNonce, err := f.keeper.EvmNonces.Get(f.ctx, strings.ToLower(evmAddr.Hex()))
@@ -109,8 +110,7 @@ func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		Cid:             "bafybadcid",
-		SizeBytes:       8 * 1024 * 1024,
+		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),
@@ -165,8 +165,7 @@ func TestCreateDealFromEvm_ReplayNonce(t *testing.T) {
 	makeMsg := func(nonce uint64) *types.MsgCreateDealFromEvm {
 		intent := &types.EvmCreateDealIntent{
 			CreatorEvm:      evmAddr.Hex(),
-			Cid:             "bafyreplaycid",
-			SizeBytes:       8 * 1024 * 1024,
+			SizeTier:        1, // DEAL_SIZE_4GIB
 			DurationBlocks:  100,
 			ServiceHint:     "General",
 			InitialEscrow:   math.NewInt(1000000),
@@ -221,8 +220,7 @@ func TestCreateDealFromEvm_WrongChainID(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		Cid:             "bafywrongchain",
-		SizeBytes:       8 * 1024 * 1024,
+		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),

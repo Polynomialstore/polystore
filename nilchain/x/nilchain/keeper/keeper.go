@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"errors" // ADDED
 	"fmt"
 	"crypto/sha256" // ADDED
 	"encoding/binary" // ADDED
@@ -39,6 +40,7 @@ type Keeper struct {
 	ProviderRewards      collections.Map[string, math.Int]
 	ReceiptNonces        collections.Map[string, uint64]
 	EvmNonces            collections.Map[string, uint64]
+	DealHeatStates       collections.Map[uint64, types.DealHeatState]
 }
 
 func NewKeeper(
@@ -76,6 +78,7 @@ func NewKeeper(
 		ProviderRewards:      collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
 		ReceiptNonces:        collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		EvmNonces:            collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
+		DealHeatStates:       collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
 	}
 
 	schema, err := sb.Build()
@@ -180,4 +183,21 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 // GetAuthority returns the module's authority.
 func (k Keeper) GetAuthority() []byte {
 	return k.authority
+}
+
+// IncrementHeat updates the traffic statistics for a deal.
+func (k Keeper) IncrementHeat(ctx sdk.Context, dealID uint64, bytesServed uint64, failed bool) error {
+	state, err := k.DealHeatStates.Get(ctx, dealID)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	// If not found, it's zero-value (empty struct), which is fine for proto3.
+
+	state.BytesServedTotal += bytesServed
+	if failed {
+		state.FailedChallengesTotal += 1
+	}
+	state.LastUpdateHeight = ctx.BlockHeight()
+
+	return k.DealHeatStates.Set(ctx, dealID, state)
 }

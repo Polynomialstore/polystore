@@ -47,24 +47,26 @@ func CmdRegisterProvider() *cobra.Command {
 
 func CmdCreateDeal() *cobra.Command {
     cmd := &cobra.Command{
-        Use:   "create-deal [cid] [size] [duration] [initial-escrow] [max-monthly-spend]",
-        Short: "Create a new storage deal",
-        Args:  cobra.ExactArgs(5),
+        Use:   "create-deal [size-tier] [duration] [initial-escrow] [max-monthly-spend]",
+        Short: "Create a new storage deal (allocate capacity)",
+        Long:  "size-tier: 1=4GiB, 2=32GiB, 3=512GiB",
+        Args:  cobra.ExactArgs(4),
         RunE: func(cmd *cobra.Command, args []string) (err error) {
             clientCtx, err := client.GetClientTxContext(cmd)
             if err != nil {
                 return err
             }
 
-            cid := args[0]
-            size, err := strconv.ParseUint(args[1], 10, 64)
+            tierVal, err := strconv.ParseUint(args[0], 10, 32)
             if err != nil { return err }
-            duration, err := strconv.ParseUint(args[2], 10, 64)
+            dealSize := types.DealSize(tierVal)
+
+            duration, err := strconv.ParseUint(args[1], 10, 64)
             if err != nil { return err }
             
-            initialEscrow, ok := math.NewIntFromString(args[3])
+            initialEscrow, ok := math.NewIntFromString(args[2])
             if !ok { return strconv.ErrSyntax }
-            maxMonthly, ok := math.NewIntFromString(args[4])
+            maxMonthly, ok := math.NewIntFromString(args[3])
             if !ok { return strconv.ErrSyntax }
             hint, err := cmd.Flags().GetString("service-hint")
             if err != nil {
@@ -76,8 +78,7 @@ func CmdCreateDeal() *cobra.Command {
 
             msg := types.MsgCreateDeal{
                 Creator:             clientCtx.GetFromAddress().String(),
-                Cid:                 cid,
-                Size_:               size,
+                DealSize:            dealSize,
                 DurationBlocks:      duration,
                 ServiceHint:         hint,
                 InitialEscrowAmount: initialEscrow,
@@ -88,6 +89,38 @@ func CmdCreateDeal() *cobra.Command {
         },
     }
     cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General:owner=<nilAddress>:replicas=<N>)")
+    flags.AddTxFlagsToCmd(cmd)
+    return cmd
+}
+
+func CmdUpdateDealContent() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "update-deal-content [deal-id] [cid] [size]",
+        Short: "Update/Commit content for an existing deal",
+        Args:  cobra.ExactArgs(3),
+        RunE: func(cmd *cobra.Command, args []string) (err error) {
+            clientCtx, err := client.GetClientTxContext(cmd)
+            if err != nil {
+                return err
+            }
+
+            dealId, err := strconv.ParseUint(args[0], 10, 64)
+            if err != nil { return err }
+            
+            cid := args[1]
+            size, err := strconv.ParseUint(args[2], 10, 64)
+            if err != nil { return err }
+
+            msg := types.MsgUpdateDealContent{
+                Creator: clientCtx.GetFromAddress().String(),
+                DealId:  dealId,
+                Cid:     cid,
+                Size_:   size,
+            }
+
+            return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+        },
+    }
     flags.AddTxFlagsToCmd(cmd)
     return cmd
 }
@@ -130,6 +163,54 @@ func CmdCreateDealFromEvm() *cobra.Command {
 			}
 
 			msg := types.MsgCreateDealFromEvm{
+				Sender:       clientCtx.GetFromAddress().String(),
+				Intent:       &payload.Intent,
+				EvmSignature: sigBz,
+			}
+
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+// CmdUpdateDealContentFromEvm updates deal content from an EVM-signed intent.
+func CmdUpdateDealContentFromEvm() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update-deal-content-from-evm [payload-json-file]",
+		Short: "Update deal content from an EVM-signed intent",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			path := args[0]
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			var payload struct {
+				Intent       types.EvmUpdateContentIntent `json:"intent"`
+				EvmSignature string                       `json:"evm_signature"`
+			}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				return err
+			}
+
+			sig := payload.EvmSignature
+			if len(sig) >= 2 && (sig[0:2] == "0x" || sig[0:2] == "0X") {
+				sig = sig[2:]
+			}
+			sigBz, err := hex.DecodeString(sig)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgUpdateDealContentFromEvm{
 				Sender:       clientCtx.GetFromAddress().String(),
 				Intent:       &payload.Intent,
 				EvmSignature: sigBz,
