@@ -200,10 +200,6 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
     let manifest_blob_hex = format!("0x{}", hex::encode(&manifest_blob));
 
     println!("Manifest Root: {}", manifest_root_hex);
-    
-    // Debug Z
-    let z_test = z_for_cell(1979);
-    println!("DEBUG Z(1979): 0x{}", hex::encode(&z_test));
 
     // 4. Generate Sample Proofs (Chained)
     let seed_list: Vec<u64> = seeds.split(',')
@@ -320,31 +316,31 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
-    let mut mdu = vec![0u8; MDU_SIZE];
+    // 1. Chunk into 16-byte scalars (Safe for scalar field)
+    let mut frs = Vec::new();
+    for chunk in raw_data.chunks(16) {
+        // Convert to BigUint (Big Endian)
+        let bn = BigUint::from_bytes_be(chunk);
+        frs.push(bn);
+    }
     
-    // We have 64 blobs.
-    // Each blob has 4096 scalars.
-    // Each scalar takes 32 bytes.
-    // We use 31 bytes of data per scalar (safe padding for BE).
-    // Layout: [0, data (31)] (Big Endian)
-    // This ensures MSB is 0, so Scalar < Modulus.
+    // 2. Use utils::frs_to_blobs
+    // This handles bit-reversal and valid padding (leading/trailing?)
+    // frs_to_blobs uses fr_to_bytes_be (fixed to BE).
+    // It creates 4096-scalar blobs.
+    let blobs = frs_to_blobs(&frs);
     
-    let mut raw_ptr = 0;
-    let mut mdu_ptr = 0;
+    // 3. Flatten blobs
+    let mut mdu = Vec::with_capacity(MDU_SIZE);
+    for blob in blobs {
+        mdu.extend_from_slice(&blob);
+    }
     
-    for _blob_idx in 0..BLOBS_PER_MDU {
-        for _scalar_idx in 0..4096 {
-            // Read 31 bytes
-            let len = std::cmp::min(31, raw_data.len().saturating_sub(raw_ptr));
-            if len > 0 {
-                // Big Endian Padding: Zero MSB (index 0).
-                mdu[mdu_ptr] = 0; 
-                mdu[mdu_ptr+1..mdu_ptr+1+len].copy_from_slice(&raw_data[raw_ptr..raw_ptr+len]);
-                raw_ptr += len;
-            }
-            // Advance MDU ptr by 32
-            mdu_ptr += 32;
-        }
+    // 4. Pad MDU to 8MB if needed
+    // frs_to_blobs creates blobs. Each is 128KB.
+    // If we have fewer than 64 blobs, we need to add more zero blobs.
+    while mdu.len() < MDU_SIZE {
+        mdu.extend_from_slice(&vec![0u8; BLOB_SIZE]);
     }
     
     mdu
