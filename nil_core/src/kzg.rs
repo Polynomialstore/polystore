@@ -6,6 +6,8 @@ use std::path::Path;
 use thiserror::Error;
 use blake2::{Blake2s256, Digest};
 use rs_merkle::{MerkleTree, MerkleProof, Hasher};
+use num_bigint::BigUint;
+use num_integer::Integer;
 
 // Define MDU (Mega-Data Unit) and Shard sizes
 pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
@@ -101,6 +103,41 @@ impl KzgContext {
         merkle_tree.root()
             .ok_or_else(|| KzgError::MerkleTreeError("Failed to get Merkle root".to_string()))
             .map(|root_hash| Bytes32::from_bytes(root_hash.as_slice()).unwrap()) // Bytes32 is 32 bytes, root_hash is 32 bytes
+    }
+
+    /// Computes the Manifest Root (KZG Commitment) and the Manifest MDU (Blob)
+    /// from a list of MDU Merkle Roots (32-byte hashes).
+    pub fn compute_manifest_commitment(&self, mdu_roots: &[[u8; 32]]) -> Result<(KzgCommitment, Vec<u8>), KzgError> {
+        use crate::utils::{bytes_to_fr_be, frs_to_blobs, get_modulus};
+
+        let modulus = get_modulus();
+        let frs: Vec<BigUint> = mdu_roots.iter()
+            .map(|root| {
+                let bn = bytes_to_fr_be(root);
+                bn.mod_floor(&modulus)
+            })
+            .collect();
+
+        // frs_to_blobs handles the packing (4096 scalars per blob)
+        // and bit-reversal ordering required by c-kzg.
+        let blobs = frs_to_blobs(&frs);
+        
+        if blobs.is_empty() {
+             // Handle empty case: single zero blob
+             let zero_blob = vec![0u8; BLOB_SIZE];
+             let commitment = self.blob_to_commitment(&zero_blob)?;
+             return Ok((commitment, zero_blob));
+        }
+        
+        // For Phase 2, we enforce a single Manifest MDU (max 4096 MDUs per file).
+        if blobs.len() > 1 {
+             return Err(KzgError::InvalidDataLength); // TODO: Support multi-blob manifest
+        }
+        
+        let manifest_blob = &blobs[0];
+        let commitment = self.blob_to_commitment(manifest_blob)?;
+        
+        Ok((commitment, manifest_blob.clone()))
     }
 
     /// Verifies a Merkle proof for a specific KZG commitment within an MDU.
@@ -255,7 +292,7 @@ mod tests {
         
         let proof_bytes_flat: Vec<u8> = proof.to_bytes().into_iter().flatten().collect();
 
-        let is_valid = verify_mdu_merkle_proof(
+        let is_valid = KzgContext::verify_mdu_merkle_proof(
             mdu_root.as_slice(),
             challenged_commitment.as_slice(),
             challenged_index,

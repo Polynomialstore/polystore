@@ -249,3 +249,56 @@ pub extern "C" fn nil_compute_mdu_proof_test(
 
     0 // Success
 }
+
+/// Computes the Manifest Root (KZG Commitment) and the Manifest MDU (Blob)
+/// from a list of MDU Merkle Roots (32-byte hashes).
+/// 
+/// Inputs:
+/// - hashes_ptr: Pointer to contiguous array of 32-byte hashes.
+/// - num_hashes: Number of hashes.
+/// 
+/// Outputs:
+/// - out_commitment: Buffer for 48-byte KZG Commitment.
+/// - out_manifest_blob: Buffer for 128 KiB Manifest MDU.
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_compute_manifest_commitment(
+    hashes_ptr: *const u8,
+    num_hashes: usize,
+    out_commitment: *mut u8,
+    out_manifest_blob: *mut u8,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1, // Not initialized
+    };
+
+    if hashes_ptr.is_null() || out_commitment.is_null() || out_manifest_blob.is_null() {
+        return -2;
+    }
+
+    // Convert raw pointer to slice of [u8; 32]
+    let total_bytes = num_hashes * 32;
+    let hashes_slice = unsafe { std::slice::from_raw_parts(hashes_ptr, total_bytes) };
+    
+    let mut hashes = Vec::with_capacity(num_hashes);
+    for chunk in hashes_slice.chunks_exact(32) {
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(chunk);
+        hashes.push(arr);
+    }
+
+    match ctx.compute_manifest_commitment(&hashes) {
+        Ok((commitment, blob)) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(commitment.as_slice().as_ptr(), out_commitment, 48);
+                std::ptr::copy_nonoverlapping(blob.as_ptr(), out_manifest_blob, crate::kzg::BLOB_SIZE);
+            }
+            0
+        },
+        Err(e) => {
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: Failed to compute manifest: {:?}", e);
+            -3
+        }
+    }
+}
