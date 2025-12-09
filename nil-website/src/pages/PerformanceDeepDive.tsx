@@ -1,7 +1,18 @@
 import { motion } from "framer-motion";
-import { Trophy, Zap } from "lucide-react";
+import { Trophy, Zap, HardDrive, Cloud, Server } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export const PerformanceDeepDive = () => {
+  const [racing, setRacing] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRacing(true);
+      setTimeout(() => setRacing(false), 4000); // Race duration + pause
+    }, 6000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="w-full">
       <motion.div
@@ -21,68 +32,95 @@ export const PerformanceDeepDive = () => {
         </p>
 
         {/* Visualization: The Latency Racer */}
-        <section className="bg-card border border-border p-8 rounded-2xl shadow-sm">
-          <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-foreground">
-            <Zap className="w-5 h-5 text-yellow-500" /> Latency Tiers (Block Height)
-          </h3>
+        <section className="bg-card border border-border p-8 rounded-2xl shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+             <Zap className="w-64 h-64" />
+          </div>
           
-          <div className="space-y-8">
-            {/* Lane 1: Platinum */}
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-bold text-foreground flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span> Local NVMe Node
-                </span>
-                <span className="font-mono text-cyan-400">Block H+1 (100% Reward)</span>
+          <div className="flex justify-between items-center mb-8">
+              <h3 className="text-xl font-bold flex items-center gap-2 text-foreground">
+                <Zap className="w-5 h-5 text-yellow-500" /> Latency Race Simulation
+              </h3>
+              <div className="text-xs font-mono text-muted-foreground">
+                  Status: {racing ? "CHALLENGE ACTIVE" : "IDLE"}
               </div>
-              <div className="w-full bg-secondary/50 h-8 rounded-full overflow-hidden relative">
+          </div>
+          
+          <div className="space-y-10 relative">
+            {/* Start Line */}
+            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-dashed border-l border-white/20 z-10"></div>
+            {/* Finish Line (Block H+1) */}
+            <div className="absolute left-[30%] top-0 bottom-0 w-px bg-cyan-500/30 z-0">
+                <div className="absolute -top-6 left-0 text-[10px] text-cyan-500 whitespace-nowrap">Platinum (H+1)</div>
+            </div>
+            {/* Finish Line (Block H+5) */}
+            <div className="absolute left-[60%] top-0 bottom-0 w-px bg-yellow-500/30 z-0">
+                <div className="absolute -top-6 left-0 text-[10px] text-yellow-500 whitespace-nowrap">Gold (H+5)</div>
+            </div>
+             {/* Finish Line (Block H+20) */}
+             <div className="absolute right-0 top-0 bottom-0 w-px bg-red-500/30 z-0">
+                <div className="absolute -top-6 right-0 text-[10px] text-red-500 whitespace-nowrap">Cutoff (H+20)</div>
+            </div>
+
+            {/* Lane 1: Platinum */}
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-2 text-sm">
+                <Server className="w-4 h-4 text-cyan-400" />
+                <span className="font-bold text-foreground">Local NVMe Node</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-cyan-400">Reward: 1.0 NIL</span>
+              </div>
+              <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "100%" }}
+                  initial={{ x: 0 }}
+                  animate={{ x: racing ? "30%" : 0 }}
                   transition={{ duration: 1, ease: "easeOut" }}
-                  className="h-full bg-cyan-500"
-                />
+                  className="absolute w-8 h-8 bg-cyan-500 rounded shadow-[0_0_15px_rgba(6,182,212,0.5)] flex items-center justify-center"
+                >
+                    <Zap className="w-4 h-4 text-black fill-current" />
+                </motion.div>
               </div>
             </div>
 
             {/* Lane 2: Gold */}
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-bold text-foreground flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span> Standard HDD Node
-                </span>
-                <span className="font-mono text-yellow-400">Block H+5 (80% Reward)</span>
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-2 text-sm">
+                <HardDrive className="w-4 h-4 text-yellow-400" />
+                <span className="font-bold text-foreground">Standard HDD Node</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-yellow-400">Reward: 0.8 NIL</span>
               </div>
-              <div className="w-full bg-secondary/50 h-8 rounded-full overflow-hidden relative">
+              <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "60%" }}
-                  transition={{ duration: 2, ease: "easeOut" }}
-                  className="h-full bg-yellow-500"
-                />
+                  initial={{ x: 0 }}
+                  animate={{ x: racing ? "60%" : 0 }}
+                  transition={{ duration: 2.5, ease: "easeOut" }}
+                  className="absolute w-8 h-8 bg-yellow-500 rounded shadow-[0_0_15px_rgba(234,179,8,0.5)] flex items-center justify-center"
+                >
+                    <Zap className="w-4 h-4 text-black fill-current" />
+                </motion.div>
               </div>
             </div>
 
             {/* Lane 3: Fail */}
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-bold text-foreground flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500"></span> S3 / Cold Storage
-                </span>
-                <span className="font-mono text-red-500">Block H+20 (0% Reward)</span>
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-2 text-sm">
+                <Cloud className="w-4 h-4 text-red-500" />
+                <span className="font-bold text-foreground">S3 Wrapper / Cold</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-red-500">Reward: 0.0 NIL</span>
               </div>
-              <div className="w-full bg-secondary/50 h-8 rounded-full overflow-hidden relative">
+              <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "20%" }}
-                  transition={{ duration: 3, ease: "easeOut" }}
-                  className="h-full bg-red-500"
-                />
+                  initial={{ x: 0 }}
+                  animate={{ x: racing ? "95%" : 0 }}
+                  transition={{ duration: 4, ease: "linear" }}
+                  className="absolute w-8 h-8 bg-red-500 rounded shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center"
+                >
+                    <Zap className="w-4 h-4 text-white fill-current" />
+                </motion.div>
               </div>
             </div>
           </div>
 
-          <div className="mt-8 p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm text-muted-foreground">
+          <div className="mt-12 p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm text-muted-foreground">
             <p>
               <strong>Market Logic:</strong> Slow providers aren't banned; they just earn less. This implicitly filters out "Lazy Providers" (S3 wrappers) because the bandwidth costs of fetching data remotely destroy their margins when combined with lower Gold/Silver tier rewards.
             </p>
