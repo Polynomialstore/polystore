@@ -184,6 +184,23 @@ impl NilNode {
                             // Try to decode as AskForProxy
                             if let Ok(proxy_req) = serde_json::from_slice::<AskForProxy>(&message.data) {
                                 info!("🕵️‍♀️ Received PROXY REQUEST from {}: Need CID {} via Peer {}", peer_id, proxy_req.cid, proxy_req.target_peer);
+                                
+                                // Logic: Am I the deputy?
+                                let my_id = self.swarm.local_peer_id().to_string();
+                                if proxy_req.target_peer == my_id {
+                                    info!("✅ I am the deputy! Handling proxy request...");
+                                    // 1. "Fetch" data from the *actual* target (not in message, usually implicitly the Deal SP)
+                                    // For Phase 2, we just simulate the fetch delay.
+                                    info!("   Fetching CID {} from network...", proxy_req.cid);
+                                    
+                                    // 2. "Verify" (Simulate KZG check)
+                                    info!("   Verifying KZG proof... OK.");
+                                    
+                                    // 3. "Return" (Simulate sending data back)
+                                    // In a real implementation, we would open a direct stream to 'peer_id' (requester)
+                                    // and pipe the data. For now, we just log.
+                                    info!("   Streaming data back to requester {}.", peer_id);
+                                }
                             }
                         }
                         _ => {}

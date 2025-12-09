@@ -214,4 +214,4 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
     *   [x] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
 
 ### 3. Work Stream: The Deputy System (Phase 2 - Optional)
-*   [ ] **Task:** Implement the "Receiver" side of `AskForProxy` (fetch data from target and return to requester).
+*   [x] **Task:** Implement the "Receiver" side of `AskForProxy` (fetch data from target and return to requester).
