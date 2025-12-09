@@ -321,6 +321,80 @@ The objective values `O_old` and `O_new` MUST be computable from:
 
 No hidden off‑chain information may be required to recompute or verify the objective for a given proposal.
 
+### 6.5 Knapsack analogy & dynamic assignment (illustrative)
+
+It is often helpful to have a concrete mental model of how this “knapsack” behaves and what UX it implies for data users.
+
+Consider three deals:
+
+- Deal A: 1 TB, archive‑like (almost no reads), `H(A) ≈ 0`.
+- Deal B: 10 GB, moderately used, `H(B)` mid‑range.
+- Deal C: 10 GB, suddenly viral, `H(C)` high.
+
+And two SPs:
+
+- SP₁: “Archive‑optimized”: cheap storage, constrained bandwidth.
+- SP₂: “Edge‑optimized”: expensive storage, abundant bandwidth.
+
+Users creating A, B, C only specify:
+
+- redundancy bounds `r_min/r_max`,
+- base price settings (storage + bandwidth),
+- and maybe loose preferences (“archive‑friendly” vs “performance‑friendly” profile).
+
+They **never** pick specific SPs; they just submit deals into the system.
+
+The system flow, in the steady state, looks like:
+
+1. **Initial placement.**
+   - Committees assign:
+     - Deal A primarily to SP₁ (archive), satisfying `r_min(A)`,
+     - Deals B and C across both SPs according to capacity and diversity rules.
+   - At this point, placement may be close to “uniform but redundancy‑respecting”.
+
+2. **Heat reacts to demand.**
+   - Over several epochs, Mode 1’s Heat layer sees:
+     - A: almost no bytes served ⇒ `H(A)` stays near 0.
+     - B: steady moderate traffic ⇒ `H(B)` stabilizes at a moderate value.
+     - C: large spikes in retrievals ⇒ `H(C)` climbs toward the top of its band.
+
+3. **Objective / knapsack view.**
+   - In the objective `Objective(placement)`, high `H(C)` makes C “valuable to cover well”; low `H(A)` makes A less sensitive, as long as `r_min(A)` is met.
+   - SP₁’s archive‑oriented cost curve means additional replicas of C are expensive in terms of bandwidth commitment; SP₂’s edge profile makes additional replicas of C relatively cheap.
+
+4. **Committee proposals.**
+   - A placement committee for this epoch, looking at:
+     - current `H(·)`,
+     - capacities `C_storage`, `C_bw`,
+     - current `r_actual(·)`,
+   - proposes to:
+     - keep A on SP₁ (and maybe one backup SP), since it’s cheap and cold,
+     - add more C replicas on SP₂ (up to `r_max(C)`),
+     - potentially move one B replica from SP₁ to SP₂ if SP₁ is bandwidth‑constrained.
+   - Provided constraints are respected, `Objective(new)` > `Objective(old)`, and no better counter‑proposal arrives, the chain accepts this update.
+
+5. **UX and resource use.**
+   - From the **user’s perspective**:
+     - They never had to think about SP identities; they just see that:
+       - A is stored redundantly and cheaply,
+       - C remains retrievable with good performance during its hot period.
+   - From the **network’s perspective**:
+     - Archive SPs are mostly filled with cold deals (A‑like),
+     - Edge SPs are heavily allocated to hot deals (C‑like),
+     - Capacity is used near‑optimally given declared profiles and Heat.
+
+Crucially, all of this happens **dynamically and automatically**:
+
+- Users specify *what* they want (size, redundancy, rough performance profile, willingness to pay).
+- SPs specify *what they can offer* (capacity, bandwidth, capabilities).
+- The system (via committees and the knapsack objective) continuously re‑solves the “who stores what” mapping inside the constraints of Mode 1’s retrievability and self‑healing invariants.
+
+The goal is not to guarantee a perfect global optimum, but to:
+
+- Stay within a *good* region of the knapsack solution space (no obvious waste),
+- Offer a **simple UX** for data users (“upload file → choose redundancy & price → system handles placement”),
+- Preserve the core safety guarantees of the underlying cryptosystem (commitments, proofs, slashing).
+
 Multiple proposals can be submitted; the chain must decide which to accept (Section 7).
 
 ---
