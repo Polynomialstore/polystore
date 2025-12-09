@@ -176,18 +176,20 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 ### 1. Work Stream: Triple Proof Architecture (Core & Chain)
 **Goal:** Implement the 3-Hop Verification to allow dealing with large datasets using a single 48-byte Manifest Root.
 
-*   **Step A: Protobuf Definitions**
-    *   [ ] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
-    *   [ ] **Task:** Update `Deal` struct: replace `string cid` with `bytes manifest_root` (48-byte) and add `uint64 total_mdus`.
-    *   [ ] **Task:** Define `message ChainedProof`: `mdu_index`, `mdu_root_fr`, `manifest_opening` (Hop 1), `blob_commitment`, `merkle_path` (Hop 2), `z`, `y`, `kzg_opening` (Hop 3).
-*   **Step B: Core Cryptography (`nil_core`)**
-    *   [ ] **Task:** Implement `ManifestMDU` generation:
+*   **Step A: Protobuf Definitions (Executed)**
+    *   [x] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
+    *   [x] **Task:** Update `Deal` struct: replace `string cid` with `bytes manifest_root` (48-byte) and add `uint64 total_mdus`.
+    *   [x] **Task:** Define `message ChainedProof`: `mdu_index`, `mdu_root_fr`, `manifest_opening` (Hop 1), `blob_commitment`, `merkle_path` (Hop 2), `z`, `y`, `kzg_opening` (Hop 3).
+*   **Step B: Core Cryptography (`nil_core`) (Executed)**
+    *   [x] **Task:** Implement `ManifestMDU` generation:
         *   Input: List of MDU Roots (hashes).
         *   Process: Map hashes to Scalars -> Blob -> KZG Commitment.
         *   Output: `ManifestRoot` (G1) and `ManifestBlob` data.
 *   **Step C: Chain Verification Logic**
+    *   [ ] **Task (Core):** Implement `verify_manifest_inclusion` in `nil_core` (Need to handle Roots of Unity coordinate mapping).
+    *   [ ] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
     *   [ ] **File:** `nilchain/x/nilchain/keeper/msg_server.go` (or dedicated verifier).
-    *   [ ] **Task:** Implement `VerifyChainedProof` algorithm:
+    *   [ ] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
         *   Hop 1 (KZG): Verify MDU Root is in Manifest.
         *   Hop 2 (Merkle): Verify Blob is in MDU.
         *   Hop 3 (KZG): Verify Data is in Blob.
