@@ -66,13 +66,11 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
                 0 // Success
             },
             Err(e) => {
-                #[cfg(feature = "debug-print")]
                 eprintln!("ERROR: Failed to create MDU Merkle root: {:?}", e);
                 -4 // Merkle root creation failed
             }
         },
         Err(e) => {
-            #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to get KZG commitments for MDU: {:?}", e);
             -3 // Commitment calculation failed
         }

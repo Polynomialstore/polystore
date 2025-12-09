@@ -799,6 +799,7 @@ dependencies = [
  "clap",
  "hex",
  "nil_core",
+ "num-bigint",
  "rand",
  "reqwest",
  "rs_merkle",

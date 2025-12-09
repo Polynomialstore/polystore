@@ -58,6 +58,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+    "os"
 	"unsafe"
 
 	"nilchain/x/nilchain/types" // Import types for MDU_SIZE
@@ -93,7 +94,6 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 
 	return outRoot, nil
 }
-
 // ComputeManifestProof computes a KZG proof for a specific MDU inclusion in the Manifest.
 func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte, y []byte, err error) {
     if len(manifest_blob) != types.BLOB_SIZE { // Assuming types.BLOB_SIZE is 128KB (131072)

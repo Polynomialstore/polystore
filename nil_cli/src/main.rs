@@ -2,14 +2,13 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use nil_core::{
     kzg::{KzgContext, MDU_SIZE, BLOBS_PER_MDU, BLOB_SIZE},
-    utils::{z_for_cell},
+    utils::{z_for_cell, frs_to_blobs, BYTES_PER_BLOB},
 };
+use num_bigint::BigUint;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::path::PathBuf;
-use std::time::Duration;
 use rs_merkle::{MerkleTree, Hasher};
 
 // Define local Hasher to match nil_core's behavior
@@ -41,6 +40,8 @@ enum Commands {
         seeds: String, // Random bytes to challenge (simulating future retrieval)
         #[arg(long, default_value = "output.json")]
         out: PathBuf,
+        #[arg(long)]
+        save_mdu_prefix: Option<String>,
     },
     Verify {
         file: PathBuf,
@@ -130,43 +131,49 @@ fn main() -> Result<()> {
     };
 
     match cli.command {
-        Commands::Shard { file, seeds, out } => run_shard(file, seeds, out, ts_path),
+        Commands::Shard { file, seeds, out, save_mdu_prefix } => run_shard(file, seeds, out, ts_path, save_mdu_prefix),
         Commands::Verify { file } => run_verify(file, ts_path),
         Commands::Store { file, url, owner } => run_store(file, url, owner),
     }
 }
 
-fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Result<()> {
+fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_mdu_prefix: Option<String>) -> Result<()> {
     let kzg_ctx = KzgContext::load_from_file(&ts_path)
         .context("Failed to load KZG trusted setup")?;
 
     println!("Sharding file: {:?}", file);
-    let mut data = std::fs::read(&file).context("Failed to read input file")?;
-    let original_len = data.len();
-
-    // 1. Chunk into MDUs (8 MiB)
-    // Pad to multiple of MDU_SIZE if needed? 
-    // Spec says: MDU is 8MiB. If file is smaller, pad it?
-    // Let's pad the data to MDU boundary.
-    if data.len() % MDU_SIZE != 0 {
-        let padding = MDU_SIZE - (data.len() % MDU_SIZE);
-        data.resize(data.len() + padding, 0);
-    }
+    let mut raw_data = std::fs::read(&file).context("Failed to read input file")?;
+    let original_len = raw_data.len();
     
-    let mdu_chunks: Vec<&[u8]> = data.chunks(MDU_SIZE).collect();
-    let total_mdus = mdu_chunks.len();
+    // We treat the file as a stream of bytes. We pack them into MDUs.
+    // Capacity = 64 * 4096 * 31 = 8,126,464 bytes.
+    let chunk_size = 31;
+    let mdu_capacity = 64 * 4096 * chunk_size;
+    
+    let raw_chunks: Vec<&[u8]> = raw_data.chunks(mdu_capacity).collect();
+    let total_mdus = raw_chunks.len();
     println!("Total MDUs: {}", total_mdus);
 
     let mut mdu_roots_bytes: Vec<[u8; 32]> = Vec::new();
     let mut mdu_outputs = Vec::new();
     let mut all_mdu_commitments = Vec::new(); // Store commitments for proof generation
+    let mut encoded_mdus = Vec::new(); // Store encoded data for proof generation
 
     // 2. Process each MDU
-    for (i, chunk) in mdu_chunks.iter().enumerate() {
+    for (i, raw_chunk) in raw_chunks.iter().enumerate() {
         println!("Processing MDU {}/{}...", i + 1, total_mdus);
         
+        let encoded_mdu = encode_to_mdu(raw_chunk);
+        encoded_mdus.push(encoded_mdu.clone());
+        
+        if let Some(prefix) = &save_mdu_prefix {
+            let path = format!("{}.mdu.{}.bin", prefix, i);
+            std::fs::write(&path, &encoded_mdu).context("Failed to save MDU")?;
+            println!("Saved MDU to {}", path);
+        }
+        
         // a. Get Commitments (64 blobs)
-        let commitments = kzg_ctx.mdu_to_kzg_commitments(chunk)?;
+        let commitments = kzg_ctx.mdu_to_kzg_commitments(&encoded_mdu)?;
         
         // b. Compute Merkle Root
         let root_bytes32 = kzg_ctx.create_mdu_merkle_root(&commitments)?;
@@ -185,7 +192,7 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
             blobs: blob_hex_list,
         });
     }
-
+    
     // 3. Compute Manifest
     println!("Computing Manifest...");
     let (manifest_commitment, manifest_blob) = kzg_ctx.compute_manifest_commitment(&mdu_roots_bytes)?;
@@ -208,23 +215,22 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
         
         // Calculate coordinates
         // Global Offset -> MDU Index -> Blob Index -> Local Offset
-        let mdu_idx = byte_offset / MDU_SIZE;
-        let offset_in_mdu = byte_offset % MDU_SIZE;
-        let blob_idx = offset_in_mdu / BLOB_SIZE;
-        let offset_in_blob = offset_in_mdu % BLOB_SIZE; 
+        let mdu_idx = byte_offset / mdu_capacity;
+        let offset_in_mdu_raw = byte_offset % mdu_capacity;
         
-        // Note: KZG works on "Symbols" (32 bytes). 
-        // We usually prove a whole symbol.
-        // Let's align to symbol boundary for the proof.
-        let symbol_idx_in_blob = offset_in_blob / 32;
+        // Map raw offset to blob/symbol index
+        // 31 bytes per symbol
+        let blob_idx = offset_in_mdu_raw / (4096 * chunk_size);
+        let offset_in_blob_raw = offset_in_mdu_raw % (4096 * chunk_size);
+        let symbol_idx_in_blob = offset_in_blob_raw / chunk_size;
         
         // --- Hop 1: Manifest Inclusion ---
-        // Verify that mdu_roots_bytes[mdu_idx] is in manifest
+        println!("   Generating Hop 1 (Manifest) proof for MDU {}...", mdu_idx);
         let z_mdu = z_for_cell(mdu_idx);
         let (manifest_proof, _) = kzg_ctx.compute_proof(&manifest_blob, &z_mdu)?;
         
         // --- Hop 2: Merkle Inclusion ---
-        // Verify that blob[blob_idx] is in MDU[mdu_idx]
+        println!("   Generating Hop 2 (Merkle) proof for Blob {}...", blob_idx);
         let commitments = &all_mdu_commitments[mdu_idx];
         let target_blob_commitment = &commitments[blob_idx];
         
@@ -238,18 +244,17 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
             .collect();
 
         // --- Hop 3: Data Inclusion ---
-        // Verify symbol at symbol_idx_in_blob is in blob[blob_idx]
+        println!("   Generating Hop 3 (Data) proof for Symbol {} in Blob {}...", symbol_idx_in_blob, blob_idx);
         let z_blob = z_for_cell(symbol_idx_in_blob);
         
-        // Extract blob bytes
-        let mdu_start = mdu_idx * MDU_SIZE;
-        let blob_start = mdu_start + (blob_idx * BLOB_SIZE);
-        let blob_bytes = &data[blob_start .. blob_start + BLOB_SIZE];
+        // Extract blob bytes (Encoded!)
+        let mdu_data = &encoded_mdus[mdu_idx];
+        let blob_start = blob_idx * BLOB_SIZE;
+        let blob_bytes = &mdu_data[blob_start .. blob_start + BLOB_SIZE];
         
         let (blob_proof, y_blob) = kzg_ctx.compute_proof(blob_bytes, &z_blob)?;
         
         // --- Verify (Simulate) ---
-        // 1. Manifest
         let v1 = kzg_ctx.verify_manifest_inclusion(
             manifest_commitment.as_slice(),
             &mdu_roots_bytes[mdu_idx],
@@ -257,7 +262,6 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
             manifest_proof.as_slice()
         )?;
         
-        // 2. Merkle
         let root_arr = mdu_roots_bytes[mdu_idx];
         let leaf = Blake2s256Hasher::hash(target_blob_commitment.as_slice());
         let v2 = merkle_proof.verify(
@@ -267,7 +271,6 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
             BLOBS_PER_MDU
         );
         
-        // 3. Data
         let v3 = kzg_ctx.verify_proof(
             target_blob_commitment.as_slice(),
             &z_blob,
@@ -310,6 +313,34 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf) -> Re
     std::fs::write(&out, json)?;
     println!("Saved output to {:?}", out);
     Ok(())
+}
+
+fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
+    // 1. Chunk into 31-byte scalars
+    let mut frs = Vec::new();
+    for chunk in raw_data.chunks(31) {
+        // Convert to BigUint (Big Endian)
+        let bn = BigUint::from_bytes_be(chunk);
+        frs.push(bn);
+    }
+    
+    // 2. Use utils::frs_to_blobs
+    // This handles bit-reversal and valid padding (leading/trailing?)
+    // frs_to_blobs uses fr_to_bytes_be (fixed to BE).
+    let blobs = frs_to_blobs(&frs);
+    
+    // 3. Flatten blobs
+    let mut mdu = Vec::with_capacity(MDU_SIZE);
+    for blob in blobs {
+        mdu.extend_from_slice(&blob);
+    }
+    
+    // 4. Pad MDU to 8MB if needed
+    while mdu.len() < MDU_SIZE {
+        mdu.extend_from_slice(&vec![0u8; BLOB_SIZE]);
+    }
+    
+    mdu
 }
 
 fn run_verify(file: PathBuf, ts_path: PathBuf) -> Result<()> {
