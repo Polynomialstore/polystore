@@ -226,6 +226,33 @@ impl KzgContext {
         )
         .map_err(KzgError::Internal)
     }
+
+    /// Verifies that a specific MDU Merkle Root is included in the Manifest.
+    /// This corresponds to "Hop 1" of the Triple Proof.
+    pub fn verify_manifest_inclusion(
+        &self,
+        manifest_commitment_bytes: &[u8],
+        mdu_root_bytes: &[u8], // The value (y) - MDU Merkle Root
+        mdu_index: usize,      // The index in the manifest
+        proof_bytes: &[u8],    // The KZG proof
+    ) -> Result<bool, KzgError> {
+        if manifest_commitment_bytes.len() != 48 || mdu_root_bytes.len() != 32 || proof_bytes.len() != 48 {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        // 1. Calculate z (evaluation point) from the index
+        let z_bytes = crate::utils::z_for_cell(mdu_index);
+
+        // 2. Reuse standard verify_proof
+        // The "value" (y) is the MDU root itself, treated as a field element.
+        // verify_proof handles the Bytes32 conversion.
+        self.verify_proof(
+            manifest_commitment_bytes,
+            &z_bytes,
+            mdu_root_bytes,
+            proof_bytes,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -288,9 +315,9 @@ mod tests {
             .map(|c| Blake2s256Hasher::hash(c.as_slice()))
             .collect();
         let merkle_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&leaves);
-        let proof = merkle_tree.proof(&[challenged_index]).expect("Proof creation failed");
+        let proof = merkle_tree.proof(&[challenged_index]);
         
-        let proof_bytes_flat: Vec<u8> = proof.to_bytes().into_iter().flatten().collect();
+        let proof_bytes_flat: Vec<u8> = proof.to_bytes();
 
         let is_valid = KzgContext::verify_mdu_merkle_proof(
             mdu_root.as_slice(),

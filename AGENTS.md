@@ -186,15 +186,15 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
         *   Process: Map hashes to Scalars -> Blob -> KZG Commitment.
         *   Output: `ManifestRoot` (G1) and `ManifestBlob` data.
 *   **Step C: Chain Verification Logic**
-    *   [ ] **Task (Core):** Implement `verify_manifest_inclusion` in `nil_core` (Need to handle Roots of Unity coordinate mapping).
-    *   [ ] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
-    *   [ ] **File:** `nilchain/x/nilchain/keeper/msg_server.go` (or dedicated verifier).
-    *   [ ] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
+    *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `nil_core` (Need to handle Roots of Unity coordinate mapping).
+    *   [x] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
+    *   [x] **File:** `nilchain/x/nilchain/keeper/msg_server.go` (or dedicated verifier).
+    *   [x] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
         *   Hop 1 (KZG): Verify MDU Root is in Manifest.
         *   Hop 2 (Merkle): Verify Blob is in MDU.
         *   Hop 3 (KZG): Verify Data is in Blob.
 *   **Step D: CLI Tooling**
-    *   [ ] **Task:** Update `nil-cli shard` to produce `ManifestMDU` and the final `ManifestRoot` for the Deal.
+    *   [x] **Task:** Update `nil-cli shard` to produce `ManifestMDU` and the final `ManifestRoot` for the Deal.
 
 ### 2. Work Stream: Web UI Modernization
 **Goal:** Update the frontend to reflect the "Container vs Content" model and visualize the new architecture.

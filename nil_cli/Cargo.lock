@@ -795,11 +795,13 @@ name = "nil_cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blake2",
  "clap",
  "hex",
  "nil_core",
  "rand",
  "reqwest",
+ "rs_merkle",
  "serde",
  "serde_json",
  "sha2",

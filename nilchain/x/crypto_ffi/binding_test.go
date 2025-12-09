@@ -43,3 +43,27 @@ func TestVerifyMduProof(t *testing.T) {
         t.Fatal("Proof of zeros should not be valid")
     }
 }
+
+func TestVerifyChainedProof(t *testing.T) {
+    manifestComm := make([]byte, 48)
+    manifestProof := make([]byte, 48)
+    mduRoot := make([]byte, 32)
+    blobComm := make([]byte, 48)
+    blobProof := make([]byte, 48)
+    z := make([]byte, 32)
+    y := make([]byte, 32)
+    merklePath := make([]byte, 32)
+
+    valid, err := VerifyChainedProof(
+        manifestComm, 0, manifestProof, mduRoot, 
+        blobComm, 0, merklePath, 
+        z, y, blobProof,
+    )
+    
+    if err != nil {
+        t.Logf("Chained Verification returned: %v, err: %v", valid, err)
+    }
+    if valid {
+         t.Fatal("Proof of zeros should not be valid")
+    }
+}

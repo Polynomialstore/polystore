@@ -28,6 +28,31 @@ int nil_compute_mdu_proof_test(
     unsigned char* out_y,
     unsigned char* out_kzg_proof
 );
+int nil_compute_manifest_commitment(
+    const unsigned char* hashes_ptr,
+    size_t num_hashes,
+    unsigned char* out_commitment,
+    unsigned char* out_manifest_blob
+);
+int nil_compute_manifest_proof(
+    const unsigned char* manifest_blob,
+    unsigned long long mdu_index,
+    unsigned char* out_proof,
+    unsigned char* out_y
+);
+int nil_verify_chained_proof(
+    const unsigned char* manifest_commitment,
+    unsigned long long mdu_index,
+    const unsigned char* manifest_proof,
+    const unsigned char* mdu_merkle_root,
+    const unsigned char* blob_commitment,
+    unsigned long long blob_index,
+    const unsigned char* blob_merkle_proof,
+    size_t blob_merkle_proof_len,
+    const unsigned char* blob_z,
+    const unsigned char* blob_y,
+    const unsigned char* blob_proof
+);
 */
 import "C"
 import (
@@ -67,6 +92,33 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 	}
 
 	return outRoot, nil
+}
+
+// ComputeManifestProof computes a KZG proof for a specific MDU inclusion in the Manifest.
+func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte, y []byte, err error) {
+    if len(manifest_blob) != types.BLOB_SIZE { // Assuming types.BLOB_SIZE is 128KB (131072)
+         return nil, nil, fmt.Errorf("invalid manifest_blob length: expected %d, got %d", types.BLOB_SIZE, len(manifest_blob))
+    }
+
+    proof = make([]byte, 48)
+    y = make([]byte, 32)
+    
+    cManifestBlob := (*C.uchar)(unsafe.Pointer(&manifest_blob[0]))
+    cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
+    cY := (*C.uchar)(unsafe.Pointer(&y[0]))
+
+    res := C.nil_compute_manifest_proof(
+        cManifestBlob,
+        C.ulonglong(mdu_index),
+        cProof,
+        cY,
+    )
+
+    if res != 0 {
+        return nil, nil, fmt.Errorf("nil_compute_manifest_proof failed with code: %d", res)
+    }
+
+    return proof, y, nil
 }
 
 // VerifyMduProof verifies a KZG proof for a single 128 KiB blob within an MDU,
@@ -110,6 +162,60 @@ func VerifyMduProof(
 		return false, nil
 	} else {
 		return false, fmt.Errorf("nil_verify_mdu_proof failed with code: %d", res)
+	}
+}
+
+// VerifyChainedProof verifies a "Triple Proof" (Chained Verification).
+//
+// Hop 1: Verify MDU Root is in Manifest (KZG).
+// Hop 2: Verify Blob Commitment is in MDU (Merkle).
+// Hop 3: Verify Data is in Blob (KZG).
+func VerifyChainedProof(
+	manifest_commitment []byte,
+	mdu_index uint64,
+	manifest_proof []byte,
+	mdu_merkle_root []byte,
+	blob_commitment []byte,
+	blob_index uint64,
+	blob_merkle_proof []byte,
+	blob_z []byte,
+	blob_y []byte,
+	blob_proof []byte,
+) (bool, error) {
+	if len(manifest_commitment) != 48 || len(manifest_proof) != 48 || len(mdu_merkle_root) != 32 ||
+		len(blob_commitment) != 48 || len(blob_z) != 32 || len(blob_y) != 32 || len(blob_proof) != 48 {
+		return false, errors.New("invalid input lengths for Chained Proof components")
+	}
+
+	cManifestCommitment := (*C.uchar)(unsafe.Pointer(&manifest_commitment[0]))
+	cManifestProof := (*C.uchar)(unsafe.Pointer(&manifest_proof[0]))
+	cMduMerkleRoot := (*C.uchar)(unsafe.Pointer(&mdu_merkle_root[0]))
+	cBlobCommitment := (*C.uchar)(unsafe.Pointer(&blob_commitment[0]))
+	cBlobMerkleProof := (*C.uchar)(unsafe.Pointer(&blob_merkle_proof[0]))
+	cBlobZ := (*C.uchar)(unsafe.Pointer(&blob_z[0]))
+	cBlobY := (*C.uchar)(unsafe.Pointer(&blob_y[0]))
+	cBlobProof := (*C.uchar)(unsafe.Pointer(&blob_proof[0]))
+
+	res := C.nil_verify_chained_proof(
+		cManifestCommitment,
+		C.ulonglong(mdu_index),
+		cManifestProof,
+		cMduMerkleRoot,
+		cBlobCommitment,
+		C.ulonglong(blob_index),
+		cBlobMerkleProof,
+		C.size_t(len(blob_merkle_proof)),
+		cBlobZ,
+		cBlobY,
+		cBlobProof,
+	)
+
+	if res == 1 {
+		return true, nil
+	} else if res == 0 {
+		return false, nil
+	} else {
+		return false, fmt.Errorf("nil_verify_chained_proof failed with code: %d", res)
 	}
 }
 

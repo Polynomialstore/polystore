@@ -16,6 +16,7 @@ import (
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"nilchain/x/nilchain/types"
+	"nilchain/x/crypto_ffi"
 )
 
 type msgServer struct {
@@ -642,12 +643,50 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
 	}
 
-	// TRIPLE PROOF VERIFICATION (Placeholder)
-	// TODO: Call crypto_ffi.VerifyChainedProof(deal.ManifestRoot, chainedProof)
-	// For now, we assume valid if inputs are non-empty to unblock compilation.
-	// This allows us to proceed with Proto/Keeper refactoring before core FFI is ready.
+	// TRIPLE PROOF VERIFICATION
+	// Call crypto_ffi.VerifyChainedProof(deal.ManifestRoot, chainedProof)
 	valid := true 
-	_ = chainedProof // Suppress unused error
+	
+	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 || 
+       len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
+       len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
+           valid = false
+           ctx.Logger().Info("Invalid proof component lengths")
+    } else if len(deal.ManifestRoot) != 48 {
+           valid = false
+           ctx.Logger().Info("Deal manifest root not set")
+    } else {
+         // Flatten Merkle Path
+         flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
+         for _, node := range chainedProof.MerklePath {
+             if len(node) != 32 {
+                 valid = false
+                 break
+             }
+             flattenedMerkle = append(flattenedMerkle, node...)
+         }
+         
+         if valid {
+             v, err := crypto_ffi.VerifyChainedProof(
+                deal.ManifestRoot,
+                chainedProof.MduIndex,
+                chainedProof.ManifestOpening,
+                chainedProof.MduRootFr,
+                chainedProof.BlobCommitment,
+                uint64(chainedProof.BlobIndex),
+                flattenedMerkle,
+                chainedProof.ZValue,
+                chainedProof.YValue,
+                chainedProof.KzgOpeningProof,
+             )
+             if err != nil {
+                 ctx.Logger().Error("Triple Proof Verification Error", "err", err)
+                 valid = false
+             } else {
+                 valid = v
+             }
+         }
+    }
 
 	if !valid {
 		ctx.Logger().Info("KZG Proof INVALID: Slashing Sender")

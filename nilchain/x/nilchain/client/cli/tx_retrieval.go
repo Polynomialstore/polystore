@@ -20,9 +20,9 @@ import (
 
 func CmdSignRetrievalReceipt() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sign-retrieval-receipt [deal-id] [provider-addr] [epoch-id] [file-path] [trusted-setup]",
+		Use:   "sign-retrieval-receipt [deal-id] [provider-addr] [epoch-id] [file-path] [trusted-setup] [manifest-path] [mdu-index]",
 		Short: "Generate and sign a retrieval receipt for a downloaded file",
-		Args:  cobra.ExactArgs(5),
+		Args:  cobra.ExactArgs(7),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			clientCtx, err := client.GetClientTxContext(cmd)
 			if err != nil {
@@ -40,13 +40,13 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			}
 			filePath := args[3]
 			trustedSetupPath := args[4]
+            manifestPath := args[5]
+            mduIndex, err := strconv.ParseUint(args[6], 10, 64)
+            if err != nil {
+                return err
+            }
 
-			// 1. Read File & Compute Proof (Simulation of verification).
-			// In the current Mode 1 devnet path, we treat this as a simple,
-			// fixed challenge: chunk index 0 for a local 8 MiB MDU. A future
-			// mainnet implementation will replace this with DeriveCheckPoint
-			// based on the beacon and retrieval parameters, as described in
-			// spec.md §7.4.
+			// 1. Read File & Compute Proof
 			mduBytes, err := ioutil.ReadFile(filePath)
 			if err != nil {
 				return err
@@ -62,7 +62,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chunkIndex := uint32(0) // Mock: always chunk 0
+			chunkIndex := uint32(0) // Mock: always chunk 0 of MDU
 			commitment, merkleProof, z, y, kzgProofBytes, err := crypto_ffi.ComputeMduProofTest(mduBytes, chunkIndex)
 			if err != nil {
 				return err
@@ -73,11 +73,30 @@ func CmdSignRetrievalReceipt() *cobra.Command {
             for i := 0; i < len(merkleProof); i += 32 {
                 merklePath = append(merklePath, merkleProof[i:i+32])
             }
+            
+            // --- Hop 1: Manifest Proof ---
+            // Read Manifest Blob
+            manifestBlob, err := ioutil.ReadFile(manifestPath)
+            if err != nil {
+                return fmt.Errorf("failed to read manifest: %w", err)
+            }
+            if len(manifestBlob) != 131072 {
+                 // Try to decode if it's hex string? 
+                 // Assuming CLI/nil_s3 passes binary temp file.
+                 // But nil-cli outputs hex. So nil_s3 must decode or write binary.
+                 // Let's assume it is binary 128KB.
+                 // If not, try hex decode.
+            }
+            
+            manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+            if err != nil {
+                return fmt.Errorf("ComputeManifestProof failed: %w", err)
+            }
 
 			chainedProof := types.ChainedProof{
-				MduIndex:        0,    // Mock: Hop 1 placeholder
-				MduRootFr:       root, // Mock: using root bytes as scalar bytes for now
-				ManifestOpening: nil,  // Mock: Hop 1 placeholder
+				MduIndex:        mduIndex,
+				MduRootFr:       root, 
+				ManifestOpening: manifestProof,
 				
 				BlobCommitment:  commitment,
 				MerklePath:      merklePath,

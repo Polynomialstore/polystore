@@ -923,6 +923,56 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		defer os.Remove(mduPath)
 	}
 
+    // New: Need Manifest Blob for Triple Proof
+    // We assume shardFile already ran and produced .json. 
+    // We can re-read it to get manifest blob.
+    // Ideally submitRetrievalProof should take the manifest blob path, but for now we assume it's derivable or stored.
+    // HACK: Read <filePath>.json if it exists (from shardFile)
+    jsonPath := filePath + ".json"
+    manifestPath := ""
+    var manifestBlobHex string
+    
+    // Check if json exists
+    if _, err := os.Stat(jsonPath); err == nil {
+        // Parse it
+        jsonFile, _ := os.ReadFile(jsonPath)
+        var shardOut map[string]any
+        json.Unmarshal(jsonFile, &shardOut)
+        if val, ok := shardOut["manifest_blob_hex"].(string); ok {
+            manifestBlobHex = val
+        }
+    }
+    
+    // If not found (e.g. synthetic mdu), create a dummy manifest? 
+    // Triple Proof WILL fail on-chain if manifest is wrong.
+    // For Devnet Mode 1 "Fetch", we serve a file we have stored.
+    // So shardFile MUST have run.
+    
+    if manifestBlobHex == "" {
+         return "", fmt.Errorf("manifest_blob_hex not found in %s", jsonPath)
+    }
+
+    // Decode hex to binary temp file
+    manifestBytes, err := decodeHex(manifestBlobHex)
+    if err != nil {
+         return "", fmt.Errorf("failed to decode manifest hex: %w", err)
+    }
+    
+    manTmp, err := os.CreateTemp(uploadDir, "manifest-*.bin")
+    if err != nil {
+         return "", err
+    }
+    if _, err := manTmp.Write(manifestBytes); err != nil {
+         manTmp.Close()
+         return "", err
+    }
+    manifestPath = manTmp.Name()
+    manTmp.Close()
+    defer os.Remove(manifestPath)
+    
+    // For now, assume MDU index is 0 (single file < 8MB)
+    mduIndexStr := "0"
+
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
 	signCmd := exec.Command(
 		nilchaindBin,
@@ -932,6 +982,8 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		epochStr,
 		mduPath,
 		trustedSetup,
+        manifestPath,
+        mduIndexStr,
 		"--from", providerKeyName,
 		"--home", homeDir,
 		"--keyring-backend", "test",
@@ -1095,4 +1147,38 @@ func ensureMduFileForProof(origPath string) (string, bool, error) {
 	}
 
 	return tmp.Name(), true, nil
+}
+
+func decodeHex(s string) ([]byte, error) {
+    if strings.HasPrefix(s, "0x") {
+        s = s[2:]
+    }
+    // simple manual decode or use encoding/hex
+    // Since we didn't import encoding/hex in existing imports, we can use simple loop or add import.
+    // Adding import is better but requires context replacement or robust replace.
+    // Let's implement simple.
+    
+    src := []byte(s)
+    dst := make([]byte, len(src)/2)
+    for i := 0; i < len(src)/2; i++ {
+        h, ok1 := fromHexChar(src[i*2])
+        l, ok2 := fromHexChar(src[i*2+1])
+        if !ok1 || !ok2 {
+             return nil, fmt.Errorf("invalid hex char")
+        }
+        dst[i] = (h << 4) | l
+    }
+    return dst, nil
+}
+
+func fromHexChar(c byte) (byte, bool) {
+    switch {
+    case '0' <= c && c <= '9':
+        return c - '0', true
+    case 'a' <= c && c <= 'f':
+        return c - 'a' + 10, true
+    case 'A' <= c && c <= 'F':
+        return c - 'A' + 10, true
+    }
+    return 0, false
 }
