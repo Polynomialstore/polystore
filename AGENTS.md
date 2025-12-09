@@ -215,9 +215,10 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 
 ### 4. Work Stream: Visualizations & Marketing
 *   [x] **Task:** Implement interactive Performance Market visualization in `nil-website` (The Latency Racer).
-*   [ ] **Task:** Visualize `DealHeatState` in Deal Explorer (pending HeatState query availability).
+*   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
 ## Future Phases
 *   **Web2 Wrapper:** S3 Adapter documentation and further integration.
 *   **Governance:** DAO & Council setup visualization.
 *   **Adversarial Simulation:** End-to-End attack simulation & visualization (P&L model).
+*   **Unified Liveness:** Integrate user traffic directly into consensus via `RetrievalReceipt` aggregation (partially implemented in Phase 2).

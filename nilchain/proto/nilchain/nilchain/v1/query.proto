@@ -42,6 +42,11 @@ service Query {
   rpc GetProvider(QueryGetProviderRequest) returns (QueryGetProviderResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}";
   }
+
+  // Queries the Heat State for a Deal.
+  rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -97,4 +102,12 @@ message QueryGetProviderRequest {
 
 message QueryGetProviderResponse {
   Provider provider = 1;
+}
+
+message QueryGetDealHeatRequest {
+  uint64 deal_id = 1;
+}
+
+message QueryGetDealHeatResponse {
+  DealHeatState heat = 1 [(gogoproto.nullable) = false];
 }

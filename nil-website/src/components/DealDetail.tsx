@@ -8,6 +8,12 @@ interface DealDetailProps {
   nilAddress: string
 }
 
+interface HeatState {
+    bytes_served_total: string
+    failed_challenges_total: string
+    last_update_height: string
+}
+
 interface ManifestData {
   total_mdus: number
   manifest_root_hex: string
@@ -20,6 +26,7 @@ interface ManifestData {
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [manifest, setManifest] = useState<ManifestData | null>(null)
+  const [heat, setHeat] = useState<HeatState | null>(null)
   const [loadingManifest, setLoadingManifest] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
 
@@ -27,7 +34,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     if (deal.cid && deal.cid !== '') {
       fetchManifest(deal.cid)
     }
-  }, [deal.cid])
+    fetchHeat(deal.id)
+  }, [deal.cid, deal.id])
 
   async function fetchManifest(cid: string) {
     setLoadingManifest(true)
@@ -42,6 +50,20 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingManifest(false)
     }
+  }
+
+  async function fetchHeat(dealId: string) {
+      try {
+          const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${dealId}/heat`)
+          if (res.ok) {
+              const json = await res.json()
+              if (json.heat) {
+                  setHeat(json.heat)
+              }
+          }
+      } catch (e) {
+          console.error("Failed to fetch heat", e)
+      }
   }
 
   return (
@@ -217,11 +239,39 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 <div className="bg-gray-950/40 border border-gray-800 rounded p-4 text-center">
                     <Activity className="w-8 h-8 text-orange-500 mx-auto mb-2" />
                     <h4 className="text-sm font-medium text-white">Traffic Analysis</h4>
-                    <p className="text-xs text-gray-500 mt-1">Real-time heat metrics coming in v2.6.1</p>
+                    <p className="text-xs text-gray-500 mt-1">Real-time stats from chain state</p>
                 </div>
+                
+                {heat ? (
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                        <div className="bg-gray-950/40 p-3 rounded border border-gray-800">
+                            <div className="text-gray-500 uppercase text-[10px]">Total Traffic</div>
+                            <div className="text-lg font-mono text-white">
+                                {(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB
+                            </div>
+                        </div>
+                        <div className="bg-gray-950/40 p-3 rounded border border-gray-800">
+                            <div className="text-gray-500 uppercase text-[10px]">Failed Proofs</div>
+                            <div className="text-lg font-mono text-red-400">
+                                {heat.failed_challenges_total}
+                            </div>
+                        </div>
+                        <div className="bg-gray-950/40 p-3 rounded border border-gray-800">
+                            <div className="text-gray-500 uppercase text-[10px]">Last Activity</div>
+                            <div className="text-lg font-mono text-white">
+                                Block {heat.last_update_height}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-8 text-gray-500 text-xs">
+                        No traffic data available yet.
+                    </div>
+                )}
+
                 {/* Placeholder for future charts */}
                 <div className="h-32 bg-gray-950/20 border border-gray-800 border-dashed rounded flex items-center justify-center text-xs text-gray-600">
-                    Liveness Heatmap Visualization
+                    Liveness Heatmap Visualization (Coming Soon)
                 </div>
             </div>
         )}
