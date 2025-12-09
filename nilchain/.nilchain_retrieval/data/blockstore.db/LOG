@@ -1,8 +1,8 @@
 =============== Dec 9, 2025 (HST) ===============
-11:57:43.833236 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
-11:57:43.842154 db@open opening
-11:57:43.842282 version@stat F·[] S·0B[] Sc·[]
-11:57:43.845220 db@janitor F·2 G·0
-11:57:43.845231 db@open done T·3.042791ms
-11:59:03.944338 db@close closing
-11:59:03.944510 db@close done T·171.334µs
+12:15:55.448948 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+12:15:55.457441 db@open opening
+12:15:55.457632 version@stat F·[] S·0B[] Sc·[]
+12:15:55.460610 db@janitor F·2 G·0
+12:15:55.460634 db@open done T·3.182375ms
+12:17:44.403637 db@close closing
+12:17:44.404675 db@close done T·1.036958ms

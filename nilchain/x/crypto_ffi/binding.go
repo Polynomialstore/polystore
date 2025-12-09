@@ -66,6 +66,7 @@ import (
 
 // Init loads the trusted setup from the given path.
 func Init(path string) error {
+    fmt.Fprintf(os.Stderr, "Initializing KZG with path: %s\n", path)
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
 	res := C.nil_init(cPath)

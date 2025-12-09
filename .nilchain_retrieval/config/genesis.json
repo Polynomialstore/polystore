@@ -1,7 +1,7 @@
 {
   "app_name": "<appd>",
   "app_version": "",
-  "genesis_time": "2025-12-09T22:06:56.392561Z",
+  "genesis_time": "2025-12-09T22:59:45.200006Z",
   "chain_id": "nilchain",
   "initial_height": 1,
   "app_hash": null,
@@ -19,91 +19,91 @@
       "accounts": [
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1pfrnlc8wfwx5qtcljdywg3ww4l5ksem4nzz5sg",
+          "address": "nil13dv9ncggpk59g0ay90duelhxvqx3zf34tvl0p3",
           "pub_key": null,
           "account_number": "0",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1wuzwc38m8quyjv5el6qnjrrft4ph3rrddp8lnc",
+          "address": "nil1dkzvr4qj5p2uxj8ehguxqc6nkylk3nn7g4ztd7",
           "pub_key": null,
           "account_number": "1",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil120ftzs0gmvt5ly8kcs5fvnlzn4s7e6685vahst",
+          "address": "nil1ewxh4ftmvm8f7lc2r4f93c2mmhykmykfg92nz0",
           "pub_key": null,
           "account_number": "2",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1k8h4vg6ckts00nklwfstksx9yyvhcnmuf77sax",
+          "address": "nil18ra54v7yel070cns7cd2fujwaqx3lv9ftw27m5",
           "pub_key": null,
           "account_number": "3",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1at64q5edc3xvxze4drl9tk5w8u8ctz9r7spg7q",
+          "address": "nil14lhj2smuvv9hcn8aupt6u7dk276cysk0uskuuf",
           "pub_key": null,
           "account_number": "4",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1eze03mjfvtszxhzgj2k63ul484j9qc04h24em4",
+          "address": "nil1smcw3c0fzq0a0yxg2j74anlrjal9v09j2tdjnd",
           "pub_key": null,
           "account_number": "5",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1s48mfqg4v4ft2flk8hh4a933dqs6k0ed00g52c",
+          "address": "nil134j5c36cjmvqz3hngr96khdhesvqysd4ypd26x",
           "pub_key": null,
           "account_number": "6",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1c6renhktlcdld6xkd2zgfcd8v4mw0wajk3f6vg",
+          "address": "nil1utemd4yay962frksulw905uxh999unxzcf9puv",
           "pub_key": null,
           "account_number": "7",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil156peny62a0xhyz9ysngqrhnjhxntgqze0jz7u5",
+          "address": "nil19mc3ktgu5zvmj8d9u3jp9netrpewetq4lqjvxw",
           "pub_key": null,
           "account_number": "8",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil18fn0fvj5nmqzuphnr0z82spvf25jqgufk3cfju",
+          "address": "nil1tkeqq5clfv6yy3xuzp7q7ejyaj4fdlkgvu4545",
           "pub_key": null,
           "account_number": "9",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1ydwzkt9frpzw0gnd0mmxucyk24jug6htyk9kaj",
+          "address": "nil1ev303mckp0wq58602e3pg8dcup9aq8cvf770hy",
           "pub_key": null,
           "account_number": "10",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil1ycqnxk5xvd8m0wyl0u65fs8z0zvgzwj9pcleyx",
+          "address": "nil1uhk4mp6yasn0jxzq6xannwkct6tv092vnun5jw",
           "pub_key": null,
           "account_number": "11",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "nil17fq64k5ymtqacc95wlvgd3en6efkuhh3pnvs0u",
+          "address": "nil1wc3fhytktxe5hxvzs0kpvmrl5sunxttrhgthxh",
           "pub_key": null,
           "account_number": "12",
           "sequence": "0"
@@ -120,7 +120,109 @@
       },
       "balances": [
         {
-          "address": "nil1pfrnlc8wfwx5qtcljdywg3ww4l5ksem4nzz5sg",
+          "address": "nil19mc3ktgu5zvmj8d9u3jp9netrpewetq4lqjvxw",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil18ra54v7yel070cns7cd2fujwaqx3lv9ftw27m5",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil1tkeqq5clfv6yy3xuzp7q7ejyaj4fdlkgvu4545",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil1dkzvr4qj5p2uxj8ehguxqc6nkylk3nn7g4ztd7",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil1wc3fhytktxe5hxvzs0kpvmrl5sunxttrhgthxh",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil1smcw3c0fzq0a0yxg2j74anlrjal9v09j2tdjnd",
+          "coins": [
+            {
+              "denom": "aatom",
+              "amount": "10000000000000000000"
+            },
+            {
+              "denom": "stake",
+              "amount": "1000000"
+            },
+            {
+              "denom": "token",
+              "amount": "1000000000"
+            }
+          ]
+        },
+        {
+          "address": "nil13dv9ncggpk59g0ay90duelhxvqx3zf34tvl0p3",
           "coins": [
             {
               "denom": "aatom",
@@ -137,7 +239,7 @@
           ]
         },
         {
-          "address": "nil1ydwzkt9frpzw0gnd0mmxucyk24jug6htyk9kaj",
+          "address": "nil134j5c36cjmvqz3hngr96khdhesvqysd4ypd26x",
           "coins": [
             {
               "denom": "aatom",
@@ -154,7 +256,7 @@
           ]
         },
         {
-          "address": "nil1ycqnxk5xvd8m0wyl0u65fs8z0zvgzwj9pcleyx",
+          "address": "nil14lhj2smuvv9hcn8aupt6u7dk276cysk0uskuuf",
           "coins": [
             {
               "denom": "aatom",
@@ -171,7 +273,7 @@
           ]
         },
         {
-          "address": "nil18fn0fvj5nmqzuphnr0z82spvf25jqgufk3cfju",
+          "address": "nil1ev303mckp0wq58602e3pg8dcup9aq8cvf770hy",
           "coins": [
             {
               "denom": "aatom",
@@ -188,7 +290,7 @@
           ]
         },
         {
-          "address": "nil120ftzs0gmvt5ly8kcs5fvnlzn4s7e6685vahst",
+          "address": "nil1ewxh4ftmvm8f7lc2r4f93c2mmhykmykfg92nz0",
           "coins": [
             {
               "denom": "aatom",
@@ -205,7 +307,7 @@
           ]
         },
         {
-          "address": "nil1wuzwc38m8quyjv5el6qnjrrft4ph3rrddp8lnc",
+          "address": "nil1utemd4yay962frksulw905uxh999unxzcf9puv",
           "coins": [
             {
               "denom": "aatom",
@@ -222,109 +324,7 @@
           ]
         },
         {
-          "address": "nil1s48mfqg4v4ft2flk8hh4a933dqs6k0ed00g52c",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil156peny62a0xhyz9ysngqrhnjhxntgqze0jz7u5",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil1k8h4vg6ckts00nklwfstksx9yyvhcnmuf77sax",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil1c6renhktlcdld6xkd2zgfcd8v4mw0wajk3f6vg",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil1eze03mjfvtszxhzgj2k63ul484j9qc04h24em4",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil1at64q5edc3xvxze4drl9tk5w8u8ctz9r7spg7q",
-          "coins": [
-            {
-              "denom": "aatom",
-              "amount": "10000000000000000000"
-            },
-            {
-              "denom": "stake",
-              "amount": "1000000"
-            },
-            {
-              "denom": "token",
-              "amount": "1000000000"
-            }
-          ]
-        },
-        {
-          "address": "nil17fq64k5ymtqacc95wlvgd3en6efkuhh3pnvs0u",
+          "address": "nil1uhk4mp6yasn0jxzq6xannwkct6tv092vnun5jw",
           "coins": [
             {
               "denom": "aatom",
@@ -507,10 +507,10 @@
                 },
                 "min_self_delegation": "1",
                 "delegator_address": "",
-                "validator_address": "nilvaloper1pfrnlc8wfwx5qtcljdywg3ww4l5ksem4fepvgg",
+                "validator_address": "nilvaloper13dv9ncggpk59g0ay90duelhxvqx3zf343huhe3",
                 "pubkey": {
                   "@type": "/cosmos.crypto.ed25519.PubKey",
-                  "key": "Yg2txQIrnDOEbKkjgujmFLi3jXsEXce8TrqfpygCkl8="
+                  "key": "MYTL072DvyMhEQGoiOk/S8DaFybbAMt+tfyxbRcEl9U="
                 },
                 "value": {
                   "denom": "stake",
@@ -518,7 +518,7 @@
                 }
               }
             ],
-            "memo": "10e68c5fb948656f985d6b421753320391c4ef70@192.168.0.222:26656",
+            "memo": "ff02ffec955556b4bb2a689cdc14df9a45a60d0e@192.168.0.222:26656",
             "timeout_height": "0",
             "unordered": false,
             "timeout_timestamp": null,
@@ -530,7 +530,7 @@
               {
                 "public_key": {
                   "@type": "/cosmos.crypto.secp256k1.PubKey",
-                  "key": "AvYlCKhjZpYRLz+HMRZtrXAozUAVZfuibjJqJWE73SMl"
+                  "key": "A3OJjtx+ZLWa/Z1UPoqojg1sus1xRxCKpMwZ9W9sFV2k"
                 },
                 "mode_info": {
                   "single": {
@@ -549,7 +549,7 @@
             "tip": null
           },
           "signatures": [
-            "kIZKl6P4kVVgtmCYnqTSwuZiCGKBpJX2gAzA239eDqB7cQ/ly+cjom9bNG7ewXerqfPooTMntcFLWySRZPAnYg=="
+            "166u1FS/xttY+AXIcveKzdHfM88CQ8CFmIxpuXmtKhlmNKBpCwXlSr4LGpA/1qX1RpNCIpSvE8BS8pwd6QdlIw=="
           ]
         }
       ]
