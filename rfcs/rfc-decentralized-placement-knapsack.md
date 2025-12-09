@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Motivation
+## 1. Motivation & Problem Statement
 
 NilStore Mode 1 already defines:
 
@@ -25,6 +25,12 @@ However, two strong requirements remain:
    - A decentralized set of optimizer/committee actors,
    - On‑chain rules that validate their proposals and enforce assignments.
 
+3. **Retrievability and self‑healing must remain the hard invariants.**  
+   The knapsack/placement layer is allowed to change *who* stores *which* deals and *how often*, but is **not** allowed to:
+   - weaken “either data is retrievable or the SP is provably slashable” for any `(Deal, SP)` in `providers(D)`,
+   - bypass or replace the evidence model (KZG/Merkle, RetrievalReceipts, SyntheticStorageProofs, fraud proofs),
+   - introduce a new opaque source of truth that overrides Mode 1 semantics.
+
 This RFC sketches a design where:
 
 - The chain and a set of DRB‑selected committees jointly act as a **global knapsack solver**.
@@ -36,6 +42,22 @@ It is intentionally non‑normative; its purpose is to guide research, simulatio
 ---
 
 ## 2. Constraints & Assumptions
+
+### 2.0 Retrievability & self‑healing invariants (from Mode 1)
+
+From the retrievability memo and metaspec:
+
+- **Retrievability:** For every `(Deal D, Provider P)` such that `P ∈ providers(D)`:
+  - There exists a family of *valid retrieval challenges* defined by Mode 1 (using `R_e`, `DeriveCheckPoint`, and the retrieval protocol), and
+  - With high probability over epochs:
+    - Either P returns correct data for those challenges, or
+    - There exists on‑chain, verifiable evidence of failure (invalid KZG/Merkle against `root_cid(D)`, missed proof window, panic‑mode non‑response) that justifies slashing and/or eviction.
+- **Self‑healing:** If P behaves badly on D over time:
+  - HealthState(D,P) degrades (synthetic failures, fraud proofs, QoS signals),
+  - The placement/health layer eventually removes P from `providers(D)` for D,
+  - Replacement SPs are recruited so that redundancy and retrievability are restored.
+
+Any decentralized placement / knapsack design that does not preserve these invariants is considered invalid, regardless of economic optimality.
 
 ### 2.1 Cryptographic & consensus layer
 
@@ -143,14 +165,44 @@ Measurement oracles are **not trusted**; they are a convenience for aggregating:
 Design constraints:
 
 - Any on‑chain consumption of oracle data must be:
-  - Either treated as **soft** (only for ranking, not safety‑critical decisions), or
-  - Backed by evidence (e.g., claim includes hashes of receipts that anyone can verify).
-- Misreporting must be cheap to detect and, if used in rewards, subject to slashing.
+  - Either treated as **soft** (only for ranking, tie‑breaking, or off‑chain UX), or
+  - Backed by cryptographic evidence (e.g., claims include commitments to receipts/proofs that anyone can independently verify).
+- Misreporting must be cheap to detect and, if used in rewards or placement, subject to slashing via concrete fraud‑proofs.
 
 In early versions, we can:
 
 - Use only on‑chain metrics (bytes served, failures) to drive placement,
 - Treat richer QoS data as off‑chain hints.
+
+### 4.3 Evidence‑anchored measurement (sketch)
+
+Long‑term, we want a measurement layer where “bandwidth/latency metrics” are not a new root of trust but a thin veneer over the existing evidence model. One plausible (non‑normative) pattern:
+
+1. **Receipt bundles and Merkle commitments**
+   - Oracles (or even SPs themselves) periodically build a Merkle tree over:
+     - RetrievalReceipts they have observed,
+     - SyntheticStorageProofs,
+     - Fraud proofs and slashing events.
+   - They publish:
+     - The Merkle root,
+     - A small per‑Deal/per‑SP summary (e.g., total bytes, success/failure counts),
+     - Optional witness data for sampling.
+   - Anyone can challenge a misreported summary by providing:
+     - A Merkle proof for an included receipt contradicting the summary, or
+     - A “missing receipt” proof showing an expected receipt absent from the tree.
+2. **On‑chain consumption**
+   - When a placement committee relies on oracle summaries in a `PlacementProposal`, it references:
+     - The oracle root(s),
+     - A hash of the summary table it used.
+   - If that summary is later proven inconsistent with the receipts, the oracle can be slashed and the proposal invalidated or discounted.
+3. **SP audit‑debt as ground truth**
+   - SP audit‑debt (SPs acting as mystery shoppers) and protocol/client‑driven audits already generate a stream of *valid retrievals* with RetrievalReceipts.
+   - These form a baseline, cryptographically‑anchored sample of each `(Deal, SP)`’s behavior that no oracle can safely ignore; ignoring them exposes the oracle to simple fraud‑proofs from other participants who hold the receipts.
+
+This RFC does not pick a specific oracle scheme; it encodes the requirement that anything the placement layer uses on‑chain must either:
+
+- Be directly reconstructible from chain state and existing proofs, or
+- Be commit‑and‑challenge‑based with clear, cheap fraud‑proofs.
 
 ---
 
@@ -262,6 +314,13 @@ The chain verifies:
 - That `O_new ≥ O_old + ε` for some minimal improvement ε,
 - Integrity of the encoded sets.
 
+The objective values `O_old` and `O_new` MUST be computable from:
+
+- On‑chain state alone (e.g., `H(D)`, `file_size(D)`, capacities, current `r_actual(D)`), and/or
+- Oracle‑supplied summaries that are themselves tied to evidence as outlined in §4.3.
+
+No hidden off‑chain information may be required to recompute or verify the objective for a given proposal.
+
 Multiple proposals can be submitted; the chain must decide which to accept (Section 7).
 
 ---
@@ -312,8 +371,8 @@ Once a placement proposal is accepted:
 - The chain updates `providers(D)` accordingly:
   - Adds/removes `(D,P)` edges per `added_edges` / `removed_edges`.
 - SPs are expected to:
-  - Begin storing data for newly assigned D (with some grace period),
-  - Continue serving retrieval and synthetic challenges for assigned deals.
+  - Begin storing data for newly assigned D (with some grace period / bootstrap window),
+  - Continue serving retrieval and synthetic challenges for all assigned deals, as required by Mode 1.
 - Enforcement:
   - **Retrievability**:
     - Synthetic challenges and retrieval‑based checks ensure SPs actually hold data.
@@ -329,6 +388,17 @@ SPs can reduce their role only by:
 
 They cannot selectively drop an individual hot deal without being exposed by retrievability checks.
 
+From an SP’s point of view, the intended UX is:
+
+- “I commit to:
+  - a certain amount of storage capacity,
+  - a bandwidth / QoS profile,
+  - and (optionally) some coarse capability flags (archive‑friendly / edge‑friendly, regions I can serve).
+- The protocol (via placement committees) assigns me a portfolio of deals consistent with that profile.
+- If I under‑perform on that portfolio, I lose assignments and stake; if I over‑perform, I am more likely to be chosen again for similar roles.”
+
+There is deliberately **no first‑class notion** of “I will only store *these specific* deals.” Cherry‑picking should be economically unattractive and/or technically incompatible with participating as a full SP.
+
 ---
 
 ## 9. Interaction with Mode 1 & Heat RFC
@@ -340,15 +410,16 @@ This RFC presumes:
   - Deals, commitments,
   - Retrieval semantics, evidence types,
   - Synthetic challenge schedules,
-  - HealthState & eviction mechanics.
+  - HealthState & eviction mechanics,
+  - SP audit‑debt and mystery‑shopper retrieval responsibilities.
 
 This knapsack solver:
 
-- Treats `H(D)`, `r_target(D)`, etc. as inputs to its objective.
+- Treats `H(D)`, `r_target(D)`, observed retrieval volumes, audit activity, and redundancy gaps as *inputs* to its objective.
 - Does **not** change:
-  - How `H(D)` is computed,
-  - How proofs work,
-  - How slashing is triggered.
+  - How `H(D)` is computed in the Heat RFC (though it may motivate refinements there),
+  - How `DeriveCheckPoint`, KZG/Merkle proofs, or RetrievalReceipts work,
+  - What constitutes valid evidence for slashing or eviction in Mode 1.
 
 In early deployments:
 
@@ -373,10 +444,12 @@ This RFC is intentionally high‑level; many details need modeling or prototypin
    - How many committees per placement epoch?
    - How large should they be (to balance security vs cost)?
    - What is the right incentive structure for proposers/challengers?
+   - Should committee members stake specifically for placement work, with slashing for invalid proposals or provably bad use of oracle data?
 
 2. **Objective function choices**
    - What simple objective yields good behavior (e.g., high heat coverage, acceptable fairness) without being easily gameable?
    - How sensitive is the system to parameter choices?
+   - How do we incorporate SP audit‑debt fulfillment, diversity goals, and “fair share” of hot vs cold deals into the objective without making it intractable to compute or validate?
 
 3. **Interaction with geography / diversity**
    - How to fold in:
@@ -397,6 +470,6 @@ This RFC is intentionally high‑level; many details need modeling or prototypin
 6. **User experience & guarantees**
    - How to expose placement decisions to users (e.g., “Your data is currently on SPs X,Y,Z with these heat & health scores”)?
    - When a deal becomes under‑replicated, how quickly should the system react?
+   - How do deal creators express preferences like “archive‑like” vs “low‑latency” in a way that feeds into the decentralized knapsack (via Heat, redundancy, or fees) rather than manual SP selection?
 
 Answering these will determine which parts, if any, of this RFC eventually move into the normative spec, and which remain guidance for off‑chain tooling and committees.
-
