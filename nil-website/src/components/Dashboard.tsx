@@ -10,6 +10,7 @@ import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
+import { DealDetail } from './DealDetail'
 
 interface Deal {
   id: string
@@ -605,61 +606,11 @@ export function Dashboard() {
 
           {/* Deal Details */}
           {selectedDeal && (
-            <div className="mt-6 rounded-xl border border-gray-800 bg-gray-900/60 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wider">Selected Deal</div>
-                  <div className="text-sm font-semibold text-white">#{selectedDeal.id}</div>
-                </div>
-                <button
-                  onClick={() => setSelectedDeal(null)}
-                  className="text-xs text-gray-400 hover:text-gray-200 underline"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3 text-xs text-gray-300">
-                <div className="space-y-1">
-                  <div className="text-gray-500 uppercase tracking-wide">Content Hash (CID)</div>
-                  <div className="font-mono break-all bg-gray-950/40 border border-gray-800 rounded px-3 py-2">
-                    {selectedDeal.cid || 'Empty Container'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-gray-500 uppercase tracking-wide">Owner</div>
-                  <div className="font-mono text-[11px] bg-gray-950/40 border border-gray-800 rounded px-3 py-2">
-                    {selectedDeal.owner}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-gray-500 uppercase tracking-wide">Size</div>
-                  <div>
-                    {selectedDeal.size !== '0' ? `${(parseInt(selectedDeal.size) / 1024 / 1024).toFixed(2)} MB` : '0 MB'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-gray-500 uppercase tracking-wide">Capacity Tier</div>
-                  <div>{selectedDeal.deal_size === 1 ? '4 GiB' : selectedDeal.deal_size === 2 ? '32 GiB' : '512 GiB'}</div>
-                </div>
-              </div>
-              {selectedDeal.cid && (
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => {
-                        if (!selectedDeal?.cid || !nilAddress) return
-                        const url = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
-                          selectedDeal.cid,
-                        )}?deal_id=${encodeURIComponent(selectedDeal.id)}&owner=${encodeURIComponent(nilAddress)}`
-                        window.open(url, '_blank')
-                      }}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-indigo-600/80 hover:bg-indigo-500 text-white rounded-md"
-                    >
-                      <ArrowDownRight className="w-3 h-3" />
-                      Download file
-                    </button>
-                  </div>
-              )}
-            </div>
+            <DealDetail 
+                deal={selectedDeal} 
+                onClose={() => setSelectedDeal(null)} 
+                nilAddress={nilAddress} 
+            />
           )}
 
           {/* Liveness & Performance */}

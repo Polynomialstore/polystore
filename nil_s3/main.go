@@ -57,6 +57,7 @@ func main() {
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/manifest/{cid}", GatewayManifest).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
@@ -742,6 +743,42 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", entry.Filename))
 	}
 	http.ServeFile(w, r, entry.Path)
+}
+
+// GatewayManifest serves the manifest (shard output JSON) for a given Root CID.
+func GatewayManifest(w http.ResponseWriter, r *http.Request) {
+    setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	cid := strings.TrimSpace(vars["cid"])
+	if cid == "" {
+		http.Error(w, "cid required", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := lookupFileInIndex(cid)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if entry == nil {
+		http.Error(w, "manifest not found", http.StatusNotFound)
+		return
+	}
+
+    // The shard output is stored at <path>.json
+    manifestPath := entry.Path + ".json"
+    if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+        http.Error(w, "manifest file missing", http.StatusNotFound)
+        return
+    }
+
+	w.Header().Set("Content-Type", "application/json")
+	http.ServeFile(w, r, manifestPath)
 }
 
 // shardFile runs nil-cli shard on the given path and extracts the DU root CID

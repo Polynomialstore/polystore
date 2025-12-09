@@ -206,9 +206,9 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
     *   [x] **Task:** Update Deal List to distinguish between "Empty" (Capacity only) and "Active" (Content Committed) deals.
     *   [x] **Task:** Add "Bytes Served" column (Heat) to the Deal List using `DealHeatState` (via `proofs` aggregation for now, pending full HeatState exposure).
 *   **Step B: Deal Explorer (New Component/Page)**
-    *   [ ] **Task:** Create `src/components/DealDetail.tsx`.
-    *   [ ] **Task:** Visualize the "Manifest" (List of MDUs) if available (fetched from gateway).
-    *   [ ] **Task:** Show "Liveness History" (Heatmap of proofs) and "Heat" stats.
+    *   [x] **Task:** Create `src/components/DealDetail.tsx`.
+    *   [x] **Task:** Visualize the "Manifest" (List of MDUs) if available (fetched from gateway).
+    *   [x] **Task:** Show "Liveness History" (Heatmap of proofs) and "Heat" stats.
 *   **Step C: Integration Hooks (`src/hooks/`)**
     *   [x] **Task:** Update `useCreateDeal.ts` to call the new `GatewayCreateDeal` (with tiers).
     *   [x] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
