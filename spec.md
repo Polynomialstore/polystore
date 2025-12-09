@@ -111,14 +111,18 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
 
 1.  **Receipt Construction (Client):**
     *   After verifying the KZG proof for a served chunk, the Data Owner constructs a `RetrievalReceipt`:
-        *   `{deal_id, epoch_id, provider, bytes_served, proof_details (KzgProof), user_signature}`.
-    *   The signed message covers `(deal_id, epoch_id, provider, bytes_served)` so SPs cannot forge receipts.
+        *   `{deal_id, epoch_id, provider, bytes_served, nonce, expires_at, proof_details (KzgProof), user_signature}`.
+    *   The signed message MUST cover `(deal_id, epoch_id, provider, bytes_served, nonce, expires_at)` so SPs cannot forge or replay receipts.
+    *   `nonce` is a strictly increasing 64‑bit sequence number scoped to the Deal Owner (or payer). `expires_at` is a block height or timestamp after which the receipt is invalid.
 2.  **On‑Chain Submission (Provider):**
     *   The Provider wraps the receipt in `MsgProveLiveness{ ProofType = UserReceipt }` and submits it to the chain.
     *   The module verifies:
         *   Provider is assigned in `Deal.providers[]`.
+        *   `expires_at` has not passed.
+        *   `nonce` is strictly greater than the last accepted nonce for this Deal Owner (or payer).
         *   KZG proof is valid for the challenged MDU chunk.
         *   `user_signature` matches the Deal Owner’s on‑chain key.
+    *   The module MUST maintain persistent state `LastReceiptNonce[owner_address]` (or equivalent) and reject any receipt with `nonce ≤ LastReceiptNonce[owner_address]` as a replay.
 3.  **Book‑Keeping & Rewards:**
     *   The keeper computes the latency tier from inclusion height (Platinum/Gold/Silver/Fail) and updates `ProviderRewards`.
     *   It debits `Deal.EscrowBalance` for the bandwidth component and records a lightweight `Proof` summary:
@@ -126,3 +130,73 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
     *   `Proof` entries are exposed via `Query/ListProofs` (LCD: `/nilchain/nilchain/v1/proofs`) for dashboards and analytics.
 
 In the current devnet, the CLI (`sign-retrieval-receipt` and `submit-retrieval-proof`) drives receipt creation and submission. Web flows may fetch data over HTTP without yet emitting on‑chain receipts; this is considered **non‑normative** and will be aligned with this section as the EVM→Cosmos bridge and user‑signed deals mature.
+
+### 7.3 Data Commitment Binding (Normative)
+
+To prevent proofs over arbitrary data, all Mode 1 retrieval and storage proofs MUST be bound to the Deal’s on‑chain data commitment:
+
+1.  **Deal Commitments:** For each `Deal`, the chain MUST store one or more cryptographic commitments to the encrypted data, e.g.:
+    *   A Root CID for the File Manifest (as defined in Appendix A.3).
+    *   One or more MDU‑level Merkle roots over KZG blob commitments corresponding to the stored ciphertext.
+2.  **Proof Binding:** Any `KzgProof` used in `MsgProveLiveness` (either `system_proof` or `user_receipt.proof_details`) MUST be verified against the commitment(s) recorded in the corresponding `Deal`. A proof whose `mdu_merkle_root` does not match one of the Deal’s registered roots MUST be rejected.
+3.  **Forward Compatibility:** In future redundancy modes (StripeReplica), additional per‑stripe or overlay commitments MAY be added, but the binding rule remains: all KZG proofs MUST verify against the Deal’s active on‑chain commitments.
+
+### 7.4 Valid Retrieval Challenge (Mode 1 Mainnet Target)
+
+For mainnet Mode 1, NilStore formalizes what it means for a retrieval to be a **valid challenge** against a particular `(Deal, Provider)` pair. This definition underpins both rewards and slashing.
+
+1.  **Epoch‑Scoped Randomness:** Each block epoch `e` has a randomness beacon `R_e` derived from consensus. SPs MUST NOT be able to bias or predict `R_e` far in advance.
+2.  **Challenge Tuple:** A retrieval initiated against `(deal_id, provider_id)` in epoch `e` is a valid challenge if it carries the tuple:
+    *   `deal_id`, `provider_id`
+    *   `epoch_e`
+    *   `offset`, `length` (byte range within the file)
+    *   `channel_id` (opaque payment channel identifier bound on‑chain to `(deal_id, provider_id)`)
+    *   `session_nonce` (fresh 32‑byte random chosen by the client)
+3.  **Deterministic KZG Checkpoint:** Both client and Provider derive a single KZG checkpoint for this retrieval:
+
+    ```text
+    (mdu_index, blob_index, eval_x) =
+        DeriveCheckPoint(R_e, deal_id, channel_id, session_nonce, offset, length)
+    ```
+
+    *   `DeriveCheckPoint` is a public, deterministic function (e.g. a domain‑separated hash / PRF) whose exact encoding is specified in the implementation, but whose inputs MUST include `R_e`, `deal_id`, `channel_id`, `session_nonce`, and the requested range.
+    *   The Provider MUST return data plus a KZG proof that opens the committed blob at `(mdu_index, blob_index)` at point `eval_x`.
+4.  **Assignment & Capability Checks:** A retrieval counts as a valid protocol challenge only if:
+    *   `provider_id ∈ Deal.providers[]` at the time of the challenge, and
+    *   `channel_id` refers to a live on‑chain channel capability bound to `(deal_id, provider_id)` with sufficient remaining `limit_bytes` and a non‑expired `expiry_epoch`.
+5.  **Devnet/Testnet Approximation:** Current devnet/testnet flows MAY approximate `DeriveCheckPoint` (e.g. fixed `mdu_index = 0`) and avoid explicit `channel_id`s, but MUST evolve towards this definition. Any such approximations MUST be clearly documented in `AGENTS.md` and treated as temporary.
+
+This definition ensures that every retrieval has the **potential** to be used as a storage proof, and that SPs cannot know in advance which requests will later be used as evidence.
+
+### 7.5 Evidence Types & Fraud Proofs
+
+NilStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)`.
+
+1.  **Synthetic Storage Proofs (System‑Initiated):**
+    *   For each epoch `e` and assignment `(deal_id, provider_id)`, the protocol derives a finite challenge set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from `R_e`.
+    *   A `SyntheticStorageProof` message carries:
+        *   `(deal_id, provider_id, epoch_e, mdu_index, blob_index, eval_x, eval_y, kzg_commitment, kzg_proof, merkle_paths…)`.
+    *   On‑chain verification MUST check:
+        *   `(mdu_index, blob_index) ∈ S_e(D,P)`,
+        *   Merkle paths reconstruct the Deal’s commitment(s),
+        *   KZG opening is valid at `(eval_x, eval_y)`.
+    *   A satisfied synthetic challenge contributes to storage rewards and positive health for `(D,P)`.
+2.  **Retrieval‑Based Proofs (Client‑Initiated):**
+    *   A `RetrievalReceipt` formed as in § 7.2, whose checkpoint matches `DeriveCheckPoint(…)`, MAY be submitted on‑chain as a `RetrievalProof`.
+    *   Verification MUST:
+        *   Recompute `DeriveCheckPoint` and match `(mdu_index, blob_index, eval_x)`,
+        *   Verify Merkle + KZG against the Deal’s commitments,
+        *   Verify `user_signature` and anti‑replay checks (nonce, expiry),
+        *   Ensure `(mdu_index, blob_index) ∈ S_e(D,P)` if the receipt is to satisfy a synthetic challenge.
+    *   Successful retrieval proofs count equivalently to synthetic proofs for storage reward and health.
+3.  **Fraud Proofs (Wrong Data):**
+    *   If a client or auditor receives a response whose KZG/Merkle proof fails against `root_cid(deal_id)`, they MAY construct a `FraudProof` that includes:
+        *   The offending `RetrievalReceipt` and, optionally, the Provider’s signed response.
+    *   On‑chain verification MUST:
+        *   Re‑run Merkle/KZG checks and confirm failure relative to the stored commitments.
+    *   A confirmed fraud proof MUST trigger slashing for the implicated `(deal_id, provider_id)` and degrade the Provider’s global health.
+4.  **On‑Chain Challenge Non‑Response (Liveness Panic Path):**
+    *   In extreme cases, a watcher MAY post an explicit on‑chain challenge (referencing a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index, eval_x)`).
+    *   The chain MUST enforce a bounded response window; failure by the Provider to submit a corresponding `SyntheticStorageProof` within that window is treated as hard evidence of unavailability and MUST be slashable.
+
+These evidence types collectively support the retrievability invariant: for each `(Deal, Provider)`, data is either retrievable under protocol rules or there exists high‑probability, verifiable evidence of failure that can be used to punish and eventually evict the Provider.

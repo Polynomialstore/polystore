@@ -32,6 +32,20 @@ We don't ban S3. We just pay for speed.
 *   **Gold (Block H+5):** 80% Reward.
 *   **Fail (>H+20):** 0% Reward + Slash. (Glacier/Offline).
 
+### C. Retrievability & Self-Healing (High-Level)
+
+NilStore’s retrieval layer is designed so that:
+
+*   For every `(Deal, Provider)` pair, either the data is retrievable under protocol rules, or there is verifiable evidence the Provider failed (wrong data or non-response) and can be punished.
+*   Providers who repeatedly fail retrievals are automatically pushed out of Deals and replaced by healthier nodes over time.
+
+Concretely, the mainnet Mode 1 design adds:
+
+*   **Challenge Structure:** Each retrieval carries enough information (epoch randomness, nonce, deal and provider IDs) for the protocol to derive a deterministic KZG checkpoint inside the requested range, making every retrieval a potential storage proof.
+*   **Synthetic Checks for Cold Data:** The chain periodically selects random chunks (`“I need a piece of this file”`) for each Deal/Provider and requires KZG proofs even when no one is actively downloading the file.
+*   **Provider “Audit Debt”:** Providers must periodically act as mystery shoppers for other Providers, issuing retrievals and reporting misbehavior. The more data you store, the more audits you are expected to perform.
+*   **Health & Eviction:** The protocol maintains simple health scores per Deal/Provider and uses them to decide when to add new replicas and evict bad actors, so the network self-heals as it runs.
+
 ---
 
 ## 3. The Architecture: A Hybrid Approach

@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useDisconnect } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Coins, RefreshCw, SendHorizonal, Wallet, CheckCircle2, ArrowDownRight, Upload } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -54,6 +54,15 @@ export function Dashboard() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const { proofs, loading: proofsLoading } = useProofs()
+
+  const retrievalCountsByDeal = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of proofs) {
+      if (!p.dealId) continue
+      counts[p.dealId] = (counts[p.dealId] ?? 0) + 1
+    }
+    return counts
+  }, [proofs])
 
   useEffect(() => {
     if (address) {
@@ -183,6 +192,12 @@ export function Dashboard() {
       alert('CID is required')
       return
     }
+    // Require user to have requested faucet funds / have some stake before creating deals.
+    if (!bankBalances.stake && !bankBalances.atom) {
+      setStatusTone('error')
+      setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
+      return
+    }
       try {
         await submitDeal({
           creator: address || nilAddress,
@@ -201,7 +216,7 @@ export function Dashboard() {
         }
       } catch (e) {
         setStatusTone('error')
-        setStatusMsg('Deal submission failed. Check faucet server logs.')
+        setStatusMsg('Deal submission failed. Check gateway logs.')
       }
   }
 
@@ -457,17 +472,18 @@ export function Dashboard() {
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Service Hint</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Replication</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Escrow Balance</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Retrievals</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Providers</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800">
                       {deals.map((deal) => (
-                          <tr
-                            key={deal.id}
-                            className="hover:bg-white/5 transition-colors cursor-pointer"
-                            onClick={() => setSelectedDeal(deal)}
-                          >
+                      <tr
+                        key={deal.id}
+                        className="hover:bg-white/5 transition-colors cursor-pointer"
+                        onClick={() => setSelectedDeal(deal)}
+                      >
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">#{deal.id}</td>
                               <td
                                 className="px-6 py-4 whitespace-nowrap text-sm font-mono text-indigo-400"
@@ -481,6 +497,9 @@ export function Dashboard() {
                                 {deal.current_replication || (deal.providers?.length ? String(deal.providers.length) : '—')}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{deal.escrow ? `${deal.escrow} stake` : '—'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                   <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
                                       Active
@@ -491,7 +510,7 @@ export function Dashboard() {
                                   ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}${deal.providers.length > 1 ? ` (+${deal.providers.length - 1} more)` : ''}`
                                   : '—'}
                               </td>
-                          </tr>
+                      </tr>
                       ))}
                   </tbody>
               </table>

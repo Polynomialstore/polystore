@@ -25,10 +25,13 @@ var ParamsKey = collections.NewPrefix("p_nilchain")
 var (
 	ProofCountKey = collections.NewPrefix("ProofCount/value/")
 	ProofsKey     = collections.NewPrefix("Proofs/value/")
-    
+
 	DealCountKey  = collections.NewPrefix("DealCount/value/")
 	DealsKey      = collections.NewPrefix("Deals/value/")
 	ProvidersKey  = collections.NewPrefix("Providers/value/")
-	DealProviderStatusKey = collections.NewPrefix("DealProviderStatus/value/")
-	ProviderRewardsKey    = collections.NewPrefix("ProviderRewards/value/")
+	DealProviderStatusKey   = collections.NewPrefix("DealProviderStatus/value/")
+	DealProviderFailuresKey = collections.NewPrefix("DealProviderFailures/value/")
+	ProviderRewardsKey      = collections.NewPrefix("ProviderRewards/value/")
+	ReceiptNonceKey         = collections.NewPrefix("ReceiptNonce/value/")
+	EvmNonceKey             = collections.NewPrefix("EvmNonce/value/")
 )

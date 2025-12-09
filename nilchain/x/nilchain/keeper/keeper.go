@@ -34,8 +34,11 @@ type Keeper struct {
 	DealCount  collections.Sequence
 	Deals      collections.Map[uint64, types.Deal]
 	Providers  collections.Map[string, types.Provider] // Key by address string
-	DealProviderStatus collections.Map[collections.Pair[uint64, string], uint64]
-	ProviderRewards collections.Map[string, math.Int]
+	DealProviderStatus   collections.Map[collections.Pair[uint64, string], uint64]
+	DealProviderFailures collections.Map[collections.Pair[uint64, string], uint64]
+	ProviderRewards      collections.Map[string, math.Int]
+	ReceiptNonces        collections.Map[string, uint64]
+	EvmNonces            collections.Map[string, uint64]
 }
 
 func NewKeeper(
@@ -68,8 +71,11 @@ func NewKeeper(
 		DealCount:    collections.NewSequence(sb, types.DealCountKey, "deal_count"),
 		Deals:        collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
 		Providers:    collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
-		DealProviderStatus: collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		ProviderRewards: collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
+		DealProviderStatus:   collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		DealProviderFailures: collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		ProviderRewards:      collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
+		ReceiptNonces:        collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
+		EvmNonces:            collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
 	}
 
 	schema, err := sb.Build()

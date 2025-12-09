@@ -203,6 +203,15 @@ We have executed a major refactor of the protocol specification to replace "Phys
 2.  **EVM JSON-RPC Bridge:** Added `tools/evm_jsonrpc_bridge` (read-only) exposing `eth_chainId`, `eth_blockNumber`, `eth_getBalance`, and `eth_gasPrice` by proxying LCD. CORS is wide open for the web UI.
 3.  **Stack Runner:** `scripts/run_local_stack.sh` now boots the bridge with liveness checks so port 8545 is up immediately after `start`.
 
+**Tooling Note (Go Version – For All Future Agents)**
+
+- You MUST use the following Go binary when building, testing, or generating protobuf code for `nilchain` and related tools:
+  - `GO_BIN=/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go`
+- Do not rely on the system `go` in `$PATH` if it differs from this version; mismatches (e.g. `go1.25.4` vs `go1.25.5`) will cause build and proto‑generation failures.
+- When invoking `go` directly in shell commands, either:
+  - Call the full path `/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go`, or
+  - Ensure `GO_BIN` is set and use `$GO_BIN` explicitly in scripts and commands.
+
 **Change Log (Session 7: Native EVM JSON-RPC)**
 
 1.  **Cosmos EVM Server Integration:** Switched `nilchaind` to use the Cosmos EVM server stack (`github.com/cosmos/evm/server`), so the node now exposes a native Ethereum JSON-RPC endpoint directly from the binary.
@@ -327,3 +336,266 @@ We have executed a major refactor of the protocol specification to replace "Phys
     *   Uses `GET /gateway/fetch/{cid}?deal_id=<id>&owner=<nilAddress>` which both checks ownership and runs `sign-retrieval-receipt` + `submit-retrieval-proof` under a demo Provider key (faucet) before streaming the file.
     *   Leaves real end-user signing (MetaMask → Cosmos) and strict owner signature validation as a future hardening step once the EVM→Cosmos bridge is in place.
 *   [x] **Proofs Polling:** Add lightweight polling in `useProofs` so the Dashboard’s "Liveness & Performance" table refreshes periodically (default 10s) without requiring a manual page reload.
+
+## Phase 3.4: Retrieval System Hardening (Devnet/Testnet)
+
+**Goal:** Tighten the current Mode 1 devnet/testnet implementation so it more closely matches the long‑term retrievability and self‑healing design, without over‑engineering the early network.
+
+### A. Retrieval Counts & UI Wiring
+*   [ ] **Proofs Path Sanity:** Verify that `GET /nilchain/nilchain/v1/proofs` returns entries after web downloads via `GET /gateway/fetch/{cid}` and that each proof’s `commitment` encodes `deal:<id>/epoch:<epoch>/tier:<tier>` as expected.
+*   [ ] **Dashboard Retrieval Counters:** Ensure `nil-website/src/hooks/useProofs.ts` correctly aggregates proofs per Deal and that the Dashboard table’s **Retrievals** column increments when files are downloaded from the web UI.
+*   [ ] **Gateway Fetch Flow:** Audit `nil_s3`’s `GatewayFetch` + `submit-retrieval-proof` path to confirm that every successful gateway download emits a `MsgProveLiveness` for the correct `(deal_id, provider_id)` and Deal owner.
+
+### B. Data Commitment Binding (Implementation)
+*   [ ] **On‑Chain Commitments:** Confirm that `Deal` objects in `nilchain` store (or can derive) the Merkle/KZG commitments required to bind retrieval proofs to specific ciphertext (see `spec.md` § 7.3).
+*   [ ] **MsgProveLiveness Checks:** Update `MsgProveLiveness` so any `KzgProof` or system proof it accepts is verified against the Deal’s stored commitments; proofs whose `mdu_merkle_root` does not match MUST be rejected.
+*   [ ] **Tests:** Add or extend unit tests in `x/nilchain/keeper` to cover valid vs invalid commitment bindings (correct root vs wrong root) and ensure regressions are caught.
+
+### C. Valid Retrieval Challenge (Devnet Approximation)
+*   [ ] **Explicit Definition in Code:** Make the current devnet interpretation of a “valid retrieval challenge” explicit in code and comments (e.g. fixed `mdu_index` / blob index or a trivial `DeriveCheckPoint`), and document that this is a temporary approximation of the mainnet model described in `spec.md` § 7.4.
+*   [ ] **Receipt Fields:** Ensure `RetrievalReceipt` and the `sign-retrieval-receipt` CLI sign over `(deal_id, epoch_id, provider, bytes_served, nonce, expires_at, challenge_point)` so Providers cannot forge or replay receipts.
+*   [ ] **Anti‑Replay:** Keep `nonce` strictly increasing per payer/owner (`LastReceiptNonce[owner_address]` or equivalent), and reject receipts with stale or duplicated nonces in `MsgProveLiveness`.
+
+### D. Minimal Health Tracking & Simulated Eviction
+*   [ ] **Health State Stub:** Introduce a minimal per‑(Deal, Provider) health record (e.g. last successful proof height, recent failure counters) in the keeper, wired off existing `Proof` events.
+*   [ ] **Threshold Logging:** Implement simple thresholds that mark an assignment as “degraded” or “would evict if self‑healing were enabled,” and log these events (or expose them via LCD) without yet performing actual re‑replication.
+*   [ ] **Spec Alignment:** Ensure these stubs and thresholds are consistent with the long‑term HealthState design in `metaspec.md` § 7.5 and treat them as scaffolding for full self‑healing in later phases.
+
+## Phase 4: Cosmos-Aware EVM Bridge (Design & TODOs)
+
+**Goal:** Allow users to create storage deals (and eventually retrieval receipts) using their existing EVM wallets (MetaMask) while nilchaind enforces all economics and signatures on the Cosmos side. Remove the devnet-only faucet-as-signer hack from the core flow and make user identity + signatures real and auditable.
+
+### 4.0 High-Level Architecture
+
+1. **Identity Mapping**
+   *   EVM accounts are the primary user identities (MetaMask `0x...` addresses).
+   *   Each EVM public key maps deterministically to a Cosmos bech32 address (the existing `ethToNil` / “same pubkey, different prefix” pattern).
+   *   All Deals and balances on nilchaind are ultimately keyed by the Cosmos address; EVM is the signing surface.
+
+2. **Bridge Messages (No EVM Contract Required Initially)**
+   *   Introduce “bridge” messages that wrap a signed EVM intent:
+       *   `MsgCreateDealFromEvm` (Phase 4.1).
+       *   (Optional later) `MsgSubmitRetrievalFromEvm` for user-signed retrieval receipts (Phase 4.3).
+   *   Each bridge message carries:
+       *   An EVM address `creator_evm`.
+       *   A structured payload (the intent).
+       *   An EVM signature `evm_signature`.
+       *   A bridge-level nonce for replay protection.
+   *   The nilchain module verifies the EVM signature, maps to Cosmos, enforces a per-EVM nonce, and then runs the existing keeper logic (`MsgCreateDeal`, `MsgProveLiveness`).
+
+3. **Optional Phase 2: EVM Contract Bridge (Mainnet Hardening)**
+   *   Later, an EVM contract on the nilchaind EVM module can:
+       *   Escrow tokens explicitly on the EVM side.
+       *   Emit events (`DealIntentCreated`, `EscrowFunded`).
+       *   Be watched by a relayer that posts equivalent bridge messages to the Cosmos module.
+   *   This allows stronger economic coupling and explicit on-chain accounting for cross-module token flows, but is not required for the first Cosmos-aware EVM integration.
+
+### 4.1 On-Chain Design: MsgCreateDealFromEvm
+
+**New proto messages (conceptual)**
+
+*   In `nilchain/proto/nilchain/nilchain/v1/tx.proto` (Phase 4.1):
+
+    ```proto
+    // Intent signed by an EVM account
+    message EvmCreateDealIntent {
+      string creator_evm        = 1;  // 0x...
+      string cid                = 2;  // Root CID
+      uint64 size_bytes         = 3;
+      uint64 duration_blocks    = 4;
+      string service_hint       = 5;
+      string initial_escrow     = 6;  // cosmossdk.io/math.Int (stake)
+      string max_monthly_spend  = 7;  // cosmossdk.io/math.Int (stake)
+      uint64 nonce              = 8;  // per-EVM-address bridge nonce
+      string chain_id           = 9;  // nilchaind chain-id, for domain separation
+    }
+
+    message MsgCreateDealFromEvm {
+      string sender             = 1;  // Cosmos address paying gas (relayer or user)
+      EvmCreateDealIntent intent = 2;
+      bytes evm_signature       = 3;  // 65-byte ECDSA sig over the typed intent
+    }
+
+    message MsgCreateDealFromEvmResponse {
+      uint64 deal_id = 1;
+    }
+    ```
+
+*   The `EvmCreateDealIntent` is the EIP-712 payload. The EVM wallet signs over a canonical encoding of this intent (including `chain_id` and `nonce`), and nilchain verifies it via `ecrecover`.
+
+**Keeper / msgServer logic**
+
+*   New `MsgServer.CreateDealFromEvm` handler in `x/nilchain/keeper/msg_server.go`:
+    1.  **Decode and validate intent fields:**
+        *   Non-empty `cid`, non-zero `size_bytes`/`duration_blocks`, positive `initial_escrow`, `max_monthly_spend`.
+        *   `intent.chain_id` MUST match `ctx.ChainID()`.
+    2.  **Verify EVM signature:**
+        *   Reconstruct the EIP-191 / EIP-712 digest for the intent.
+        *   Use `ecrecover` (via Ethermint / `ethsecp256k1` primitives) to recover the EVM public key and address `addr_evm`.
+        *   Check `addr_evm` matches `intent.creator_evm`.
+    3.  **Replay protection:**
+        *   Maintain a new collection `EvmNonces` keyed by `addr_evm` (string).
+        *   Ensure `intent.nonce > EvmNonces[addr_evm]`; otherwise reject with `ErrUnauthorized("bridge nonce must be strictly increasing")`.
+        *   Update `EvmNonces[addr_evm] = intent.nonce` on success.
+    4.  **Map to Cosmos identity:**
+        *   Derive a Cosmos bech32 address from the recovered EVM public key (`evmPubKey -> nil1...`), using the same encoding `ethToNil` uses in reverse.
+        *   Call this `ownerCosmos`.
+    5.  **Escrow and Deal creation:**
+        *   Check `ownerCosmos` has sufficient stake to cover `initial_escrow`.
+        *   Deduct `initial_escrow` from `ownerCosmos` bank balance into the module account.
+        *   Call the internal `createDeal` helper (or reuse `MsgCreateDeal` logic) with:
+            *   `Creator = ownerCosmos`.
+            *   `Cid`, `Size_`, `DurationBlocks`, `ServiceHint`, `InitialEscrowAmount`, `MaxMonthlySpend` from the intent.
+        *   Return `MsgCreateDealFromEvmResponse{ deal_id: newDeal.Id }`.
+
+**New keeper state**
+
+*   In `x/nilchain/types/keys.go`:
+    *   Add `EvmNonceKey = collections.NewPrefix("EvmNonce/value/")`.
+*   In `Keeper` struct:
+    *   Add `EvmNonces collections.Map[string, uint64]` initialised in `NewKeeper` with `EvmNonceKey`.
+
+**Ante handler / fee model**
+
+*   Initial dev/testnet:
+    *   Treat `MsgCreateDealFromEvm` like any other Cosmos message for gas:
+        *   The `sender` field is the transaction signer / fee payer (can be the same as `ownerCosmos` or a relayer).
+        *   The EVM signature is verified inside the module; the outer Cosmos signature solely pays fees.
+*   Mainnet hardening:
+    *   Add an ante-handler that enforces that `sender` == `ownerCosmos` for self-funded flows or is in an allowed relayer set.
+    *   Consider using `ethsecp256k1` as a first-class Cosmos signer type to avoid dual-signature pattern (optional).
+
+### 4.2 Front-End & Gateway Integration (Phase 4.1)
+
+**Front-end (nil-website)**
+
+1.  **Typed intent construction**
+    *   In `useCreateDeal`, stop calling `/gateway/create-deal` directly.
+    *   Instead:
+        *   Build an `EvmCreateDealIntent` object:
+            *   `creator_evm = connected EVM address`.
+            *   `cid, size_bytes, duration_blocks, service_hint, initial_escrow, max_monthly_spend`.
+            *   `nonce = client-side monotonically increasing counter (per EVM address)` or obtained from a lightweight LCD query (`/nilchain/nilchain/v1/evm_nonces/{addr_evm}` if implemented).
+            *   `chain_id = nilchain chain-id (from config)`.
+        *   Build a deterministic signing payload for this intent.
+        *   Current implementation: use a simple domain-separated string
+            (`NILSTORE_EVM_CREATE_DEAL|...`) and have MetaMask sign it via
+            `personal_sign` / `eth_sign`. Future hardening can upgrade this
+            to full EIP-712 typed data without changing on-chain semantics.
+2.  **Bridge tx submission**
+    *   Option A (dev/testnet): POST to a small bridge endpoint in `nil_s3` (e.g. `/gateway/create-deal-evm`) that:
+        *   Wraps `{ intent, evm_signature }` into a `MsgCreateDealFromEvm` and broadcasts it using the local keyring’s fee payer (e.g. `--from faucet` for gas only).
+    *   Option B (later / mainnet): Use a Cosmos-aware JS client (e.g. cosmjs) to:
+        *   Build a `MsgCreateDealFromEvm` tx.
+        *   Sign/broadcast it with a CosmJS wallet whose accounts are derived from the EVM seed (or a dedicated Cosmos wallet).
+3.  **UI/UX**
+    *   Display a clear indication that:
+        *   The user is signing a **NilStore storage deal intent** with MetaMask.
+        *   The deal owner/address in the Cosmos world is the mapped nil-address (ethToNil).
+    *   Show the resulting `deal_id` and a link to `GET /nilchain/nilchain/v1/deals/{id}` once the tx lands.
+
+**Gateway (nil_s3) – devnet/testnet helper**
+
+*   Add `/gateway/create-deal-evm`:
+    *   Accepts `{ intent: EvmCreateDealIntent, evm_signature: string }`.
+    *   Validates intent shape (cheap checks).
+    *   Builds and broadcasts `MsgCreateDealFromEvm` using the local `nilchaind` binary and a fee-payer key (faucet or dedicated relayer).
+    *   Returns `{ tx_hash, deal_id }` if available.
+
+### 4.3 Optional: EVM-Signed Retrieval Receipts (Later)
+
+**Note:** This is a harder problem and can be phased in after `MsgCreateDealFromEvm` is stable.
+
+1.  Extend `RetrievalReceipt` to optionally include:
+    *   `string payer_evm` (0x...).
+    *   `bytes evm_signature` (over a `EvmRetrievalIntent` containing deal_id, epoch_id, provider, bytes_served, nonce, expires_at).
+2.  Add `MsgSubmitRetrievalFromEvm`:
+    *   Similar pattern to `MsgCreateDealFromEvm`:
+        *   Verify EVM signature, map to `payerCosmos`, enforce nonces, then call `MsgProveLiveness` with a constructed `RetrievalReceipt` whose `user_signature` field carries the EVM-derived signature or a Cosmos-secp wrapper.
+3.  Defer implementation until core deal-creation bridge is robust and the economics of user-signed receipts are fully specified.
+
+### 4.4 Tests & Validation (Thorough TODOs)
+
+**On-chain unit tests (Go)**
+
+1.  `x/nilchain/keeper/msg_server_evmbdg_test.go`
+    *   `[x]` `TestCreateDealFromEvm_ValidSignature`:
+        *   Use a known EVM private key (hard-coded in test).
+        *   Construct an `EvmCreateDealIntent` and sign it using local EIP-712 helper.
+        *   Call `MsgServer.CreateDealFromEvm` and assert:
+            *   Deal is created.
+            *   `Deal.Owner` matches the expected Cosmos address.
+            *   Escrow is deducted from that owner’s balance.
+            *   `EvmNonces[creator_evm]` is updated to the intent nonce.
+    *   `[x]` `TestCreateDealFromEvm_InvalidSignature`:
+        *   Mutate the signature or the intent; verify the message is rejected with `ErrUnauthorized`.
+    *   `[x]` `TestCreateDealFromEvm_ReplayNonce`:
+        *   Call `CreateDealFromEvm` twice with the same `intent.nonce`, assert the second call fails and no second deal is created.
+    *   `[x]` `TestCreateDealFromEvm_WrongChainID`:
+        *   Use mismatched `intent.chain_id` and assert rejection.
+2.  (Optional) `x/nilchain/keeper/evm_nonce_test.go`
+    *   `[ ]` Confirm `EvmNonces` stores and retrieves expected values and persists across `InitGenesis`/`ExportGenesis` if you decide to include it in genesis.
+
+**End-to-end tests (shell + Go / JS tools)**
+
+1.  `[x]` `e2e_create_deal_from_evm.sh`:
+    *   Start the local stack (`scripts/run_local_stack.sh start`).
+    *   Use a small Go or Node helper to:
+        *   Use the dev EVM key (e.g. the faucet’s) to sign an `EvmCreateDealIntent` (EIP-712).
+        *   POST to `/gateway/create-deal-evm`.
+        *   Poll LCD until the new deal appears in `GET /nilchain/nilchain/v1/deals`.
+    *   Verify:
+        *   The deal’s `owner` field matches the nil-address derived from the EVM key.
+        *   The escrow balance and providers are set as expected.
+2.  `[ ]` Web E2E smoke:
+    *   With the local stack running:
+        *   Connect MetaMask to the nilchain RPC as configured in the dashboard.
+        *   Use the web UI to:
+            *   Upload a file.
+            *   Create a deal via the new EVM-driven path (MetaMask signs an EIP-712 intent).
+            *   Confirm in the Dashboard + LCD that the deal is owned by the nil-address mapped from the MetaMask account.
+
+**Front-end tests**
+
+1.  `[ ]` Add unit tests (Jest/Vitest if/when configured) for:
+    *   `ethToNil` / mapping correctness.
+    *   EIP-712 typed-data construction helpers (ensuring deterministic payloads).
+2.  `[ ]]` Manual QA checklist:
+    *   Ensure the user is always shown exactly what they are signing in MetaMask (e.g. human-readable fields for CID, size, duration, escrow).
+    *   Ensure deal creation fails gracefully if MetaMask rejects the signature or if the bridge endpoint returns an error.
+
+### 4.5 Process Notes for Future Agents
+
+*   Do not attempt to implement the EVM contract bridge until `MsgCreateDealFromEvm` and its tests are stable.
+*   When integrating signature verification, prefer using existing Ethermint / `ethsecp256k1` primitives instead of re-rolling ECDSA/ecrecover.
+*   All new bridge-related messages and state (e.g. `EvmNonces`) MUST be covered by unit tests before enabling them in `run_local_stack.sh`.
+*   Keep the devnet helpers (`/gateway/create-deal`, faucet-signed path) available until the EVM bridge is fully wired into the web UI, but clearly mark them as legacy in comments and docs.
+
+## Phase 5: Mode 1 Retrievability & Self‑Healing (Mainnet Track)
+
+**Goal:** Implement the full Mode 1 retrieval, auditing, and self‑healing design described in `retrievability-memo.md`, `spec.md` § 7.4–7.5, and `metaspec.md` § 7, turning the retrievability invariants into enforceable on‑chain rules.
+
+### A. DeriveCheckPoint & Valid Challenges
+*   [ ] **Function Definition:** Specify and implement `DeriveCheckPoint(R_e, deal_id, channel_id, session_nonce, offset, length)` as a concrete, domain‑separated hash/PRF in Go/Rust, including test vectors.
+*   [ ] **Wire Into Retrieval:** Update the retrieval protocol (gateway, CLI, and any P2P implementation) so every retrieval computes the checkpoint via `DeriveCheckPoint` and expects exactly one KZG opening per retrieval.
+*   [ ] **Challenge Validation:** Extend `MsgProveLiveness` / retrieval verification logic to treat only those receipts that respect the `DeriveCheckPoint` derivation and provider assignment as valid protocol challenges.
+
+### B. Synthetic Storage Challenges
+*   [ ] **Challenge Schedule:** Implement the per‑epoch synthetic challenge derivation `S_e(D,P)` from `R_e` for each active `(Deal, Provider)` pair.
+*   [ ] **SyntheticProof Messages:** Add a dedicated `SyntheticStorageProof` (or equivalent) path in the module and wire it into rewards so Providers can satisfy `S_e(D,P)` without necessarily serving a live retrieval.
+*   [ ] **Coverage Accounting:** Track which synthetic challenges are satisfied by synthetic proofs vs retrieval proofs and ensure this feeds into both rewards and health metrics.
+
+### C. SP Audit Debt
+*   [ ] **Stored Bytes Accounting:** Implement a robust way to compute `stored_bytes(P, e)` for each Provider (e.g. based on Deal sizes and assignments at epoch boundaries).
+*   [ ] **Audit Task Generator:** Implement the deterministic, beacon‑driven audit task assignment `T_e(P)` so each Provider’s total assigned audit bytes ≈ `audit_debt(P, e)`.
+*   [ ] **Execution & Rewards:** Define and implement a minimal audit‑reward model (e.g. small payments or bounties) and wire audit results (success/failure) into HealthState and slashing where applicable.
+
+### D. HealthState & Automatic Eviction
+*   [ ] **HealthState Structure:** Implement the `HealthState` struct per `(Deal, Provider)` with fields for storage_ok_ratio, retrieval_success_ratio, bad_data_rate, and basic latency/QoS metrics as described in `metaspec.md` § 7.5.
+*   [ ] **Threshold Logic:** Define protocol parameters for “healthy / degraded / unhealthy” thresholds and integrate them into the keeper’s reward and placement logic.
+*   [ ] **Eviction & Re‑Replication:** Implement the full eviction pipeline: identify unhealthy assignments, recruit replacement Providers via system‑defined placement, replicate data, and remove the bad Provider once replacement proofs succeed.
+
+### E. Panic‑Mode On‑Chain Challenges
+*   [ ] **ChallengeTx / RespondChallengeTx:** Add explicit on‑chain challenge/response messages for rare “panic mode” audits, with bounded response windows.
+*   [ ] **Slashing Rules:** Define clear, documented slashing rules for non‑response or provably bad data in this path and ensure unit tests cover all edge cases.
+*   [ ] **Operator Guidance:** Document when operators and auditors should use this path versus ordinary retrieval‑based auditing to avoid unnecessary chain load.

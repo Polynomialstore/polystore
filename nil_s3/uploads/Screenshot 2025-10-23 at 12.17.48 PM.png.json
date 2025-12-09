@@ -1,0 +1,45 @@
+{
+  "filename": "uploads/Screenshot 2025-10-23 at 12.17.48 PM.png",
+  "file_size_bytes": 660680,
+  "symbols_1kib": 6,
+  "blob_count": 1,
+  "du_c_root_hex": "0x186bb120d7de5a896bc6e3d0153c4ec1aeada33cb6f9d92fe9e15afc59d650d7",
+  "commitments_hex": [
+    "0xb964207282b7022e2263b126b49d4342963d77c51e2cab9c8e47ea06ee3e4bd83dc3559a8042fa3823e4eaa7b5cfa35d"
+  ],
+  "proofs": [
+    {
+      "index": 1,
+      "shard_idx": 0,
+      "local_cell": 1,
+      "z_hex": "0x564c0a11a0f704f4fc3e8acfe0f8245f0ad1347b378fbf96e206da11a5d36306",
+      "y_hex": "0x4ad00cce98388e130b30506c1598d155d6fbde9ad7670f5882676354b945274b",
+      "commitment": "0xb964207282b7022e2263b126b49d4342963d77c51e2cab9c8e47ea06ee3e4bd83dc3559a8042fa3823e4eaa7b5cfa35d",
+      "symbol_preview_hex": "1af4607887b19a8de54c1459c701673b",
+      "proof_hex": "0xa8b5b961d2979fddbac67cb454ac7ac1263410c107b8bd3d78f7a4e26f7acb0be967c113dd55c55a701c7754aa42bfc0",
+      "verified": true
+    },
+    {
+      "index": 3,
+      "shard_idx": 0,
+      "local_cell": 3,
+      "z_hex": "0x36a0694837b9391d085fa60b9f017e70697bf2539257c17e7aad249861212753",
+      "y_hex": "0x28c497eb048f90af47356b2d3b700a06a164847147d2438653738052b50f69fe",
+      "commitment": "0xb964207282b7022e2263b126b49d4342963d77c51e2cab9c8e47ea06ee3e4bd83dc3559a8042fa3823e4eaa7b5cfa35d",
+      "symbol_preview_hex": "1650f2e95f8b06b3ca1beda89876a01c",
+      "proof_hex": "0x86d1d6571a97a1509b60747647940c53b39e396fbcbaf6d70b6674e6830d25bcd35b49e878ffc1abeb37e94da781d4b8",
+      "verified": true
+    },
+    {
+      "index": 0,
+      "shard_idx": 0,
+      "local_cell": 0,
+      "z_hex": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "y_hex": "0x09945d32dfbce350a9325a40d63c23ae1cfa91bc8d7c05961f2a3d12dac1ea18",
+      "commitment": "0xb964207282b7022e2263b126b49d4342963d77c51e2cab9c8e47ea06ee3e4bd83dc3559a8042fa3823e4eaa7b5cfa35d",
+      "symbol_preview_hex": "89504e470d0a1a0a0000000d49484452",
+      "proof_hex": "0xa9e67d8311428d054d1e099e10d811f41245bab10775dfab661deb295039ce35791da3164a425d0ce0be3f975137a18f",
+      "verified": true
+    }
+  ]
+}

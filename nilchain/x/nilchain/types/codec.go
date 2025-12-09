@@ -12,8 +12,11 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgUpdateParams{},
 		&MsgRegisterProvider{},
 		&MsgCreateDeal{},
+		&MsgCreateDealFromEvm{},
 		&MsgProveLiveness{},
 		&MsgSignalSaturation{},
+		&MsgAddCredit{},
+		&MsgWithdrawRewards{},
 	)
 	msgservice.RegisterMsgServiceDesc(registrar, &_Msg_serviceDesc)
 }

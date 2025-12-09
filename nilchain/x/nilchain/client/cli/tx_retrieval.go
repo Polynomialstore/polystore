@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-    "github.com/cosmos/cosmos-sdk/types/tx/signing"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/spf13/cobra"
 
 	"nilchain/x/crypto_ffi"
@@ -40,7 +41,12 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			filePath := args[3]
 			trustedSetupPath := args[4]
 
-			// 1. Read File & Compute Proof (Simulation of verification)
+			// 1. Read File & Compute Proof (Simulation of verification).
+			// In the current Mode 1 devnet path, we treat this as a simple,
+			// fixed challenge: chunk index 0 for a local 8 MiB MDU. A future
+			// mainnet implementation will replace this with DeriveCheckPoint
+			// based on the beacon and retrieval parameters, as described in
+			// spec.md §7.4.
 			mduBytes, err := ioutil.ReadFile(filePath)
 			if err != nil {
 				return err
@@ -78,13 +84,20 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				KzgOpeningProof:                   kzgProofBytes,
 			}
 
-			// 2. Sign Data
-            // Format: DealID (8) + EpochID (8) + Provider (len) + BytesServed (8)
+			// 2. Prepare anti-replay fields
+			// For devnet, we derive a monotonically increasing nonce from the local time.
+			nonce := uint64(time.Now().UnixNano())
+			var expiresAt uint64 = 0 // 0 = no expiry; chain will only enforce expiry if > 0.
+
+			// 3. Sign Data
+            // Format: DealID (8) + EpochID (8) + Provider (len) + BytesServed (8) + Nonce (8) + ExpiresAt (8)
             buf := make([]byte, 0)
             buf = append(buf, sdk.Uint64ToBigEndian(dealId)...)
             buf = append(buf, sdk.Uint64ToBigEndian(epochId)...)
             buf = append(buf, []byte(providerAddr)...)
             buf = append(buf, sdk.Uint64ToBigEndian(bytesServed)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(nonce)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(expiresAt)...)
 
             // Sign with Keyring
             name := clientCtx.GetFromName()
@@ -97,7 +110,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
                 return err
             }
 
-			// 3. Construct Receipt
+			// 4. Construct Receipt
 			receipt := types.RetrievalReceipt{
 				DealId:        dealId,
 				EpochId:       epochId,
@@ -105,9 +118,11 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				BytesServed:   bytesServed,
 				ProofDetails:  kzgProof,
 				UserSignature: sig,
+				Nonce:         nonce,
+				ExpiresAt:     expiresAt,
 			}
 
-			// 4. Output JSON
+			// 5. Output JSON
 			bz, err := json.MarshalIndent(receipt, "", "  ")
 			if err != nil {
 				return err

@@ -76,6 +76,10 @@ init_chain() {
 
   # Fund faucet + create validator
   "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  # Pre-fund a well-known dev EVM-mapped account used in E2E tests so that
+  # MsgCreateDealFromEvm can deduct stake from its owner without relying on the
+  # faucet service timing.
+  "$NILCHAIND_BIN" genesis add-genesis-account nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
 

@@ -1,0 +1,45 @@
+{
+  "filename": "uploads/logo cropped inverted.jpg",
+  "file_size_bytes": 537822,
+  "symbols_1kib": 5,
+  "blob_count": 1,
+  "du_c_root_hex": "0xb7376457adbcc76b45114d1868bf955813687dfe4f01979ffaf1c0b25129a1eb",
+  "commitments_hex": [
+    "0xb73de925a5d64f3d1bb89b9579f205423ca4f58bb588149f1160090b6584b887c4561e901efe2a9b654816ff85c39ab8"
+  ],
+  "proofs": [
+    {
+      "index": 0,
+      "shard_idx": 0,
+      "local_cell": 0,
+      "z_hex": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "y_hex": "0x11e017a196268efc45a4b4713dc842561418f9d40f4e116e9b8ac2fcb41eeacd",
+      "commitment": "0xb73de925a5d64f3d1bb89b9579f205423ca4f58bb588149f1160090b6584b887c4561e901efe2a9b654816ff85c39ab8",
+      "symbol_preview_hex": "ffd8ffe000104a464946000101000001",
+      "proof_hex": "0xa41f973940ad2ccd3a60ef00ee728877d1dbc2fe291689b6fd64567d4e08caa776f6218fc9e6af4b89fca3c384e4ee6d",
+      "verified": true
+    },
+    {
+      "index": 2,
+      "shard_idx": 0,
+      "local_cell": 2,
+      "z_hex": "0x6d031f1b5c49c83409f1ca610a08f16655ea6811be9c622d4a838b5d59cd79e5",
+      "y_hex": "0x1afeb96f1ccf2397ccdda808befe6ab426868e572fd6911043641190d4ff330f",
+      "commitment": "0xb73de925a5d64f3d1bb89b9579f205423ca4f58bb588149f1160090b6584b887c4561e901efe2a9b654816ff85c39ab8",
+      "symbol_preview_hex": "a222294a834089a445d12ba50df9682b",
+      "proof_hex": "0xa08064ff06704d4434c908557933ca8d175b70bcb1f61b1233b8330e03fef0bf80b485149523fe7f86fdf0e47ce7d7d2",
+      "verified": true
+    },
+    {
+      "index": 0,
+      "shard_idx": 0,
+      "local_cell": 0,
+      "z_hex": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "y_hex": "0x11e017a196268efc45a4b4713dc842561418f9d40f4e116e9b8ac2fcb41eeacd",
+      "commitment": "0xb73de925a5d64f3d1bb89b9579f205423ca4f58bb588149f1160090b6584b887c4561e901efe2a9b654816ff85c39ab8",
+      "symbol_preview_hex": "ffd8ffe000104a464946000101000001",
+      "proof_hex": "0xa41f973940ad2ccd3a60ef00ee728877d1dbc2fe291689b6fd64567d4e08caa776f6218fc9e6af4b89fca3c384e4ee6d",
+      "verified": true
+    }
+  ]
+}

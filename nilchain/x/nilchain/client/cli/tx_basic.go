@@ -1,15 +1,18 @@
 package cli
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"os"
 	"strconv"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/spf13/cobra"
-    
-    "nilchain/x/nilchain/types"
-    "cosmossdk.io/math"
+
+	"cosmossdk.io/math"
+	"nilchain/x/nilchain/types"
 )
 
 func CmdRegisterProvider() *cobra.Command {
@@ -87,4 +90,54 @@ func CmdCreateDeal() *cobra.Command {
     cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General:owner=<nilAddress>:replicas=<N>)")
     flags.AddTxFlagsToCmd(cmd)
     return cmd
+}
+
+// CmdCreateDealFromEvm creates a new storage deal from an EVM-signed intent.
+// It expects a JSON file on disk containing:
+//   { "intent": { ...EvmCreateDealIntent... }, "evm_signature": "0x..." }
+func CmdCreateDealFromEvm() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create-deal-from-evm [payload-json-file]",
+		Short: "Create a storage deal from an EVM-signed intent",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			path := args[0]
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			var payload struct {
+				Intent       types.EvmCreateDealIntent `json:"intent"`
+				EvmSignature string                   `json:"evm_signature"`
+			}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				return err
+			}
+
+			sig := payload.EvmSignature
+			if len(sig) >= 2 && (sig[0:2] == "0x" || sig[0:2] == "0X") {
+				sig = sig[2:]
+			}
+			sigBz, err := hex.DecodeString(sig)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgCreateDealFromEvm{
+				Sender:       clientCtx.GetFromAddress().String(),
+				Intent:       &payload.Intent,
+				EvmSignature: sigBz,
+			}
+
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
 }

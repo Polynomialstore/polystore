@@ -16,6 +16,7 @@ export const Layout = () => {
     { name: "Technology", path: "/technology" },
     { name: "Leaderboard", path: "/leaderboard" },
     { name: "Performance", path: "/performance" },
+    { name: "Proofs", path: "/proofs" },
     { name: "Economy", path: "/economy" },
     { name: "Security", path: "/security" },
     { name: "S3 Adapter", path: "/s3-adapter" },

@@ -1,10 +1,13 @@
 package keeper_test
 
 import (
+	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	"github.com/stretchr/testify/require"
 
@@ -376,6 +379,201 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.True(t, res.Success)
 	require.Equal(t, uint32(0), res.Tier) // Platinum
 	t.Logf("Proof Accepted! Reward: %s", res.RewardAmount)
+
+	// Health stub: ensure that no failures are recorded for this
+	// (deal, provider) pair after a successful proof.
+	_, err = f.keeper.DealProviderFailures.Get(f.ctx, collections.Join(resDeal.DealId, assignedProvider))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+}
+
+// TestProveLiveness_InvalidUserReceipt verifies that user-receipt proofs are
+// rejected when the nonce is stale or the signature is invalid.
+func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Setup trusted setup; skip if not available.
+	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
+	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
+		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping retrieval receipt tests")
+	}
+
+	// Register one provider and extras for placement.
+	addrBz := []byte("provider_user_path___")
+	providerAddr, _ := f.addressCodec.BytesToString(addrBz)
+	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		Creator:      providerAddr,
+		Capabilities: "General",
+		TotalStorage: 100000000000,
+	})
+	require.NoError(t, err)
+	for i := 0; i < 5; i++ {
+		extraBz := []byte(fmt.Sprintf("extra_prov_user__%02d", i))
+		extraAddr, _ := f.addressCodec.BytesToString(extraBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      extraAddr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+		})
+		require.NoError(t, err)
+	}
+
+	// Create a Deal owned by the provider address so that the owner account
+	// exists in AccountKeeper and signature verification can be exercised.
+	owner := providerAddr
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		Cid:                 "bafyuserreceipt",
+		Size_:               8 * 1024 * 1024,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(100000000),
+		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	assignedProvider := resDeal.AssignedProviders[0]
+
+	// Construct a minimal RetrievalReceipt with a bogus signature and stale nonce.
+	// We deliberately do not construct a valid KZG proof here; the goal is to
+	// exercise the nonce/signature checks rather than the cryptography.
+	receipt := types.RetrievalReceipt{
+		DealId:        resDeal.DealId,
+		EpochId:       1,
+		Provider:      assignedProvider,
+		BytesServed:   1024,
+		ProofDetails:  types.KzgProof{MduMerkleRoot: make([]byte, 32)},
+		UserSignature: []byte("not-a-real-signature"),
+		Nonce:         1,
+		ExpiresAt:     0,
+	}
+
+	// First attempt should fail on signature verification once the owner
+	// account has a pubkey.
+	proofMsg := &types.MsgProveLiveness{
+		Creator: assignedProvider,
+		DealId:  resDeal.DealId,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_UserReceipt{
+			UserReceipt: &receipt,
+		},
+	}
+
+	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
+	require.Error(t, err, "invalid retrieval receipt signature should be rejected")
+
+	// Simulate a stored nonce, and then try to submit a receipt with a stale
+	// nonce to exercise the anti-replay check.
+	err = f.keeper.ReceiptNonces.Set(f.ctx, owner, 5)
+	require.NoError(t, err)
+	receipt.Nonce = 3
+
+	proofMsg2 := &types.MsgProveLiveness{
+		Creator: assignedProvider,
+		DealId:  resDeal.DealId,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_UserReceipt{
+			UserReceipt: &receipt,
+		},
+	}
+	_, err = msgServer.ProveLiveness(f.ctx, proofMsg2)
+	require.Error(t, err, "stale retrieval receipt nonce should be rejected")
+}
+
+// TestProveLiveness_StrictBinding verifies that when a deal opts into a
+// stricter redundancy mode (RedundancyMode == 2) and encodes a 32-byte hex
+// commitment in its CID, ProveLiveness enforces that the KZG proof's
+// MDU merkle root matches this commitment.
+func TestProveLiveness_StrictBinding(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// 1. Setup trusted setup
+	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
+	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
+		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping strict binding test")
+	}
+
+	// 2. Register a provider
+	addrBz := []byte("provider_strict_bind_")
+	providerAddr, _ := f.addressCodec.BytesToString(addrBz)
+	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		Creator:      providerAddr,
+		Capabilities: "General",
+		TotalStorage: 100000000000,
+	})
+	require.NoError(t, err)
+
+	// 3. Create a deal normally, then override its RedundancyMode and Cid
+	// to simulate a strict-binding mainnet deal.
+	userBz := []byte("user_strict_bind_____")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		Cid:                 "dummycid",
+		Size_:               8 * 1024 * 1024,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(100000000),
+		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	assignedProvider := resDeal.AssignedProviders[0]
+
+	// Generate a KZG proof for a zero-filled MDU and derive its root.
+	mduData := make([]byte, 8*1024*1024)
+	err = crypto_ffi.Init("../../../trusted_setup.txt")
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	require.NoError(t, err)
+
+	chunkIdx := uint32(0)
+	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
+	require.NoError(t, err)
+
+	merklePath := make([][]byte, 0)
+	for i := 0; i < len(merkleProof); i += 32 {
+		merklePath = append(merklePath, merkleProof[i:i+32])
+	}
+
+	// Override the stored deal to enable strict binding and set Cid to the
+	// hex-encoded MDU root.
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	deal.RedundancyMode = 2
+	deal.Cid = hex.EncodeToString(root)
+	err = f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal)
+	require.NoError(t, err)
+
+	// 4. Submit a proof whose MDU root matches the hex CID -> should succeed.
+	proofMsg := &types.MsgProveLiveness{
+		Creator: assignedProvider,
+		DealId:  resDeal.DealId,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_SystemProof{
+			SystemProof: &types.KzgProof{
+				MduMerkleRoot:                     root,
+				ChallengedKzgCommitment:           commitment,
+				ChallengedKzgCommitmentMerklePath: merklePath,
+				ChallengedKzgCommitmentIndex:      chunkIdx,
+				ZValue:                            z,
+				YValue:                            y,
+				KzgOpeningProof:                   kzgProof,
+			},
+		},
+	}
+
+	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
+	require.NoError(t, err)
+
+	// 5. Now store a mismatched CID and verify that strict binding rejects it.
+	deal.Cid = hex.EncodeToString(bytes.Repeat([]byte{0xFF}, 32))
+	err = f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal)
+	require.NoError(t, err)
+
+	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
+	require.Error(t, err, "strict binding must reject mismatched MDU roots")
 }
 
 func TestSignalSaturation(t *testing.T) {

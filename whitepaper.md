@@ -53,6 +53,22 @@ In the current **FullReplica (Mode 1)** implementation, retrieval events are sur
 
 Future StripeReplica modes preserve this pattern but allow multiple Providers to contribute receipts for different stripes of the same file.
 
+### 2.4 Retrievability & Self-Healing Invariants
+
+NilStore’s long-term design is anchored on two invariants:
+
+*   **Retrievability / Accountability:** For every `(Deal, Provider)` assignment, either the encrypted data is reliably retrievable under the protocol’s rules, or there exists high‑probability, verifiable evidence of SP failure that can be used to punish and eventually evict that Provider.
+*   **Self-Healing Placement:** Persistently underperforming or malicious Providers are automatically detected, de‑rewarded or slashed, and replaced by healthier Providers, so the network tends toward a state where Deals are held only by SPs that actually serve data.
+
+To support these invariants, the mainnet Mode 1 design extends the Unified Liveness protocol with:
+
+*   **Valid Retrieval Challenges:** Every retrieval against `(Deal, Provider)` in epoch `e` is tagged with randomness `R_e` and a session nonce, and both client and SP derive a single deterministic KZG checkpoint inside the requested range. This makes each retrieval a potential storage proof.
+*   **Synthetic Storage Challenges:** For each epoch and `(Deal, Provider)`, the chain selects a small set of blob indices to probe purely from `R_e`. SPs that wish to earn storage rewards must satisfy these either via synthetic proofs or retrieval-based proofs.
+*   **SP Audit Debt:** Each SP accumulates an “audit debt” proportional to the total bytes they store; they must act as mystery shoppers for other SPs’ Deals, issuing retrieval challenges and reporting misbehavior.
+*   **HealthState & Eviction:** The chain maintains rolling health metrics per `(Deal, Provider)` (success ratios, fraud rate, basic latency). When an assignment is clearly unhealthy, the placement engine recruits replacements and evicts the bad SP once new replicas prove themselves.
+
+Devnet and testnet implementations approximate this model (e.g., simpler challenge selection and health scoring), but the north star is that **data is either retrievable or the chain can prove that a specific SP failed and punish them accordingly**.
+
 ---
 
 ## 3. Traffic Management (Elasticity)

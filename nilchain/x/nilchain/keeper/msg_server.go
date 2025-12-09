@@ -1,7 +1,9 @@
 package keeper
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +14,9 @@ import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	gethAccounts "github.com/ethereum/go-ethereum/accounts"
+	gethCommon "github.com/ethereum/go-ethereum/common"
+	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
@@ -28,6 +33,180 @@ func NewMsgServerImpl(keeper Keeper) types.MsgServer {
 
 // Ensure msgServer implements the types.MsgServer interface
 var _ types.MsgServer = msgServer{}
+
+// CreateDealFromEvm handles MsgCreateDealFromEvm to create a new storage deal
+// from an EVM-signed intent bridged into nilchaind.
+func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreateDealFromEvm) (*types.MsgCreateDealFromEvmResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if msg.Intent == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("intent is required")
+	}
+	intent := msg.Intent
+
+	// Basic field validation.
+	if strings.TrimSpace(intent.Cid) == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("CID cannot be empty")
+	}
+	if intent.SizeBytes == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size cannot be zero")
+	}
+	if intent.DurationBlocks == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
+	}
+	if intent.InitialEscrow.IsNil() || intent.InitialEscrow.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid initial escrow amount: %s", intent.InitialEscrow)
+	}
+	if intent.MaxMonthlySpend.IsNil() || intent.MaxMonthlySpend.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", intent.MaxMonthlySpend)
+	}
+	if strings.TrimSpace(intent.ChainId) == "" || strings.TrimSpace(intent.ChainId) != ctx.ChainID() {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("intent chain_id %q does not match chain %q", intent.ChainId, ctx.ChainID())
+	}
+
+	if len(msg.EvmSignature) != 65 {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length (expected 65 bytes)")
+	}
+
+	// Build the canonical signing message and recover the EVM signer.
+	signingMsg, err := types.BuildEvmCreateDealMessage(intent)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to build signing message: %s", err)
+	}
+
+	evmAddr, err := recoverEvmAddress(signingMsg, msg.EvmSignature)
+	if err != nil {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+	}
+
+	// Normalise creator_evm for comparison.
+	intentCreator := strings.TrimSpace(intent.CreatorEvm)
+	intentCreator = strings.ToLower(intentCreator)
+	if intentCreator != "" && !strings.HasPrefix(intentCreator, "0x") {
+		intentCreator = "0x" + intentCreator
+	}
+	if intentCreator == "" || intentCreator != strings.ToLower(evmAddr.Hex()) {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("evm_signature does not match intent.creator_evm")
+	}
+
+	// Replay protection: enforce strictly increasing nonce per EVM address.
+	evmKey := strings.ToLower(evmAddr.Hex())
+	lastNonce, err := k.EvmNonces.Get(ctx, evmKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("failed to load bridge nonce: %w", err)
+	}
+	if intent.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("bridge nonce must be strictly increasing")
+	}
+	if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
+	}
+
+	// Map EVM address -> Cosmos bech32 (same bytes, different prefix).
+	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
+	ownerAddrStr := ownerAcc.String()
+
+	// Decode service hint and requested replication (owner is derived from EVM).
+	rawHint := strings.TrimSpace(intent.ServiceHint)
+	serviceHint := rawHint
+	requestedReplicas := uint64(types.DealBaseReplication)
+
+	if rawHint != "" {
+		base := rawHint
+		if idx := strings.Index(rawHint, ":"); idx != -1 {
+			base = strings.TrimSpace(rawHint[:idx])
+			extras := strings.Split(rawHint[idx+1:], ":")
+			for _, token := range extras {
+				token = strings.TrimSpace(token)
+				if token == "" {
+					continue
+				}
+				parts := strings.SplitN(token, "=", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				key := strings.ToLower(strings.TrimSpace(parts[0]))
+				val := strings.TrimSpace(parts[1])
+				switch key {
+				case "replicas":
+					if val == "" {
+						continue
+					}
+					n, err := strconv.ParseUint(val, 10, 64)
+					if err != nil || n == 0 {
+						return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid replicas value in service hint: %s", val)
+					}
+					if n > uint64(types.DealBaseReplication) {
+						n = uint64(types.DealBaseReplication)
+					}
+					requestedReplicas = n
+				}
+			}
+		}
+		if base != "" {
+			serviceHint = base
+		}
+	}
+
+	if serviceHint != "Hot" && serviceHint != "Cold" && serviceHint != "General" && serviceHint != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHint)
+	}
+
+	dealID, err := k.DealCount.Next(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
+	}
+
+	blockHash := ctx.BlockHeader().LastBlockId.Hash
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, requestedReplicas)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign providers: %w", err)
+	}
+
+	escrowCoins := sdk.NewCoins(sdk.NewCoin("stake", intent.InitialEscrow))
+	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, escrowCoins); err != nil {
+		return nil, err
+	}
+
+	currentReplication := uint64(len(assignedProviders))
+
+	deal := types.Deal{
+		Id:                 dealID,
+		Cid:                intent.Cid,
+		Size_:              intent.SizeBytes,
+		Owner:              ownerAddrStr,
+		EscrowBalance:      intent.InitialEscrow,
+		StartBlock:         uint64(ctx.BlockHeight()),
+		EndBlock:           uint64(ctx.BlockHeight()) + intent.DurationBlocks,
+		Providers:          assignedProviders,
+		RedundancyMode:     1,
+		CurrentReplication: currentReplication,
+		ServiceHint:        serviceHint,
+		MaxMonthlySpend:    intent.MaxMonthlySpend,
+	}
+
+	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+		return nil, fmt.Errorf("failed to set deal: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			// Reuse the CreateDeal event type so downstream consumers
+			// see a uniform DealCreated surface regardless of entry path.
+			types.TypeMsgCreateDeal,
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
+			sdk.NewAttribute(types.AttributeKeyCID, deal.Cid),
+			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
+			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
+		),
+	)
+
+	return &types.MsgCreateDealFromEvmResponse{
+		DealId: deal.Id,
+	}, nil
+}
 
 // RegisterProvider handles MsgRegisterProvider to create a new Storage Provider.
 func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegisterProvider) (*types.MsgRegisterProviderResponse, error) {
@@ -259,6 +438,33 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
 	}
 
+	// DEVNET NOTE (Phase 3.4):
+	// In the current Mode 1 devnet implementation, the KZG proof is verified
+	// against a synthetic 8 MiB MDU constructed off-chain. The MDU Merkle
+	// root is not yet bound to the Deal's on-chain commitments (Root CID /
+	// manifest). We still enforce that the root is present and that the
+	// proof is structurally valid via VerifyMduProof, but full binding to
+	// the Deal's commitments remains a mainnet goal (see spec.md §7.3).
+	if len(kzgProof.MduMerkleRoot) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid KZG proof: mdu_merkle_root must be 32 bytes")
+	}
+
+	// MAINNET-FACING BINDING (gated):
+	// For deals that opt into a stricter redundancy mode (RedundancyMode == 2),
+	// we interpret Deal.Cid as a hex-encoded 32-byte commitment root and
+	// require that the KZG proof's MDU Merkle root matches it. Existing Mode 1
+	// devnet/testnet deals use RedundancyMode == 1 and are not subject to this
+	// binding yet.
+	if deal.RedundancyMode == 2 {
+		cidBytes, err := hex.DecodeString(strings.TrimSpace(deal.Cid))
+		if err != nil || len(cidBytes) != 32 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("deal CID is not a valid 32-byte hex commitment (strict mode)")
+		}
+		if !bytes.Equal(cidBytes, kzgProof.MduMerkleRoot) {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("kzg proof root does not match deal commitment (strict mode)")
+		}
+	}
+
 	flattenedMerklePath := make([]byte, 0, len(kzgProof.ChallengedKzgCommitmentMerklePath)*32)
 	for _, node := range kzgProof.ChallengedKzgCommitmentMerklePath {
 		flattenedMerklePath = append(flattenedMerklePath, node...)
@@ -323,6 +529,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if err := k.recordProofSummary(ctx, msg, deal, "Fail", false); err != nil {
 			ctx.Logger().Error("failed to record proof summary", "error", err)
 		}
+		// Track a minimal health stub for Phase 3.4: count consecutive failures
+		// so we can log when a (deal, provider) pair would be considered
+		// degraded in a full self-healing implementation.
+		k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
 		return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 	}
 
@@ -394,13 +604,29 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	var bandwidthPayment math.Int
 	if isUserReceipt {
         receipt := msg.GetProofType().(*types.MsgProveLiveness_UserReceipt).UserReceipt
-        
+
+        // Anti-replay and expiry checks
+        if receipt.ExpiresAt != 0 && uint64(ctx.BlockHeight()) > receipt.ExpiresAt {
+            return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt expired")
+        }
+
+        lastNonce, err := k.ReceiptNonces.Get(ctx, deal.Owner)
+        if err != nil && !errors.Is(err, collections.ErrNotFound) {
+            return nil, fmt.Errorf("failed to load last receipt nonce: %w", err)
+        }
+        if receipt.Nonce <= lastNonce {
+            return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt nonce must be strictly increasing")
+        }
+
+        // Reconstruct signed message buffer (must match CLI)
         buf := make([]byte, 0)
         buf = append(buf, sdk.Uint64ToBigEndian(receipt.DealId)...)
         buf = append(buf, sdk.Uint64ToBigEndian(receipt.EpochId)...)
         buf = append(buf, []byte(receipt.Provider)...)
         buf = append(buf, sdk.Uint64ToBigEndian(receipt.BytesServed)...)
-        
+        buf = append(buf, sdk.Uint64ToBigEndian(receipt.Nonce)...)
+        buf = append(buf, sdk.Uint64ToBigEndian(receipt.ExpiresAt)...)
+
         ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
         if err != nil {
              return nil, fmt.Errorf("invalid owner address: %w", err)
@@ -410,7 +636,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
         if ownerAccount == nil {
              // Devnet mode: if the owner account does not yet exist on-chain,
              // we cannot recover a public key. Skip signature verification but
-             // still account the receipt for liveness.
+             // still account the receipt for liveness and nonce tracking.
              ctx.Logger().Info("deal owner account not found; skipping retrieval receipt signature verification (devnet mode)", "owner", deal.Owner)
         } else {
             pubKey := ownerAccount.GetPubKey()
@@ -422,6 +648,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
                       return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
                  }
             }
+        }
+
+        // Update stored nonce after all checks
+        if err := k.ReceiptNonces.Set(ctx, deal.Owner, receipt.Nonce); err != nil {
+            return nil, fmt.Errorf("failed to update receipt nonce: %w", err)
         }
 
 		bandwidthPayment = math.NewInt(500000) // Placeholder 0.5 NIL
@@ -491,6 +722,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		ctx.Logger().Error("failed to record proof summary", "error", err)
 	}
 
+	// Update minimal health stub: successful proof resets failure counters for
+	// this (deal, provider) pair and logs health as "OK" for devnet.
+	k.trackProviderHealth(ctx, msg.DealId, msg.Creator, true)
+
 	return &types.MsgProveLivenessResponse{Success: true, Tier: tier, RewardAmount: totalReward.String()}, nil
 }
 
@@ -516,6 +751,46 @@ func (k msgServer) recordProofSummary(ctx sdk.Context, msg *types.MsgProveLivene
 	}
 
 	return nil
+}
+
+// trackProviderHealth maintains a minimal per-(Deal, Provider) health stub for
+// Phase 3.4. It does not affect rewards or slashing; it only keeps a small
+// failure counter and logs when a pair would be considered "degraded" under a
+// full HealthState-based eviction policy.
+func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider string, proofOK bool) {
+	key := collections.Join(dealID, provider)
+
+	if proofOK {
+		// Reset failure counter on success.
+		if err := k.DealProviderFailures.Remove(ctx, key); err != nil && !errors.Is(err, collections.ErrNotFound) {
+			ctx.Logger().Error("failed to reset provider failure counter", "deal", dealID, "provider", provider, "error", err)
+		}
+		return
+	}
+
+	// Increment failure counter on invalid proof.
+	current, err := k.DealProviderFailures.Get(ctx, key)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		ctx.Logger().Error("failed to get provider failure counter", "deal", dealID, "provider", provider, "error", err)
+	}
+	failures := current + 1
+	if err := k.DealProviderFailures.Set(ctx, key, failures); err != nil {
+		ctx.Logger().Error("failed to update provider failure counter", "deal", dealID, "provider", provider, "error", err)
+		return
+	}
+
+	// Log when the failure count crosses a small threshold. This is purely
+	// informational and gives operators a sense of which pairs would be
+	// considered for eviction in a mainnet-grade HealthState implementation.
+	const failureThreshold uint64 = 3
+	if failures == failureThreshold {
+		ctx.Logger().Info(
+			"provider health degraded for deal; would consider eviction in full self-healing mode",
+			"deal", dealID,
+			"provider", provider,
+			"failures", failures,
+		)
+	}
 }
 
 // SignalSaturation handles MsgSignalSaturation to trigger pre-emptive scaling.
@@ -689,4 +964,27 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
     }
     
     return &types.MsgWithdrawRewardsResponse{AmountWithdrawn: rewards}, nil
+}
+
+// recoverEvmAddress recovers the EVM address from a personal_sign-style
+// signature over the given human-readable message.
+func recoverEvmAddress(message string, sig []byte) (gethCommon.Address, error) {
+	var zero gethCommon.Address
+	if len(sig) != 65 {
+		return zero, fmt.Errorf("invalid signature length: %d", len(sig))
+	}
+
+	sigCopy := make([]byte, len(sig))
+	copy(sigCopy, sig)
+	// Normalise V into {0,1} as expected by go-ethereum.
+	if sigCopy[64] >= 27 {
+		sigCopy[64] -= 27
+	}
+
+	hash := gethAccounts.TextHash([]byte(message))
+	pubKey, err := gethCrypto.SigToPub(hash, sigCopy)
+	if err != nil {
+		return zero, err
+	}
+	return gethCrypto.PubkeyToAddress(*pubKey), nil
 }

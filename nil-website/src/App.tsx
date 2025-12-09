@@ -15,6 +15,7 @@ import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
 import { PerformanceReport } from "./pages/PerformanceReport";
 import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
+import { ProofsDashboard } from "./pages/ProofsDashboard";
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -33,6 +34,7 @@ function App() {
               <Route path="testnet" element={<TestnetDocs />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="performance" element={<PerformanceReport />} />
+              <Route path="proofs" element={<ProofsDashboard />} />
               <Route path="s3-adapter" element={<S3AdapterDocs />} />
               <Route path="governance" element={<GovernanceDocs />} />
               <Route path="economy" element={<EconomyDashboard />} />

@@ -53,6 +53,7 @@ func main() {
 	// Gateway endpoints used by the web UI
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
@@ -191,6 +192,13 @@ type proveRetrievalRequest struct {
 	Epoch  uint64 `json:"epoch_id,omitempty"`
 }
 
+// createDealFromEvmRequest is the payload expected by /gateway/create-deal-evm.
+// It mirrors the on-chain MsgCreateDealFromEvm JSON shape.
+type createDealFromEvmRequest struct {
+	Intent       map[string]any `json:"intent"`
+	EvmSignature string         `json:"evm_signature"`
+}
+
 func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -216,6 +224,21 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	hint := strings.TrimSpace(req.ServiceHint)
 	if hint == "" {
 		hint = "General"
+	}
+
+	// Light economic guardrail: require that the logical creator has at least
+	// some stake/atom balance before allowing a deal to be created on their
+	// behalf. This forces the UI flow to go through the faucet and ensures the
+	// owner appears on-chain, even though the faucet key still sponsors the tx.
+	if req.Creator != "" {
+		if ok, err := creatorHasSomeBalance(req.Creator); err != nil {
+			log.Printf("GatewayCreateDeal: balance check failed for %s: %v", req.Creator, err)
+			http.Error(w, "failed to validate creator balance", http.StatusInternalServerError)
+			return
+		} else if !ok {
+			http.Error(w, "creator has no on-chain balance; request testnet NIL from the faucet first", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// NOTE: We sign as the faucet/system key for now. The logical creator is
@@ -253,6 +276,122 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		"tx_hash": txHash,
 	}); err != nil {
 		log.Printf("GatewayCreateDeal encode error: %v", err)
+	}
+}
+
+// GatewayCreateDealFromEvm accepts an EVM-signed deal intent and forwards it
+// to nilchaind via the MsgCreateDealFromEvm CLI path. This is the primary
+// devnet/testnet entrypoint for user-signed deals.
+func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var req createDealFromEvmRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Intent == nil {
+		http.Error(w, "intent is required", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.EvmSignature) == "" {
+		http.Error(w, "evm_signature is required", http.StatusBadRequest)
+		return
+	}
+
+	// Light validation of the intent shape.
+	rawCreator, okCreator := req.Intent["creator_evm"].(string)
+	rawCid, okCid := req.Intent["cid"].(string)
+	rawSize, okSize := req.Intent["size_bytes"]
+	if !okCreator || strings.TrimSpace(rawCreator) == "" ||
+		!okCid || strings.TrimSpace(rawCid) == "" ||
+		!okSize {
+		http.Error(w, "intent must include creator_evm, cid, and size_bytes", http.StatusBadRequest)
+		return
+	}
+
+	// Best-effort numeric check for size_bytes > 0.
+	switch v := rawSize.(type) {
+	case float64:
+		if v <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
+	case int64:
+		if v <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil || n <= 0 {
+			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
+			return
+		}
+	default:
+		// If it's some other type, we just skip the check; the on-chain
+		// keeper will perform strict validation.
+	}
+
+	tmp, err := os.CreateTemp(uploadDir, "evm-deal-*.json")
+	if err != nil {
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+	tmpPath := tmp.Name()
+
+	payload := map[string]any{
+		"intent":        req.Intent,
+		"evm_signature": req.EvmSignature,
+	}
+	if err := json.NewEncoder(tmp).Encode(payload); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "failed to encode payload", http.StatusInternalServerError)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		http.Error(w, "failed to close temp file", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	cmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "create-deal-from-evm",
+		tmpPath,
+		"--chain-id", chainID,
+		"--from", "faucet",
+		"--yes",
+		"--keyring-backend", "test",
+		"--home", homeDir,
+		"--gas-prices", gasPrices,
+	)
+
+	out, err := cmd.CombinedOutput()
+	outStr := string(out)
+	if err != nil {
+		log.Printf("GatewayCreateDealFromEvm failed: %s", outStr)
+		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	txHash := extractTxHash(outStr)
+	log.Printf("GatewayCreateDealFromEvm success: txhash=%s", txHash)
+
+	resp := map[string]any{
+		"status":  "success",
+		"tx_hash": txHash,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("GatewayCreateDealFromEvm encode error: %v", err)
 	}
 }
 
@@ -661,6 +800,46 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 		cid = v
 	}
 	return owner, cid, nil
+}
+
+// creatorHasSomeBalance checks whether a given bech32 address has any non-zero
+// balance in the bank module (stake or aatom). It is a devnet guard used to
+// ensure users have gone through the faucet flow before deals are created.
+func creatorHasSomeBalance(creator string) (bool, error) {
+	url := fmt.Sprintf("%s/cosmos/bank/v1beta1/balances/%s", lcdBase, creator)
+	resp, err := http.Get(url)
+	if err != nil {
+		return false, fmt.Errorf("bank LCD request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// If the account does not exist yet, treat as zero balance.
+		if resp.StatusCode == http.StatusNotFound {
+			return false, nil
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("bank LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload struct {
+		Balances []struct {
+			Denom  string `json:"denom"`
+			Amount string `json:"amount"`
+		} `json:"balances"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return false, fmt.Errorf("failed to decode bank response: %w", err)
+	}
+
+	for _, b := range payload.Balances {
+		if b.Amount == "" || b.Amount == "0" {
+			continue
+		}
+		// Any non-zero denom is enough to consider the creator "funded" for devnet.
+		return true, nil
+	}
+	return false, nil
 }
 
 // ensureMduFileForProof ensures we have a file of exactly 8 MiB to feed into

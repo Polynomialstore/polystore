@@ -24,6 +24,7 @@ func GetTxCmd() *cobra.Command {
     cmd.AddCommand(CmdSubmitRetrievalProof())
     cmd.AddCommand(CmdRegisterProvider())
     cmd.AddCommand(CmdCreateDeal())
+    cmd.AddCommand(CmdCreateDealFromEvm())
     cmd.AddCommand(CmdSignalSaturation())
     cmd.AddCommand(CmdAddCredit())
     cmd.AddCommand(CmdWithdrawRewards())
