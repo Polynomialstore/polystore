@@ -110,3 +110,99 @@ The security relies on a strict chain of custody:
 
 This effectively allows the blockchain to verify Petabytes of data while only holding a single 48-byte Root in its RAM.
 
+
+
+
+### 4\. Disk Storage Breakdown
+
+This breakdown calculates the exact storage footprint for the Blockchain, the Data Unit, and the Storage Provider at every layer of the architecture.
+
+
+
+### Layer 1: The Atom (`Blob`)
+* **Unit Size:** 128 KiB ($2^{17}$ bytes)
+* **Identity:** KZG Commitment (48 bytes)
+
+| Location | What is Stored? | Size Impact |
+| :--- | :--- | :--- |
+| **On-Chain** | **Nothing.** | 0 bytes. |
+| **Inside DU** | **Raw Data.** The 128 KiB of user file data. | 128 KiB per blob. |
+| **SP Side** | **Raw Data + Commitment.** The SP stores the blob data and its calculated commitment to generate proofs. | ~128.05 KiB (128KB Data + 48B Commitment). |
+
+---
+
+### Layer 2: The Brick (`MDU`)
+* **Unit Size:** 8 MiB ($2^{23}$ bytes)
+* **Composition:** 64 Blobs.
+* **Identity:** Merkle Root (32 bytes).
+
+| Location | What is Stored? | Size Impact |
+| :--- | :--- | :--- |
+| **On-Chain** | **Nothing.** | 0 bytes. |
+| **Inside DU** | **Nothing.** The MDU *is* the container for the Blobs. | N/A |
+| **SP Side** | **Merkle Tree Overhead.** The SP must store the intermediate hashes of the Merkle Tree to generate proofs quickly. | **~2 KB per MDU.** (64 leaves + intermediate nodes $\approx$ 127 hashes $\times$ 32 bytes). |
+
+---
+
+### Layer 3: The Warehouse (`Deal`)
+* **Unit Size:** Variable (4 GB, 32 GB, 512 GB).
+* **Identity:** Manifest Root (48-byte KZG Commitment).
+
+| Location | What is Stored? | Size Impact |
+| :--- | :--- | :--- |
+| **On-Chain** | **The Manifest Root.** The single 48-byte anchor. | **Constant (48 bytes)** per Deal. |
+| **Inside DU** | **The Manifest (MDU #0).** A reserved MDU containing the list of Layer 2 Merkle Roots. | **Variable** (depends on Deal Size). See SP Side below. |
+| **SP Side** | **The Manifest File.** The SP stores MDU #0 which lists every MDU Root. | **Variable.** (See Calculation below). |
+
+---
+
+### Scale Analysis: On-Chain Storage
+*Assumption:* We are scaling to **3 Exabytes (3 EiB)** of total network storage.
+*Constraint:* The blockchain state database (`KVStore`) must fit in RAM/SSD.
+
+**Calculation:**
+* **Total Capacity:** $3 \text{ EiB} = 3,458,764,513,820,540,928$ bytes.
+* **Struct Overhead:** Each Deal record is ~300 bytes (ID + Owner + Root + Metadata).
+
+| Deal Size Tier | Number of Deals (Items) | Total Chain State Size | Feasibility |
+| :--- | :--- | :--- | :--- |
+| **4 GiB** | 805 Million | **~241 GB** | **High Load.** (Requires sharding/high-spec nodes). |
+| **32 GiB** | 100 Million | **~30 GB** | **Healthy.** (Standard Cosmos chain load). |
+| **512 GiB** | 6.2 Million | **~1.8 GB** | **Trivial.** (Extremely lightweight). |
+
+**Conclusion:** We must incentivize users to aggregate into 32GB+ deals. If everyone uses 4GB deals, the chain state becomes heavy (240GB).
+
+---
+
+### Scale Analysis: Storage Provider (SP) Overhead
+*Assumption:* The SP stores the "Manifest MDU" (MDU #0) to map the file. How big is this map?
+
+**Constants:**
+* Each MDU (8 MiB) requires 1 Merkle Root (32 bytes) in the map.
+* Manifest Entry Size = 32 bytes.
+
+**1. The 4 GiB Deal**
+* **MDUs:** $4 \text{ GB} / 8 \text{ MB} = 512 \text{ MDUs}$.
+* **Manifest Size:** $512 \times 32 \text{ bytes} = \mathbf{16 \text{ KB}}$.
+* **Fit:** Fits easily in MDU #0 (8 MB capacity). 99.8% empty space.
+
+**2. The 32 GiB Deal (Standard)**
+* **MDUs:** $32 \text{ GB} / 8 \text{ MB} = 4,096 \text{ MDUs}$.
+* **Manifest Size:** $4,096 \times 32 \text{ bytes} = \mathbf{131 \text{ KB}}$.
+* **Fit:** Fits easily in MDU #0.
+
+**3. The 512 GiB Deal (Wholesale)**
+* **MDUs:** $512 \text{ GB} / 8 \text{ MB} = 65,536 \text{ MDUs}$.
+* **Manifest Size:** $65,536 \times 32 \text{ bytes} = \mathbf{2 \text{ MB}}$.
+* **Fit:** Fits comfortably in MDU #0 (25% utilization of the 8 MB reserved slot).
+
+**Conclusion:** Even for the largest supported deal size (512 GB), the metadata overhead (The Map) is only **2 MB**. This is negligible compared to the 512 GB of data being stored.
+
+### Summary Table
+
+| Component | **On-Chain** (Global State) | **SP Side** (Per 32GB Deal) |
+| :--- | :--- | :--- |
+| **Layer 1 (Blob)** | 0 bytes | 32 GB (Raw Data) |
+| **Layer 2 (MDU)** | 0 bytes | ~8 MB (Merkle Tree Hashes) |
+| **Layer 3 (Deal)** | **48 bytes** (Manifest Root) | **131 KB** (Manifest File / MDU #0) |
+| **Total** | **48 bytes** | **~32.01 GB** (Data + Metadata) |
