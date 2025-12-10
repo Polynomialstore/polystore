@@ -168,9 +168,28 @@ export function Dashboard() {
               else if (d.deal_size === 'DEAL_SIZE_512GIB') dealSizeVal = 3
               else if (typeof d.deal_size === 'number') dealSizeVal = d.deal_size
 
+              // Helper to convert base64 to hex
+              const toHex = (str: string) => {
+                  if (!str) return ''
+                  if (str.startsWith('0x')) return str
+                  try {
+                      const binary = atob(str)
+                      const bytes = new Uint8Array(binary.length)
+                      for (let i = 0; i < binary.length; i++) {
+                          bytes[i] = binary.charCodeAt(i)
+                      }
+                      return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+                  } catch (e) {
+                      return str // Return original if not base64
+                  }
+              }
+
+              const manifestRootHex = d.manifest_root ? toHex(d.manifest_root) : ''
+              const cid = d.cid ? String(d.cid) : manifestRootHex
+
               return {
                 id: String(d.id ?? ''),
-                cid: d.cid ? String(d.cid) : (d.manifest_root ? String(d.manifest_root) : ''),
+                cid: cid,
                 size: String(d.size ?? d.size_bytes ?? '0'),
                 owner: String(d.owner ?? ''),
                 escrow: String(d.escrow_balance ?? d.escrow ?? ''),
