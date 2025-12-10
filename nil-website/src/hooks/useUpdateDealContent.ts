@@ -37,6 +37,12 @@ export function useUpdateDealContent() {
       }
 
       const types = {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
         UpdateContent: [
           { name: 'creator', type: 'address' },
           { name: 'deal_id', type: 'uint64' },

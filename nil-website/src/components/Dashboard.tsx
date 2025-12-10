@@ -1,4 +1,4 @@
-import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useMemo, useState } from 'react'
@@ -8,6 +8,7 @@ import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
 import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
+import { useNetwork } from '../hooks/useNetwork'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
 import { DealDetail } from './DealDetail'
@@ -39,13 +40,13 @@ interface Provider {
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
-  const { switchChainAsync } = useSwitchChain()
   const { connectAsync } = useConnect()
   const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
+  const { switchNetwork } = useNetwork()
   const [deals, setDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,38 +54,66 @@ export function Dashboard() {
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content'>('alloc')
 
-  const isWrongNetwork = chainId !== appConfig.chainId
+  // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
+  const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const getChainId = async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const eth = (window as any).ethereum
+        if (eth) {
+            try {
+                const hex = await eth.request({ method: 'eth_chainId' })
+                setMetamaskChainId(parseInt(hex, 16))
+            } catch (e) {
+                console.error(e)
+            }
+        }
+    }
+    getChainId()
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const eth = (window as any).ethereum
+    if (eth && eth.on) {
+        const handleChainChanged = (hex: string) => setMetamaskChainId(parseInt(hex, 16))
+        eth.on('chainChanged', handleChainChanged)
+        return () => eth.removeListener('chainChanged', handleChainChanged)
+    }
+  }, [])
+
+  // Prefer the direct MetaMask ID if available, otherwise fallback to Wagmi
+  const activeChainId = metamaskChainId ?? chainId
+  const isWrongNetwork = activeChainId !== appConfig.chainId
+
+  // Check if the RPC node itself is on the right chain
+  const [rpcChainId, setRpcChainId] = useState<number | null>(null)
+  useEffect(() => {
+    const checkRpc = async () => {
+      try {
+        const res = await fetch(appConfig.evmRpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+        })
+        const json = await res.json()
+        const id = parseInt(json.result, 16)
+        setRpcChainId(id)
+      } catch (e) {
+        console.error('RPC Check failed', e)
+      }
+    }
+    checkRpc()
+    const timer = setInterval(checkRpc, 5000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
 
   const handleSwitchNetwork = async () => {
     try {
-      await switchChainAsync({ chainId: appConfig.chainId })
+      await switchNetwork()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
-      console.error('Failed to switch network:', e)
-      
-      // Error code 4902 means the chain has not been added to MetaMask.
-      if (e.code === 4902 || e.message?.includes('Unrecognized chain ID') || e.code === -32603) {
-         try {
-             await (window as any).ethereum.request({
-                 method: 'wallet_addEthereumChain',
-                 params: [{
-                     chainId: '0x40000', // 262144 in hex
-                     chainName: 'NilChain Local',
-                     nativeCurrency: {
-                         name: 'AATOM',
-                         symbol: 'AATOM',
-                         decimals: 18,
-                     },
-                     rpcUrls: [appConfig.evmRpc],
-                     blockExplorerUrls: [],
-                 }],
-             })
-         } catch (addError) {
-             console.error('Failed to add network:', addError)
-             alert('Failed to add NilChain Local network. Please add it manually: ChainID 262144, RPC http://localhost:8545')
-         }
-      } else {
-          alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
-      }
+      alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
     }
   }
 
@@ -132,20 +161,47 @@ export function Dashboard() {
         const response = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals`)
         const data = await response.json()
         if (data.deals) {
-            const all: Deal[] = data.deals.map((d: any) => ({
-              id: String(d.id ?? ''),
-              cid: d.cid ? String(d.cid) : (d.manifest_root ? String(d.manifest_root) : ''),
-              size: String(d.size ?? d.size_bytes ?? '0'),
-              owner: String(d.owner ?? ''),
-              escrow: String(d.escrow_balance ?? d.escrow ?? ''),
-              end_block: String(d.end_block ?? ''),
-              start_block: String(d.start_block ?? ''),
-              service_hint: d.service_hint,
-              current_replication: d.current_replication,
-              max_monthly_spend: d.max_monthly_spend,
-              providers: Array.isArray(d.providers) ? d.providers : [],
-              deal_size: d.deal_size ? Number(d.deal_size) : 0,
-            }))
+            const all: Deal[] = data.deals.map((d: any) => {
+              let dealSizeVal = 0
+              if (d.deal_size === 'DEAL_SIZE_4GIB') dealSizeVal = 1
+              else if (d.deal_size === 'DEAL_SIZE_32GIB') dealSizeVal = 2
+              else if (d.deal_size === 'DEAL_SIZE_512GIB') dealSizeVal = 3
+              else if (typeof d.deal_size === 'number') dealSizeVal = d.deal_size
+
+              // Helper to convert base64 to hex
+              const toHex = (str: string) => {
+                  if (!str) return ''
+                  if (str.startsWith('0x')) return str
+                  try {
+                      const binary = atob(str)
+                      const bytes = new Uint8Array(binary.length)
+                      for (let i = 0; i < binary.length; i++) {
+                          bytes[i] = binary.charCodeAt(i)
+                      }
+                      return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+                  } catch (e) {
+                      return str // Return original if not base64
+                  }
+              }
+
+              const manifestRootHex = d.manifest_root ? toHex(d.manifest_root) : ''
+              const cid = d.cid ? String(d.cid) : manifestRootHex
+
+              return {
+                id: String(d.id ?? ''),
+                cid: cid,
+                size: String(d.size ?? d.size_bytes ?? '0'),
+                owner: String(d.owner ?? ''),
+                escrow: String(d.escrow_balance ?? d.escrow ?? ''),
+                end_block: String(d.end_block ?? ''),
+                start_block: String(d.start_block ?? ''),
+                service_hint: d.service_hint,
+                current_replication: d.current_replication,
+                max_monthly_spend: d.max_monthly_spend,
+                providers: Array.isArray(d.providers) ? d.providers : [],
+                deal_size: dealSizeVal,
+              }
+            })
             let filtered = owner ? all.filter((d) => d.owner === owner) : all
             if (owner && filtered.length === 0 && all.length > 0) {
               filtered = all
@@ -250,7 +306,7 @@ export function Dashboard() {
         setStatusTone('success')
         setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
         if (nilAddress) {
-          await refreshDealsAfterCreate(nilAddress)
+          await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
           await fetchBalances(nilAddress)
           // Auto-switch to content tab and pre-fill deal ID
           setTargetDealId(String(res.deal_id))
@@ -275,21 +331,21 @@ export function Dashboard() {
           })
           setStatusTone('success')
           setStatusMsg('Content Committed! The network will now replicate your data.')
-          if (nilAddress) await refreshDealsAfterCreate(nilAddress)
+          if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
       } catch (e) {
           setStatusTone('error')
           setStatusMsg('Content commit failed.')
       }
   }
 
-  async function refreshDealsAfterCreate(owner: string) {
-    const maxAttempts = 5
+  async function refreshDealsAfterCreate(owner: string, newDealId: string) {
+    const maxAttempts = 10
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const list = await fetchDeals(owner)
-      if (list.length > 0) { // Simple check, ideally check for new ID
+      if (list.some(d => d.id === newDealId)) {
         return
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1500))
     }
   }
 
@@ -323,20 +379,39 @@ export function Dashboard() {
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
       
-      {isWrongNetwork && (
-        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between">
+      {rpcMismatch && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-500/20 rounded-full">
               <RefreshCw className="w-5 h-5 text-red-400" />
             </div>
             <div>
-              <h3 className="font-bold text-red-200">Wrong Network</h3>
-              <p className="text-sm text-red-300">You are connected to Chain ID {chainId}. Please switch to Local NilChain ({appConfig.chainId}).</p>
+              <h3 className="font-bold text-red-200">Critical Node Mismatch</h3>
+              <p className="text-sm text-red-300">
+                Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
+                <br/>Please restart your local stack or check your <code>run_local_stack.sh</code> configuration.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isWrongNetwork && (
+        <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-yellow-500/20 rounded-full">
+              <RefreshCw className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div>
+              <h3 className="font-bold text-yellow-200">Wrong Network</h3>
+              <p className="text-sm text-yellow-300">
+                Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilChain Local).
+              </p>
             </div>
           </div>
           <button
             onClick={handleSwitchNetwork}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors"
           >
             Switch Network
           </button>
@@ -427,6 +502,13 @@ export function Dashboard() {
               className="text-xs text-gray-500 hover:text-white underline"
             >
               Disconnect
+            </button>
+            <span className="text-gray-700">|</span>
+            <button
+              onClick={() => switchNetwork()}
+              className="text-xs text-indigo-400 hover:text-indigo-300 underline"
+            >
+              Force Switch Network
             </button>
           </div>
         </div>

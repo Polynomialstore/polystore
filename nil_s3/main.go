@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -219,11 +220,11 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tierStr := strconv.FormatUint(uint64(req.DealSizeTier), 10)
-	durationStr := strconv.FormatUint(req.DurationBlocks, 10)
+durationStr := strconv.FormatUint(req.DurationBlocks, 10)
 	if durationStr == "0" {
 		durationStr = defaultDuration
 	}
-	hint := strings.TrimSpace(req.ServiceHint)
+hint := strings.TrimSpace(req.ServiceHint)
 	if hint == "" {
 		hint = "General"
 	}
@@ -298,74 +299,33 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req updateDealContentRequest
-	    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-	        http.Error(w, "invalid JSON", http.StatusBadRequest)
-	        return
-	    }
-	    if req.Cid == "" || req.SizeBytes == 0 { // DealID can be 0, which is valid.
-	        http.Error(w, "missing fields", http.StatusBadRequest)
-	        return
-	    }
-	
-	    	dealIDStr := strconv.FormatUint(req.DealID, 10)
-	
-	    	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
-	
-	    
-	
-	    		log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
-	
-	    
-	
-	    		cmd := exec.Command(
-	
-	    
-	
-	    			nilchaindBin,
-	
-	    
-	
-	    			"tx", "nilchain", "update-deal-content",
-	
-	    
-	
-	    			"--deal-id", dealIDStr,
-	
-	    
-	
-	    			"--cid", req.Cid,
-	
-	    
-	
-	    			"--size", sizeStr,
-	
-	    
-	
-	    			"--chain-id", chainID,
-	
-	    
-	
-	    			"--from", "faucet",
-	
-	    
-	
-	    			"--yes",
-	
-	    
-	
-	    			"--keyring-backend", "test",
-	
-	    
-	
-	    			"--home", homeDir,
-	
-	    
-	
-	    			"--gas-prices", gasPrices,
-	
-	    
-	
-	    		)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Cid == "" || req.SizeBytes == 0 { // DealID can be 0, which is valid.
+		http.Error(w, "missing fields", http.StatusBadRequest)
+		return
+	}
+
+	dealIDStr := strconv.FormatUint(req.DealID, 10)
+	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
+
+	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
+
+	cmd := exec.Command(
+		nilchaindBin,
+		"tx", "nilchain", "update-deal-content",
+		"--deal-id", dealIDStr,
+		"--cid", req.Cid,
+		"--size", sizeStr,
+		"--chain-id", chainID,
+		"--from", "faucet",
+		"--yes",
+		"--keyring-backend", "test",
+		"--home", homeDir,
+		"--gas-prices", gasPrices,
+	)
 
 	out, err := cmd.CombinedOutput()
 	outStr := string(out)
@@ -413,7 +373,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	// Light validation of the intent shape.
 	rawCreator, okCreator := req.Intent["creator_evm"].(string)
 	rawTier, okTier := req.Intent["size_tier"]
-	
+
 	if !okCreator || strings.TrimSpace(rawCreator) == "" || !okTier {
 		http.Error(w, "intent must include creator_evm and size_tier", http.StatusBadRequest)
 		return
@@ -473,24 +433,122 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		"--keyring-backend", "test",
 		"--home", homeDir,
 		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
+		"--output", "json",
 	)
 
 	out, err := cmd.CombinedOutput()
-	outStr := string(out)
 	if err != nil {
-		log.Printf("GatewayCreateDealFromEvm failed: %s", outStr)
+		log.Printf("GatewayCreateDealFromEvm failed: %s", string(out))
 		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	txHash := extractTxHash(outStr)
-	log.Printf("GatewayCreateDealFromEvm success: txhash=%s", txHash)
-
-	resp := map[string]any{
-		"status":  "success",
-		"tx_hash": txHash,
+	var txRes struct {
+		TxHash string `json:"txhash"`
+		Code   int    `json:"code"`
+		RawLog string `json:"raw_log"`
 	}
 
+	if err := json.Unmarshal(out, &txRes); err != nil {
+		log.Printf("GatewayCreateDealFromEvm failed to parse JSON: %v. Output: %s", err, string(out))
+		http.Error(w, "failed to parse tx response", http.StatusInternalServerError)
+		return
+	}
+
+	if txRes.Code != 0 {
+		log.Printf("GatewayCreateDealFromEvm tx failed with code %d: %s", txRes.Code, txRes.RawLog)
+		http.Error(w, fmt.Sprintf("tx failed: %s", txRes.RawLog), http.StatusInternalServerError)
+		return
+	}
+
+	txHash := txRes.TxHash
+	log.Printf("GatewayCreateDealFromEvm sent: txhash=%s. Polling for inclusion...", txHash)
+
+	var dealID string
+	// Poll for tx inclusion (max 10 seconds)
+	for i := 0; i < 20; i++ {
+		time.Sleep(500 * time.Millisecond)
+
+		qCmd := exec.Command(
+			nilchaindBin,
+			"q", "tx", txHash,
+			"--output", "json",
+			"--node", "tcp://localhost:26657", // Ensure we hit the same node
+		)
+		qOut, _ := qCmd.CombinedOutput()
+
+				var qRes struct {
+					Logs []struct {
+						Events []struct {
+							Type       string `json:"type"`
+							Attributes []struct {
+								Key   string `json:"key"`
+								Value string `json:"value"`
+							} `json:"attributes"`
+						} `json:"events"`
+					} `json:"logs"`
+					Events []struct {
+						Type       string `json:"type"`
+						Attributes []struct {
+							Key   string `json:"key"`
+							Value string `json:"value"`
+						} `json:"attributes"`
+					} `json:"events"`
+				}
+		
+				if err := json.Unmarshal(qOut, &qRes); err == nil {
+					// Scan Logs (legacy/standard)
+					for _, log := range qRes.Logs {
+						for _, event := range log.Events {
+							if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
+								for _, attr := range event.Attributes {
+									if attr.Key == "id" || attr.Key == "deal_id" {
+										dealID = attr.Value
+										break
+									}
+								}
+							}
+						}
+						if dealID != "" {
+							break
+						}
+					}
+					// Scan Top-level Events (if Logs was empty or ID not found)
+					if dealID == "" {
+						for _, event := range qRes.Events {
+							if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
+								for _, attr := range event.Attributes {
+									if attr.Key == "id" || attr.Key == "deal_id" {
+										dealID = attr.Value
+										break
+									}
+								}
+							}
+							if dealID != "" {
+								break
+							}
+						}
+					}
+					
+					if dealID != "" {
+						break
+					}
+				}
+			}
+		
+			if dealID == "" {
+				log.Printf("Error: deal_id not found in tx events after polling. TxHash: %s", txHash)
+				http.Error(w, "deal creation failed: deal_id not found in transaction events", http.StatusInternalServerError)
+				return
+			} else {
+				log.Printf("GatewayCreateDealFromEvm confirmed: deal_id=%s", dealID)
+			}		
+		    resp := map[string]any{
+		        "status":  "success",
+		        "tx_hash": txHash,
+		        "deal_id": dealID,
+		    }
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("GatewayCreateDealFromEvm encode error: %v", err)
@@ -522,7 +580,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	// Light validation
 	rawCid, okCid := req.Intent["cid"].(string)
 	rawSize, okSize := req.Intent["size_bytes"]
-	
+
 	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize {
 		http.Error(w, "intent must include cid and size_bytes", http.StatusBadRequest)
 		return
@@ -747,7 +805,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 // GatewayManifest serves the manifest (shard output JSON) for a given Root CID.
 func GatewayManifest(w http.ResponseWriter, r *http.Request) {
-    setCORS(w)
+	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -770,12 +828,12 @@ func GatewayManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // The shard output is stored at <path>.json
-    manifestPath := entry.Path + ".json"
-    if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-        http.Error(w, "manifest file missing", http.StatusNotFound)
-        return
-    }
+	// The shard output is stored at <path>.json
+	manifestPath := entry.Path + ".json"
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		http.Error(w, "manifest file missing", http.StatusNotFound)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	http.ServeFile(w, r, manifestPath)
@@ -960,55 +1018,55 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		defer os.Remove(mduPath)
 	}
 
-    // New: Need Manifest Blob for Triple Proof
-    // We assume shardFile already ran and produced .json. 
-    // We can re-read it to get manifest blob.
-    // Ideally submitRetrievalProof should take the manifest blob path, but for now we assume it's derivable or stored.
-    // HACK: Read <filePath>.json if it exists (from shardFile)
-    jsonPath := filePath + ".json"
-    manifestPath := ""
-    var manifestBlobHex string
-    
-    // Check if json exists
-    if _, err := os.Stat(jsonPath); err == nil {
-        // Parse it
-        jsonFile, _ := os.ReadFile(jsonPath)
-        var shardOut map[string]any
-        json.Unmarshal(jsonFile, &shardOut)
-        if val, ok := shardOut["manifest_blob_hex"].(string); ok {
-            manifestBlobHex = val
-        }
-    }
-    
-    // If not found (e.g. synthetic mdu), create a dummy manifest? 
-    // Triple Proof WILL fail on-chain if manifest is wrong.
-    // For Devnet Mode 1 "Fetch", we serve a file we have stored.
-    // So shardFile MUST have run.
-    
-    if manifestBlobHex == "" {
-         return "", fmt.Errorf("manifest_blob_hex not found in %s", jsonPath)
-    }
+	// New: Need Manifest Blob for Triple Proof
+	// We assume shardFile already ran and produced .json.
+	// We can re-read it to get manifest blob.
+	// Ideally submitRetrievalProof should take the manifest blob path, but for now we assume it's derivable or stored.
+	// HACK: Read <filePath>.json if it exists (from shardFile)
+	jsonPath := filePath + ".json"
+	manifestPath := ""
+	var manifestBlobHex string
 
-    // Decode hex to binary temp file
-    manifestBytes, err := decodeHex(manifestBlobHex)
-    if err != nil {
-         return "", fmt.Errorf("failed to decode manifest hex: %w", err)
-    }
-    
-    manTmp, err := os.CreateTemp(uploadDir, "manifest-*.bin")
-    if err != nil {
-         return "", err
-    }
-    if _, err := manTmp.Write(manifestBytes); err != nil {
-         manTmp.Close()
-         return "", err
-    }
-    manifestPath = manTmp.Name()
-    manTmp.Close()
-    defer os.Remove(manifestPath)
-    
-    // For now, assume MDU index is 0 (single file < 8MB)
-    mduIndexStr := "0"
+	// Check if json exists
+	if _, err := os.Stat(jsonPath); err == nil {
+		// Parse it
+		jsonFile, _ := os.ReadFile(jsonPath)
+		var shardOut map[string]any
+		json.Unmarshal(jsonFile, &shardOut)
+		if val, ok := shardOut["manifest_blob_hex"].(string); ok {
+			manifestBlobHex = val
+		}
+	}
+
+	// If not found (e.g. synthetic mdu), create a dummy manifest?
+	// Triple Proof WILL fail on-chain if manifest is wrong.
+	// For Devnet Mode 1 "Fetch", we serve a file we have stored.
+	// So shardFile MUST have run.
+
+	if manifestBlobHex == "" {
+		return "", fmt.Errorf("manifest_blob_hex not found in %s", jsonPath)
+	}
+
+	// Decode hex to binary temp file
+	manifestBytes, err := decodeHex(manifestBlobHex)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode manifest hex: %w", err)
+	}
+
+	manTmp, err := os.CreateTemp(uploadDir, "manifest-*.bin")
+	if err != nil {
+		return "", err
+	}
+	if _, err := manTmp.Write(manifestBytes); err != nil {
+		manTmp.Close()
+		return "", err
+	}
+	manifestPath = manTmp.Name()
+	manTmp.Close()
+	defer os.Remove(manifestPath)
+
+	// For now, assume MDU index is 0 (single file < 8MB)
+	mduIndexStr := "0"
 
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
 	signCmd := exec.Command(
@@ -1019,16 +1077,19 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		epochStr,
 		mduPath,
 		trustedSetup,
-        manifestPath,
-        mduIndexStr,
+		manifestPath,
+		mduIndexStr,
 		"--from", providerKeyName,
 		"--home", homeDir,
 		"--keyring-backend", "test",
 		"--offline",
 	)
-	signOut, err := signCmd.CombinedOutput()
+	signOut, err := signCmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (%s)", err, string(signOut))
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
+		}
+		return "", fmt.Errorf("sign-retrieval-receipt failed: %w", err)
 	}
 
 	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
@@ -1187,35 +1248,35 @@ func ensureMduFileForProof(origPath string) (string, bool, error) {
 }
 
 func decodeHex(s string) ([]byte, error) {
-    if strings.HasPrefix(s, "0x") {
-        s = s[2:]
-    }
-    // simple manual decode or use encoding/hex
-    // Since we didn't import encoding/hex in existing imports, we can use simple loop or add import.
-    // Adding import is better but requires context replacement or robust replace.
-    // Let's implement simple.
-    
-    src := []byte(s)
-    dst := make([]byte, len(src)/2)
-    for i := 0; i < len(src)/2; i++ {
-        h, ok1 := fromHexChar(src[i*2])
-        l, ok2 := fromHexChar(src[i*2+1])
-        if !ok1 || !ok2 {
-             return nil, fmt.Errorf("invalid hex char")
-        }
-        dst[i] = (h << 4) | l
-    }
-    return dst, nil
+	if strings.HasPrefix(s, "0x") {
+		s = s[2:]
+	}
+	// simple manual decode or use encoding/hex
+	// Since we didn't import encoding/hex in existing imports, we can use simple loop or add import.
+	// Adding import is better but requires context replacement or robust replace.
+	// Let's implement simple.
+
+	src := []byte(s)
+	dst := make([]byte, len(src)/2)
+	for i := 0; i < len(src)/2; i++ {
+		h, ok1 := fromHexChar(src[i*2])
+		l, ok2 := fromHexChar(src[i*2+1])
+		if !ok1 || !ok2 {
+			 return nil, fmt.Errorf("invalid hex char")
+		}
+		dst[i] = (h << 4) | l
+	}
+	return dst, nil
 }
 
 func fromHexChar(c byte) (byte, bool) {
-    switch {
-    case '0' <= c && c <= '9':
-        return c - '0', true
-    case 'a' <= c && c <= 'f':
-        return c - 'a' + 10, true
-    case 'A' <= c && c <= 'F':
-        return c - 'A' + 10, true
-    }
-    return 0, false
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0', true
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, true
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, true
+	}
+	return 0, false
 }
