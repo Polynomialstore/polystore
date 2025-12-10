@@ -1,4 +1,4 @@
-import { useAccount, useBalance, useConnect, useDisconnect } from 'wagmi'
+import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useMemo, useState } from 'react'
@@ -38,6 +38,8 @@ interface Provider {
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { switchChainAsync } = useSwitchChain()
   const { connectAsync } = useConnect()
   const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
@@ -50,6 +52,41 @@ export function Dashboard() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content'>('alloc')
+
+  const isWrongNetwork = chainId !== appConfig.chainId
+
+  const handleSwitchNetwork = async () => {
+    try {
+      await switchChainAsync({ chainId: appConfig.chainId })
+    } catch (e: any) {
+      console.error('Failed to switch network:', e)
+      
+      // Error code 4902 means the chain has not been added to MetaMask.
+      if (e.code === 4902 || e.message?.includes('Unrecognized chain ID') || e.code === -32603) {
+         try {
+             await (window as any).ethereum.request({
+                 method: 'wallet_addEthereumChain',
+                 params: [{
+                     chainId: '0x40000', // 262144 in hex
+                     chainName: 'NilChain Local',
+                     nativeCurrency: {
+                         name: 'AATOM',
+                         symbol: 'AATOM',
+                         decimals: 18,
+                     },
+                     rpcUrls: [appConfig.evmRpc],
+                     blockExplorerUrls: [],
+                 }],
+             })
+         } catch (addError) {
+             console.error('Failed to add network:', addError)
+             alert('Failed to add NilChain Local network. Please add it manually: ChainID 262144, RPC http://localhost:8545')
+         }
+      } else {
+          alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
+      }
+    }
+  }
 
   // Step 1: Alloc State
   const [sizeTier, setSizeTier] = useState('1')
@@ -285,6 +322,27 @@ export function Dashboard() {
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
+      
+      {isWrongNetwork && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-500/20 rounded-full">
+              <RefreshCw className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h3 className="font-bold text-red-200">Wrong Network</h3>
+              <p className="text-sm text-red-300">You are connected to Chain ID {chainId}. Please switch to Local NilChain ({appConfig.chainId}).</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSwitchNetwork}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-lg transition-colors"
+          >
+            Switch Network
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-900/30 p-6 rounded-xl border border-gray-800">
         <div>
             <h2 className="text-2xl font-bold text-white">My Storage Deals</h2>
@@ -301,9 +359,12 @@ export function Dashboard() {
                     {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
                 </button>
                 {faucetTx && (
-                  <div className="flex items-center gap-2 text-xs text-green-400">
-                    <ArrowDownRight className="w-3 h-3" />
-                    Faucet tx: <span className="font-mono">{faucetTx}</span> ({faucetTxStatus})
+                  <div className="flex items-center gap-2 text-xs text-green-400 bg-green-950/30 px-2 py-1 rounded border border-green-500/20">
+                    <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate max-w-[120px]" title={faucetTx}>
+                        Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
+                    </span>
+                    <span className="opacity-75">({faucetTxStatus})</span>
                   </div>
                 )}
                 <div className="text-right">
