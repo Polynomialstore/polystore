@@ -280,17 +280,88 @@ def verify_final(deal_id, cid, size_bytes):
     print("Final Verification FAILED: Timeout")
     sys.exit(1)
 
+    print("Final Verification PASSED!")
+
+# --- 6. Retrieve Content ---
+def retrieve_content(deal_id, cid, expected_content, nil_address):
+    print(f"Retrieving content for CID {cid}...")
+    import urllib.parse
+    
+    # URL Encode the CID (it's 0x... hex, but gateway might expect it encoded or raw? 
+    # e2e_gateway_retrieval.sh says: print(urllib.parse.quote(sys.argv[1]))
+    # And the CID there is 0x... hex string. So we should quote it.
+    encoded_cid = urllib.parse.quote(cid)
+    
+    url = f"{GATEWAY_URL}/gateway/fetch/{encoded_cid}?deal_id={deal_id}&owner={nil_address}"
+    
+    for attempt in range(10):
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                retrieved_content = resp.content
+                if retrieved_content != expected_content:
+                    print(f"FAIL: Retrieved content mismatch! Got {len(retrieved_content)} bytes, expected {len(expected_content)}")
+                    sys.exit(1)
+                
+                print("Retrieval Verification PASSED! Content matches.")
+                return
+            else:
+                print(f"Retrieval attempt {attempt+1} failed: {resp.status_code} {resp.text}")
+                
+        except Exception as e:
+            print(f"Retrieval attempt {attempt+1} error: {e}")
+        
+        time.sleep(2)
+
+    print("Retrieval FAILED after all attempts.")
+    sys.exit(1)
+
 def main():
     try:
         request_funds(account.address)
         deal_id = create_deal()
         verify_deal(deal_id)
+        cid, size_bytes = upload_content() # This function returns the dummy content implicitly? No, it returns CID/size.
+        # We need to capture the content to verify it.
+        # Let's refactor upload_content to return content or let main define it.
+        
+        # Refactor: define content in main
+        content = b"Hello NilStore E2E Test" * 100
+        
+        # We need to hack upload_content to accept content or just override it.
+        # Actually, let's just modify upload_content to take content as arg in a separate replace block if needed.
+        # For now, let's assume we can change upload_content in this block? 
+        # No, "upload_content" is defined above. 
+        # I will redefine `upload_content` here to accept `content`? No that's messy.
+        # I will change the call to `upload_content` and update the definition in a separate tool call? 
+        # Wait, I can see `upload_content` in the file.
+        
+        # Let's just create a new function `upload_custom_content` or just modify `upload_content` in a previous step?
+        # The user instructions are to "extend".
+        
+        # Let's look at the existing `upload_content`. It creates dummy content inside.
+        # I should modify `upload_content` to return the content it used, or accept it.
+        pass
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    # Redefine main execution block
+    try:
+        request_funds(account.address)
+        deal_id = create_deal()
+        verify_deal(deal_id)
+        
+        # We need to get the content used in upload. 
+        # Existing upload_content uses: content = b"Hello NilStore E2E Test" * 100
+        expected_content = b"Hello NilStore E2E Test" * 100
+        
         cid, size_bytes = upload_content()
         update_content(deal_id, cid, size_bytes)
         verify_final(deal_id, cid, size_bytes)
+        
+        retrieve_content(deal_id, cid, expected_content, eth_to_nil(account.address))
+        
     except Exception as e:
         print(f"Test failed with exception: {e}")
         sys.exit(1)
-
-if __name__ == "__main__":
-    main()

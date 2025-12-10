@@ -1084,9 +1084,12 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		"--keyring-backend", "test",
 		"--offline",
 	)
-	signOut, err := signCmd.CombinedOutput()
+	signOut, err := signCmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (%s)", err, string(signOut))
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
+		}
+		return "", fmt.Errorf("sign-retrieval-receipt failed: %w", err)
 	}
 
 	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
