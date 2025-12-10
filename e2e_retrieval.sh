@@ -21,9 +21,13 @@ python3 -c "import sys; print(bytes.fromhex(sys.argv[1][2:]).decode('latin1'))" 
 # Ensure binaries are built
 echo ">>> Building binaries..."
 touch nil_core/src/lib.rs
-cd nil_core && cargo build --release && cd ..
-cd nilchain && go build -o ../nilchaind ./cmd/nilchaind && cd ..
+cd nil_core && cargo build --release --features debug-print && cd ..
+cp nil_core/target/release/libnil_core.dylib . 2>/dev/null || cp nil_core/target/release/libnil_core.so . 2>/dev/null || true
+cd nilchain && go clean -cache && go build -o ../nilchaind ./cmd/nilchaind && cd ..
 cd nil_cli && cargo build --release && cd ..
+
+export DYLD_LIBRARY_PATH=$(pwd):$DYLD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
 
 # Clean start
 echo ">>> Resetting chain..."
@@ -46,7 +50,8 @@ PROVIDER1_ADDR=$($BINARY keys show provider1 -a --home $HOME_DIR --keyring-backe
 
 # Add genesis accounts
 # We give accounts 'aatom' (for EVM) and 'stake' (for consensus).
-$BINARY genesis add-genesis-account "$USER_ADDR" 100000000000token,100000000stake,100000000000000000000aatom --home $HOME_DIR
+# User needs enough stake for Gentx (100M) AND Deal Escrow (1000). So giving 200M stake.
+$BINARY genesis add-genesis-account "$USER_ADDR" 100000000000token,200000000stake,100000000000000000000aatom --home $HOME_DIR
 for i in {1..12}
 do
    PROV_ADDR=$($BINARY keys show "provider$i" -a --home $HOME_DIR --keyring-backend test)
@@ -136,33 +141,30 @@ echo "   Size: $SIZE"
 MDU_FILE="${INPUT_FILE}.mdu.0.bin"
 
 # Save Manifest Blob to file (binary)
-python3 -c "import sys; print(bytes.fromhex('$MANIFEST_BLOB_HEX'[2:]).decode('latin1'))" > $MANIFEST_FILE 2>/dev/null || \
 python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex('$MANIFEST_BLOB_HEX'[2:]))" > $MANIFEST_FILE
-
-# Ensure we have an MDU file (mocking the download). 
-# For 1MB file, it fits in one MDU. nil-cli pads it?
-# Actually, `sign-retrieval-receipt` expects an 8MB MDU file.
-# nil-cli shard might output chunks?
-# For this test, let's create a dummy 8MB MDU that matches the structural requirement if possible,
-# OR just use the input file and pad it, assuming `nil-cli` logic matches.
-# Wait, `sign-retrieval-receipt` calls `ComputeMduMerkleRoot`.
-# The MDU used there MUST match the one committed in the manifest.
-# Since we are using `nil-cli` to generate the manifest, we need the MDU data `nil-cli` used.
-# `nil-cli` doesn't currently output the MDU binary chunks separately.
-# Hack: Re-create the MDU by padding the input file to 8MB.
-cp $INPUT_FILE $MDU_FILE
-truncate -s 8M $MDU_FILE
 
 # 2. Create Deal (Alloc)
 echo ">>> Creating Deal (Alloc)..."
-# DealSize 1 = 4GB. Duration 100. Escrow 1000. Spend 5000.
-yes | $BINARY tx nilchain create-deal 1 100 1000 5000 --service-hint "General" --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657
+# DealSize 1 = 4GB. Duration 100. Escrow 1000000. Spend 5000.
+CREATE_RES=$(yes | $BINARY tx nilchain create-deal 1 100 1000000 5000 --service-hint "General" --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657 --output json)
+CREATE_HASH=$(echo $CREATE_RES | jq -r '.txhash')
 
-echo ">>> Waiting for block..."
-sleep 2
+echo ">>> Waiting for CreateDeal (Tx: $CREATE_HASH)..."
+sleep 6
 
-# Get Deal ID
-DEAL_ID=0 # First deal
+# Query Tx to get logs
+TX_JSON=$($BINARY query tx $CREATE_HASH --home $HOME_DIR --node tcp://127.0.0.1:26657 --output json)
+echo "CreateDeal Tx Result: $TX_JSON"
+
+DEAL_ID=$(echo "$TX_JSON" | jq -r '(.logs[0].events[]? // .events[]?) | select(.type=="create_deal") | .attributes[] | select(.key=="deal_id") | .value' 2>/dev/null | head -n 1 || echo "")
+
+if [ -z "$DEAL_ID" ] || [ "$DEAL_ID" == "null" ]; then
+    echo "ERROR: Failed to create deal or parse Deal ID."
+    echo "Tx JSON: $TX_JSON"
+    exit 1
+fi
+
+echo ">>> Deal Created with ID: $DEAL_ID"
 
 # 3. Commit Content
 echo ">>> Committing Content..."
@@ -177,31 +179,38 @@ echo ">>> Signing Retrieval Receipt (User)..."
 $BINARY tx nilchain sign-retrieval-receipt $DEAL_ID $PROVIDER1_ADDR 1 $MDU_FILE $TRUSTED_SETUP $MANIFEST_FILE 0 \
   --from user --keyring-backend test --home $HOME_DIR --offline > $RECEIPT_FILE
 
+echo ">>> Receipt Content:"
+cat $RECEIPT_FILE
+
 echo ">>> Receipt generated."
 
 # 5. Submit Proof
 echo ">>> Submitting Retrieval Proof (Provider)..."
-yes | $BINARY tx nilchain submit-retrieval-proof $RECEIPT_FILE --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657
+TX_RES=$(yes | $BINARY tx nilchain submit-retrieval-proof $RECEIPT_FILE --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657 --output json)
+echo $TX_RES
+TX_HASH=$(echo $TX_RES | jq -r '.txhash')
 
-echo ">>> Waiting for verification..."
+echo ">>> Waiting for verification (Tx: $TX_HASH)..."
 sleep 6
 
-# Check logs
-if grep -q "ProviderRewards" $HOME_DIR/chain.log || grep -q "ModuleToAccount" $HOME_DIR/chain.log; then
-    echo "SUCCESS: Rewards distributed (Proof Verified)."
-elif grep -q "KZG Proof INVALID" $HOME_DIR/chain.log; then
-    echo "FAILURE: Proof INVALID."
-    cat $HOME_DIR/chain.log | grep "KZG"
+echo ">>> Querying Tx Result..."
+TX_RESULT=$($BINARY query tx $TX_HASH --home $HOME_DIR --node tcp://127.0.0.1:26657 --output json)
+echo $TX_RESULT
+
+# Check for success event in the transaction result
+SUCCESS_STATUS=$(echo $TX_RESULT | jq -r '(.logs[0].events[]? // .events[]?) | select(.type=="prove_liveness") | .attributes[] | select(.key=="success") | .value' 2>/dev/null)
+
+if [ "$SUCCESS_STATUS" == "true" ]; then
+    echo "SUCCESS: Retrieval Proof Verified on-chain (Liveness Confirmed)!"
+elif [ "$SUCCESS_STATUS" == "false" ]; then
+    echo "FAILURE: Proof was rejected by the chain (success=false)."
+    cat $HOME_DIR/chain.log
     exit 1
 else
-    # Check for success event in tx log (if we queried it) or just scan logs for msg processing
-    if grep -q "MsgProveLiveness" $HOME_DIR/chain.log; then
-         echo "SUCCESS: Proof processed."
-    else
-         echo "FAILURE: Proof not processed."
-         tail -n 50 $HOME_DIR/chain.log
-         exit 1
-    fi
+    echo "FAILURE: Could not parse proof result from transaction."
+    echo "Last 50 lines of log:"
+    tail -n 50 $HOME_DIR/chain.log
+    exit 1
 fi
 
 # Cleanup

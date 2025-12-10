@@ -1,31 +1,27 @@
-# Handoff: Triple Proof & Web UI Modernization
+# Handoff: Triple Proofs Complete & Verified
 
-The codebase is in the middle of implementing the "Triple Proof" (Chained Verification) architecture for scalable retrieval proofs.
+The codebase has successfully completed the "Spring Roadmap - Phase 2". The **Triple Proof Architecture** is fully implemented, integrated, and **verified** via the `e2e_retrieval.sh` integration test.
 
 ## Current State
-*   **Proto:** `Deal` uses `ManifestRoot` (48-byte KZG Commitment). `ProveLiveness` accepts `ChainedProof` (3-Hop).
-*   **Keeper (`nilchain`):** `msg_server.go` is updated to handle new types. Verification is **STUBBED** (`valid := true`) pending Core FFI updates.
-*   **Core (`nil_core`):** `compute_manifest_commitment` is implemented and exposed via FFI (generates Manifest from list of MDU roots).
-*   **Tests:** Keeper tests are refactored and passing (verifying structure, not crypto).
+*   **Triple Proofs:** Implemented in `nil_core` (Rust), FFI, `nilchain` (Go), and `nil_cli`.
+    *   **Verification:** `e2e_retrieval.sh` passes successfully. It shards a file, creates a deal, generates a Triple Proof (Manifest + Merkle + KZG), signs a receipt, and the chain verifies it, issuing rewards.
+    *   **Encoding:** Fixed scalar encoding to 32-byte Big Endian with 1-byte zero padding to fit BLS12-381 modulus.
+*   **Web UI:** Modernized with 2-step deal flow and `DealDetail` visualizations (Manifests/Heat).
+*   **S3 Adapter:** Documentation updated to reflect the MDU/Manifest architecture.
+*   **Testing:** `e2e_retrieval.sh` is the source of truth. It uses `nil_cli` to generate artifacts and `nilchaind` to verify them.
 
-## Next Immediate Tasks (Step 1.C - Chain Verification)
-1.  **Implement `verify_manifest_inclusion` in `nil_core` (Rust):**
-    *   This is "Hop 1". Verify that `mdu_root_fr` is the value of the Manifest Polynomial at index `mdu_index`.
-    *   **Challenge:** Mapping `mdu_index` (integer) to KZG evaluation point `z` (Root of Unity). You need to investigate how `c-kzg` handles evaluation points for Blobs.
-    *   Implement `verify_chained_proof` FFI that wraps:
-        *   Hop 1: Manifest Inclusion (KZG).
-        *   Hop 2: Blob Inclusion (Merkle - already exists as `verify_mdu_merkle_proof`).
-        *   Hop 3: Data Inclusion (KZG - already exists as `verify_proof`).
-2.  **Expose FFI in Go (`nilchain/x/crypto_ffi`):**
-    *   Update `crypto_ffi.go` to call the new Rust functions.
-3.  **Wire into Keeper (`nilchain/x/nilchain/keeper/msg_server.go`):**
-    *   Replace the `valid := true` stub in `ProveLiveness` with the actual `crypto_ffi.VerifyChainedProof` call.
+## Immediate Next Steps (Unified Liveness)
+The next major protocol upgrade is **Unified Liveness** (Phase 3).
+*   **Goal:** Transition from Random Audits to User-Driven Traffic verification (using the now-working Retrieval Receipts).
+*   **Tasks:**
+    1.  **Receipt Aggregation:** The chain handles 1 receipt per tx. We need aggregation to handle high throughput without spamming the mempool.
+    2.  **Consensus Integration:** Adjust `AuditProbability` based on `DealHeatState`. High heat = low random audit.
+    3.  **Gateway Integration:** The `nil_s3` gateway currently just uploads. It needs to capture user downloads, sign receipts, and batch-submit them.
 
-## Parallel Track (Web UI)
-*   The `nil-website` needs to be updated to support the new "Capacity vs Content" deal flow.
-*   See `AGENTS.md` for details (Step 2: Web UI Modernization).
+## Pending Ops
+*   **EVM Bridge:** The contract `NilBridge.sol` is ready but the local deployment script (`scripts/deploy_bridge_local.sh`) failed with "Connection Refused" in the last attempt (timing issue with `nilchaind` startup). Needs a retry.
 
 ## References
-*   `AGENTS.md` (Updated Roadmap).
-*   `spec.md` & `metaspec.md` (Triple Proof Definitions).
-*   `nil_core/src/kzg.rs` (Core Logic).
+*   `e2e_retrieval.sh`: Main integration test (Passed).
+*   `nil_cli/src/main.rs`: Reference for MDU/KZG scalar encoding.
+*   `AGENTS.md`: Roadmap tracking.

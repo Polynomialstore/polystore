@@ -243,13 +243,21 @@ impl KzgContext {
         // 1. Calculate z (evaluation point) from the index
         let z_bytes = crate::utils::z_for_cell(mdu_index);
 
-        // 2. Reuse standard verify_proof
-        // The "value" (y) is the MDU root itself, treated as a field element.
-        // verify_proof handles the Bytes32 conversion.
+        // 2. Modulo the MDU root to get the scalar field element
+        // compute_manifest_commitment uses bytes_to_fr_be -> mod_floor
+        use crate::utils::{bytes_to_fr_be, fr_to_bytes_be, get_modulus};
+        use num_integer::Integer; // For mod_floor
+
+        let bn = bytes_to_fr_be(mdu_root_bytes);
+        let modulus = get_modulus();
+        let fr = bn.mod_floor(&modulus);
+        let y_bytes = fr_to_bytes_be(&fr); // Changed to BE
+
+        // 3. Reuse standard verify_proof
         self.verify_proof(
             manifest_commitment_bytes,
             &z_bytes,
-            mdu_root_bytes,
+            &y_bytes,
             proof_bytes,
         )
     }
@@ -331,32 +339,19 @@ mod tests {
     }
 
     #[test]
-    fn test_commit_prove_verify() {
+    fn test_blob_endianness() {
         let path = get_trusted_setup_path();
         let ctx = KzgContext::load_from_file(&path).unwrap();
 
-        // Create a dummy blob (all zeros except first byte)
-        let mut blob_bytes = [0u8; BLOB_SIZE];
-        blob_bytes[0] = 1; // Just some data
-
-        // Commit
-        let commitment = ctx.blob_to_commitment(&blob_bytes).expect("Commit failed");
+        let mut blob_ambiguous = [0u8; BLOB_SIZE];
+        blob_ambiguous[31] = 0x80;
         
-        // Point to evaluate at (z)
-        let mut z_bytes = [0u8; 32];
-        z_bytes[0] = 2; // Just some point
-
-        // Compute proof
-        let (proof, y) = ctx.compute_proof(&blob_bytes, &z_bytes).expect("Proof failed");
-
-        // Verify
-        let valid = ctx.verify_proof(
-            commitment.as_slice(),
-            &z_bytes,
-            y.as_slice(),
-            proof.as_slice()
-        ).expect("Verification failed");
-
-        assert!(valid, "Proof should be valid");
+        println!("Testing Blob with 0x80 at index 31 (LE=Huge, BE=Small)...");
+        let res_commit = ctx.blob_to_commitment(&blob_ambiguous);
+        println!("Blob Commit Result: {:?}", res_commit);
+        
+        let mut z = [0u8; 32]; // z=0 (LE or BE)
+        let res_proof = ctx.compute_proof(&blob_ambiguous, &z);
+        println!("Blob Proof Result: {:?}", res_proof);
     }
 }

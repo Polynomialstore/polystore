@@ -146,7 +146,7 @@ pub fn frs_to_blobs(frs: &[BigUint]) -> Vec<Vec<u8>> {
 
             let offset = j * 32;
 
-            let bytes = fr_to_bytes_be(fr);
+            let bytes = fr_to_bytes_be(fr); // Reverted to BE
 
             blob[offset..offset+32].copy_from_slice(&bytes);
 

@@ -252,15 +252,27 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
         let blob_start = blob_idx * BLOB_SIZE;
         let blob_bytes = &mdu_data[blob_start .. blob_start + BLOB_SIZE];
         
-        let (blob_proof, y_blob) = kzg_ctx.compute_proof(blob_bytes, &z_blob)?;
+        let (blob_proof, y_blob) = match kzg_ctx.compute_proof(blob_bytes, &z_blob) {
+            Ok(res) => res,
+            Err(e) => {
+                println!("ERROR: Hop 3 compute_proof failed: {:?}", e);
+                return Err(e.into());
+            }
+        };
         
         // --- Verify (Simulate) ---
-        let v1 = kzg_ctx.verify_manifest_inclusion(
+        let v1 = match kzg_ctx.verify_manifest_inclusion(
             manifest_commitment.as_slice(),
             &mdu_roots_bytes[mdu_idx],
             mdu_idx,
             manifest_proof.as_slice()
-        )?;
+        ) {
+            Ok(res) => res,
+            Err(e) => {
+                println!("ERROR: verify_manifest_inclusion failed: {:?}", e);
+                return Err(e.into());
+            }
+        };
         
         let root_arr = mdu_roots_bytes[mdu_idx];
         let leaf = Blake2s256Hasher::hash(target_blob_commitment.as_slice());
