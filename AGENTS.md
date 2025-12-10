@@ -238,6 +238,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 ### 9.1 Task 1: Define Go Structs for MDU #0 Layout
 
+**Status:** [x] COMPLETED
+
 **Description:** Define Go structs (`FileTableHeader`, `FileRecordV1`) for the MDU #0 Super-Manifest layout in a new package `nil_s3/pkg/layout`. This includes bit-packing logic for `length_and_flags`.
 
 **TDD Plan:** Create `nil_s3/pkg/layout/layout_test.go` first.
@@ -259,6 +261,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 **Definition of Done:** `go test ./pkg/layout` passes with 100% coverage of struct definition and serialization/deserialization logic. All bit-packing and size assertions are correct.
 
 ### 9.2 Task 2: Implement `Mdu0Builder` Logic
+
+**Status:** [x] COMPLETED
 
 **Description:** Develop a `Mdu0Builder` module responsible for initializing, modifying, and serializing the 8MB MDU #0 buffer. This builder must account for the Root Table containing roots for MDU #0 itself, **Witness MDUs**, and User Data MDUs.
 
@@ -297,6 +301,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 ### 9.3 Task 3: Refactor `GatewayUpload` (Service Layer)
 
+**Status:** [x] COMPLETED
+
 **Description:** Modify the `GatewayUpload` handler (`nil_s3/main.go`) to utilize the `Mdu0Builder` and the new "Filesystem on Slab" logic, including the generation and storage of **Witness MDUs**.
 
 **TDD Plan:** Create `nil_s3/main_test.go` (or a dedicated integration test package for handlers).
@@ -333,6 +339,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 ### 9.4 Task 4: Refactor `GatewayFetch` (Filesystem Resolution)
 
+**Status:** [x] COMPLETED
+
 **Description:** Update the `GatewayFetch` handler to resolve files by their path within a Deal, rather than requiring a direct CID for a single file. This involves reading MDU #0 and retrieving Blob Commitments from Witness MDUs for proof generation.
 
 **TDD Plan:** Extend `nil_s3/main_test.go` (or a dedicated integration test package for handlers).
@@ -356,6 +364,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 **Definition of Done:** `GatewayFetch` correctly resolves file paths, retrieves `FileRecord`s, reads Blob Commitments from Witness MDUs, and streams the correct byte ranges from the User Data MDUs.
 
 ### 9.5 Task 5: Implement `GatewayUpdateDealContent` Refactor (Chain Interaction)
+
+**Status:** [x] COMPLETED
 
 **Description:** Modify `GatewayUpdateDealContentFromEvm` (and potentially `GatewayUpdateDealContent`) to properly handle the `allocated_length` field and ensure the on-chain representation matches the `nil_s3`'s understanding of the Deal's state.
 
