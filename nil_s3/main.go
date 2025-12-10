@@ -19,7 +19,7 @@ import (
 // Configurable paths & chain settings (overridable via env).
 var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
-	nilCliPath      = envDefault("NIL_CLI_BIN", "../nil_cli/target/debug/nil_cli")
+	nilCliPath      = envDefault("NIL_CLI_BIN", "../nil_cli/target/release/nil_cli")
 	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../nilchain/trusted_setup.txt")
 	nilchaindBin    = envDefault("NILCHAIND_BIN", "nilchaind")
 	chainID         = envDefault("NIL_CHAIN_ID", "test-1")
@@ -810,9 +810,9 @@ func shardFile(path string) (string, uint64, error) {
 		return "", 0, fmt.Errorf("failed to parse shard output: %w", err)
 	}
 
-	rawCID, ok := shardOut["du_c_root_hex"].(string)
+	rawCID, ok := shardOut["manifest_root_hex"].(string)
 	if !ok || rawCID == "" {
-		return "", 0, fmt.Errorf("du_c_root_hex missing in shard output")
+		return "", 0, fmt.Errorf("manifest_root_hex missing in shard output")
 	}
 
 	sizeVal, ok := shardOut["file_size_bytes"].(float64)

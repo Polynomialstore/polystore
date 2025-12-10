@@ -171,10 +171,10 @@ export function Dashboard() {
       setSizeBytes(String(result.sizeBytes))
       setStatusTone('neutral')
       setStatusMsg(`File uploaded. Root CID derived: ${result.cid.slice(0, 16)}...`)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
       setStatusTone('error')
-      setStatusMsg('File upload/sharding failed. Check gateway logs.')
+      setStatusMsg(`File upload/sharding failed: ${e.message || 'Check gateway logs.'}`)
     }
   }
 

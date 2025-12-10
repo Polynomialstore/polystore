@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+    "math/big"
 	"strconv"
 	"strings"
 
@@ -12,7 +13,6 @@ import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	gethAccounts "github.com/ethereum/go-ethereum/accounts"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"nilchain/x/nilchain/types"
@@ -78,17 +78,24 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length (expected 65 bytes)")
 	}
 
-	// Build the canonical signing message and recover the EVM signer.
-	// NOTE: BuildEvmCreateDealMessage needs to be updated in types package to handle SizeTier!
-	// Assuming it's updated or we construct it manually here if possible? 
-	// The prompt implies we are just changing keeper logic. We might need to fix types helper too.
-	// For now, let's assume types.BuildEvmCreateDealMessage handles the new intent structure.
-	signingMsg, err := types.BuildEvmCreateDealMessage(intent)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to build signing message: %s", err)
-	}
+    // EIP-712 Verification
+    // chainID, ok := new(big.Int).SetString(ctx.ChainID(), 10) 
+    
+    // Attempt to parse intent.ChainId.
+    eip712ChainID, ok := new(big.Int).SetString(intent.ChainId, 10)
+    if !ok {
+        eip712ChainID = big.NewInt(1)
+    }
 
-	evmAddr, err := recoverEvmAddress(signingMsg, msg.EvmSignature)
+	domainSep := types.HashDomainSeparator(eip712ChainID)
+    structHash, err := types.HashCreateDeal(intent)
+    if err != nil {
+        return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
+    }
+    
+    digest := types.ComputeEIP712Digest(domainSep, structHash)
+
+	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
 	if err != nil {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
 	}
@@ -512,13 +519,21 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length")
 	}
 
-	// Reconstruct signing message
-	signingMsg, err := types.BuildEvmUpdateContentMessage(intent)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to build signing message: %s", err)
-	}
+    // EIP-712 Verification
+    eip712ChainID, ok := new(big.Int).SetString(intent.ChainId, 10)
+    if !ok {
+        eip712ChainID = big.NewInt(1)
+    }
 
-	evmAddr, err := recoverEvmAddress(signingMsg, msg.EvmSignature)
+	domainSep := types.HashDomainSeparator(eip712ChainID)
+    structHash, err := types.HashUpdateContent(intent)
+    if err != nil {
+        return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
+    }
+    
+    digest := types.ComputeEIP712Digest(domainSep, structHash)
+
+	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
 	if err != nil {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
 	}
@@ -1165,9 +1180,8 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
     return &types.MsgWithdrawRewardsResponse{AmountWithdrawn: rewards}, nil
 }
 
-// recoverEvmAddress recovers the EVM address from a personal_sign-style
-// signature over the given human-readable message.
-func recoverEvmAddress(message string, sig []byte) (gethCommon.Address, error) {
+// recoverEvmAddressFromDigest recovers the EVM address from a signature over a digest.
+func recoverEvmAddressFromDigest(digest []byte, sig []byte) (gethCommon.Address, error) {
 	var zero gethCommon.Address
 	if len(sig) != 65 {
 		return zero, fmt.Errorf("invalid signature length: %d", len(sig))
@@ -1180,8 +1194,7 @@ func recoverEvmAddress(message string, sig []byte) (gethCommon.Address, error) {
 		sigCopy[64] -= 27
 	}
 
-	hash := gethAccounts.TextHash([]byte(message))
-	pubKey, err := gethCrypto.SigToPub(hash, sigCopy)
+	pubKey, err := gethCrypto.SigToPub(digest, sigCopy)
 	if err != nil {
 		return zero, err
 	}

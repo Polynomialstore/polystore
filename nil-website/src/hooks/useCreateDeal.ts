@@ -32,6 +32,55 @@ export function useCreateDeal() {
       const nextNonce = currentNonce + 1
       window.localStorage.setItem(nonceKey, String(nextNonce))
 
+      // EIP-712 Typed Data
+      const domain = {
+        name: 'NilStore',
+        version: '1',
+        chainId: appConfig.chainId, // Use configured EVM chain ID
+        verifyingContract: '0x0000000000000000000000000000000000000000' as const,
+      }
+
+      const types = {
+        CreateDeal: [
+          { name: 'creator', type: 'address' },
+          { name: 'size_tier', type: 'uint32' },
+          { name: 'duration', type: 'uint64' },
+          { name: 'service_hint', type: 'string' },
+          { name: 'initial_escrow', type: 'uint256' },
+          { name: 'max_monthly_spend', type: 'uint256' },
+          { name: 'nonce', type: 'uint64' },
+        ],
+      }
+
+      const message = {
+        creator: evmAddress,
+        size_tier: Number(input.sizeTier),
+        duration: Number(input.duration),
+        service_hint: serviceHint,
+        initial_escrow: input.initialEscrow,
+        max_monthly_spend: input.maxMonthlySpend,
+        nonce: Number(nextNonce),
+      }
+
+      const typedData = {
+        domain,
+        types,
+        primaryType: 'CreateDeal',
+        message,
+      }
+
+      const ethereum = (window as any).ethereum
+      if (!ethereum || typeof ethereum.request !== 'function') {
+        throw new Error('Ethereum provider (MetaMask) not available')
+      }
+
+      const signature: string = await ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [evmAddress, JSON.stringify(typedData)],
+      })
+
+      // Construct the Intent object for the Gateway (must match protobuf/backend expectation)
+      // Backend expects chain_id as string in the intent JSON.
       const intent = {
         creator_evm: evmAddress,
         size_tier: input.sizeTier,
@@ -40,19 +89,8 @@ export function useCreateDeal() {
         initial_escrow: input.initialEscrow,
         max_monthly_spend: input.maxMonthlySpend,
         nonce: nextNonce,
-        chain_id: appConfig.cosmosChainId,
+        chain_id: String(appConfig.chainId), // Use same chain ID
       }
-
-      const message = buildEvmCreateDealMessage(intent)
-      const ethereum = (window as any).ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
-
-      const signature: string = await ethereum.request({
-        method: 'personal_sign',
-        params: [message, evmAddress],
-      })
 
       const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal-evm`, {
         method: 'POST',
@@ -77,33 +115,4 @@ export function useCreateDeal() {
   }
 
   return { submitDeal, loading, lastTx }
-}
-
-function buildEvmCreateDealMessage(intent: {
-  creator_evm: string
-  size_tier: number
-  duration_blocks: number
-  service_hint: string
-  initial_escrow: string
-  max_monthly_spend: string
-  nonce: number
-  chain_id: string
-}): string {
-  const creator = intent.creator_evm.trim().toLowerCase().startsWith('0x')
-    ? intent.creator_evm.trim().toLowerCase()
-    : `0x${intent.creator_evm.trim().toLowerCase()}`
-
-  const parts = [
-    'NILSTORE_EVM_CREATE_DEAL',
-    creator,
-    String(intent.size_tier),
-    String(intent.duration_blocks),
-    intent.service_hint.trim(),
-    intent.initial_escrow,
-    intent.max_monthly_spend,
-    String(intent.nonce),
-    intent.chain_id.trim(),
-  ]
-
-  return parts.join('|')
 }

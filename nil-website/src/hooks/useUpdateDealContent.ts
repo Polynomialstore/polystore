@@ -28,25 +28,58 @@ export function useUpdateDealContent() {
       const nextNonce = currentNonce + 1
       window.localStorage.setItem(nonceKey, String(nextNonce))
 
-      const intent = {
-        creator_evm: evmAddress,
-        deal_id: input.dealId,
-        cid: input.cid,
-        size_bytes: input.sizeBytes,
-        nonce: nextNonce,
-        chain_id: appConfig.cosmosChainId,
+      // EIP-712 Typed Data
+      const domain = {
+        name: 'NilStore',
+        version: '1',
+        chainId: appConfig.chainId, // Use configured EVM chain ID
+        verifyingContract: '0x0000000000000000000000000000000000000000' as const,
       }
 
-      const message = buildEvmUpdateContentMessage(intent)
+      const types = {
+        UpdateContent: [
+          { name: 'creator', type: 'address' },
+          { name: 'deal_id', type: 'uint64' },
+          { name: 'cid', type: 'string' },
+          { name: 'size', type: 'uint64' },
+          { name: 'nonce', type: 'uint64' },
+        ],
+      }
+
+      const message = {
+        creator: evmAddress,
+        deal_id: Number(input.dealId),
+        cid: input.cid,
+        size: Number(input.sizeBytes),
+        nonce: Number(nextNonce),
+      }
+
+      const typedData = {
+        domain,
+        types,
+        primaryType: 'UpdateContent',
+        message,
+      }
+
       const ethereum = (window as any).ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
 
       const signature: string = await ethereum.request({
-        method: 'personal_sign',
-        params: [message, evmAddress],
+        method: 'eth_signTypedData_v4',
+        params: [evmAddress, JSON.stringify(typedData)],
       })
+
+      // Construct intent for backend
+      const intent = {
+        creator_evm: evmAddress,
+        deal_id: input.dealId,
+        cid: input.cid,
+        size_bytes: input.sizeBytes,
+        nonce: nextNonce,
+        chain_id: String(appConfig.chainId),
+      }
 
       const response = await fetch(`${appConfig.gatewayBase}/gateway/update-deal-content-evm`, {
         method: 'POST',
@@ -71,29 +104,4 @@ export function useUpdateDealContent() {
   }
 
   return { submitUpdate, loading, lastTx }
-}
-
-function buildEvmUpdateContentMessage(intent: {
-  creator_evm: string
-  deal_id: number
-  cid: string
-  size_bytes: number
-  nonce: number
-  chain_id: string
-}): string {
-  const creator = intent.creator_evm.trim().toLowerCase().startsWith('0x')
-    ? intent.creator_evm.trim().toLowerCase()
-    : `0x${intent.creator_evm.trim().toLowerCase()}`
-
-  const parts = [
-    'NILSTORE_EVM_UPDATE_CONTENT',
-    creator,
-    String(intent.deal_id),
-    intent.cid.trim(),
-    String(intent.size_bytes),
-    String(intent.nonce),
-    intent.chain_id.trim(),
-  ]
-
-  return parts.join('|')
 }

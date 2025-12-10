@@ -34,10 +34,8 @@ ensure_nilchaind() {
 }
 
 ensure_nil_cli() {
-  if [ ! -x "$ROOT_DIR/nil_cli/target/debug/nil_cli" ]; then
-    banner "Building nil_cli (debug)"
-    (cd "$ROOT_DIR/nil_cli" && cargo build)
-  fi
+  banner "Building nil_cli (release)"
+  (cd "$ROOT_DIR/nil_cli" && cargo build --release)
 }
 
 register_demo_provider() {
@@ -189,7 +187,7 @@ start_gateway() {
   ensure_nil_cli
   (
     cd "$ROOT_DIR/nil_s3"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/debug/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" \
       "$GO_BIN" run . \
       >"$LOG_DIR/gateway.log" 2>&1 &
     echo $! > "$PID_DIR/gateway.pid"
