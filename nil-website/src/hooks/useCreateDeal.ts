@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
-import { hashTypedData } from 'viem'
 
 export interface CreateDealInput {
   creator: string
