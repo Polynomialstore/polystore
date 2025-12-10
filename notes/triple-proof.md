@@ -6,7 +6,7 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"
 
-We treat the Deal as an **Elastic Volume** (Slab). `MDU #0` is reserved as the **Super-Manifest**, containing the File Allocation Table (FAT) and the Sector Map. The Deal grows lazily: users pay for a Cap (e.g., 512GB) but only verify/store `AllocatedLength` MDUs initially.
+We treat the Deal as an **Elastic Volume** (Slab) with a structured layout: **Super-Manifest (MDU #0)**, followed by **Witness MDUs**, and then **User Data MDUs**. The Deal grows lazily: users pay for a Cap (e.g., 512GB) but only verify/store `AllocatedLength` MDUs initially.
 
 #### A. On-Chain State (`Deal`)
 
@@ -19,17 +19,18 @@ message Deal {
     // MDU #0 is an 8MB unit containing the File Table and MDU Roots.
     bytes manifest_root = 14; // 32-byte Merkle Root (Poseidon/Sha256)
     
-    // The Reservation (Max Capacity).
-    uint64 total_mdus = 3;    // e.g. 65536 for 512GB.
+    // The Reservation (Max Capacity) for User Data MDUs.
+    // E.g. 65536 for 512GB of user data.
+    uint64 max_user_mdus = 3;    
     
-    // The Working Set (High Water Mark).
-    // Challenges are bounded to [0, allocated_length].
+    // The Working Set (High Water Mark) of ALL MDUs, including MDU #0 and Witness MDUs.
+    // Challenges are bounded to [0, allocated_length).
     // Updates require MsgUpdateDealContent.
-    uint64 allocated_length = 4; // e.g. 10 (MDU #0 + 9 Data MDUs)
+    uint64 allocated_length = 4;
 }
 ```
 
-#### B. Off-Chain State (MDU #0: The Super-Manifest)
+#### B. MDU #0: The Super-Manifest (Layout)
 
 MDU #0 is an 8 MiB unit strictly partitioned into two regions:
 
@@ -40,12 +41,12 @@ MDU #0 is an 8 MiB unit strictly partitioned into two regions:
 
 **1. The Root Table (Blobs 0-15)**
 A contiguous array of 32-byte BLS12-381 Scalars.
-*   **Indexing:** `RootTable[i]` corresponds to the Merkle Root of Data MDU #`i+1`.
-*   **Addressing:** `Root(i)` is located at `Offset = i * 32` within the 2MB region.
-*   **Purpose:** Enables the Triple Proof. Proving `Root_i` exists in `Blob_k` of MDU #0 allows the chain to verify data in MDU `i+1`.
+*   **Indexing:** `RootTable[i]` stores the Merkle Root of `MDU #(i)`. Note: MDU #0's root is not stored here (it's `Deal.manifest_root`). `RootTable[0]` refers to `MDU #1`, `RootTable[W]` refers to `MDU #(W+1)` (first User Data MDU).
+*   **Addressing:** `Root(i)` is located at `Offset = i * 32` within the 2MB region of MDU #0.
+*   **Purpose:** Enables the Triple Proof. Proving `Root_i` exists in `Blob_k` of MDU #0 allows the chain to verify data in MDU `i`.
 
 **2. The File Table (Blobs 16-63)**
-A metadata region describing the files stored within the Data Slab (MDUs 1+).
+A metadata region describing the files stored within the User Data Slab.
 
 **Header (Blob 16, Offset 0):**
 ```rust
@@ -61,9 +62,9 @@ struct FileTableHeader {
 **Records (Blob 16+, Offset 128):**
 ```rust
 struct FileRecordV1 {
-    // Global byte offset from start of Data Slab (MDU #1).
-    // This is the Logical Address in the Slab.
-    start_offset: u64, // 8 bytes (Little Endian). Must be 32-byte aligned.
+    // Global byte offset from start of the FIRST USER DATA MDU.
+    // I.e., `start_offset` = 0 means the first byte of MDU #(1+W).
+    start_offset: u64, // 8 bytes (Little Endian)
 
     // Exact length of the file in bytes (lower 56 bits).
     // Top 8 bits (MSB) are used for Flags (see below).
@@ -80,61 +81,57 @@ struct FileRecordV1 {
 
 // Flags (Top 8 bits of length_and_flags):
 // Bit 7 (0x80): ENCRYPTED (1 if client-side encrypted, 0 otherwise)
-// Bit 6 (0x40): HIDDEN / SYSTEM FILE (1 if not to be shown in normal listings)
+// Bit 6 (0x40): HIDDEN / SYSTEM FILE (1 if not to be shown in standard listings)
 // Bits 3-0 (0x0F): COMPRESSION_TYPE (Enum: 0=None, 1=Gzip, 2=Zstd, 3=Brotli, ...)
-// Example: Encrypted & Zstd compressed file: (0x80 | 0x02) = 0x82.
-
 ```
 
-#### C. The Proof Object (`ChainedProof`)
+#### C. MDU #1..W: The Witness Data
 
-When challenged for `(MDU_Index, Blob_Index, Byte_Index)`, the SP provides:
+This contiguous block of MDUs (immediately following MDU #0) stores the KZG Blob Commitments required for Hop 2 of the Triple Proof.
 
-```protobuf
-message ChainedProof {
-    // HOP 1: Manifest -> MDU Root (Merkle + KZG)
-    // "I prove the Root for MDU #X is in MDU #0"
-    bytes  manifest_blob_commitment = 1; // The KZG commit of the specific blob in MDU #0 containing the root list
-    bytes[] manifest_merkle_path = 2;    // Path from ManifestRoot -> manifest_blob_commitment
-    bytes  mdu_root_scalar = 3;          // The actual scalar value (the root of MDU #X)
-    bytes  manifest_kzg_opening = 4;     // KZG Proof: manifest_blob(index) = mdu_root_scalar
+*   **Calculation of W (Number of Witness MDUs):**
+    *   For `N` max_user_mdus, total blob commitments = `N * 64`.
+    *   Total size of commitments = `N * 64 * 48 bytes`.
+    *   `W = ceil( (N * 64 * 48) / (8 * 1024 * 1024) )`.
+    *   Example: For `max_user_mdus = 65536` (512GB), `W = 24` MDUs.
+*   **Structure:** Witness MDUs are a packed, contiguous array of 48-byte G1 Points (Compressed).
+*   **Indexing:** The `kzg_commitment` for `User_Data_MDU_X, Blob_Y` is located at a deterministic offset within the Witness MDUs.
 
-    // HOP 2: MDU Root -> Data Blob (Merkle)
-    // "I prove Data Blob #Y is in MDU #X"
-    bytes  data_blob_commitment = 5;     // The KZG commit of the target data blob
-    bytes[] mdu_merkle_path = 6;         // Path from mdu_root_scalar -> data_blob_commitment
+#### D. MDU #(W+1)..AllocatedLength-1: The User Data MDUs
 
-    // HOP 3: Data Blob -> Byte (KZG)
-    // "I prove Data Byte Z is in Blob #Y"
-    bytes  z_value = 7;                  // Challenge point (derived)
-    bytes  y_value = 8;                  // Evaluation (Data Byte)
-    bytes  data_kzg_opening = 9;         // KZG Proof: data_blob(z) = y
-}
-```
+These are the MDUs that store the actual file content (raw bytes).
 
------
+---
 
 ### 2. The Verification Algorithm
 
 **Algorithm: `VerifyChainedProof(Deal, Challenge, Proof)`**
 
 1.  **Context Derivation:**
-    *   From `Challenge`, derive `Target_MDU_Index`.
+    *   From `Challenge`, derive `Target_MDU_Index` (the 0-indexed MDU number being challenged, starting from MDU #0).
     *   **Safety Check:** `Target_MDU_Index` must be < `Deal.allocated_length`.
-    *   Calculate `Root_Table_Index` = `Target_MDU_Index - 1`. (Since RootTable[0] -> MDU#1).
-    *   Calculate `Root_Table_Blob_Index` = `Root_Table_Index / 4096`.
-    *   Calculate `Scalar_Offset` = `Root_Table_Index % 4096`.
 
-2.  **Hop 1: Verify The Map (Manifest -> MDU Root)**
-    *   *Merkle Check:* Verify `Proof.manifest_merkle_path` links `Proof.manifest_blob_commitment` to `Deal.manifest_root` at index `Root_Table_Blob_Index`.
+2.  **Determine MDU Type:**
+    *   If `Target_MDU_Index == 0`: MDU #0 (Super-Manifest). Hop 2 is to find a Root within its Root Table.
+    *   If `Target_MDU_Index > 0` and `Target_MDU_Index <= W`: Witness MDU. Hop 2 is to find a Blob commitment for a Data MDU.
+    *   If `Target_MDU_Index > W`: User Data MDU. Hop 2 is to find a Data Blob.
+
+3.  **Hop 1: Verify The Map (MDU #0 Root -> Target MDU Root)**
+    *   *Merkle Check:* Verify `Proof.manifest_merkle_path` links `Proof.manifest_blob_commitment` to `Deal.manifest_root` (the root of MDU #0) at `Root_Table_Blob_Index`.
     *   *KZG Check:* Verify `VerifyKZG(Proof.manifest_blob_commitment, Scalar_Offset, Proof.mdu_root_scalar, Proof.manifest_kzg_opening)`.
-    *   *Result:* We now trust `Proof.mdu_root_scalar` is the true Merkle Root of the target MDU.
+    *   *Result:* We now trust `Proof.mdu_root_scalar` is the true Merkle Root of `Target_MDU_Index`.
 
-3.  **Hop 2: Verify The Molecule (MDU Root -> Data Blob)**
-    *   *Merkle Check:* Verify `Proof.mdu_merkle_path` links `Proof.data_blob_commitment` to `Proof.mdu_root_scalar`.
+4.  **Hop 2: Verify The Molecule (Target MDU Root -> Data Blob Commitment)**
+    *   **If `Target_MDU_Index` is a User Data MDU:**
+        *   The SP needs to provide the KZG commitment for `User_Data_MDU_X, Blob_Y`.
+        *   This commitment *must* be fetched from the appropriate offset within the **Witness MDUs**.
+        *   *Merkle Check:* Verify `Proof.mdu_merkle_path` links this Witness-derived commitment to `Proof.mdu_root_scalar` (the root of the User Data MDU).
+    *   **If `Target_MDU_Index` is MDU #0 or a Witness MDU:** (Simplified)
+        *   The content of these MDUs is deterministic or derived.
+        *   The Merkle Check would involve proving a fragment of the MDU itself. (This is a detail for a lower-level specification of witness MDUs).
     *   *Result:* We now trust `Proof.data_blob_commitment` is the true blob holding the data.
 
-4.  **Hop 3: Verify The Atom (Data Blob -> Data Byte)**
+5.  **Hop 3: Verify The Atom (Data Blob Commitment -> Data Byte)**
     *   *KZG Check:* Verify `VerifyKZG(Proof.data_blob_commitment, Proof.z_value, Proof.y_value, Proof.data_kzg_opening)`.
     *   *Result:* The data byte is valid.
 
@@ -143,18 +140,19 @@ message ChainedProof {
 ### 3. Lifecycle & Filesystem Logic
 
 #### 3.1 Initialization (Lazy Fill)
-*   **Action:** User creates a Deal with `TotalMDUs = 65536` (512GB) but `AllocatedLength = 1` (Just MDU #0).
-*   **State:** MDU #0 exists but is full of zeros (empty Root Table, empty File Table).
-*   **Chain:** Verification challenges for MDU #0 are valid. Challenges for MDU #1+ are invalid (out of bounds).
+*   **Action:** User creates a Deal with `max_user_mdus = 65536` (512GB) but `allocated_length = 1 + W` (MDU #0 + Witness MDUs). `W` is derived from `max_user_mdus`.
+*   **State:** MDU #0 (empty FAT, roots for MDU #1..W filled with zeros) and Witness MDUs (all zeros).
+*   **Chain:** Verification challenges for MDU #0 and Witness MDUs are valid. Challenges for User Data MDUs are invalid (out of bounds).
 
 #### 3.2 Sequential Write (Expansion)
 *   **Scenario:** User uploads 1GB file.
 *   **Gateway:**
-    1.  Packs data into ~125 MDUs.
-    2.  Updates `Root Table` in MDU #0 (indices 0..124).
-    3.  Appends `FileRecord` to `File Table` in MDU #0.
-*   **Chain:** User signs `MsgUpdateDealContent` updating `ManifestRoot` and setting `AllocatedLength = 126`.
-*   **Safety:** Challenges for MDUs 1..125 are now valid.
+    1.  Packs data into ~125 User Data MDUs.
+    2.  Updates `Root Table` in MDU #0 for these User Data MDUs.
+    3.  Updates **Witness MDUs** with the KZG Blob Commitments for these User Data MDUs.
+    4.  Appends `FileRecord` to `File Table` in MDU #0.
+*   **Chain:** User signs `MsgUpdateDealContent` updating `ManifestRoot` and setting `allocated_length = 1 + W + 125`.
+*   **Safety:** Challenges for newly added User Data MDUs are now valid.
 
 #### 3.3 Deletion & Fragmentation (Tombstones)
 *   **Scenario:** Delete a 64KB file.
@@ -166,9 +164,7 @@ message ChainedProof {
     
 #### 3.4 Compaction (Garbage Collection)
 *   **Scenario:** File Table is full of fragmented Tombstones.
-*   **Action:** Gateway reads all valid files, repacks them into a *fresh* Slab (starting at MDU #1), generates a clean MDU #0, and updates the Deal. This is computationally expensive but restores linearity.
-
-*   **Extensibility:** Future versions can increase `record_size` (e.g., to add signatures) or update `FileTableHeader.version` without breaking the Root Table partition.
+*   **Action:** Gateway reads all valid files, repacks them into a *fresh* block of User Data MDUs (starting at MDU #(W+1)), generates clean MDU #0 and Witness MDUs, and updates the Deal. This is computationally expensive but restores linearity.
 
 ### Appendix E: Forward Compatibility - Mode 2 (Horizontal Erasure)
 
