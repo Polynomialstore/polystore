@@ -358,3 +358,26 @@ The website depends on the following services (configured in `config.ts`):
 | `/proofs` | `ProofsDashboard` | Stream: Live ZK verification. |
 | `/whitepaper` | `Whitepaper` | PDF/Markdown render of spec. |
 | `/s3-adapter` | `S3AdapterDocs` | Guide: Using S3 compatibility. |
+
+---
+
+## 8. Spec Compliance & Implementation Reality (Gap Analysis)
+
+**Critical Note:** As of v2.5, the web frontend functions as a **Thin Client**. It deviates from the core `spec.md` "Thick Client" model in the following ways to accommodate browser limitations and UX speed:
+
+### 8.1 Data Ingestion (Upload)
+*   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
+*   **Actual:** Client uploads **raw `FormData`** to the **Storage Gateway** (`POST /gateway/upload`). The *Gateway* performs the sharding, KZG commitment generation (Trusted Setup binding), and MDU packing. It returns the `CID` and `size_bytes` to the client.
+*   **Implication:** The client currently trusts the Gateway to generate the correct canonical representation of the data.
+
+### 8.2 Data Retrieval (Download)
+*   **Spec:** Client fetches chunks from SPs, verifies the KZG Triple Proof (Manifest->MDU->Blob->Data) locally, and signs a receipt.
+*   **Actual:** Client requests data via **Gateway Proxy** (`GET /gateway/fetch/...`). The Gateway performs the retrieval and verification from the NilChain network and streams the reconstructed file to the user.
+*   **Implication:** Browser-side KZG verification is not yet implemented.
+
+### 8.3 Visualizations vs. Logic
+*   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
+*   **Real Data Flow:** The actual data flow for a deal is:
+    1.  `useCreateDeal` -> Allocates storage on-chain.
+    2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns CID.
+    3.  `useUpdateDealContent` -> Commits Gateway-provided CID to the chain.

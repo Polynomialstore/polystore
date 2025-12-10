@@ -33,3 +33,12 @@ This document outlines the high-level tasks required to expand `website-spec.md`
 
 ## 7. Utilities & Libraries
 - [x] **Utils:** `src/lib/` function specs (`address.ts`, `status.ts`, `cn`).
+
+## 8. Gap Analysis: Frontend vs. Protocol Spec
+
+Future agents utilizing this documentation must be aware of the following architectural divergence detected during the review of `@spec.md` and `@nil-website/**`:
+
+- **Triple Proof Model:** The frontend **does not** currently implement the Triple Proof verification logic described in `@notes/triple-proof.md`. It relies on the Gateway (`nil_gateway` / `nil_s3`) to perform these checks.
+- **MDU Packing:** The frontend **does not** pack files into MDUs (as defined in `@spec.md`). It streams raw bytes to the Gateway via `useUpload`.
+- **Simulation vs. Reality:** The `FileSharder.tsx` component is a visual simulation using SHA-256 and is **not** part of the actual transaction pipeline.
+- **Action Item:** Future work involves compiling the Rust `nil_core` crate to Wasm to enable true "Thick Client" functionality (Local KZG generation, MDU packing, and autonomous SP negotiation) directly in the browser.
