@@ -122,26 +122,10 @@ func DefaultMessageValidator(msgs []sdk.Msg) error {
 // ValidateAndGetGenTx validates the genesis transaction and returns GenTx if valid
 // it cannot verify the signature as it is stateless validation
 func ValidateAndGetGenTx(genTx json.RawMessage, txJSONDecoder sdk.TxDecoder, validator MessageValidator) (sdk.Tx, error) {
-	if len(genTx) == 0 {
-		return nil, fmt.Errorf("empty gentx payload")
-	}
-
-	if txJSONDecoder == nil {
-		return nil, fmt.Errorf("nil tx decoder for gentx")
-	}
-
 	tx, err := txJSONDecoder(genTx)
 	if err != nil {
 		return tx, fmt.Errorf("failed to decode gentx: %s, error: %w", genTx, err)
 	}
-	if tx == nil {
-		return nil, fmt.Errorf("decoded gentx is nil")
-	}
 
-	msgs := tx.GetMsgs()
-	if validator == nil {
-		validator = DefaultMessageValidator
-	}
-
-	return tx, validator(msgs)
+	return tx, validator(tx.GetMsgs())
 }

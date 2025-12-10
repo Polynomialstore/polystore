@@ -88,6 +88,7 @@ init_chain() {
   ensure_metadata
 
   APP_TOML="$CHAIN_HOME/config/app.toml"
+  perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
   perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
   perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"

@@ -91,11 +91,10 @@ func NewRootCmd() *cobra.Command {
 		autoCliOpts.Modules[name] = mod
 	}
 
-	// Manually register EVM basics so default genesis includes EVM/feemarket state.
-	moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
-	moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
-	moduleBasicManager[genutiltypes.ModuleName] = genutil.AppModuleBasic{}
-
+	        // Manually register EVM basics so default genesis includes EVM/feemarket state.
+	        moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
+	        moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
+	        moduleBasicManager[genutiltypes.ModuleName] = genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator)
 	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {

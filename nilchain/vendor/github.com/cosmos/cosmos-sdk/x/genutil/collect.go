@@ -129,15 +129,9 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 
 		// genesis transactions must be single-message
 		msgs := genTx.GetMsgs()
-		if len(msgs) == 0 {
-			return appGenTxs, persistentPeers, fmt.Errorf("gentx contains no messages")
-		}
 
 		// TODO abstract out staking message validation back to staking
-		msg, ok := msgs[0].(*stakingtypes.MsgCreateValidator)
-		if !ok {
-			return appGenTxs, persistentPeers, fmt.Errorf("unexpected GenTx message type; expected MsgCreateValidator, got: %T", msgs[0])
-		}
+		msg := msgs[0].(*stakingtypes.MsgCreateValidator)
 
 		// validate validator addresses and funds against the accounts in the state
 		valAddr, err := valAddrCodec.StringToBytes(msg.ValidatorAddress)
@@ -146,12 +140,6 @@ func CollectTxs(cdc codec.JSONCodec, txJSONDecoder sdk.TxDecoder, moniker, genTx
 		}
 
 		valAccAddr := sdk.AccAddress(valAddr).String()
-
-		// If the delegator address is missing in the MsgCreateValidator, default
-		// it to the account-form of the validator address so the gentx is well-formed.
-		if msg.DelegatorAddress == "" {
-			msg.DelegatorAddress = valAccAddr
-		}
 
 		delBal, delOk := balancesMap[valAccAddr]
 		if !delOk {

@@ -364,6 +364,11 @@ func New(
 		}
 	}
 
+	// Init EVM mempool before sealing BaseApp (which happens in Load)
+	if err := app.initEVMMempool(); err != nil {
+		panic(err)
+	}
+
 	if err := app.Load(loadLatest); err != nil {
 		panic(err)
 	}
@@ -429,19 +434,9 @@ func (app *App) GetMempool() sdkmempool.ExtMempool {
 }
 
 // SetClientCtx is called by the Cosmos EVM server stack once a client.Context
-// is available; we use this as a hook to lazily configure the EVM mempool.
+// is available.
 func (app *App) SetClientCtx(clientCtx client.Context) {
 	app.clientCtx = clientCtx
-
-	if app.evmMempool == nil {
-		if err := app.configureEVMMempool(); err != nil {
-			if app.logger != nil {
-				app.logger.Error("failed to configure EVM mempool", "err", err)
-			}
-		}
-	} else if app.logger != nil {
-		app.logger.Debug("EVM mempool already configured; skipping re-init")
-	}
 }
 
 // LegacyAmino returns App's amino codec.
