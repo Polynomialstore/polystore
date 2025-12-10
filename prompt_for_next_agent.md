@@ -1,31 +1,35 @@
-# Critical: Validate UX & E2E Reliability
+# Critical: Implement "Filesystem on Slab" in `nil_s3` Gateway
 
-The previous sprint successfully fixed EIP-712 signing and network configuration, allowing deals to be created and content to be committed via the web UI. However, the UI is not updating to reflect these changes, and there are discrepancies in data display.
+The previous session culminated in a detailed architectural discussion and the definition of the "Filesystem on Slab" data model and lifecycle for NilStore. The `notes/triple-proof.md` has been updated to reflect this new canonical data structure and behavior.
 
-**Goal:** Fix the UI state management and verify the entire pipeline with a rigorous End-to-End (E2E) test.
+The primary task for the next agent is to **implement this new filesystem logic within the `nil_s3` Gateway**. This refactor is crucial for enabling a robust user experience with files (not just raw data slabs) and for proving the feasibility of our elastic storage model.
 
-## 1. Investigation Tasks
-*   **UI Updates:** The "Success" toast appears, but the Dashboard list does not refresh (or takes too long). Investigate `nil-website/src/components/Dashboard.tsx` and the `useDeals` hook. Ensure they are polling the correct endpoint and handling the response correctly.
-*   **Size Mismatch:** User reports deals created as "4GB" (Tier 1) show as "512GB" in the UI. Check `Dashboard.tsx` or the Gateway response mapping. Ensure the `DealSize` enum (1, 2, 3) is correctly mapped to labels.
+## Primary Goal
 
-## 2. E2E Test Construction
-You must build a new test script (e.g., `tests/e2e_full_stack.sh` or Python) that validates the **Happy Path** without manual UI clicking. 
+Implement the new "Filesystem on Slab" logic in the `nil_s3` Gateway, as detailed in `notes/triple-proof.md`.
 
-**Test Requirements:**
-1.  **Setup:** Start the local stack (`./scripts/run_local_stack.sh`).
-2.  **Act (Deal):** Use `curl` or a helper script to call the Gateway endpoint `/gateway/create-deal-evm` directly (simulating the frontend). You will need to construct a valid EIP-712 signature (use `nil-website/debug_final_original.js` logic or a Python script using `web3.py`/`eth_account`).
-3.  **Verify (Deal):** Poll the Gateway or LCD (`http://localhost:1317/nilchain/nilchain/v1/deals/{id}`) to confirm the deal exists and `deal_id` is returned.
-4.  **Act (Content):** Call `/gateway/upload` (multipart) to get a CID, then call `/gateway/update-deal-content-evm` with the signature.
-5.  **Verify (Content):** Query the deal again to ensure `manifest_root` (CID) is updated and `size` matches the uploaded file.
-6.  **Verify (Size):** explicitly assert that `capacity_tier` or mapped size matches the input (e.g., if input was Tier 1, result is 4GB, not 512GB).
+## Task Breakdown (Refer to `AGENTS.md` for full TDD Plan)
 
-## 3. Mandates
-*   **Use the E2E test as the source of truth.** Do not rely on "it looks okay" in the browser. If the script passes, the backend is solid. Then fix the React UI to match the backend reality.
-*   **Fix the EIP-712 Signing in Test:** Your test script needs to generate valid signatures. Use the findings from `debug_final_original.js` (Metamask sorts fields, uses correct chain ID).
+All tasks are outlined with a **Test-Driven Development (TDD)** approach in `AGENTS.md`, Section 9. Follow that plan rigorously, writing tests first and committing/pushing upon completion of each defined "Definition of Done".
 
-## Context
-*   **Chain ID:** `31337`
-*   **Gateway:** `http://localhost:8080`
-*   **LCD:** `http://localhost:1317`
-*   **Backend:** `nilchaind` (Cosmos SDK)
-*   **EIP-712 Domain:** `NilStore`, Version `1`, VerifyingContract `0x00...00`.
+**Key Areas of Implementation:**
+
+1.  **Data Structures (`nil_s3/pkg/layout`):** Define Go structs for `FileTableHeader` and `FileRecordV1`, including bit-packing for `length_and_flags`.
+2.  **MDU #0 Builder (`nil_s3/pkg/builder`):** Implement the core logic for initializing, modifying, and serializing the 8MB MDU #0 buffer (Root Table + File Table).
+3.  **`GatewayUpload` Refactor:** Adapt the upload handler to manage the MDU #0 state, append files, and return the new `ManifestRoot` and `AllocatedLength`.
+4.  **`GatewayFetch` Refactor:** Update the fetch handler to resolve files by path within the filesystem and reconstruct from the correct MDU ranges.
+5.  **Chain Integration (`GatewayUpdateDealContent`):** Ensure `ManifestRoot` and `AllocatedLength` are correctly updated on-chain.
+
+## Context from Previous Session
+
+*   **Canonical Data Model:** `notes/triple-proof.md` now defines the `FileRecordV1` struct, MDU #0 layout, and lifecycle (Elastic Slab, Tombstones, Compaction).
+*   **Gateway Role:** `nil_s3` is confirmed as the primary "Ingress Provider" responsible for implementing this logic on the server-side.
+*   **E2E Test:** The E2E test outlined previously will be re-evaluated *after* the `nil_s3` refactor is complete, as its current objectives are superseded by the new architecture. The UI updates will also follow `nil_s3` changes.
+
+## Mandates
+
+*   **Strictly follow the TDD plan in `AGENTS.md` (Section 9).** Write tests first, then code.
+*   **Commit changes after each "Definition of Done" is met for a sub-task.**
+*   **Prioritize correctness and adherence to the `notes/triple-proof.md` specification.**
+
+---
