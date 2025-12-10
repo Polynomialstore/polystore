@@ -1,6 +1,0 @@
-=============== Dec 9, 2025 (HST) ===============
-13:08:55.165757 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
-13:08:55.173327 db@open opening
-13:08:55.173450 version@stat F·[] S·0B[] Sc·[]
-13:08:55.176636 db@janitor F·2 G·0
-13:08:55.176647 db@open done T·3.308334ms

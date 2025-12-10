@@ -1,27 +1,26 @@
-# Handoff: EIP-712 Implementation & Fixes
+# Handoff: EIP-712 & UX Improvements
 
-The codebase has been updated to use **EIP-712 Typed Data** for all EVM-signed storage deal operations.
+The codebase is updated with **EIP-712** signing and improved **UX for network management**.
 
-## Key Changes
-1.  **EIP-712 Standard:**
-    *   **Frontend:** `useCreateDeal` and `useUpdateDealContent` now use `eth_signTypedData_v4`.
-    *   **Backend:** `nilchain` Keeper logic updated to verify EIP-712 signatures.
-    *   **Hashing:** Implemented `HashCreateDeal` and `HashUpdateContent` in `nilchain/x/nilchain/types/eip712.go` matching the Solidity/Standard spec.
-    *   **Chain ID:** Both frontend and backend now align on the numeric EVM Chain ID (default 262144) for signature verification.
+## Key Updates
+1.  **Network Switching:**
+    *   `Dashboard.tsx` now detects chain ID mismatch (Wallet vs App Config).
+    *   A "Wrong Network" banner appears if the user is not on Chain ID `262144` (Local NilChain).
+    *   The "Switch Network" button uses `wagmi` to automatically prompt MetaMask to switch/add the local network.
 
-2.  **Upload/Shard Fix:**
-    *   Previous `nil_s3` gateway was using a stale `debug` binary of `nil_cli`.
-    *   Updated `scripts/run_local_stack.sh` and `nil_s3/main.go` to strictly use the `release` binary.
+2.  **EIP-712 Signing:**
+    *   Deal creation and updates use `eth_signTypedData_v4`.
+    *   Backend `nilchain` verifies these signatures correctly.
+    *   Fixed earlier issues with legacy string signing.
 
-## Verification
-*   **Web UI:** Creating a deal will now prompt MetaMask with a readable "NilStore" typed data request instead of a raw string.
-*   **Gateway:** Uploads work reliably without `C_KZG_BADARGS` errors.
+3.  **Stability:**
+    *   Gateway uses release binary for reliable sharding.
+    *   Stack startup is robust.
 
 ## Next Steps
-*   **Unified Liveness:** Continue with Phase 3 (Receipt Aggregation, Consensus Integration).
-*   **EVM Bridge:** The local contract deployment script `scripts/deploy_bridge_local.sh` still needs a successful run/debug if smart contract features are prioritized.
+*   **Unified Liveness:** Proceed with Phase 3 (Receipt Aggregation).
+*   **Production Config:** The current `Web3Provider` hardcodes `localhost:8545`. For a deployed testnet, this needs to be environment-driven (already partially handled by `VITE_EVM_RPC`, but `nilChain` definition might need dynamic update).
 
 ## References
-*   `nilchain/x/nilchain/types/eip712.go`: EIP-712 Hashing logic.
-*   `nilchain/x/nilchain/keeper/msg_server.go`: Signature verification.
-*   `nil-website/src/hooks/useCreateDeal.ts`: Frontend signing logic.
+*   `nil-website/src/components/Dashboard.tsx`: Network switching logic.
+*   `nil-website/src/context/Web3Provider.tsx`: Wagmi chain configuration.

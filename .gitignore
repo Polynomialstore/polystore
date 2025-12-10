@@ -13,3 +13,4 @@ _artifacts/
 nilchain/nilchain_data/
 nilchain/validator_key.json
 validator_key.json
+libnil_core.dylib
