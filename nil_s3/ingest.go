@@ -13,7 +13,7 @@ import (
 // IngestNewDeal creates a new MDU #0 and Witness MDUs from a source file.
 func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
 	// 1. Shard the user file to get Data MDU roots and commitments
-	shardOut, err := shardFile(filePath)
+	shardOut, err := shardFile(filePath, false)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
@@ -38,26 +38,20 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 
 	// 4. Create and Shard Witness MDUs
 	witnessData := witnessBuf.Bytes()
-	witnessMduSize := 8 * 1024 * 1024
-	
-	// We expect b.WitnessMduCount Witness MDUs.
-	// Current implementation: One big witness buffer. We must slice it.
-	// Note: If the file is small, we have less data than W*8MB.
-	// We just process what we have. Empty space in Witness MDUs is zeros.
+	witnessMduCapacity := 8126464
 	
 	for i := uint64(0); i < b.WitnessMduCount; i++ {
-		start := int(i) * witnessMduSize
-		end := start + witnessMduSize
+		start := int(i) * witnessMduCapacity
+		end := start + witnessMduCapacity
 		
 		var chunk []byte
 		if start >= len(witnessData) {
-			chunk = make([]byte, witnessMduSize) // All zeros
+			chunk = []byte{0} // Minimal content to ensure MDU generation (padded by nil_cli)
 		} else {
 			if end > len(witnessData) {
 				end = len(witnessData)
 			}
-			chunk = make([]byte, witnessMduSize)
-			copy(chunk, witnessData[start:end])
+			chunk = witnessData[start:end]
 		}
 
 		// Save Witness MDU to temp file for sharding
@@ -68,7 +62,7 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 		defer os.Remove(tmpName)
 
 		// Shard Witness MDU to get its Root
-		wOut, err := shardFile(tmpName)
+		wOut, err := shardFile(tmpName, false)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("failed to shard witness MDU %d: %w", i, err)
 		}
@@ -123,7 +117,7 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	tmp0.Close()
 	defer os.Remove(tmp0Name)
 
-	finalOut, err := shardFile(tmp0Name)
+	finalOut, err := shardFile(tmp0Name, false)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
 	}

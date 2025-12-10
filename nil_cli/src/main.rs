@@ -42,6 +42,8 @@ enum Commands {
         out: PathBuf,
         #[arg(long)]
         save_mdu_prefix: Option<String>,
+        #[arg(long)]
+        raw: bool, // Treat input as pre-encoded MDU(s)
     },
     Verify {
         file: PathBuf,
@@ -131,13 +133,13 @@ fn main() -> Result<()> {
     };
 
     match cli.command {
-        Commands::Shard { file, seeds, out, save_mdu_prefix } => run_shard(file, seeds, out, ts_path, save_mdu_prefix),
+        Commands::Shard { file, seeds, out, save_mdu_prefix, raw } => run_shard(file, seeds, out, ts_path, save_mdu_prefix, raw),
         Commands::Verify { file } => run_verify(file, ts_path),
         Commands::Store { file, url, owner } => run_store(file, url, owner),
     }
 }
 
-fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_mdu_prefix: Option<String>) -> Result<()> {
+fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_mdu_prefix: Option<String>, raw: bool) -> Result<()> {
     let kzg_ctx = KzgContext::load_from_file(&ts_path)
         .context("Failed to load KZG trusted setup")?;
 
@@ -150,7 +152,15 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
     let chunk_size = 31;
     let mdu_capacity = 64 * 4096 * chunk_size;
     
-    let raw_chunks: Vec<&[u8]> = raw_data.chunks(mdu_capacity).collect();
+    let raw_chunks: Vec<&[u8]> = if raw {
+        if raw_data.len() % MDU_SIZE != 0 {
+             return Err(anyhow::anyhow!("Raw input must be multiple of 8MB"));
+        }
+        raw_data.chunks(MDU_SIZE).collect()
+    } else {
+        raw_data.chunks(mdu_capacity).collect()
+    };
+
     let total_mdus = raw_chunks.len();
     println!("Total MDUs: {}", total_mdus);
 
@@ -163,7 +173,11 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
     for (i, raw_chunk) in raw_chunks.iter().enumerate() {
         println!("Processing MDU {}/{}...", i + 1, total_mdus);
         
-        let encoded_mdu = encode_to_mdu(raw_chunk);
+        let encoded_mdu = if raw {
+             raw_chunk.to_vec()
+        } else {
+             encode_to_mdu(raw_chunk)
+        };
         encoded_mdus.push(encoded_mdu.clone());
         
         if let Some(prefix) = &save_mdu_prefix {
@@ -328,9 +342,9 @@ fn run_shard(file: PathBuf, seeds: String, out: PathBuf, ts_path: PathBuf, save_
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
-    // 1. Chunk into 16-byte scalars (Safe for scalar field)
+    // 1. Chunk into 31-byte scalars (Safe for scalar field)
     let mut frs = Vec::new();
-    for chunk in raw_data.chunks(16) {
+    for chunk in raw_data.chunks(31) {
         // Convert to BigUint (Big Endian)
         let bn = BigUint::from_bytes_be(chunk);
         frs.push(bn);
@@ -349,10 +363,8 @@ fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
     }
     
     // 4. Pad MDU to 8MB if needed
-    // frs_to_blobs creates blobs. Each is 128KB.
-    // If we have fewer than 64 blobs, we need to add more zero blobs.
-    while mdu.len() < MDU_SIZE {
-        mdu.extend_from_slice(&vec![0u8; BLOB_SIZE]);
+    if mdu.len() < MDU_SIZE {
+        mdu.resize(MDU_SIZE, 0);
     }
     
     mdu

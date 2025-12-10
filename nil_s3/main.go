@@ -101,7 +101,7 @@ func PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Compute CID + size using nil-cli
-	out, err := shardFile(path)
+	out, err := shardFile(path, false)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Sharding failed: %v", err), http.StatusInternalServerError)
 		return
@@ -195,7 +195,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Legacy/Append Flow (Not fully refactored yet, fallback to single-file shard)
-		shardOut, err := shardFile(path)
+		shardOut, err := shardFile(path, false)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("sharding failed: %v", err), http.StatusInternalServerError)
 			return
@@ -909,16 +909,20 @@ func GatewayManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // shardFile runs nil-cli shard on the given path and extracts the full output.
-func shardFile(path string) (*NilCliOutput, error) {
+func shardFile(path string, raw bool) (*NilCliOutput, error) {
 	outPath := path + ".json"
 
-	cmd := execCommand(
-		nilCliPath,
+	args := []string{
 		"--trusted-setup", trustedSetup,
 		"shard",
 		path,
 		"--out", outPath,
-	)
+	}
+	if raw {
+		args = append(args, "--raw")
+	}
+
+	cmd := execCommand(nilCliPath, args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
