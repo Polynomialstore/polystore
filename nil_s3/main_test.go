@@ -2,10 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -16,6 +20,7 @@ import (
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	return r
 }
 
@@ -102,3 +107,115 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	}
 }
 
+// TestHelperProcess is used to mock exec.Command
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	defer os.Exit(0)
+
+	// Args: [nil_cli, --trusted-setup, ..., shard, path, --out, outPath]
+	// We want to write specific JSON to outPath based on 'path'.
+	
+	args := os.Args
+	for len(args) > 0 {
+		if args[0] == "--" {
+			args = args[1:]
+			break
+		}
+		args = args[1:]
+	}
+	
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "No args\n")
+		os.Exit(1)
+	}
+
+	_ = args[0] // path to executable (ignored)
+	// find "shard"
+	shardIdx := -1
+	for i, arg := range args {
+		if arg == "shard" {
+			shardIdx = i
+			break
+		}
+	}
+	
+	if shardIdx == -1 {
+		// keys show, etc.
+		return
+	}
+	
+	inputFile := args[shardIdx+1]
+	outPath := ""
+	for i, arg := range args {
+		if arg == "--out" && i+1 < len(args) {
+			outPath = args[i+1]
+			break
+		}
+	}
+
+	// Generate Fake Output
+	output := NilCliOutput{
+		ManifestRootHex: "0x1234567890abcdef",
+		ManifestBlobHex: "0xdeadbeef",
+		FileSize: 100,
+		Mdus: []MduData{
+			{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}},
+		},
+	}
+
+	if strings.Contains(inputFile, "witness") {
+		output.ManifestRootHex = "0xwitnessroot"
+	} else if strings.Contains(inputFile, "mdu0") {
+		output.ManifestRootHex = "0xfinalroot"
+	} else {
+		// User file
+		output.ManifestRootHex = "0xuserroot"
+	}
+
+	data, _ := json.Marshal(output)
+	os.WriteFile(outPath, data, 0644)
+}
+
+func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
+	// Mock execCommand
+	oldExec := execCommand
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=TestHelperProcess", "--", name}
+		cs = append(cs, args...)
+		cmd := exec.Command(os.Args[0], cs...)
+		cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+		return cmd
+	}
+	defer func() { execCommand = oldExec }()
+
+	r := testRouter()
+
+	// Prepare Multipart Upload
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "test.txt")
+	part.Write([]byte("some data"))
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/gateway/upload", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GatewayUpload failed: %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp["cid"] != "0xfinalroot" {
+		t.Errorf("Expected cid=0xfinalroot, got %v", resp["cid"])
+	}
+	if resp["allocated_length"] == nil {
+		t.Errorf("Expected allocated_length")
+	}
+}

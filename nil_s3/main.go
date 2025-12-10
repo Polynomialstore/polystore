@@ -28,6 +28,8 @@ var (
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
+
+	execCommand = exec.Command
 )
 
 // Simple txhash extractor, shared with faucet-style flows.
@@ -38,6 +40,19 @@ type fileIndexEntry struct {
 	Path     string `json:"path"`
 	Filename string `json:"filename"`
 	Size     uint64 `json:"size"`
+}
+
+type NilCliOutput struct {
+	ManifestRootHex string    `json:"manifest_root_hex"`
+	ManifestBlobHex string    `json:"manifest_blob_hex"`
+	FileSize        uint64    `json:"file_size_bytes"`
+	Mdus            []MduData `json:"mdus"`
+}
+
+type MduData struct {
+	Index   int      `json:"index"`
+	RootHex string   `json:"root_hex"`
+	Blobs   []string `json:"blobs"`
 }
 
 func main() {
@@ -86,11 +101,13 @@ func PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Compute CID + size using nil-cli
-	cid, size, err := shardFile(path)
+	out, err := shardFile(path)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Sharding failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	cid := out.ManifestRootHex
+	size := out.FileSize
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Object stored. CID: %s, Size: %d.", cid, size)
@@ -130,7 +147,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	owner := r.FormValue("owner")
-	log.Printf("GatewayUpload: file=%s owner=%s", header.Filename, owner)
+	dealIDStr := r.FormValue("deal_id")
+	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", header.Filename, owner, dealIDStr)
 
 	// Persist file under a deterministic key (filename-based for now).
 	key := strings.TrimSpace(header.Filename)
@@ -154,10 +172,36 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cid, size, err := shardFile(path)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("sharding failed: %v", err), http.StatusInternalServerError)
-		return
+	var cid string
+	var size uint64
+	var allocatedLength uint64
+
+	if dealIDStr == "" {
+		// New Deal Flow: Ingest into MDU #0 structure
+		maxMdus := uint64(65536) // Default 512GB
+		_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		cid = manifestRoot
+		allocatedLength = allocLen
+		
+		// For backward compatibility (legacy index), we assume size is file size?
+		// We need file size. IngestNewDeal doesn't return it directly but calculates it.
+		// Let's just stat the file or use header.Size?
+		if info, err := os.Stat(path); err == nil {
+			size = uint64(info.Size())
+		}
+	} else {
+		// Legacy/Append Flow (Not fully refactored yet, fallback to single-file shard)
+		shardOut, err := shardFile(path)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("sharding failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		cid = shardOut.ManifestRootHex
+		size = shardOut.FileSize
 	}
 
 	// Record this file in a simple local index so we can serve it back
@@ -167,9 +211,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"cid":        cid,
-		"size_bytes": size,
-		"filename":   header.Filename,
+		"cid":              cid,
+		"manifest_root":    cid,
+		"size_bytes":       size,
+		"allocated_length": allocatedLength,
+		"filename":         header.Filename,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -246,7 +292,7 @@ hint := strings.TrimSpace(req.ServiceHint)
 
 	// NOTE: We sign as the faucet/system key for now. The logical creator is
 	// provided in req.Creator and can be wired into on-chain state later.
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "create-deal",
 		tierStr,
@@ -313,7 +359,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
 
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "update-deal-content",
 		"--deal-id", dealIDStr,
@@ -423,7 +469,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpPath)
 
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "create-deal-from-evm",
 		tmpPath,
@@ -470,7 +516,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < 20; i++ {
 		time.Sleep(500 * time.Millisecond)
 
-		qCmd := exec.Command(
+		qCmd := execCommand(
 			nilchaindBin,
 			"q", "tx", txHash,
 			"--output", "json",
@@ -630,7 +676,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpPath)
 
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "update-deal-content-from-evm",
 		tmpPath,
@@ -761,6 +807,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	filePath := q.Get("file_path")
+	if filePath != "" {
+		// New Logic: Resolve from Slab
+		// CID in URL is treated as ManifestRoot
+		content, size, err := ResolveFileByPath(cid, filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "file not found in deal", http.StatusNotFound)
+			} else {
+				log.Printf("ResolveFileByPath failed: %v", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			}
+			return
+		}
+		defer content.Close()
+		
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.FormatUint(size, 10))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
+		io.Copy(w, content)
+		return
+	}
+
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 	if err != nil {
@@ -839,12 +908,11 @@ func GatewayManifest(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, manifestPath)
 }
 
-// shardFile runs nil-cli shard on the given path and extracts the DU root CID
-// and file size.
-func shardFile(path string) (string, uint64, error) {
+// shardFile runs nil-cli shard on the given path and extracts the full output.
+func shardFile(path string) (*NilCliOutput, error) {
 	outPath := path + ".json"
 
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilCliPath,
 		"--trusted-setup", trustedSetup,
 		"shard",
@@ -855,31 +923,24 @@ func shardFile(path string) (string, uint64, error) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("shardFile: shard failed: %s", string(output))
-		return "", 0, fmt.Errorf("nil_cli shard failed: %w", err)
+		return nil, fmt.Errorf("nil_cli shard failed: %w", err)
 	}
 
 	jsonFile, err := os.ReadFile(outPath)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to read shard output: %w", err)
+		return nil, fmt.Errorf("failed to read shard output: %w", err)
 	}
 
-	var shardOut map[string]any
+	var shardOut NilCliOutput
 	if err := json.Unmarshal(jsonFile, &shardOut); err != nil {
-		return "", 0, fmt.Errorf("failed to parse shard output: %w", err)
+		return nil, fmt.Errorf("failed to parse shard output: %w", err)
 	}
 
-	rawCID, ok := shardOut["manifest_root_hex"].(string)
-	if !ok || rawCID == "" {
-		return "", 0, fmt.Errorf("manifest_root_hex missing in shard output")
+	if shardOut.ManifestRootHex == "" {
+		return nil, fmt.Errorf("manifest_root_hex missing in shard output")
 	}
 
-	sizeVal, ok := shardOut["file_size_bytes"].(float64)
-	if !ok {
-		return "", 0, fmt.Errorf("file_size_bytes missing in shard output")
-	}
-	size := uint64(sizeVal)
-
-	return rawCID, size, nil
+	return &shardOut, nil
 }
 
 func setCORS(w http.ResponseWriter) {
@@ -978,7 +1039,7 @@ func lookupFileInIndex(cid string) (*fileIndexEntry, error) {
 
 // resolveKeyAddress returns the bech32 address for a key name in the local keyring.
 func resolveKeyAddress(name string) (string, error) {
-	cmd := exec.Command(
+	cmd := execCommand(
 		nilchaindBin,
 		"keys", "show", name,
 		"-a",
@@ -1069,7 +1130,7 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	mduIndexStr := "0"
 
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
-	signCmd := exec.Command(
+	signCmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "sign-retrieval-receipt",
 		dealIDStr,
@@ -1109,7 +1170,7 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	defer os.Remove(tmpPath)
 
 	// 2) Submit the receipt as a retrieval proof.
-	submitCmd := exec.Command(
+	submitCmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "submit-retrieval-proof",
 		tmpPath,
