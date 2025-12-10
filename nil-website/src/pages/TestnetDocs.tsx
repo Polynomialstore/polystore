@@ -1,6 +1,7 @@
 import { Download, Terminal, Wallet, Blocks } from "lucide-react";
 import { FileSharder } from "../components/FileSharder";
 import { FaucetWidget } from "../components/FaucetWidget";
+import { appConfig } from "../config";
 
 export const TestnetDocs = () => {
   return (
@@ -60,7 +61,7 @@ export const TestnetDocs = () => {
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># Requires Foundry (forge)</p>
                 <p>$ cd nil-store/nil_bridge</p>
-                <p>$ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
+                <p>$ forge script script/Deploy.s.sol --rpc-url {appConfig.evmRpc} --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>
           </div>
@@ -97,11 +98,11 @@ export const TestnetDocs = () => {
                 </div>
                 <div>
                     <span className="text-gray-400 block">RPC URL</span>
-                    <span className="font-mono text-indigo-300">http://localhost:8545</span>
+                    <span className="font-mono text-indigo-300">{appConfig.evmRpc}</span>
                 </div>
                 <div>
                     <span className="text-gray-400 block">Chain ID</span>
-                    <span className="font-mono text-indigo-300">262144</span>
+                    <span className="font-mono text-indigo-300">{appConfig.chainId}</span>
                 </div>
                 <div>
                     <span className="text-gray-400 block">Currency Symbol</span>

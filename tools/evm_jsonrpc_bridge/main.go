@@ -33,7 +33,7 @@ type rpcError struct {
 
 var (
 	lcdURL  = strings.TrimRight(env("EVM_BRIDGE_LCD", "http://localhost:1317"), "/")
-	chainID = env("EVM_BRIDGE_CHAIN_ID", "0x40000") // 262144
+	chainID = env("EVM_BRIDGE_CHAIN_ID", "0x7a69") // 31337
 )
 
 func main() {

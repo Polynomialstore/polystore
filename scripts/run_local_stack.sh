@@ -9,7 +9,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
 CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
-CHAIN_ID="${CHAIN_ID:-test-1}"
+CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
@@ -225,7 +225,7 @@ start_all() {
   cat <<EOF
 RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 262144 default)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31337)
 Faucet:      http://localhost:8081/faucet
 Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard

@@ -20,6 +20,8 @@ const (
 
 var (
 	// Type Hashes
+    // NOTE: viem/ethers uses the order defined in the types object, not necessarily sorted by name.
+    
 	// keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
 	EIP712DomainTypeHash = crypto.Keccak256([]byte("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"))
 
@@ -31,21 +33,19 @@ var (
 )
 
 // HashDomainSeparator computes the domain separator for a specific chain ID.
+// Fields: name, version, chainId, verifyingContract
 func HashDomainSeparator(chainID *big.Int) common.Hash {
 	return crypto.Keccak256Hash(
 		EIP712DomainTypeHash,
 		keccak256String(EIP712DomainName),
 		keccak256String(EIP712DomainVersion),
-		math.PaddedBigBytes(chainID, 32),
-		common.HexToAddress(VerifyingContract).Bytes(), // Pad to 32 bytes handled by Keccak? No, address is 20 bytes, stored as 32 bytes in struct.
-        // Wait, abi.encode for address is padded to 32 bytes.
-        // crypto.Keccak256 expects raw bytes.
-        // For EIP-712 encoding, simple types are encoded in place (u256=32bytes, address=32bytes padded).
+        math.PaddedBigBytes(chainID, 32),
         pad32(common.HexToAddress(VerifyingContract).Bytes()),
 	)
 }
 
 // HashCreateDeal computes the struct hash for a CreateDeal intent.
+// Fields: creator, size_tier, duration, service_hint, initial_escrow, max_monthly_spend, nonce
 func HashCreateDeal(intent *EvmCreateDealIntent) (common.Hash, error) {
     creatorAddr := common.HexToAddress(intent.CreatorEvm)
     
@@ -69,6 +69,7 @@ func HashCreateDeal(intent *EvmCreateDealIntent) (common.Hash, error) {
 }
 
 // HashUpdateContent computes the struct hash for an UpdateContent intent.
+// Fields: creator, deal_id, cid, size, nonce
 func HashUpdateContent(intent *EvmUpdateContentIntent) (common.Hash, error) {
     creatorAddr := common.HexToAddress(intent.CreatorEvm)
 

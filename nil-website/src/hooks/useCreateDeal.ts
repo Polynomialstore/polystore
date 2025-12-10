@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
+import { hashTypedData } from 'viem'
 
 export interface CreateDealInput {
   creator: string
@@ -24,7 +25,7 @@ export function useCreateDeal() {
         throw new Error('EVM address required for EVM-bridged deal creation')
       }
       const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
-      const serviceHint = `General:replicas=${replicas}`
+      let serviceHint = `General:replicas=${replicas}`
 
       // Build EvmCreateDealIntent payload.
       const nonceKey = `nilstore:evmNonces:${evmAddress.toLowerCase()}`
@@ -41,6 +42,12 @@ export function useCreateDeal() {
       }
 
       const types = {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
         CreateDeal: [
           { name: 'creator', type: 'address' },
           { name: 'size_tier', type: 'uint32' },

@@ -3,10 +3,11 @@ import { mainnet, sepolia } from 'wagmi/chains'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defineChain } from 'viem'
 import React from 'react'
+import { appConfig } from '../config'
 
 // Define the local NilChain network
 export const nilChain = defineChain({
-  id: 262144, // DefaultEVMChainID from nilchaind
+  id: appConfig.chainId,
   name: 'NilChain Local',
   nativeCurrency: {
     decimals: 18,
@@ -14,7 +15,7 @@ export const nilChain = defineChain({
     symbol: 'AATOM',
   },
   rpcUrls: {
-    default: { http: ['http://localhost:8545'] },
+    default: { http: [appConfig.evmRpc] },
   },
   blockExplorers: {
     default: { name: 'NilExplorer', url: 'http://localhost:5173' },
@@ -24,7 +25,7 @@ export const nilChain = defineChain({
 export const config = createConfig({
   chains: [nilChain, mainnet, sepolia],
   transports: {
-    [nilChain.id]: http('http://localhost:8545'),
+    [nilChain.id]: http(appConfig.evmRpc),
     [mainnet.id]: http(),
     [sepolia.id]: http(),
   },

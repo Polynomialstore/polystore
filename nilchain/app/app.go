@@ -276,7 +276,7 @@ func New(
 		app.FeeMarketKeeper,
 		app.ConsensusParamsKeeper,
 		nil, // Erc20Keeper
-		evmtypes.DefaultEVMChainID,
+		31337,
 		"",
 	)
 	app.EVMKeeper = evmKeeper.WithDefaultEvmCoinInfo(

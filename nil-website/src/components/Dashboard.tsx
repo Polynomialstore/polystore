@@ -1,4 +1,4 @@
-import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useMemo, useState } from 'react'
@@ -8,6 +8,7 @@ import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
 import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
+import { useNetwork } from '../hooks/useNetwork'
 import { appConfig } from '../config'
 import { StatusBar } from './StatusBar'
 import { DealDetail } from './DealDetail'
@@ -39,13 +40,13 @@ interface Provider {
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
-  const { switchChainAsync } = useSwitchChain()
   const { connectAsync } = useConnect()
   const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
+  const { switchNetwork } = useNetwork()
   const [deals, setDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,38 +54,66 @@ export function Dashboard() {
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content'>('alloc')
 
-  const isWrongNetwork = chainId !== appConfig.chainId
+  // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
+  const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const getChainId = async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const eth = (window as any).ethereum
+        if (eth) {
+            try {
+                const hex = await eth.request({ method: 'eth_chainId' })
+                setMetamaskChainId(parseInt(hex, 16))
+            } catch (e) {
+                console.error(e)
+            }
+        }
+    }
+    getChainId()
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const eth = (window as any).ethereum
+    if (eth && eth.on) {
+        const handleChainChanged = (hex: string) => setMetamaskChainId(parseInt(hex, 16))
+        eth.on('chainChanged', handleChainChanged)
+        return () => eth.removeListener('chainChanged', handleChainChanged)
+    }
+  }, [])
+
+  // Prefer the direct MetaMask ID if available, otherwise fallback to Wagmi
+  const activeChainId = metamaskChainId ?? chainId
+  const isWrongNetwork = activeChainId !== appConfig.chainId
+
+  // Check if the RPC node itself is on the right chain
+  const [rpcChainId, setRpcChainId] = useState<number | null>(null)
+  useEffect(() => {
+    const checkRpc = async () => {
+      try {
+        const res = await fetch(appConfig.evmRpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+        })
+        const json = await res.json()
+        const id = parseInt(json.result, 16)
+        setRpcChainId(id)
+      } catch (e) {
+        console.error('RPC Check failed', e)
+      }
+    }
+    checkRpc()
+    const timer = setInterval(checkRpc, 5000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
 
   const handleSwitchNetwork = async () => {
     try {
-      await switchChainAsync({ chainId: appConfig.chainId })
+      await switchNetwork()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
-      console.error('Failed to switch network:', e)
-      
-      // Error code 4902 means the chain has not been added to MetaMask.
-      if (e.code === 4902 || e.message?.includes('Unrecognized chain ID') || e.code === -32603) {
-         try {
-             await (window as any).ethereum.request({
-                 method: 'wallet_addEthereumChain',
-                 params: [{
-                     chainId: '0x40000', // 262144 in hex
-                     chainName: 'NilChain Local',
-                     nativeCurrency: {
-                         name: 'AATOM',
-                         symbol: 'AATOM',
-                         decimals: 18,
-                     },
-                     rpcUrls: [appConfig.evmRpc],
-                     blockExplorerUrls: [],
-                 }],
-             })
-         } catch (addError) {
-             console.error('Failed to add network:', addError)
-             alert('Failed to add NilChain Local network. Please add it manually: ChainID 262144, RPC http://localhost:8545')
-         }
-      } else {
-          alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
-      }
+      alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
     }
   }
 
@@ -323,20 +352,39 @@ export function Dashboard() {
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
       
-      {isWrongNetwork && (
-        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between">
+      {rpcMismatch && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-500/20 rounded-full">
               <RefreshCw className="w-5 h-5 text-red-400" />
             </div>
             <div>
-              <h3 className="font-bold text-red-200">Wrong Network</h3>
-              <p className="text-sm text-red-300">You are connected to Chain ID {chainId}. Please switch to Local NilChain ({appConfig.chainId}).</p>
+              <h3 className="font-bold text-red-200">Critical Node Mismatch</h3>
+              <p className="text-sm text-red-300">
+                Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
+                <br/>Please restart your local stack or check your <code>run_local_stack.sh</code> configuration.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isWrongNetwork && (
+        <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-yellow-500/20 rounded-full">
+              <RefreshCw className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div>
+              <h3 className="font-bold text-yellow-200">Wrong Network</h3>
+              <p className="text-sm text-yellow-300">
+                Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilChain Local).
+              </p>
             </div>
           </div>
           <button
             onClick={handleSwitchNetwork}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors"
           >
             Switch Network
           </button>
@@ -427,6 +475,13 @@ export function Dashboard() {
               className="text-xs text-gray-500 hover:text-white underline"
             >
               Disconnect
+            </button>
+            <span className="text-gray-700">|</span>
+            <button
+              onClick={() => switchNetwork()}
+              className="text-xs text-indigo-400 hover:text-indigo-300 underline"
+            >
+              Force Switch Network
             </button>
           </div>
         </div>

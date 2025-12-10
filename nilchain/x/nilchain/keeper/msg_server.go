@@ -79,9 +79,6 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 
     // EIP-712 Verification
-    // chainID, ok := new(big.Int).SetString(ctx.ChainID(), 10) 
-    
-    // Attempt to parse intent.ChainId.
     eip712ChainID, ok := new(big.Int).SetString(intent.ChainId, 10)
     if !ok {
         eip712ChainID = big.NewInt(1)
@@ -95,10 +92,22 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
     
     digest := types.ComputeEIP712Digest(domainSep, structHash)
 
+    // DEBUG: EIP-712 Tracing
+    fmt.Printf("\n--- DEBUG EIP-712 ---\n")
+    fmt.Printf("Intent: %+v\n", intent)
+    fmt.Printf("ChainID: %s\n", eip712ChainID.String())
+    fmt.Printf("DomainSep: %s\n", domainSep.Hex())
+    fmt.Printf("StructHash: %s\n", structHash.Hex())
+    fmt.Printf("Digest: %x\n", digest)
+    fmt.Printf("Signature: %x\n", msg.EvmSignature)
+
 	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
 	if err != nil {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
 	}
+    fmt.Printf("Recovered: %s\n", evmAddr.Hex())
+    fmt.Printf("Expected: %s\n", intent.CreatorEvm)
+    fmt.Printf("---------------------\n")
 
 	// Normalise creator_evm for comparison.
 	intentCreator := strings.TrimSpace(intent.CreatorEvm)
