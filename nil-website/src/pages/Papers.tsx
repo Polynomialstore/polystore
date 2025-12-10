@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { marked } from 'marked';
 
 interface MarkdownPageProps {
   filePath: string;
@@ -19,7 +20,7 @@ const MarkdownPage = ({ filePath, title }: MarkdownPageProps) => {
           throw new Error(`Failed to fetch ${filePath}: ${response.statusText}`);
         }
         const text = await response.text();
-        setContent(text);
+        setContent(marked.parse(text));
       } catch (err: any) {
         setError(err.message);
       } finally {
