@@ -111,25 +111,158 @@ The verifier (Chain Node) executes this logic inside the `MsgProveLiveness` hand
           * `Proof` = `Proof.kzg_opening_proof`.
       * *Check:* If `VerifyKZG(...) == False`, **REJECT**.
 
-5.  **Result:*
+5.  **Result:**
+
       * If all 3 hops pass, return **TRUE**. The SP has proven possession of the specific byte requested by the protocol.
+
+
 
 -----
 
+
+
 ### 3. Why This Works (Hybrid Scaling)
+
+
 
 This architecture solves the "Manifest Size" problem identified in earlier designs.
 
+
+
 1.  **Scale Issue:** A 512 GB deal has ~4 million blobs. A Manifest listing 4 million KZG commitments (48 bytes each) would be ~200 MB. This is too big for the 8 MB "MDU #0" slot.
+
 2.  **Solution:** We group blobs into 8 MB MDUs.
+
     *   **Layer 1 (Blob):** 128 KB. Identity = 48B Commitment.
+
     *   **Layer 2 (MDU):** 64 Blobs. Identity = 32B Merkle Root.
+
     *   **Layer 3 (Manifest):** List of MDU Roots.
+
 3.  **Result:** A 512 GB deal has 65,536 MDUs.
+
     *   Manifest Size = $65,536 \times 32 \text{ bytes} \approx 2 \text{ MB}$.
+
     *   This fits comfortably in the 8 MB limit.
+
 4.  **Security:** The chain of trust is unbroken.
+
     *   `Deal` locks the `Manifest`.
+
     *   `Manifest` locks the `MDU`.
+
     *   `MDU` locks the `Blob`.
+
     *   `Blob` locks the `Data`.
+
+
+
+### Appendix D: MDU #0 Layout (Normative)
+
+
+
+MDU #0 is the **Super-Manifest** reserved for system metadata. To ensure O(1) verification while supporting a filesystem layer, it is strictly partitioned into two fixed regions.
+
+
+
+| Blob Range | Content | Format | Capacity |
+
+| :--- | :--- | :--- | :--- |
+
+| **0 - 15** | **Root Table** | `[Scalar; 65536]` | Roots for 512GB |
+
+| **16 - 63** | **File Table** | Header + `[FileRecord; N]` | ~98k Files |
+
+
+
+#### 1. The Root Table (Blobs 0-15)
+
+A contiguous array of 32-byte BLS12-381 Scalars.
+
+*   **Content:** `Root_i` corresponds to the Merkle Root of Data MDU #`i+1`.
+
+*   **Addressing:** `Root(i)` is located at `Offset = i * 32` within the 2MB region.
+
+*   **Purpose:** Enables the Triple Proof. Proving `Root_i` exists in `Blob_k` of MDU #0 allows the chain to verify data in MDU `i+1`.
+
+
+
+#### 2. The File Table (Blobs 16-63)
+
+A metadata region describing the files stored within the Data Slab (MDUs 1+). It begins with a header for versioning.
+
+
+
+**A. File Table Header (Blob 16, Offset 0)**
+
+The first 128 bytes of Blob 16 define the schema.
+
+
+
+```rust
+
+struct FileTableHeader {
+
+    magic: [u8; 4],      // "NILF" (0x4E494C46)
+
+    version: u8,         // Version of this Header format (e.g., 1)
+
+    record_size: u16,    // Size of each FileRecord in bytes (e.g., 64)
+
+    record_count: u32,   // Number of active records
+
+    _reserved: [u8; 117] // Padding for future use
+
+}
+
+```
+
+
+
+**B. File Record V1 (Blob 16, Offset 128)**
+
+Immediately following the header is a contiguous array of `FileRecord` structs.
+
+
+
+```rust
+
+struct FileRecordV1 {
+
+    // Global byte offset from start of Data Slab (MDU #1).
+
+    // MDU_Index = start_offset / 8_388_608
+
+    start_offset: u64, // 8 bytes (Little Endian)
+
+
+
+    // Exact length of the file in bytes.
+
+    length: u64,       // 8 bytes (Little Endian)
+
+
+
+    // Unix epoch timestamp (seconds). 0 if unknown.
+
+    timestamp: u64,    // 8 bytes (Little Endian)
+
+
+
+    // Null-terminated filename/path. Padded with 0x00.
+
+    path: [u8; 40],    // 40 bytes
+
+}
+
+// Total Size: 64 Bytes.
+
+```
+
+
+
+**Verification Strategy:**
+
+*   **Thick Client (Browser):** Fetches Blobs 16-63, parses the Header, iterates the Records, and maps `path` -> `MDU Range`. It then uses the standard Triple Proof to verify data within that range.
+
+*   **Extensibility:** Future versions can increase `record_size` (e.g., to add signatures) or update `FileTableHeader.version` without breaking the Root Table partition.
