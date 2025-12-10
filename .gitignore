@@ -16,3 +16,4 @@ validator_key.json
 libnil_core.dylib
 .nilchain_retrieval
 nil_s3/uploads/
+.gemini
