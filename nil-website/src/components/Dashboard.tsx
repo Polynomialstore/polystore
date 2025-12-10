@@ -161,20 +161,28 @@ export function Dashboard() {
         const response = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals`)
         const data = await response.json()
         if (data.deals) {
-            const all: Deal[] = data.deals.map((d: any) => ({
-              id: String(d.id ?? ''),
-              cid: d.cid ? String(d.cid) : (d.manifest_root ? String(d.manifest_root) : ''),
-              size: String(d.size ?? d.size_bytes ?? '0'),
-              owner: String(d.owner ?? ''),
-              escrow: String(d.escrow_balance ?? d.escrow ?? ''),
-              end_block: String(d.end_block ?? ''),
-              start_block: String(d.start_block ?? ''),
-              service_hint: d.service_hint,
-              current_replication: d.current_replication,
-              max_monthly_spend: d.max_monthly_spend,
-              providers: Array.isArray(d.providers) ? d.providers : [],
-              deal_size: d.deal_size ? Number(d.deal_size) : 0,
-            }))
+            const all: Deal[] = data.deals.map((d: any) => {
+              let dealSizeVal = 0
+              if (d.deal_size === 'DEAL_SIZE_4GIB') dealSizeVal = 1
+              else if (d.deal_size === 'DEAL_SIZE_32GIB') dealSizeVal = 2
+              else if (d.deal_size === 'DEAL_SIZE_512GIB') dealSizeVal = 3
+              else if (typeof d.deal_size === 'number') dealSizeVal = d.deal_size
+
+              return {
+                id: String(d.id ?? ''),
+                cid: d.cid ? String(d.cid) : (d.manifest_root ? String(d.manifest_root) : ''),
+                size: String(d.size ?? d.size_bytes ?? '0'),
+                owner: String(d.owner ?? ''),
+                escrow: String(d.escrow_balance ?? d.escrow ?? ''),
+                end_block: String(d.end_block ?? ''),
+                start_block: String(d.start_block ?? ''),
+                service_hint: d.service_hint,
+                current_replication: d.current_replication,
+                max_monthly_spend: d.max_monthly_spend,
+                providers: Array.isArray(d.providers) ? d.providers : [],
+                deal_size: dealSizeVal,
+              }
+            })
             let filtered = owner ? all.filter((d) => d.owner === owner) : all
             if (owner && filtered.length === 0 && all.length > 0) {
               filtered = all
@@ -279,7 +287,7 @@ export function Dashboard() {
         setStatusTone('success')
         setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
         if (nilAddress) {
-          await refreshDealsAfterCreate(nilAddress)
+          await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
           await fetchBalances(nilAddress)
           // Auto-switch to content tab and pre-fill deal ID
           setTargetDealId(String(res.deal_id))
@@ -304,21 +312,21 @@ export function Dashboard() {
           })
           setStatusTone('success')
           setStatusMsg('Content Committed! The network will now replicate your data.')
-          if (nilAddress) await refreshDealsAfterCreate(nilAddress)
+          if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
       } catch (e) {
           setStatusTone('error')
           setStatusMsg('Content commit failed.')
       }
   }
 
-  async function refreshDealsAfterCreate(owner: string) {
-    const maxAttempts = 5
+  async function refreshDealsAfterCreate(owner: string, newDealId: string) {
+    const maxAttempts = 10
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const list = await fetchDeals(owner)
-      if (list.length > 0) { // Simple check, ideally check for new ID
+      if (list.some(d => d.id === newDealId)) {
         return
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1500))
     }
   }
 
