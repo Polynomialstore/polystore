@@ -2,6 +2,6 @@
   "name": "nil-website",
   "compatibility_date": "2025-12-10",
     "assets": {
-      "directory": "./_site"
+      "directory": "./dist"
     }
 }
