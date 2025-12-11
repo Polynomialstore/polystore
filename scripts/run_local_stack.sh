@@ -206,7 +206,7 @@ start_gateway() {
 }
 
 start_bridge() {
-  local mode="${NIL_DEPLOY_BRIDGE:-auto}"
+  local mode="${NIL_DEPLOY_BRIDGE:-1}"
   if [ "$mode" = "0" ]; then
     echo "Skipping bridge deployment (NIL_DEPLOY_BRIDGE=0)"
     return
