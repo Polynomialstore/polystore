@@ -96,6 +96,7 @@ init_chain() {
   perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
   perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
+  perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $CHAIN_ID/" "$APP_TOML"
   # Fallback patcher in case formats change (pure string replace to avoid extra deps)
   python3 - "$APP_TOML" <<'PY' || true
 import sys, pathlib
@@ -106,6 +107,7 @@ for src, dst in [
     ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
     ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
     ('enabled-unsafe-cors = false', 'enabled-unsafe-cors = true'),
+    ('evm-chain-id = 262144', 'evm-chain-id = 31337'),
 ]:
     txt = txt.replace(src, dst)
 path.write_text(txt)

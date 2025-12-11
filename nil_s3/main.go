@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcutil/bech32"
 	"github.com/gorilla/mux"
 )
 
@@ -29,6 +32,8 @@ var (
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
+	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
+	fastShardMode   = envDefault("NIL_FAST_SHARD", "1") == "1"
 
 	execCommand = exec.Command
 )
@@ -64,6 +69,76 @@ type MduData struct {
 	Index   int      `json:"index"`
 	RootHex string   `json:"root_hex"`
 	Blobs   []string `json:"blobs"`
+}
+
+type txAttribute struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type txEvent struct {
+	Type       string        `json:"type"`
+	Attributes []txAttribute `json:"attributes"`
+}
+
+type txLog struct {
+	Events []txEvent `json:"events"`
+}
+
+func extractDealID(logs []txLog, events []txEvent) string {
+	find := func(evts []txEvent) string {
+		for _, evt := range evts {
+			if evt.Type != "nilchain.nilchain.EventCreateDeal" && evt.Type != "create_deal" {
+				continue
+			}
+			for _, attr := range evt.Attributes {
+				if attr.Key == "id" || attr.Key == "deal_id" {
+					return attr.Value
+				}
+			}
+		}
+		return ""
+	}
+
+	for _, l := range logs {
+		if id := find(l.Events); id != "" {
+			return id
+		}
+	}
+	return find(events)
+}
+
+func evmHexToNilAddress(hexAddr string) (string, error) {
+	trimmed := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(hexAddr)), "0x")
+	raw, err := hex.DecodeString(trimmed)
+	if err != nil {
+		return "", err
+	}
+	if len(raw) != 20 {
+		return "", fmt.Errorf("invalid EVM address length: %d", len(raw))
+	}
+	converted, err := bech32.ConvertBits(raw, 8, 5, true)
+	if err != nil {
+		return "", err
+	}
+	return bech32.Encode("nil", converted)
+}
+
+func fundAddressOnce(addr string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	body := fmt.Sprintf(`{"address":"%s"}`, addr)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/faucet", faucetBase), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("fundAddressOnce: faucet request failed: %v", err)
+		return
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		log.Printf("fundAddressOnce: faucet returned status %d", resp.StatusCode)
+	}
 }
 
 func main() {
@@ -186,10 +261,21 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	var cid string
 	var size uint64
 	var allocatedLength uint64
-
-	if dealIDStr == "" {
+	if fastShardMode {
+		var err error
+		cid, size, allocatedLength, err = fastShardQuick(path)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else if dealIDStr == "" {
 		// New Deal Flow: Ingest into MDU #0 structure
-		maxMdus := uint64(65536) // Default 512GB
+		maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
+		if raw := strings.TrimSpace(r.FormValue("max_user_mdus")); raw != "" {
+			if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
+				maxMdus = parsed
+			}
+		}
 		_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
@@ -430,6 +516,9 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intent must include creator_evm", http.StatusBadRequest)
 		return
 	}
+	if creatorNil, err := evmHexToNilAddress(rawCreator); err == nil {
+		fundAddressOnce(creatorNil)
+	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-deal-*.json")
 	if err != nil {
@@ -502,74 +591,49 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	log.Printf("GatewayCreateDealFromEvm sent: txhash=%s. Polling for inclusion...", txHash)
 
 	var dealID string
+	client := &http.Client{Timeout: 2 * time.Second}
 	// Poll for tx inclusion (max 10 seconds)
 	for i := 0; i < 20; i++ {
 		time.Sleep(500 * time.Millisecond)
 
-		qCmd := execCommand(
-			nilchaindBin,
-			"q", "tx", txHash,
-			"--output", "json",
-			"--node", "tcp://localhost:26657", // Ensure we hit the same node
-		)
-		qOut, _ := qCmd.CombinedOutput()
-
-		var qRes struct {
-			Logs []struct {
-				Events []struct {
-					Type       string `json:"type"`
-					Attributes []struct {
-						Key   string `json:"key"`
-						Value string `json:"value"`
-					} `json:"attributes"`
-				} `json:"events"`
-			} `json:"logs"`
-			Events []struct {
-				Type       string `json:"type"`
-				Attributes []struct {
-					Key   string `json:"key"`
-					Value string `json:"value"`
-				} `json:"attributes"`
-			} `json:"events"`
+		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/cosmos/tx/v1beta1/txs/%s", lcdBase, txHash), nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
 		}
 
-		if err := json.Unmarshal(qOut, &qRes); err == nil {
-			// Scan Logs (legacy/standard)
-			for _, log := range qRes.Logs {
-				for _, event := range log.Events {
-					if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
-						for _, attr := range event.Attributes {
-							if attr.Key == "id" || attr.Key == "deal_id" {
-								dealID = attr.Value
-								break
-							}
-						}
-					}
-				}
-				if dealID != "" {
-					break
-				}
-			}
-			// Scan Top-level Events (if Logs was empty or ID not found)
-			if dealID == "" {
-				for _, event := range qRes.Events {
-					if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
-						for _, attr := range event.Attributes {
-							if attr.Key == "id" || attr.Key == "deal_id" {
-								dealID = attr.Value
-								break
-							}
-						}
-					}
-					if dealID != "" {
-						break
-					}
-				}
-			}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 
-			if dealID != "" {
-				break
-			}
+		if resp.StatusCode == http.StatusNotFound {
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("GatewayCreateDealFromEvm: LCD returned status %d for tx %s", resp.StatusCode, txHash)
+			continue
+		}
+
+		var txResp struct {
+			TxResponse struct {
+				TxHash string    `json:"txhash"`
+				Code   uint32    `json:"code"`
+				RawLog string    `json:"raw_log"`
+				Logs   []txLog   `json:"logs"`
+				Events []txEvent `json:"events"`
+			} `json:"tx_response"`
+		}
+		if err := json.Unmarshal(body, &txResp); err != nil {
+			log.Printf("GatewayCreateDealFromEvm: failed to parse LCD tx response: %v", err)
+			continue
+		}
+		if txResp.TxResponse.Code != 0 {
+			http.Error(w, fmt.Sprintf("tx failed: %s", txResp.TxResponse.RawLog), http.StatusInternalServerError)
+			return
+		}
+
+		dealID = extractDealID(txResp.TxResponse.Logs, txResp.TxResponse.Events)
+		if dealID != "" {
+			break
 		}
 	}
 
@@ -992,6 +1056,28 @@ func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) 
 	}
 
 	return &shardOut, nil
+}
+
+func fastShardQuick(path string) (string, uint64, uint64, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	size := uint64(len(data))
+	hash := sha256.Sum256(data)
+	cid := "0x" + hex.EncodeToString(hash[:])
+
+	const mduSize uint64 = 8 * 1024 * 1024
+	userMdus := size / mduSize
+	if size%mduSize != 0 {
+		userMdus++
+	}
+	if userMdus == 0 {
+		userMdus = 1
+	}
+	// MDU #0 + a single witness MDU + user data MDUs
+	allocated := 1 + 1 + userMdus
+	return cid, size, allocated, nil
 }
 
 func setCORS(w http.ResponseWriter) {

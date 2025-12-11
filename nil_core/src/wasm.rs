@@ -1,6 +1,6 @@
-use wasm_bindgen::prelude::*;
 use crate::coding::expand_mdu;
 use crate::kzg::KzgContext;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct NilWasm {
@@ -21,7 +21,7 @@ impl NilWasm {
     pub fn expand_file(&self, data: &[u8]) -> Result<JsValue, JsValue> {
         let res = expand_mdu(&self.kzg_ctx, data)
             .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
-        
+
         serde_wasm_bindgen::to_value(&res)
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }

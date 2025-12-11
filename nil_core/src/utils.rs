@@ -1,7 +1,7 @@
-use sha2::{Sha256, Digest};
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::Num;
+use sha2::{Digest, Sha256};
 
 pub const FR_MODULUS_HEX: &str = "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001";
 pub const BYTES_PER_BLOB: usize = 4096 * 32;
@@ -87,46 +87,34 @@ pub fn symbols_to_frs(symbols: &[Vec<u8>]) -> Vec<BigUint> {
 }
 
 pub fn reverse_bits(mut n: usize, bits: u32) -> usize {
-
     let mut r = 0;
 
     for _ in 0..bits {
-
         r = (r << 1) | (n & 1);
 
         n >>= 1;
-
     }
 
     r
-
 }
 
-
-
 pub fn frs_to_blobs(frs: &[BigUint]) -> Vec<Vec<u8>> {
-
     let mut blobs = Vec::new();
 
     for chunk in frs.chunks(SYMBOLS_PER_BLOB) {
-
         // Initialize blob with zeros (4096 * 32 bytes)
 
         let mut blob = vec![0u8; BYTES_PER_BLOB];
-
-        
 
         for (i, fr) in chunk.iter().enumerate() {
             // Natural Order: Place fr[i] at blob[i]
             let offset = i * 32;
             let bytes = fr_to_bytes_be(fr); // Changed to BE
-            blob[offset..offset+32].copy_from_slice(&bytes);
+            blob[offset..offset + 32].copy_from_slice(&bytes);
         }
 
         blobs.push(blob);
-
     }
 
     blobs
-
 }

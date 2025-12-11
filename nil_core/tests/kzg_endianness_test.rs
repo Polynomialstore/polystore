@@ -1,8 +1,8 @@
-use nil_core::kzg::{KzgContext, BLOB_SIZE};
-use nil_core::utils::{z_for_cell, frs_to_blobs};
-use std::path::PathBuf;
+use nil_core::kzg::{BLOB_SIZE, KzgContext};
+use nil_core::utils::{frs_to_blobs, z_for_cell};
 use num_bigint::BigUint;
 use num_traits::One;
+use std::path::PathBuf;
 
 fn get_trusted_setup_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -30,7 +30,7 @@ fn test_kzg_big_endian_compatibility() {
     for _ in 1..4096 {
         frs.push(BigUint::from(0u32));
     }
-    
+
     // 2. Convert to Blob using utils::frs_to_blobs (which must use BE)
     let blobs = frs_to_blobs(&frs);
     let blob_bytes = &blobs[0];
@@ -38,15 +38,21 @@ fn test_kzg_big_endian_compatibility() {
     // 3. Generate z for index 0 using utils::z_for_cell (which must use BE)
     // Index 0 -> z = 1 (in BE: 00...01)
     let z_bytes = z_for_cell(0);
-    
+
     // 4. Compute Proof
-    let (_, y_out) = ctx.compute_proof(blob_bytes, &z_bytes).expect("proof failed");
-    
+    let (_, y_out) = ctx
+        .compute_proof(blob_bytes, &z_bytes)
+        .expect("proof failed");
+
     // 5. Expect y = 1 (BE) -> [0...01]
     let mut expected_y = [0u8; 32];
     expected_y[31] = 1;
-    
-    assert_eq!(y_out.as_slice(), &expected_y, "y should be 1 (BE). Mismatch indicates Endianness or Domain issue.");
+
+    assert_eq!(
+        y_out.as_slice(),
+        &expected_y,
+        "y should be 1 (BE). Mismatch indicates Endianness or Domain issue."
+    );
 }
 
 #[test]
@@ -64,12 +70,18 @@ fn test_constant_polynomial_all_ones() {
     }
 
     // z = 1 (Index 0)
-    let z_bytes = z_for_cell(0); 
-    
-    let (_, y_out) = ctx.compute_proof(&blob_bytes, &z_bytes).expect("compute_proof failed");
-    
+    let z_bytes = z_for_cell(0);
+
+    let (_, y_out) = ctx
+        .compute_proof(&blob_bytes, &z_bytes)
+        .expect("compute_proof failed");
+
     let mut expected_y = [0u8; 32];
     expected_y[31] = 1;
-    
-    assert_eq!(y_out.as_slice(), &expected_y, "y should be 1 for constant polynomial");
+
+    assert_eq!(
+        y_out.as_slice(),
+        &expected_y,
+        "y should be 1 for constant polynomial"
+    );
 }

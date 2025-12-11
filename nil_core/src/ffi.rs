@@ -1,4 +1,4 @@
-use crate::kzg::{KzgContext, BLOB_SIZE, BLOBS_PER_MDU}; // Added BLOB_SIZE back
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -10,7 +10,7 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
     if trusted_setup_path.is_null() {
         return -1; // Null path
     }
-    
+
     // Check if already initialized
     if KZG_CTX.get().is_some() {
         return 0; // Already initialized, consider it success
@@ -21,15 +21,15 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8 in path
     };
-    
+
     // println!("DEBUG: nil_init called with path: {}", path_str);
 
     match KzgContext::load_from_file(path_str) {
         Ok(ctx) => {
-             // println!("DEBUG: KzgContext loaded successfully");
-             let _ = KZG_CTX.set(ctx); // Ignore error if set concurrently
-             0
-        },
+            // println!("DEBUG: KzgContext loaded successfully");
+            let _ = KZG_CTX.set(ctx); // Ignore error if set concurrently
+            0
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to load KzgContext: {:?}", e); // Use eprintln for errors
@@ -51,7 +51,8 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
         None => return -1, // Not initialized
     };
 
-    if mdu_bytes.is_null() || out_mdu_merkle_root.is_null() || mdu_bytes_len != crate::kzg::MDU_SIZE {
+    if mdu_bytes.is_null() || out_mdu_merkle_root.is_null() || mdu_bytes_len != crate::kzg::MDU_SIZE
+    {
         return -2; // Invalid inputs
     }
 
@@ -61,10 +62,14 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
         Ok(commitments) => match ctx.create_mdu_merkle_root(&commitments) {
             Ok(root) => {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(root.as_slice().as_ptr(), out_mdu_merkle_root, 32);
+                    std::ptr::copy_nonoverlapping(
+                        root.as_slice().as_ptr(),
+                        out_mdu_merkle_root,
+                        32,
+                    );
                 }
                 0 // Success
-            },
+            }
             Err(e) => {
                 eprintln!("ERROR: Failed to create MDU Merkle root: {:?}", e);
                 -4 // Merkle root creation failed
@@ -77,18 +82,17 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
     }
 }
 
-
 /// Verifies a KZG proof for a single 128 KiB blob within an MDU, including Merkle proof verification.
 #[unsafe(no_mangle)]
 pub extern "C" fn nil_verify_mdu_proof(
-    mdu_merkle_root: *const u8,                // 32-byte MDU Merkle Root
-    challenged_kzg_commitment: *const u8,      // 48-byte KZG commitment of the challenged blob
-    merkle_path_bytes: *const u8,              // Serialized Merkle path
-    merkle_path_len: usize,                    // Length of serialized Merkle path
-    challenged_kzg_commitment_index: u32,      // Index of the challenged blob (0-63)
-    z_value: *const u8,                        // 32-byte challenge point
-    y_value: *const u8,                        // 32-byte claimed value
-    kzg_opening_proof: *const u8,              // 48-byte KZG opening proof
+    mdu_merkle_root: *const u8,           // 32-byte MDU Merkle Root
+    challenged_kzg_commitment: *const u8, // 48-byte KZG commitment of the challenged blob
+    merkle_path_bytes: *const u8,         // Serialized Merkle path
+    merkle_path_len: usize,               // Length of serialized Merkle path
+    challenged_kzg_commitment_index: u32, // Index of the challenged blob (0-63)
+    z_value: *const u8,                   // 32-byte challenge point
+    y_value: *const u8,                   // 32-byte claimed value
+    kzg_opening_proof: *const u8,         // 48-byte KZG opening proof
 ) -> c_int {
     let ctx = match KZG_CTX.get() {
         Some(c) => c,
@@ -96,16 +100,22 @@ pub extern "C" fn nil_verify_mdu_proof(
     };
 
     // Input validation for lengths and null pointers
-    if mdu_merkle_root.is_null() || challenged_kzg_commitment.is_null() ||
-       merkle_path_bytes.is_null() || z_value.is_null() ||
-       y_value.is_null() || kzg_opening_proof.is_null() {
+    if mdu_merkle_root.is_null()
+        || challenged_kzg_commitment.is_null()
+        || merkle_path_bytes.is_null()
+        || z_value.is_null()
+        || y_value.is_null()
+        || kzg_opening_proof.is_null()
+    {
         return -2; // Null pointers
     }
 
     // Convert inputs to Rust slices/types
     let mdu_merkle_root_slice = unsafe { std::slice::from_raw_parts(mdu_merkle_root, 32) };
-    let challenged_kzg_commitment_slice = unsafe { std::slice::from_raw_parts(challenged_kzg_commitment, 48) };
-    let merkle_path_slice = unsafe { std::slice::from_raw_parts(merkle_path_bytes, merkle_path_len) };
+    let challenged_kzg_commitment_slice =
+        unsafe { std::slice::from_raw_parts(challenged_kzg_commitment, 48) };
+    let merkle_path_slice =
+        unsafe { std::slice::from_raw_parts(merkle_path_bytes, merkle_path_len) };
     let z_value_slice = unsafe { std::slice::from_raw_parts(z_value, 32) };
     let y_value_slice = unsafe { std::slice::from_raw_parts(y_value, 32) };
     let kzg_opening_proof_slice = unsafe { std::slice::from_raw_parts(kzg_opening_proof, 48) };
@@ -118,12 +128,12 @@ pub extern "C" fn nil_verify_mdu_proof(
         merkle_path_slice,
         BLOBS_PER_MDU,
     ) {
-        Ok(true) => { /* Merkle proof valid, proceed to KZG verification */ },
+        Ok(true) => { /* Merkle proof valid, proceed to KZG verification */ }
         Ok(false) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Merkle proof invalid.");
             return 0; // Merkle proof invalid
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Merkle proof verification error: {:?}", e);
@@ -143,7 +153,7 @@ pub extern "C" fn nil_verify_mdu_proof(
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: KZG opening proof invalid.");
             0 // KZG proof invalid
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: KZG verification error: {:?}", e);
@@ -154,7 +164,7 @@ pub extern "C" fn nil_verify_mdu_proof(
 
 /// TEST HELPER: Computes a full MDU proof for a given chunk index.
 /// This is exposed primarily for integration testing to generate valid proofs.
-/// 
+///
 /// Outputs:
 /// - out_commitment: 48 bytes
 /// - out_merkle_proof: buffer size sufficient for path (e.g. 6 * 32 bytes)
@@ -195,18 +205,19 @@ pub extern "C" fn nil_compute_mdu_proof_test(
         Ok(c) => c,
         Err(_) => return -3,
     };
-    
-    use rs_merkle::MerkleTree;
-    use crate::kzg::Blake2s256Hasher;
-    use rs_merkle::Hasher; // Import Hasher trait for .hash()
 
-    let leaves: Vec<[u8; 32]> = commitments.iter()
-            .map(|c| Blake2s256Hasher::hash(c.as_slice()))
-            .collect();
+    use crate::kzg::Blake2s256Hasher;
+    use rs_merkle::Hasher;
+    use rs_merkle::MerkleTree; // Import Hasher trait for .hash()
+
+    let leaves: Vec<[u8; 32]> = commitments
+        .iter()
+        .map(|c| Blake2s256Hasher::hash(c.as_slice()))
+        .collect();
     let merkle_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&leaves);
     let merkle_proof = merkle_tree.proof(&[idx]);
     let proof_bytes = merkle_proof.to_bytes(); // Should be already flattened
-    
+
     // Copy Outputs
     // 1. Commitment
     unsafe {
@@ -250,11 +261,11 @@ pub extern "C" fn nil_compute_mdu_proof_test(
 
 /// Computes the Manifest Root (KZG Commitment) and the Manifest MDU (Blob)
 /// from a list of MDU Merkle Roots (32-byte hashes).
-/// 
+///
 /// Inputs:
 /// - hashes_ptr: Pointer to contiguous array of 32-byte hashes.
 /// - num_hashes: Number of hashes.
-/// 
+///
 /// Outputs:
 /// - out_commitment: Buffer for 48-byte KZG Commitment.
 /// - out_manifest_blob: Buffer for 128 KiB Manifest MDU.
@@ -277,7 +288,7 @@ pub extern "C" fn nil_compute_manifest_commitment(
     // Convert raw pointer to slice of [u8; 32]
     let total_bytes = num_hashes * 32;
     let hashes_slice = unsafe { std::slice::from_raw_parts(hashes_ptr, total_bytes) };
-    
+
     let mut hashes = Vec::with_capacity(num_hashes);
     for chunk in hashes_slice.chunks_exact(32) {
         let mut arr = [0u8; 32];
@@ -289,10 +300,14 @@ pub extern "C" fn nil_compute_manifest_commitment(
         Ok((commitment, blob)) => {
             unsafe {
                 std::ptr::copy_nonoverlapping(commitment.as_slice().as_ptr(), out_commitment, 48);
-                std::ptr::copy_nonoverlapping(blob.as_ptr(), out_manifest_blob, crate::kzg::BLOB_SIZE);
+                std::ptr::copy_nonoverlapping(
+                    blob.as_ptr(),
+                    out_manifest_blob,
+                    crate::kzg::BLOB_SIZE,
+                );
             }
             0
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to compute manifest: {:?}", e);
@@ -302,11 +317,11 @@ pub extern "C" fn nil_compute_manifest_commitment(
 }
 
 /// Computes a KZG proof for a specific MDU inclusion in the Manifest.
-/// 
+///
 /// Inputs:
 /// - manifest_blob_ptr: Pointer to 128 KiB Manifest MDU data.
 /// - mdu_index: Index of the MDU in the manifest.
-/// 
+///
 /// Outputs:
 /// - out_proof: Buffer for 48-byte KZG Proof.
 /// - out_y: Buffer for 32-byte Value (MDU Root).
@@ -326,8 +341,9 @@ pub extern "C" fn nil_compute_manifest_proof(
         return -2;
     }
 
-    let manifest_blob = unsafe { std::slice::from_raw_parts(manifest_blob_ptr, crate::kzg::BLOB_SIZE) };
-    
+    let manifest_blob =
+        unsafe { std::slice::from_raw_parts(manifest_blob_ptr, crate::kzg::BLOB_SIZE) };
+
     // Calculate z (evaluation point) from the index
     let z_bytes = crate::utils::z_for_cell(mdu_index as usize);
 
@@ -338,9 +354,9 @@ pub extern "C" fn nil_compute_manifest_proof(
                 std::ptr::copy_nonoverlapping(y.as_slice().as_ptr(), out_y, 32);
             }
             0
-        },
+        }
         Err(e) => {
-             #[cfg(feature = "debug-print")]
+            #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Failed to compute manifest proof: {:?}", e);
             -3
         }
@@ -348,39 +364,45 @@ pub extern "C" fn nil_compute_manifest_proof(
 }
 
 /// Verifies a "Triple Proof" (Chained Verification).
-/// 
+///
 /// Hop 1: Verify MDU Root is in Manifest (KZG).
 /// Hop 2: Verify Blob Commitment is in MDU (Merkle).
 /// Hop 3: Verify Data is in Blob (KZG).
 #[unsafe(no_mangle)]
 pub extern "C" fn nil_verify_chained_proof(
     // Hop 1 Inputs
-    manifest_commitment: *const u8,        // 48 bytes
-    mdu_index: u64,                        // Index of MDU in Manifest
-    manifest_proof: *const u8,             // 48 bytes (KZG proof for MDU Root)
-    
+    manifest_commitment: *const u8, // 48 bytes
+    mdu_index: u64,                 // Index of MDU in Manifest
+    manifest_proof: *const u8,      // 48 bytes (KZG proof for MDU Root)
+
     // Intermediate / Hop 2 Input
-    mdu_merkle_root: *const u8,            // 32 bytes (The "Value" for Hop 1, Root for Hop 2)
-    
+    mdu_merkle_root: *const u8, // 32 bytes (The "Value" for Hop 1, Root for Hop 2)
+
     // Hop 2 Inputs
-    blob_commitment: *const u8,            // 48 bytes
-    blob_index: u64,                       // Index of Blob in MDU
-    blob_merkle_proof: *const u8,          // Serialized Merkle path
+    blob_commitment: *const u8,   // 48 bytes
+    blob_index: u64,              // Index of Blob in MDU
+    blob_merkle_proof: *const u8, // Serialized Merkle path
     blob_merkle_proof_len: usize,
-    
+
     // Hop 3 Inputs
-    blob_z: *const u8,                     // 32 bytes
-    blob_y: *const u8,                     // 32 bytes
-    blob_proof: *const u8,                 // 48 bytes
+    blob_z: *const u8,     // 32 bytes
+    blob_y: *const u8,     // 32 bytes
+    blob_proof: *const u8, // 48 bytes
 ) -> c_int {
     let ctx = match KZG_CTX.get() {
         Some(c) => c,
         None => return -1, // Not initialized
     };
 
-    if manifest_commitment.is_null() || manifest_proof.is_null() || mdu_merkle_root.is_null() ||
-       blob_commitment.is_null() || blob_merkle_proof.is_null() || blob_z.is_null() ||
-       blob_y.is_null() || blob_proof.is_null() {
+    if manifest_commitment.is_null()
+        || manifest_proof.is_null()
+        || mdu_merkle_root.is_null()
+        || blob_commitment.is_null()
+        || blob_merkle_proof.is_null()
+        || blob_z.is_null()
+        || blob_y.is_null()
+        || blob_proof.is_null()
+    {
         return -2;
     }
 
@@ -389,7 +411,8 @@ pub extern "C" fn nil_verify_chained_proof(
     let manifest_proof_slice = unsafe { std::slice::from_raw_parts(manifest_proof, 48) };
     let mdu_merkle_root_slice = unsafe { std::slice::from_raw_parts(mdu_merkle_root, 32) };
     let blob_commitment_slice = unsafe { std::slice::from_raw_parts(blob_commitment, 48) };
-    let blob_merkle_proof_slice = unsafe { std::slice::from_raw_parts(blob_merkle_proof, blob_merkle_proof_len) };
+    let blob_merkle_proof_slice =
+        unsafe { std::slice::from_raw_parts(blob_merkle_proof, blob_merkle_proof_len) };
     let blob_z_slice = unsafe { std::slice::from_raw_parts(blob_z, 32) };
     let blob_y_slice = unsafe { std::slice::from_raw_parts(blob_y, 32) };
     let blob_proof_slice = unsafe { std::slice::from_raw_parts(blob_proof, 48) };
@@ -400,14 +423,14 @@ pub extern "C" fn nil_verify_chained_proof(
         manifest_commitment_slice,
         mdu_merkle_root_slice,
         mdu_index as usize,
-        manifest_proof_slice
+        manifest_proof_slice,
     ) {
-        Ok(true) => {},
+        Ok(true) => {}
         Ok(false) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 1 (Manifest) verification failed.");
             return 0;
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 1 error: {:?}", e);
@@ -423,12 +446,12 @@ pub extern "C" fn nil_verify_chained_proof(
         blob_merkle_proof_slice,
         crate::kzg::BLOBS_PER_MDU,
     ) {
-        Ok(true) => {},
+        Ok(true) => {}
         Ok(false) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 2 (Merkle) verification failed.");
             return 0;
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 2 error: {:?}", e);
@@ -448,7 +471,7 @@ pub extern "C" fn nil_verify_chained_proof(
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 3 (Blob KZG) verification failed.");
             0
-        },
+        }
         Err(e) => {
             #[cfg(feature = "debug-print")]
             eprintln!("ERROR: Hop 3 error: {:?}", e);

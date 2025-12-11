@@ -22,10 +22,10 @@ if [ -z "$PRIVATE_KEY" ]; then
 fi
 
 echo ">>> Deploying NilBridge to $RPC_URL ..."
+export PRIVATE_KEY
 pushd "$REPO_ROOT/nil_bridge" >/dev/null
 DEPLOY_LOG=$(forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY" \
   --broadcast \
   --legacy 2>&1 | tee /dev/fd/3 3>/dev/null)
 popd >/dev/null
