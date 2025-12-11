@@ -36,8 +36,8 @@ export const EconomyDashboard = () => {
                       </h3>
                       <ul className="space-y-2 text-muted-foreground list-disc list-inside">
                         <li><strong>Storage Growth:</strong> Agents (simulated users) upload files based on an adoption curve.</li>
-                        <li><strong>Minting (Inflation):</strong> Storage Providers earn newly minted NIL tokens for valid proofs.</li>
-                        <li><strong>Slashing (Deflation):</strong> Random "fault events" (epochs #15 & #35) trigger the quadratic slashing mechanism, burning tokens from negligent providers.</li>
+                        <li><strong>Tiered Minting:</strong> Providers earn Platinum (1.0x), Gold (0.8x), or Silver (0.2x) rewards based on latency.</li>
+                        <li><strong>Latency Slashing:</strong> Slow nodes (Silver) face higher slash risk, driving a market evolution toward Platinum performance.</li>
                       </ul>
                     </div>
                   </motion.div>

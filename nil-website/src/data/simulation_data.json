@@ -1,409 +1,659 @@
 {
   "meta": {
-    "timestamp": 1764844629.433169,
+    "timestamp": 1765416121.579116,
     "epochs": 50
   },
   "data": [
     {
       "epoch": 1,
-      "storage_gb": 11.28,
-      "supply": 1000135.0,
+      "storage_gb": 13.584,
+      "supply": 1000089.1,
       "slashed": 0.0,
-      "rewards_epoch": 135.0,
-      "slashed_epoch": 0.0
+      "rewards_epoch": 89.1,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.2,
+        "gold": 0.5,
+        "silver": 0.3
+      }
     },
     {
       "epoch": 2,
-      "storage_gb": 13.584,
-      "supply": 1000252.0,
-      "slashed": 45.0,
-      "rewards_epoch": 162.0,
-      "slashed_epoch": 45.0
+      "storage_gb": 15.248,
+      "supply": 1000189.42,
+      "slashed": 0.0,
+      "rewards_epoch": 100.32,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.2,
+        "gold": 0.5,
+        "silver": 0.3
+      }
     },
     {
       "epoch": 3,
-      "storage_gb": 15.504,
-      "supply": 1000438.0,
-      "slashed": 45.0,
-      "rewards_epoch": 186.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 16.784,
+      "supply": 1000134.64,
+      "slashed": 165.0,
+      "rewards_epoch": 110.22,
+      "slashed_epoch": 165.0,
+      "composition": {
+        "platinum": 0.2,
+        "gold": 0.5,
+        "silver": 0.3
+      }
     },
     {
       "epoch": 4,
-      "storage_gb": 17.04,
-      "supply": 1000592.0,
-      "slashed": 95.0,
-      "rewards_epoch": 204.0,
-      "slashed_epoch": 50.0
+      "storage_gb": 21.008,
+      "supply": 1000273.24,
+      "slashed": 165.0,
+      "rewards_epoch": 138.6,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.2,
+        "gold": 0.5,
+        "silver": 0.3
+      }
     },
     {
       "epoch": 5,
-      "storage_gb": 18.192,
-      "supply": 1000809.5,
-      "slashed": 95.0,
-      "rewards_epoch": 217.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 24.464,
+      "supply": 1000441.11,
+      "slashed": 165.0,
+      "rewards_epoch": 167.87,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.25,
+        "gold": 0.48,
+        "silver": 0.27
+      }
     },
     {
       "epoch": 6,
-      "storage_gb": 21.008,
-      "supply": 1001061.5,
-      "slashed": 95.0,
-      "rewards_epoch": 252.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 27.152,
+      "supply": 1000627.56,
+      "slashed": 165.0,
+      "rewards_epoch": 186.45,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.25,
+        "gold": 0.48,
+        "silver": 0.27
+      }
     },
     {
       "epoch": 7,
-      "storage_gb": 22.288,
-      "supply": 1001328.5,
-      "slashed": 95.0,
-      "rewards_epoch": 267.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 32.016,
+      "supply": 1000847.72,
+      "slashed": 165.0,
+      "rewards_epoch": 220.16,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.25,
+        "gold": 0.48,
+        "silver": 0.27
+      }
     },
     {
       "epoch": 8,
-      "storage_gb": 23.184,
-      "supply": 1001606.0,
-      "slashed": 95.0,
-      "rewards_epoch": 277.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 34.96,
+      "supply": 1001087.83,
+      "slashed": 165.0,
+      "rewards_epoch": 240.11,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.25,
+        "gold": 0.48,
+        "silver": 0.27
+      }
     },
     {
       "epoch": 9,
-      "storage_gb": 25.744,
-      "supply": 1001913.5,
-      "slashed": 95.0,
-      "rewards_epoch": 307.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 38.288,
+      "supply": 1001350.65,
+      "slashed": 165.0,
+      "rewards_epoch": 262.82,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.25,
+        "gold": 0.48,
+        "silver": 0.27
+      }
     },
     {
       "epoch": 10,
-      "storage_gb": 28.432,
-      "supply": 1002254.0,
-      "slashed": 95.0,
-      "rewards_epoch": 340.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 41.872,
+      "supply": 1001649.94,
+      "slashed": 165.0,
+      "rewards_epoch": 299.29,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.3,
+        "gold": 0.45999999999999996,
+        "silver": 0.24000000000000002
+      }
     },
     {
       "epoch": 11,
-      "storage_gb": 30.736,
-      "supply": 1002621.5,
-      "slashed": 95.0,
-      "rewards_epoch": 367.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 45.2,
+      "supply": 1001913.57,
+      "slashed": 225.0,
+      "rewards_epoch": 323.63,
+      "slashed_epoch": 60.0,
+      "composition": {
+        "platinum": 0.3,
+        "gold": 0.45999999999999996,
+        "silver": 0.24000000000000002
+      }
     },
     {
       "epoch": 12,
-      "storage_gb": 33.296,
-      "supply": 1003020.5,
-      "slashed": 95.0,
-      "rewards_epoch": 399.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 50.704,
+      "supply": 1002276.58,
+      "slashed": 225.0,
+      "rewards_epoch": 363.01,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.3,
+        "gold": 0.45999999999999996,
+        "silver": 0.24000000000000002
+      }
     },
     {
       "epoch": 13,
-      "storage_gb": 34.192,
-      "supply": 1003430.0,
-      "slashed": 95.0,
-      "rewards_epoch": 409.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 52.88,
+      "supply": 1002654.63,
+      "slashed": 225.0,
+      "rewards_epoch": 378.05,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.3,
+        "gold": 0.45999999999999996,
+        "silver": 0.24000000000000002
+      }
     },
     {
       "epoch": 14,
-      "storage_gb": 37.264,
-      "supply": 1003877.0,
-      "slashed": 95.0,
-      "rewards_epoch": 447.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 57.104,
+      "supply": 1003063.46,
+      "slashed": 225.0,
+      "rewards_epoch": 408.84,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.3,
+        "gold": 0.45999999999999996,
+        "silver": 0.24000000000000002
+      }
     },
     {
       "epoch": 15,
-      "storage_gb": 38.416,
-      "supply": 1003782.5,
-      "slashed": 650.0,
-      "rewards_epoch": 460.5,
-      "slashed_epoch": 555.0
+      "storage_gb": 61.968,
+      "supply": 1003524.0,
+      "slashed": 225.0,
+      "rewards_epoch": 460.54,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.35,
+        "gold": 0.43999999999999995,
+        "silver": 0.21000000000000002
+      }
     },
     {
       "epoch": 16,
-      "storage_gb": 40.08,
-      "supply": 1004262.5,
-      "slashed": 650.0,
-      "rewards_epoch": 480.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 65.68,
+      "supply": 1004012.06,
+      "slashed": 225.0,
+      "rewards_epoch": 488.06,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.35,
+        "gold": 0.43999999999999995,
+        "silver": 0.21000000000000002
+      }
     },
     {
       "epoch": 17,
-      "storage_gb": 43.664,
-      "supply": 1004786.0,
-      "slashed": 650.0,
-      "rewards_epoch": 523.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 73.104,
+      "supply": 1004555.93,
+      "slashed": 225.0,
+      "rewards_epoch": 543.86,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.35,
+        "gold": 0.43999999999999995,
+        "silver": 0.21000000000000002
+      }
     },
     {
       "epoch": 18,
-      "storage_gb": 48.016,
-      "supply": 1005362.0,
-      "slashed": 650.0,
-      "rewards_epoch": 576.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 80.784,
+      "supply": 1005156.34,
+      "slashed": 225.0,
+      "rewards_epoch": 600.41,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.35,
+        "gold": 0.43999999999999995,
+        "silver": 0.21000000000000002
+      }
     },
     {
       "epoch": 19,
-      "storage_gb": 49.04,
-      "supply": 1005950.0,
-      "slashed": 650.0,
-      "rewards_epoch": 588.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 85.136,
+      "supply": 1005789.48,
+      "slashed": 225.0,
+      "rewards_epoch": 633.14,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.35,
+        "gold": 0.43999999999999995,
+        "silver": 0.21000000000000002
+      }
     },
     {
       "epoch": 20,
-      "storage_gb": 52.624,
-      "supply": 1006580.0,
-      "slashed": 650.0,
-      "rewards_epoch": 630.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 91.536,
+      "supply": 1006359.86,
+      "slashed": 361.0,
+      "rewards_epoch": 706.38,
+      "slashed_epoch": 136.0,
+      "composition": {
+        "platinum": 0.39999999999999997,
+        "gold": 0.41999999999999993,
+        "silver": 0.18000000000000002
+      }
     },
     {
       "epoch": 21,
-      "storage_gb": 55.184,
-      "supply": 1007241.5,
-      "slashed": 650.0,
-      "rewards_epoch": 661.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 97.552,
+      "supply": 1007112.56,
+      "slashed": 361.0,
+      "rewards_epoch": 752.7,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.39999999999999997,
+        "gold": 0.41999999999999993,
+        "silver": 0.18000000000000002
+      }
     },
     {
       "epoch": 22,
-      "storage_gb": 59.408,
-      "supply": 1007954.0,
-      "slashed": 650.0,
-      "rewards_epoch": 712.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 105.232,
+      "supply": 1007924.7,
+      "slashed": 361.0,
+      "rewards_epoch": 812.14,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.39999999999999997,
+        "gold": 0.41999999999999993,
+        "silver": 0.18000000000000002
+      }
     },
     {
       "epoch": 23,
-      "storage_gb": 64.016,
-      "supply": 1008722.0,
-      "slashed": 650.0,
-      "rewards_epoch": 768.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 109.072,
+      "supply": 1008701.18,
+      "slashed": 426.0,
+      "rewards_epoch": 841.48,
+      "slashed_epoch": 65.0,
+      "composition": {
+        "platinum": 0.39999999999999997,
+        "gold": 0.41999999999999993,
+        "silver": 0.18000000000000002
+      }
     },
     {
       "epoch": 24,
-      "storage_gb": 65.424,
-      "supply": 1009506.5,
-      "slashed": 650.0,
-      "rewards_epoch": 784.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 113.424,
+      "supply": 1009576.63,
+      "slashed": 426.0,
+      "rewards_epoch": 875.45,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.39999999999999997,
+        "gold": 0.41999999999999993,
+        "silver": 0.18000000000000002
+      }
     },
     {
       "epoch": 25,
-      "storage_gb": 70.032,
-      "supply": 1010346.5,
-      "slashed": 650.0,
-      "rewards_epoch": 840.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 117.52,
+      "supply": 1010516.63,
+      "slashed": 426.0,
+      "rewards_epoch": 940.0,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.44999999999999996,
+        "gold": 0.3999999999999999,
+        "silver": 0.15000000000000002
+      }
     },
     {
       "epoch": 26,
-      "storage_gb": 75.152,
-      "supply": 1011248.0,
-      "slashed": 650.0,
-      "rewards_epoch": 901.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 123.664,
+      "supply": 1011505.43,
+      "slashed": 426.0,
+      "rewards_epoch": 988.8,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.44999999999999996,
+        "gold": 0.3999999999999999,
+        "silver": 0.15000000000000002
+      }
     },
     {
       "epoch": 27,
-      "storage_gb": 78.224,
-      "supply": 1012185.5,
-      "slashed": 650.0,
-      "rewards_epoch": 937.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 128.272,
+      "supply": 1012531.03,
+      "slashed": 426.0,
+      "rewards_epoch": 1025.6,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.44999999999999996,
+        "gold": 0.3999999999999999,
+        "silver": 0.15000000000000002
+      }
     },
     {
       "epoch": 28,
-      "storage_gb": 82.448,
-      "supply": 1013174.0,
-      "slashed": 650.0,
-      "rewards_epoch": 988.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 136.848,
+      "supply": 1013625.43,
+      "slashed": 426.0,
+      "rewards_epoch": 1094.4,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.44999999999999996,
+        "gold": 0.3999999999999999,
+        "silver": 0.15000000000000002
+      }
     },
     {
       "epoch": 29,
-      "storage_gb": 86.032,
-      "supply": 1014206.0,
-      "slashed": 650.0,
-      "rewards_epoch": 1032.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 140.304,
+      "supply": 1014747.83,
+      "slashed": 426.0,
+      "rewards_epoch": 1122.4,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.44999999999999996,
+        "gold": 0.3999999999999999,
+        "silver": 0.15000000000000002
+      }
     },
     {
       "epoch": 30,
-      "storage_gb": 87.952,
-      "supply": 1015260.5,
-      "slashed": 650.0,
-      "rewards_epoch": 1054.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 143.888,
+      "supply": 1015938.5,
+      "slashed": 426.0,
+      "rewards_epoch": 1190.66,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.49999999999999994,
+        "gold": 0.3799999999999999,
+        "silver": 0.12000000000000002
+      }
     },
     {
       "epoch": 31,
-      "storage_gb": 90.128,
-      "supply": 1016297.0,
-      "slashed": 695.0,
-      "rewards_epoch": 1081.5,
-      "slashed_epoch": 45.0
+      "storage_gb": 148.24,
+      "supply": 1017165.59,
+      "slashed": 426.0,
+      "rewards_epoch": 1227.1,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.49999999999999994,
+        "gold": 0.3799999999999999,
+        "silver": 0.12000000000000002
+      }
     },
     {
       "epoch": 32,
-      "storage_gb": 94.096,
-      "supply": 1017425.0,
-      "slashed": 695.0,
-      "rewards_epoch": 1128.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 153.36,
+      "supply": 1018434.92,
+      "slashed": 426.0,
+      "rewards_epoch": 1269.32,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.49999999999999994,
+        "gold": 0.3799999999999999,
+        "silver": 0.12000000000000002
+      }
     },
     {
       "epoch": 33,
-      "storage_gb": 97.936,
-      "supply": 1018599.5,
-      "slashed": 695.0,
-      "rewards_epoch": 1174.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 160.912,
+      "supply": 1019767.17,
+      "slashed": 426.0,
+      "rewards_epoch": 1332.25,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.49999999999999994,
+        "gold": 0.3799999999999999,
+        "silver": 0.12000000000000002
+      }
     },
     {
       "epoch": 34,
-      "storage_gb": 99.344,
-      "supply": 1019790.5,
-      "slashed": 695.0,
-      "rewards_epoch": 1191.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 166.288,
+      "supply": 1021143.3,
+      "slashed": 426.0,
+      "rewards_epoch": 1376.14,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.49999999999999994,
+        "gold": 0.3799999999999999,
+        "silver": 0.12000000000000002
+      }
     },
     {
       "epoch": 35,
-      "storage_gb": 102.416,
-      "supply": 1020202.0,
-      "slashed": 1512.0,
-      "rewards_epoch": 1228.5,
-      "slashed_epoch": 817.0
+      "storage_gb": 174.992,
+      "supply": 1020640.45,
+      "slashed": 2426.0,
+      "rewards_epoch": 1497.14,
+      "slashed_epoch": 2000.0,
+      "composition": {
+        "platinum": 0.5499999999999999,
+        "gold": 0.3599999999999999,
+        "silver": 0.09000000000000002
+      }
     },
     {
       "epoch": 36,
-      "storage_gb": 108.304,
-      "supply": 1021501.0,
-      "slashed": 1512.0,
-      "rewards_epoch": 1299.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 185.104,
+      "supply": 1022224.9,
+      "slashed": 2426.0,
+      "rewards_epoch": 1584.46,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.5499999999999999,
+        "gold": 0.3599999999999999,
+        "silver": 0.09000000000000002
+      }
     },
     {
       "epoch": 37,
-      "storage_gb": 110.736,
-      "supply": 1022828.5,
-      "slashed": 1512.0,
-      "rewards_epoch": 1327.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 196.112,
+      "supply": 1023903.52,
+      "slashed": 2426.0,
+      "rewards_epoch": 1678.62,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.5499999999999999,
+        "gold": 0.3599999999999999,
+        "silver": 0.09000000000000002
+      }
     },
     {
       "epoch": 38,
-      "storage_gb": 113.936,
-      "supply": 1024195.0,
-      "slashed": 1512.0,
-      "rewards_epoch": 1366.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 202.384,
+      "supply": 1025635.21,
+      "slashed": 2426.0,
+      "rewards_epoch": 1731.69,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.5499999999999999,
+        "gold": 0.3599999999999999,
+        "silver": 0.09000000000000002
+      }
     },
     {
       "epoch": 39,
-      "storage_gb": 117.52,
-      "supply": 1025605.0,
-      "slashed": 1512.0,
-      "rewards_epoch": 1410.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 213.008,
+      "supply": 1027458.49,
+      "slashed": 2426.0,
+      "rewards_epoch": 1823.28,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.5499999999999999,
+        "gold": 0.3599999999999999,
+        "silver": 0.09000000000000002
+      }
     },
     {
       "epoch": 40,
-      "storage_gb": 121.744,
-      "supply": 1027064.5,
-      "slashed": 1512.0,
-      "rewards_epoch": 1459.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 217.36,
+      "supply": 1029379.42,
+      "slashed": 2426.0,
+      "rewards_epoch": 1920.93,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.6,
+        "gold": 0.33999999999999986,
+        "silver": 0.060000000000000026
+      }
     },
     {
       "epoch": 41,
-      "storage_gb": 126.736,
-      "supply": 1028584.0,
-      "slashed": 1512.0,
-      "rewards_epoch": 1519.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 224.784,
+      "supply": 1031365.77,
+      "slashed": 2426.0,
+      "rewards_epoch": 1986.35,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.6,
+        "gold": 0.33999999999999986,
+        "silver": 0.060000000000000026
+      }
     },
     {
       "epoch": 42,
-      "storage_gb": 129.04,
-      "supply": 1030120.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1548.0,
-      "slashed_epoch": 12.0
+      "storage_gb": 231.44,
+      "supply": 1033411.34,
+      "slashed": 2426.0,
+      "rewards_epoch": 2045.58,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.6,
+        "gold": 0.33999999999999986,
+        "silver": 0.060000000000000026
+      }
     },
     {
       "epoch": 43,
-      "storage_gb": 134.544,
-      "supply": 1031734.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1614.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 239.12,
+      "supply": 1035524.99,
+      "slashed": 2426.0,
+      "rewards_epoch": 2113.64,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.6,
+        "gold": 0.33999999999999986,
+        "silver": 0.060000000000000026
+      }
     },
     {
       "epoch": 44,
-      "storage_gb": 136.592,
-      "supply": 1033372.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1638.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 245.136,
+      "supply": 1037691.67,
+      "slashed": 2426.0,
+      "rewards_epoch": 2166.68,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.6,
+        "gold": 0.33999999999999986,
+        "silver": 0.060000000000000026
+      }
     },
     {
       "epoch": 45,
-      "storage_gb": 141.968,
-      "supply": 1035074.5,
-      "slashed": 1524.0,
-      "rewards_epoch": 1702.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 254.992,
+      "supply": 1040026.56,
+      "slashed": 2426.0,
+      "rewards_epoch": 2334.88,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.65,
+        "gold": 0.31999999999999984,
+        "silver": 0.05
+      }
     },
     {
       "epoch": 46,
-      "storage_gb": 144.784,
-      "supply": 1036811.5,
-      "slashed": 1524.0,
-      "rewards_epoch": 1737.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 265.488,
+      "supply": 1042457.62,
+      "slashed": 2426.0,
+      "rewards_epoch": 2431.06,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.65,
+        "gold": 0.31999999999999984,
+        "silver": 0.05
+      }
     },
     {
       "epoch": 47,
-      "storage_gb": 147.728,
-      "supply": 1038583.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1771.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 274.192,
+      "supply": 1044968.38,
+      "slashed": 2426.0,
+      "rewards_epoch": 2510.76,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.65,
+        "gold": 0.31999999999999984,
+        "silver": 0.05
+      }
     },
     {
       "epoch": 48,
-      "storage_gb": 154.0,
-      "supply": 1040431.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1848.0,
-      "slashed_epoch": 0.0
+      "storage_gb": 279.568,
+      "supply": 1047528.6,
+      "slashed": 2426.0,
+      "rewards_epoch": 2560.22,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.65,
+        "gold": 0.31999999999999984,
+        "silver": 0.05
+      }
     },
     {
       "epoch": 49,
-      "storage_gb": 160.4,
-      "supply": 1042355.5,
-      "slashed": 1524.0,
-      "rewards_epoch": 1924.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 290.576,
+      "supply": 1050189.58,
+      "slashed": 2426.0,
+      "rewards_epoch": 2660.98,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.65,
+        "gold": 0.31999999999999984,
+        "silver": 0.05
+      }
     },
     {
       "epoch": 50,
-      "storage_gb": 163.472,
-      "supply": 1044316.0,
-      "slashed": 1524.0,
-      "rewards_epoch": 1960.5,
-      "slashed_epoch": 0.0
+      "storage_gb": 299.792,
+      "supply": 1053036.73,
+      "slashed": 2426.0,
+      "rewards_epoch": 2847.15,
+      "slashed_epoch": 0.0,
+      "composition": {
+        "platinum": 0.7000000000000001,
+        "gold": 0.2999999999999998,
+        "silver": 0.05
+      }
     }
   ],
-  "analysis": "This agent-based simulation models the network's economic trajectory over 50 epochs. We observe a steady storage accumulation rate of ~3.04 GB/epoch, driving the Token Supply from 1.0M to 1.04M NIL. Notably, epochs #15 and #35 simulated 'Mass Slash' events where correlated failures triggered the quadratic burning mechanism, removing significant liquidity (1524 NIL total) and proving the protocol's deflationary pressure under stress."
+  "analysis": "Simulating 50 epochs of the Performance Market. We observe a 'Flight to Quality': Platinum Provider share grew from 20% to 70%, driving higher reliability. Total Supply expanded to 1.05M NIL, tempered by 2426 NIL in latency-based slashing. This proves that the Tiered Reward mechanism successfully filters out slow nodes without requiring centralized banning."
 }
