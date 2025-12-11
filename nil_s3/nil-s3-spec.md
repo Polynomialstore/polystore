@@ -21,7 +21,11 @@ The service wraps two CLI tools to perform its duties:
 ### 2.1 Storage Model
 *   **Local Buffer:** Files are uploaded to a local `uploads/` directory.
 *   **Indexing:** A simple `index.json` maps `RootCID` -> `LocalFilePath`, enabling retrieval by CID.
-*   **Sharding:** Upon upload, files are processed into 8 MiB MDUs (Mega-Data Units). The output (Manifest) is stored alongside the file (e.g., `filename.jpg.json`).
+*   **Slab Architecture:**
+    *   **MDU #0 (Super-Manifest):** Stores the File Allocation Table (FAT) and Merkle Roots for all other MDUs.
+    *   **Witness MDUs:** Store the KZG Blobs required for Triple Proof verification (replicated metadata).
+    *   **User Data MDUs:** Store the raw file content slices.
+    *   Files are committed to a `dealDir` (e.g., `uploads/<ManifestRoot>/`) containing `manifest.bin`, `mdu_0.bin`, and numbered `mdu_N.bin` files.
 
 ---
 
