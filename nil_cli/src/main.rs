@@ -45,6 +45,12 @@ enum Commands {
         #[arg(long)]
         raw: bool, // Treat input as pre-encoded MDU(s)
     },
+    Aggregate {
+        #[arg(long)]
+        roots_file: PathBuf, // JSON list of hex roots
+        #[arg(long, default_value = "manifest.json")]
+        out: PathBuf,
+    },
     Verify {
         file: PathBuf,
     },
@@ -134,6 +140,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Shard { file, seeds, out, save_mdu_prefix, raw } => run_shard(file, seeds, out, ts_path, save_mdu_prefix, raw),
+        Commands::Aggregate { roots_file, out } => run_aggregate(roots_file, out, ts_path),
         Commands::Verify { file } => run_verify(file, ts_path),
         Commands::Store { file, url, owner } => run_store(file, url, owner),
     }
@@ -438,6 +445,45 @@ fn run_verify(file: PathBuf, ts_path: PathBuf) -> Result<()> {
     } else {
         std::process::exit(1);
     }
+    Ok(())
+}
+
+fn run_aggregate(roots_file: PathBuf, out: PathBuf, ts_path: PathBuf) -> Result<()> {
+    let kzg_ctx = KzgContext::load_from_file(&ts_path)
+        .context("Failed to load KZG trusted setup")?;
+
+    let roots_json = std::fs::read_to_string(&roots_file).context("Failed to read roots file")?;
+    let hex_roots: Vec<String> = serde_json::from_str(&roots_json)?;
+
+    let mut mdu_roots_bytes: Vec<[u8; 32]> = Vec::new();
+    for r in hex_roots {
+        let b = hex::decode(r.trim_start_matches("0x"))?;
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&b);
+        mdu_roots_bytes.push(arr);
+    }
+
+    println!("Aggregating {} roots...", mdu_roots_bytes.len());
+
+    let (manifest_commitment, manifest_blob) = kzg_ctx.compute_manifest_commitment(&mdu_roots_bytes)?;
+    let manifest_root_hex = format!("0x{}", hex::encode(manifest_commitment.as_slice()));
+    let manifest_blob_hex = format!("0x{}", hex::encode(&manifest_blob));
+
+    println!("Manifest Root: {}", manifest_root_hex);
+
+    let output = Output {
+        filename: "aggregate".to_string(),
+        file_size_bytes: 0, // Virtual
+        total_mdus: mdu_roots_bytes.len(),
+        manifest_root_hex,
+        manifest_blob_hex,
+        mdus: vec![], // Not preserving MDU details here
+        sample_proofs: vec![],
+    };
+
+    let json = serde_json::to_string_pretty(&output)?;
+    std::fs::write(&out, json)?;
+    println!("Saved aggregate manifest to {:?}", out);
     Ok(())
 }
 

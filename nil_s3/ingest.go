@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -11,59 +10,42 @@ import (
 	"nil_s3/pkg/layout"
 )
 
-const RawMduCapacity = 8126464 // Capacity of 8MB Encoded MDU for Raw Data
-// Note: nil_cli with 31-byte scalars: 8388608 bytes encoded <= 8126464 bytes raw.
-// But wait, if I pad to 8MB (8388608) Raw in the slab, nil_cli will overflow 1 MDU.
-// I must pad to `RawMduCapacity`!
-// If I write `RawMduCapacity` bytes, nil_cli produces exactly 8MB Encoded.
-// So my "Slab" should be chunks of `RawMduCapacity`.
+const RawMduCapacity = 8126464
 
 // IngestNewDeal creates a new Deal Slab.
 func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
-	// 1. Shard User File (first pass to get size/structure)
-	// We actually just need to know the size to plan.
-	info, err := os.Stat(filePath)
+	// 1. Shard User File
+	userMduPrefix := filePath + ".data"
+	shardOut, err := shardFile(filePath, false, userMduPrefix)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
-	fileSize := uint64(info.Size())
-	
-	// Calculate User MDUs needed
-	userMduCount := (fileSize + RawMduCapacity - 1) / RawMduCapacity
-	if userMduCount == 0 && fileSize > 0 { userMduCount = 1 } // At least 1 if size > 0?
-	if fileSize == 0 { userMduCount = 0 }
 
-	// 2. Initialize Builder (MDU #0)
+	// 2. Initialize Builder
 	b, err := builder.NewMdu0Builder(maxUserMdus)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, fmt.Errorf("NewMdu0Builder failed: %w", err)
 	}
 
-	// 3. Prepare Slab Construction
-	// We will write MDU #0, Witness MDUs, and User MDUs to a slab file.
-	// We need to fill MDU #0 with roots LATER. 
-	// But `nil_cli` needs the data NOW to compute roots.
-	// Circular Dependency: MDU #0 needs Roots of Data. Manifest needs Root of MDU #0.
+	// 3. Collect ALL Roots for Aggregation
+	var allRoots []string
+
+	// 3a. Process User Roots (Wait, MDU #0 comes first, then Witness, then User)
+	// But we need MDU #0 roots to aggregate.
+	// Circular dependency: MDU #0 contains Witness+User roots.
+	// But MDU #0 root is needed for Manifest.
+	// Manifest is Commitment([Root_MDU0, Root_W1...Root_WN, Root_U1...Root_UM]).
 	
-	// Solution: 
-	// A. Generate User MDUs. Shard them. Get Roots.
-	// B. Generate Witness MDUs (from user blob commitments? No, we don't have them yet).
-	// Wait, `nil_cli` generates commitments.
-	// To get Witness Data, we must shard User Data first.
-	
-	// Step 1: Shard User Data ONLY.
-	// Create `user_slab.bin` (padded chunks).
-	// Actually, just pass user file to `shardFile`?
-	// `shardFile` splits it.
-	
-	userShardOut, err := shardFile(filePath, false, "")
-	if err != nil {
-		return nil, "", 0, fmt.Errorf("shard user file failed: %w", err)
-	}
-	
-	// Step 2: Build Witness Data
+	// So:
+	// 1. Calculate Witness Roots.
+	// 2. Calculate User Roots.
+	// 3. Populate MDU #0 with these.
+	// 4. Calculate MDU #0 Root.
+	// 5. Aggregate [Root_MDU0, Witness..., User...] -> Manifest.
+
+	// 4. Build Witness Data Buffer
 	witnessBuf := new(bytes.Buffer)
-	for _, mdu := range userShardOut.Mdus {
+	for _, mdu := range shardOut.Mdus {
 		for _, blobHex := range mdu.Blobs {
 			blobBytes, err := decodeHex(blobHex)
 			if err != nil { return nil, "", 0, err }
@@ -72,167 +54,130 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	}
 	witnessData := witnessBuf.Bytes()
 	
-	// Step 3: Populate MDU #0 with Witness Roots?
-	// We need to shard Witness Data to get roots.
-	// Create `witness_slab.bin` (chunks of RawMduCapacity).
-	witnessSlabPath := filepath.Join(uploadDir, "temp_witness_slab.bin")
-	wSlabFile, err := os.Create(witnessSlabPath)
-	if err != nil { return nil, "", 0, err }
-	
-	witnessMduCount := b.WitnessMduCount
-	// Write Witness chunks
-	for i := uint64(0); i < witnessMduCount; i++ {
+	// 5. Create and Shard Witness MDUs
+	witnessRoots := []string{}
+	// We need to track paths for moving
+	witnessMduPaths := make([]string, b.WitnessMduCount)
+
+	for i := uint64(0); i < b.WitnessMduCount; i++ {
 		start := int(i) * RawMduCapacity
 		end := start + RawMduCapacity
 		var chunk []byte
 		if start >= len(witnessData) {
-			chunk = []byte{0} // trigger padding
+			chunk = []byte{0}
 		} else {
 			if end > len(witnessData) { end = len(witnessData) }
 			chunk = witnessData[start:end]
 		}
+
+		tmp, _ := os.CreateTemp(uploadDir, fmt.Sprintf("witness-%d-*.bin", i))
+		tmp.Write(chunk)
+		tmpName := tmp.Name()
+		tmp.Close()
 		
-		// Write chunk
-		wSlabFile.Write(chunk)
-		// Pad to RawMduCapacity
-		padding := RawMduCapacity - len(chunk)
-		if padding > 0 {
-			pad := make([]byte, padding)
-			wSlabFile.Write(pad)
+		witnessPrefix := tmpName + ".shard"
+		wOut, err := shardFile(tmpName, false, witnessPrefix)
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("failed to shard witness MDU %d: %w", i, err)
 		}
+		os.Remove(tmpName)
+		
+		generatedMdu := fmt.Sprintf("%s.mdu.0.bin", witnessPrefix)
+		if _, err := os.Stat(generatedMdu); err == nil {
+			witnessMduPaths[i] = generatedMdu
+		} else {
+			return nil, "", 0, fmt.Errorf("witness MDU file not found: %s", generatedMdu)
+		}
+
+		// Store Root
+		if len(wOut.Mdus) == 0 {
+			return nil, "", 0, fmt.Errorf("witness MDU %d produced no MDUs", i)
+		}
+		wRoot := wOut.Mdus[0].RootHex
+		witnessRoots = append(witnessRoots, wRoot)
+		
+		// Set in MDU #0
+		rootBytes, _ := decodeHex(wRoot)
+		var root [32]byte
+		copy(root[:], rootBytes)
+		if err := b.SetRoot(i, root); err != nil { return nil, "", 0, err }
 	}
-	wSlabFile.Close()
-	defer os.Remove(witnessSlabPath)
-	
-	// Shard Witness Slab
-	wShardOut, err := shardFile(witnessSlabPath, false, "")
-	if err != nil {
-		return nil, "", 0, fmt.Errorf("shard witness slab failed: %w", err)
-	}
-	
-	// Populate MDU #0
-	// Set Witness Roots
-	for i, mdu := range wShardOut.Mdus {
+
+	// 6. Set User Roots in MDU #0
+	userRoots := []string{}
+	baseIdx := b.WitnessMduCount
+	for _, mdu := range shardOut.Mdus {
+		userRoots = append(userRoots, mdu.RootHex)
 		rootBytes, _ := decodeHex(mdu.RootHex)
 		var root [32]byte
 		copy(root[:], rootBytes)
-		b.SetRoot(uint64(i), root) // Witness starts at 0 in RootTable? 
-		// Spec: "MDU #0 stores Roots... RootTable[0] refers to MDU #1"
-		// MDU #1 IS the first Witness MDU.
-		// So RootTable[0] -> First Witness Root. Correct.
+		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil { return nil, "", 0, err }
 	}
-	
-	// Set User Roots
-	baseIdx := witnessMduCount
-	for i, mdu := range userShardOut.Mdus {
-		rootBytes, _ := decodeHex(mdu.RootHex)
-		var root [32]byte
-		copy(root[:], rootBytes)
-		b.SetRoot(baseIdx + uint64(i), root)
-	}
-	
-	// Add File Record
+
+	// 7. Append File Record
 	rec := layout.FileRecordV1{
 		StartOffset: 0,
-		LengthAndFlags: layout.PackLengthAndFlags(fileSize, 0),
+		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
 		Timestamp: 0,
 	}
 	baseName := filepath.Base(filePath)
 	if len(baseName) > 40 { baseName = baseName[:40] }
 	copy(rec.Path[:], baseName)
 	b.AppendFileRecord(rec)
-	
-	// Step 4: Construct Final Slab for Manifest Generation
-	// Slab = [MDU 0] [Witness MDUs] [User MDUs]
-	// All padded to RawMduCapacity.
-	
-	finalSlabPath := filepath.Join(uploadDir, "temp_final_slab.bin")
-	fSlab, err := os.Create(finalSlabPath)
-	if err != nil { return nil, "", 0, err }
-	
-	// Write MDU 0
+
+	// 8. Shard MDU #0
 	mdu0Bytes := b.Bytes()
-	fSlab.Write(mdu0Bytes)
-	// Pad MDU 0
-	if len(mdu0Bytes) < RawMduCapacity {
-		pad := make([]byte, RawMduCapacity - len(mdu0Bytes))
-		fSlab.Write(pad)
+	tmp0, _ := os.CreateTemp(uploadDir, "mdu0-*.bin")
+	tmp0.Write(mdu0Bytes)
+	tmp0Name := tmp0.Name()
+	tmp0.Close()
+	
+	mdu0Prefix := tmp0Name + ".shard"
+	mdu0Out, err := shardFile(tmp0Name, false, mdu0Prefix)
+	if err != nil { return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err) }
+	os.Remove(tmp0Name)
+	
+	// 9. Aggregate Roots -> Manifest
+	if len(mdu0Out.Mdus) == 0 {
+		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
 	}
+	allRoots = append(allRoots, mdu0Out.Mdus[0].RootHex) // MDU #0 is Index 0
+	allRoots = append(allRoots, witnessRoots...)
+	allRoots = append(allRoots, userRoots...)
 	
-	// Write Witness Slab (Already padded)
-	wBytes, _ := os.ReadFile(witnessSlabPath)
-	fSlab.Write(wBytes)
-	
-	// Write User Slab? We need to pad user file chunks.
-	uFile, _ := os.Open(filePath)
-	uBuf := make([]byte, RawMduCapacity)
-	for {
-		n, err := io.ReadFull(uFile, uBuf)
-		if n > 0 {
-			fSlab.Write(uBuf[:n])
-			if n < RawMduCapacity {
-				fSlab.Write(make([]byte, RawMduCapacity - n))
-			}
-		}
-		if err != nil { break }
-	}
-	uFile.Close()
-	fSlab.Close()
-	defer os.Remove(finalSlabPath)
-	
-	// Step 5: Shard Final Slab -> Manifest
-	finalOut, err := shardFile(finalSlabPath, false, "")
+	manifestRoot, manifestBlobHex, err := aggregateRoots(allRoots)
 	if err != nil {
-		return nil, "", 0, fmt.Errorf("shard final slab failed: %w", err)
+		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
-	
-	manifestRoot := finalOut.ManifestRootHex
-	
-	// Step 6: Commit to Storage
+
+	// 10. Commit to Storage
 	dealDir := filepath.Join(uploadDir, manifestRoot)
-	os.MkdirAll(dealDir, 0755)
-	
-	// Store Manifest Blob (for Hop 1)
-	// It's in finalOut.ManifestBlobHex
-	manifestBlob, _ := decodeHex(finalOut.ManifestBlobHex)
-	// We name it "mdu_0.bin" because MDU 0 IS the Manifest? NO.
-	// MDU 0 is the FAT.
-	// Manifest is the "Super Root".
-	// Store Manifest as `manifest.bin`
+	if err := os.MkdirAll(dealDir, 0755); err != nil { return nil, "", 0, err }
+
+	// Store Manifest Blob
+	manifestBlob, _ := decodeHex(manifestBlobHex)
 	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0644)
-	
-	// Store MDU 0 (Raw)
+
+	// Store MDU #0 (Raw)
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0644)
-	
-	// Store Witness MDUs (Raw)
-	// Re-read from witnessSlabPath chunks
-	wReader := bytes.NewReader(wBytes)
-	for i := uint64(0); i < witnessMduCount; i++ {
-		chunk := make([]byte, RawMduCapacity)
-		wReader.Read(chunk)
-		// Trim padding? No, store padded raw.
-		// Actually, standard is to store raw data.
-		// If we store padded, file size is 8MB approx.
-		os.WriteFile(filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+i)), chunk, 0644)
+
+	// Move Witness MDUs
+	for i, path := range witnessMduPaths {
+		dest := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+i))
+		if err := os.Rename(path, dest); err != nil {
+			return nil, "", 0, fmt.Errorf("failed to move Witness MDU %d: %w", i, err)
+		}
 	}
-	
-	// Store User MDUs (Raw)
-	uFile, _ = os.Open(filePath)
-	for i := uint64(0); i < uint64(len(userShardOut.Mdus)); i++ {
-		chunk := make([]byte, RawMduCapacity)
-		_, _ = io.ReadFull(uFile, chunk)
-		// We can store trimmed or padded. 
-		// ResolveFileByPath expects streaming. Padded is fine if LimitReader is used.
-		// Store padded to match MDU indices.
-		os.WriteFile(filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+witnessMduCount+i)), chunk, 0644) // Store padded to ensure Proof alignment
-		// Wait, if we store unpadded, random access math must account for it?
-		// `mduPath = fmt.Sprintf("mdu_%d.bin", slabIdx)`
-		// `ResolveFileByPath` logic: `remaining -= toRead`. `currentMduRelIdx++`.
-		// It assumes 1 file per MDU. Size doesn't matter.
-		// So unpadded is fine.
+
+	// Move User Data MDUs
+	for _, mdu := range shardOut.Mdus {
+		src := fmt.Sprintf("%s.mdu.%d.bin", userMduPrefix, mdu.Index)
+		dest := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+b.WitnessMduCount+uint64(mdu.Index)))
+		if err := os.Rename(src, dest); err != nil {
+			return nil, "", 0, fmt.Errorf("failed to move User MDU %d: %w", mdu.Index, err)
+		}
 	}
-	uFile.Close()
-	
-	allocatedLength := 1 + witnessMduCount + uint64(len(userShardOut.Mdus))
+
+	allocatedLength := uint64(len(allRoots))
 	return b, manifestRoot, allocatedLength, nil
 }
