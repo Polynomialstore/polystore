@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState } from "react";
-import { Menu, X, Github, ChevronDown, Zap } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ConnectWallet } from "./ConnectWallet";
 import { NavDropdown } from "./NavDropdown";
@@ -13,31 +13,35 @@ export const Layout = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Navigation Hierarchy
+  // Navigation Hierarchy (Informational Only)
   const navStructure = [
-    { type: "link", name: "Dashboard", path: "/dashboard" },
     { 
       type: "dropdown", 
-      name: "Network", 
+      name: "Explore", 
       items: [
         { name: "Leaderboard", path: "/leaderboard" },
-        { name: "Performance", path: "/performance" },
         { name: "Live Proofs", path: "/proofs" },
-        { name: "Economy Sim", path: "/economy" },
+        { name: "Performance", path: "/performance" },
+        { name: "Economy", path: "/economy" },
       ] 
     },
     { 
       type: "dropdown", 
-      name: "Resources", 
+      name: "Learn", 
       items: [
         { name: "Architecture", path: "/technology" },
         { name: "Security", path: "/security" },
-        { name: "Governance", path: "/governance" },
-        { name: "Whitepaper", path: "/whitepaper" }, // Handled by router or redirect
-        { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true },
         { name: "FAQ", path: "/faq" },
       ] 
     },
+    { 
+        type: "dropdown", 
+        name: "Community", 
+        items: [
+          { name: "Governance", path: "/governance" },
+          { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true },
+        ] 
+      },
   ];
 
   const toggleMobileGroup = (name: string) => {
@@ -82,41 +86,34 @@ export const Layout = () => {
 
           {/* 2. CENTER: Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1 bg-secondary/30 p-1 rounded-full border border-white/5 backdrop-blur-md shadow-inner">
-            {navStructure.map((item) => {
-                if (item.type === "dropdown") {
-                    return <NavDropdown key={item.name} label={item.name} items={item.items!} />;
-                }
-                const active = isActive(item.path!);
-                return (
-                    <Link 
-                        key={item.path}
-                        to={item.path!} 
-                        className={`relative px-5 py-2 text-sm font-medium rounded-full transition-all duration-300 ${
-                        active 
-                            ? "text-primary-foreground" 
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {active && (
-                            <motion.div
-                                layoutId="nav-pill"
-                                className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full shadow-lg shadow-cyan-500/20 -z-10"
-                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                            />
-                        )}
-                        {item.name}
-                    </Link>
-                );
-            })}
+            {navStructure.map((item) => (
+                <NavDropdown key={item.name} label={item.name} items={item.items!} />
+            ))}
           </div>
 
-          {/* 3. RIGHT: Actions */}
+          {/* 3. RIGHT: Actions (Console CTA) */}
           <div className="flex items-center gap-3 sm:gap-4">
               
-              <div className="h-6 w-[1px] bg-border/50 hidden sm:block"></div>
+              {/* Desktop GitHub */}
+              <a 
+                href="https://github.com/Nil-Store/nil-store" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="hidden sm:flex items-center justify-center w-9 h-9 rounded-full bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border"
+              >
+                <Github className="w-5 h-5" />
+              </a>
 
               <ModeToggle />
-              <ConnectWallet />
+              
+              {/* PRIMARY CTA: Launch Console */}
+              <Link 
+                to="/dashboard"
+                className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-lg shadow-cyan-500/20 hover:scale-105 hover:shadow-cyan-500/40 transition-all duration-300"
+              >
+                <Rocket className="w-4 h-4 fill-current" />
+                Launch Console
+              </Link>
 
               {/* Mobile Toggle */}
               <button 
@@ -140,22 +137,20 @@ export const Layout = () => {
               className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background/95 backdrop-blur-3xl border-t border-border/50 pb-24"
             >
               <div className="flex flex-col p-6 space-y-6">
+                
+                {/* Mobile CTA */}
+                <Link 
+                    to="/dashboard" 
+                    onClick={() => setIsOpen(false)}
+                    className="block w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-center text-xl shadow-lg shadow-cyan-500/20 active:scale-95 transition-transform flex items-center justify-center gap-3"
+                  >
+                    <Rocket className="w-6 h-6 fill-current" />
+                    Launch Console
+                </Link>
+
+                <div className="h-[1px] bg-border/50"></div>
+
                 {navStructure.map((item) => {
-                    if (item.type === "link") {
-                        return (
-                            <Link 
-                                key={item.path}
-                                to={item.path!} 
-                                onClick={() => setIsOpen(false)}
-                                className={`text-2xl font-bold tracking-tight flex items-center justify-between ${
-                                isActive(item.path!) ? "text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500" : "text-foreground"
-                                }`}
-                            >
-                                {item.name}
-                                {isActive(item.path!) && <Zap className="w-5 h-5 text-cyan-400 fill-current" />}
-                            </Link>
-                        );
-                    }
                     // Dropdown (Accordion)
                     const isExpanded = mobileExpanded === item.name;
                     return (
@@ -210,16 +205,6 @@ export const Layout = () => {
                         </div>
                     );
                 })}
-                
-                <div className="pt-8 space-y-4">
-                  <Link 
-                    to="/testnet" 
-                    onClick={() => setIsOpen(false)}
-                    className="block w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-center text-lg shadow-lg shadow-cyan-500/20 hover:scale-[1.02] transition-transform"
-                  >
-                    Join Testnet
-                  </Link>
-                </div>
               </div>
             </motion.div>
           )}
@@ -247,7 +232,7 @@ export const Layout = () => {
             <div>
               <h4 className="font-bold mb-4 text-foreground">Resources</h4>
               <ul className="space-y-3">
-                <li><Link to="/testnet" className="hover:text-primary transition-colors">Testnet Guide</Link></li>
+                <li><Link to="/dashboard" className="hover:text-primary transition-colors">Console</Link></li>
                 <li><a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub</a></li>
               </ul>
             </div>
