@@ -3,4 +3,6 @@ pub mod ffi;
 pub mod kzg;
 pub mod utils;
 #[cfg(target_arch = "wasm32")]
-pub mod wasm;
+mod kzg_explore;
+mod probe;
+pub mod coding;

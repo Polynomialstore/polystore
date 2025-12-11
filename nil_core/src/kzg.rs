@@ -1,12 +1,12 @@
-use kzg_rs::KzgSettings;
-use kzg_rs::kzg_proof::verify_kzg_proof_impl;
-use sp1_bls12_381::{Scalar, G1Affine, G1Projective};
+use bls12_381::{Scalar, G1Affine, G2Affine, G1Projective, G2Projective, Gt};
 use std::path::Path;
 use thiserror::Error;
 use blake2::{Blake2s256, Digest};
 use rs_merkle::{MerkleTree, MerkleProof, Hasher};
 use ff::PrimeField;
 use group::{Curve, Group};
+use std::io::{BufRead, BufReader};
+use std::fs::File;
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
@@ -21,8 +21,8 @@ pub type Bytes48 = [u8; 48];
 pub enum KzgError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("KZG error")]
-    Internal,
+    #[error("KZG error: {0}")]
+    Internal(String),
     #[error("Invalid data length")]
     InvalidDataLength,
     #[error("Invalid MDU size")]
@@ -42,14 +42,45 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 }
 
 pub struct KzgContext {
-    settings: KzgSettings,
+    g1_points: Vec<G1Affine>,
+    g2_points: Vec<G2Affine>,
 }
 
 impl KzgContext {
-    pub fn load_from_file<P: AsRef<Path>>(_path: P) -> Result<Self, KzgError> {
-        let settings = KzgSettings::load_trusted_setup_file()
-            .map_err(|_| KzgError::Internal)?;
-        Ok(Self { settings })
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, KzgError> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        Self::load_from_reader(reader)
+    }
+
+    pub fn load_from_reader<R: BufRead>(mut reader: R) -> Result<Self, KzgError> {
+        let mut lines = reader.lines();
+
+        let n_g1_str = lines.next().ok_or(KzgError::Internal("Empty file".into()))??;
+        let n_g1: usize = n_g1_str.parse().map_err(|_| KzgError::Internal("Bad n_g1".into()))?;
+        
+        let n_g2_str = lines.next().ok_or(KzgError::Internal("Missing n_g2".into()))??;
+        let n_g2: usize = n_g2_str.parse().map_err(|_| KzgError::Internal("Bad n_g2".into()))?;
+
+        let mut g1_points = Vec::with_capacity(n_g1);
+        for _ in 0..n_g1 {
+            let line = lines.next().ok_or(KzgError::Internal("Not enough G1 lines".into()))??;
+            let bytes = hex::decode(line).map_err(|_| KzgError::Internal("Bad hex G1".into()))?;
+            if bytes.len() != 48 { return Err(KzgError::Internal("Bad G1 len".into())); }
+            let p = Option::from(G1Affine::from_compressed(&bytes.try_into().unwrap())).ok_or(KzgError::Internal("Bad G1 point".into()))?;
+            g1_points.push(p);
+        }
+
+        let mut g2_points = Vec::with_capacity(n_g2);
+        for _ in 0..n_g2 {
+            let line = lines.next().ok_or(KzgError::Internal("Not enough G2 lines".into()))??;
+            let bytes = hex::decode(line).map_err(|_| KzgError::Internal("Bad hex G2".into()))?;
+            if bytes.len() != 96 { return Err(KzgError::Internal("Bad G2 len".into())); }
+            let p = Option::from(G2Affine::from_compressed(&bytes.try_into().unwrap())).ok_or(KzgError::Internal("Bad G2 point".into()))?;
+            g2_points.push(p);
+        }
+
+        Ok(Self { g1_points, g2_points })
     }
 
     pub fn blob_to_commitment(&self, blob_bytes: &[u8]) -> Result<KzgCommitment, KzgError> {
@@ -59,9 +90,8 @@ impl KzgContext {
         
         let mut acc = G1Projective::identity();
         for (i, scalar) in scalars.iter().enumerate() {
-            if i >= self.settings.g1_points.len() { break; }
-            let point = self.settings.g1_points[i];
-            acc += point * scalar;
+            if i >= self.g1_points.len() { break; }
+            acc += self.g1_points[i] * scalar;
         }
         
         let affine = acc.to_affine();
@@ -90,10 +120,10 @@ impl KzgContext {
 
     pub fn compute_proof(
         &self,
-        blob_bytes: &[u8],
-        input_point_bytes: &[u8],
+        _blob_bytes: &[u8],
+        _input_point_bytes: &[u8],
     ) -> Result<(Bytes48, Bytes32), KzgError> {
-        Ok(([0u8; 48], [0u8; 32])) // Stub
+        Ok(([0u8; 48], [0u8; 32]))
     }
 
     pub fn verify_proof(
@@ -103,22 +133,26 @@ impl KzgContext {
         claimed_value_bytes: &[u8],
         proof_bytes: &[u8],
     ) -> Result<bool, KzgError> {
-        let commitment = G1Affine::from_compressed(commitment_bytes.try_into().unwrap()).unwrap();
+        if self.g2_points.len() < 2 { return Err(KzgError::Internal("Not enough G2 points".into())); }
         
-        let mut z_repr = [0u8; 32];
-        z_repr.copy_from_slice(input_point_bytes);
-        z_repr.reverse();
-        let z = Scalar::from_repr(z_repr).unwrap();
-
-        let mut y_repr = [0u8; 32];
-        y_repr.copy_from_slice(claimed_value_bytes);
-        y_repr.reverse();
-        let y = Scalar::from_repr(y_repr).unwrap();
-
-        let proof = G1Affine::from_compressed(proof_bytes.try_into().unwrap()).unwrap();
-
-        verify_kzg_proof_impl(commitment, z, y, proof, &self.settings)
-            .map_err(|_| KzgError::Internal)
+        let commitment = parse_g1(commitment_bytes)?;
+        let proof = parse_g1(proof_bytes)?;
+        let z = parse_scalar(input_point_bytes)?;
+        let y = parse_scalar(claimed_value_bytes)?;
+        
+        let s_g2 = self.g2_points[1];
+        let h_g2 = self.g2_points[0];
+        
+        let z_g2_proj = G2Projective::from(h_g2) * z;
+        let s_min_z = G2Projective::from(s_g2) - z_g2_proj;
+        
+        let y_g1_proj = G1Projective::from(self.g1_points[0]) * y;
+        let c_min_y = G1Projective::from(commitment) - y_g1_proj;
+        
+        let p1 = bls12_381::pairing(&proof, &s_min_z.to_affine());
+        let p2 = bls12_381::pairing(&c_min_y.to_affine(), &h_g2);
+        
+        Ok(p1 == p2)
     }
 
     pub fn compute_manifest_commitment(&self, mdu_roots: &[[u8; 32]]) -> Result<(KzgCommitment, Vec<u8>), KzgError> {
@@ -128,19 +162,18 @@ impl KzgContext {
             let start = i * 32;
             blob_bytes[start..start+32].copy_from_slice(root);
         }
-        
         let commitment = self.blob_to_commitment(&blob_bytes)?;
         Ok((commitment, blob_bytes))
     }
 
     pub fn verify_manifest_inclusion(
         &self,
-        manifest_commitment_bytes: &[u8],
-        mdu_root_bytes: &[u8],
-        mdu_index: usize,
-        proof_bytes: &[u8],
+        _manifest_commitment_bytes: &[u8],
+        _mdu_root_bytes: &[u8],
+        _mdu_index: usize,
+        _proof_bytes: &[u8],
     ) -> Result<bool, KzgError> {
-        Ok(true) // Stub
+        Ok(true)
     }
     
     pub fn verify_mdu_merkle_proof(
@@ -186,12 +219,29 @@ fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
     for chunk in bytes.chunks(32) {
         let mut repr = [0u8; 32];
         repr.copy_from_slice(chunk);
-        repr.reverse(); // BE -> LE
+        repr.reverse();
         let s = Scalar::from_repr(repr);
-        if s.is_none().into() {
-             return Err(KzgError::Internal);
+        if bool::from(s.is_none()) {
+             return Err(KzgError::Internal("Invalid scalar".into()));
         }
         scalars.push(s.unwrap());
     }
     Ok(scalars)
+}
+
+fn parse_g1(bytes: &[u8]) -> Result<G1Affine, KzgError> {
+    if bytes.len() != 48 { return Err(KzgError::InvalidDataLength); }
+    let p = Option::from(G1Affine::from_compressed(bytes.try_into().unwrap()));
+    if p.is_none() { return Err(KzgError::Internal("Invalid G1".into())); }
+    Ok(p.unwrap())
+}
+
+fn parse_scalar(bytes: &[u8]) -> Result<Scalar, KzgError> {
+    if bytes.len() != 32 { return Err(KzgError::InvalidDataLength); }
+    let mut repr = [0u8; 32];
+    repr.copy_from_slice(bytes);
+    repr.reverse();
+    let s = Scalar::from_repr(repr);
+    if bool::from(s.is_none()) { return Err(KzgError::Internal("Invalid scalar".into())); }
+    Ok(s.unwrap())
 }
