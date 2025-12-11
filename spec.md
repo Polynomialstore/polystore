@@ -69,7 +69,7 @@ Scaling is not free. It is strictly constrained by the User's budget.
 NilStore supports two redundancy modes at the policy level:
 
 *   **Mode 1 – FullReplica (Alpha, Implemented):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`. This is the current implementation and the default for the devnet.
-*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is split into **Stripes** (e.g., RS(12,8) across shard indices). Scaling operates at the stripe layer: for each stripe index, the protocol recruits additional overlay providers. Retrieval can aggregate bandwidth across multiple providers in parallel.
+*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is split into **Stripes** (RS(12,8) across shard indices). Scaling operates at the stripe layer. This mode uses the **Blob-Aligned Striping** model defined in **§ 8**.
 
 For v2.4, **Mode 1** is normative and **Mode 2** is specified as a forward-compatible extension.
 
@@ -92,6 +92,42 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
 *   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto-Erasure**.
 *   **Process:** To "delete" a file, the Data Owner destroys their copy of the `FMK`. Without this key, the stored ciphertext is statistically indistinguishable from random noise.
 *   **Garbage Collection:** When a Deal is cancelled (`MsgCancelDeal`) or expires, SPs act economically: they delete the data to free up space for paying content.
+
+## § 8 Mode 2: StripeReplica & Erasure Coding (Normative Extension)
+
+This section norms the **Blob-Aligned Striping** model required for Mode 2 operation, resolving the conflict between cryptographic verification (KZG) and network distribution (Erasure Coding).
+
+### 8.1 The "Aligned" Striping Model
+
+To enable **Shared-Nothing Verification** (where a provider can verify their own shard without network communication), the atomic unit of striping must match the atomic unit of KZG verification: the **Blob**.
+
+#### 8.1.1 Constants
+*   **Blob (Atom):** 128 KiB ($2^{12}$ field elements).
+*   **MDU (Retrieval Unit):** 8 MiB (64 Blobs).
+*   **Erasure Configuration:** RS(12, 8). 8 Data Shards, 4 Parity Shards.
+
+#### 8.1.2 The "Card Dealing" Algorithm
+An 8 MiB MDU consists of 64 Blobs ($B_0 \dots B_{63}$). These are distributed to 8 Data Providers ($SP_0 \dots SP_7$) by dealing complete blobs rather than splitting them:
+
+*   **$SP_0$ receives:** $B_0, B_8, B_{16}, \dots, B_{56}$ (Total 8 Blobs = 1 MiB).
+*   **$SP_1$ receives:** $B_1, B_9, B_{17}, \dots, B_{57}$ (Total 8 Blobs = 1 MiB).
+*   ...
+*   **$SP_7$ receives:** $B_7, B_{15}, B_{23}, \dots, B_{63}$ (Total 8 Blobs = 1 MiB).
+
+**Benefit:** Since each provider holds complete 128 KiB Blobs, they can verify each one individually using standard KZG.
+
+### 8.2 Parity & Homomorphism
+To generate the 4 Parity Shards ($P_0 \dots P_3$):
+*   Parity is calculated across the "row" of blobs ($B_0 \dots B_7 \rightarrow P_0$).
+*   Due to the homomorphic property of KZG, the Parity Shards are also composed of valid 128 KiB KZG polynomials.
+*   Parity Nodes are indistinguishable from Data Nodes in terms of verification logic.
+
+### 8.3 Replicated Metadata Policy
+To support this model, the "Map" must be fully replicated:
+*   **User Data MDUs:** **Striped** (1 Shard per Provider).
+*   **Metadata MDUs (MDU #0 + Witness):** **Fully Replicated** (Copy on All 12 Providers).
+
+**Witness Expansion:** The Witness MDU MUST contain KZG commitments for **ALL 96 Blobs** (64 Data + 32 Parity) for every User MDU. This allows any provider (Data or Parity) to prove their holding against the global root.
 
 ## Appendix A: Core Cryptographic Primitives
 

@@ -217,6 +217,26 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   [x] **Task:** Implement interactive Performance Market visualization in `nil-website` (The Latency Racer).
 *   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
+## Winter Roadmap: StripeReplica & Thick Client (Phase 3)
+
+**Goal:** Enable client-side encryption, erasure coding, and KZG commitment generation in the browser (Thick Client) to support the Mode 2 (StripeReplica) architecture.
+
+### 1. WASM Foundation (Rust)
+*   [ ] **Build:** Configure `nil_core` to compile to `wasm32-unknown-unknown` (fix `getrandom` / `c-kzg` dependencies).
+*   [ ] **Trusted Setup:** Implement `KzgContext::load_from_bytes` in `nil_core` to accept raw setup data from JS.
+*   [ ] **Bindgen:** Expose `compute_commitment` and `compute_proof` to JS via `wasm-bindgen`.
+
+### 2. Mode 2 Logic (Rust)
+*   [ ] **Erasure Coding:** Integrate `reed-solomon-erasure` crate (RS 12,8).
+*   [ ] **Expansion:** Implement `expand_mdu(data: &[u8]) -> (WitnessMdu, Vec<Shard>)` following the "Blob Alignment" spec (§ 8).
+*   [ ] **Exposure:** Bind `expand_mdu` to JS, returning a structured object with Shards and Witness.
+
+### 3. Frontend Integration (React)
+*   [ ] **Worker:** Create `src/workers/WasmWorker.ts` to run `expand_mdu` off the main thread.
+*   [ ] **Asset:** Serve `trusted_setup.txt` (or bin) as a static asset.
+*   [ ] **UI:** Replace `FileSharder.tsx` mock with `WasmWorker` integration.
+*   [ ] **Validation:** Verify that locally generated commitments match the `nil-cli` output.
+
 ## Future Phases
 *   **Web2 Wrapper:** S3 Adapter documentation and further integration (Updated S3AdapterDocs page).
 *   **Governance:** DAO & Council setup visualization (Updated GovernanceDocs page with dashboard).
