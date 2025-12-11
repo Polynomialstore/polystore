@@ -1,10 +1,10 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, Shield, HelpCircle, Vote } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ConnectWallet } from "./ConnectWallet";
-import { NavDropdown } from "./NavDropdown";
+import { NavDropdown, NavItem } from "./NavDropdown";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -13,33 +13,33 @@ export const Layout = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Navigation Hierarchy (Informational Only)
-  const navStructure = [
+  // Navigation Hierarchy (Rich Data)
+  const navStructure: { type: "link" | "dropdown", name: "Dashboard" | "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
       name: "Explore", 
       items: [
-        { name: "Leaderboard", path: "/leaderboard" },
-        { name: "Live Proofs", path: "/proofs" },
-        { name: "Performance", path: "/performance" },
-        { name: "Economy", path: "/economy" },
+        { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
+        { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
+        { name: "Performance", path: "/performance", description: "Latency racing benchmarks.", icon: <Zap className="w-5 h-5" /> },
+        { name: "Economy", path: "/economy", description: "Supply and inflation simulation.", icon: <Coins className="w-5 h-5" /> },
       ] 
     },
     { 
       type: "dropdown", 
       name: "Learn", 
       items: [
-        { name: "Architecture", path: "/technology" },
-        { name: "Security", path: "/security" },
-        { name: "FAQ", path: "/faq" },
+        { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
+        { name: "Security", path: "/security", description: "Triple Proofs & Threat Model.", icon: <Shield className="w-5 h-5" /> },
+        { name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
       ] 
     },
     { 
         type: "dropdown", 
         name: "Community", 
         items: [
-          { name: "Governance", path: "/governance" },
-          { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true },
+          { name: "Governance", path: "/governance", description: "DAO proposals and voting.", icon: <Vote className="w-5 h-5" /> },
+          { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
         ] 
       },
   ];
@@ -171,31 +171,23 @@ export const Layout = () => {
                                         className="overflow-hidden pt-4 pl-2 flex flex-col gap-3"
                                     >
                                         {item.items!.map(sub => {
-                                            if (sub.external) {
-                                                return (
-                                                    <a
-                                                        key={sub.path}
-                                                        href={sub.path}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="block py-2 pl-4 border-l-2 border-border/30 text-lg font-medium text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all"
-                                                    >
-                                                        {sub.name} ↗
-                                                    </a>
-                                                )
-                                            }
+                                            const active = isActive(sub.path);
                                             return (
                                                 <Link
                                                     key={sub.path}
                                                     to={sub.path}
                                                     onClick={() => setIsOpen(false)}
-                                                    className={`block py-2 pl-4 border-l-2 text-lg font-medium transition-all ${
-                                                        isActive(sub.path) 
-                                                        ? "border-primary text-primary" 
-                                                        : "border-border/30 text-muted-foreground hover:text-foreground hover:border-foreground/50"
+                                                    className={`group flex items-center gap-4 p-2 rounded-xl transition-colors ${
+                                                        active ? "bg-secondary/50" : "hover:bg-secondary/30"
                                                     }`}
                                                 >
-                                                    {sub.name}
+                                                    <div className={`p-2 rounded-lg ${active ? "text-primary bg-primary/10" : "text-muted-foreground bg-secondary"}`}>
+                                                        {sub.icon}
+                                                    </div>
+                                                    <div>
+                                                        <div className={`font-bold ${active ? "text-foreground" : "text-foreground/80"}`}>{sub.name}</div>
+                                                        <div className="text-xs text-muted-foreground">{sub.description}</div>
+                                                    </div>
                                                 </Link>
                                             )
                                         })}
@@ -232,7 +224,7 @@ export const Layout = () => {
             <div>
               <h4 className="font-bold mb-4 text-foreground">Resources</h4>
               <ul className="space-y-3">
-                <li><Link to="/dashboard" className="hover:text-primary transition-colors">Console</Link></li>
+                <li><Link to="/testnet" className="hover:text-primary transition-colors">Testnet Guide</Link></li>
                 <li><a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub</a></li>
               </ul>
             </div>
