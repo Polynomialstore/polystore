@@ -101,7 +101,7 @@ func PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Compute CID + size using nil-cli
-	out, err := shardFile(path, false)
+	out, err := shardFile(path, false, "")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Sharding failed: %v", err), http.StatusInternalServerError)
 		return
@@ -195,7 +195,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Legacy/Append Flow (Not fully refactored yet, fallback to single-file shard)
-		shardOut, err := shardFile(path, false)
+		shardOut, err := shardFile(path, false, "")
 		if err != nil {
 			http.Error(w, fmt.Sprintf("sharding failed: %v", err), http.StatusInternalServerError)
 			return
@@ -810,15 +810,40 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	filePath := q.Get("file_path")
 	if filePath != "" {
 		// New Logic: Resolve from Slab
-		// CID in URL is treated as ManifestRoot
-		content, size, err := ResolveFileByPath(cid, filePath)
+		// 1. Get Location for Proof
+		mduIdx, mduPath, size, err := GetFileLocation(cid, filePath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				http.Error(w, "file not found in deal", http.StatusNotFound)
 			} else {
-				log.Printf("ResolveFileByPath failed: %v", err)
+				log.Printf("GetFileLocation failed: %v", err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 			}
+			return
+		}
+
+		// 2. Submit Proof
+		// We use mduPath (User Data MDU) and mduIdx (Slab Index)
+		// We also need Manifest Path.
+		// Ingest stores the specific Manifest Blob at "manifest.bin".
+		manifestPath := filepath.Join(uploadDir, cid, "manifest.bin")
+		
+		txHash, err := submitRetrievalProofNew(dealID, mduIdx, mduPath, manifestPath)
+		if err != nil {
+			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
+			// Don't fail the download if proof fails? Or do?
+			// For E2E metrics test, we need it to work.
+			// But for UX, download shouldn't fail if chain is slow.
+			// Let's log and proceed.
+		} else {
+			log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
+		}
+
+		// 3. Stream Content
+		// Re-open readers via ResolveFileByPath (or optimize to reuse)
+		content, _, err := ResolveFileByPath(cid, filePath)
+		if err != nil {
+			http.Error(w, "failed to open stream", http.StatusInternalServerError)
 			return
 		}
 		defer content.Close()
@@ -858,11 +883,13 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2) Submit the retrieval proof before serving the file.
-	if _, err := submitRetrievalProof(dealID, entry.Path); err != nil {
+	txHash, err := submitRetrievalProof(dealID, entry.Path)
+	if err != nil {
 		log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
 		http.Error(w, "failed to submit retrieval proof", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -909,7 +936,7 @@ func GatewayManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // shardFile runs nil-cli shard on the given path and extracts the full output.
-func shardFile(path string, raw bool) (*NilCliOutput, error) {
+func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) {
 	outPath := path + ".json"
 
 	args := []string{
@@ -920,6 +947,9 @@ func shardFile(path string, raw bool) (*NilCliOutput, error) {
 	}
 	if raw {
 		args = append(args, "--raw")
+	}
+	if savePrefix != "" {
+		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
 	cmd := execCommand(nilCliPath, args...)

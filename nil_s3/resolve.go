@@ -124,6 +124,46 @@ func ResolveFileByPath(manifestRoot string, filePath string) (io.ReadCloser, uin
 	return &MultiReadCloser{readers: readers, closers: closers}, length, nil
 }
 
+// GetFileLocation returns the MDU index and physical path for the start of a file.
+func GetFileLocation(manifestRoot, filePath string) (mduIndex uint64, mduPath string, length uint64, err error) {
+	dealDir := filepath.Join(uploadDir, manifestRoot)
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+
+	mdu0Data, err := os.ReadFile(mdu0Path)
+	if err != nil {
+		return 0, "", 0, fmt.Errorf("failed to read MDU #0: %w", err)
+	}
+
+	b, err := builder.LoadMdu0Builder(mdu0Data, 65536)
+	if err != nil {
+		return 0, "", 0, fmt.Errorf("failed to parse MDU #0: %w", err)
+	}
+
+	targetPath := strings.TrimPrefix(filePath, "/")
+	var targetRec *layout.FileRecordV1
+	for i := uint32(0); i < b.Header.RecordCount; i++ {
+		rec := b.GetFileRecord(i)
+		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
+		if name == targetPath {
+			targetRec = &rec
+			break
+		}
+	}
+
+	if targetRec == nil {
+		return 0, "", 0, os.ErrNotExist
+	}
+
+	length, _ = layout.UnpackLengthAndFlags(targetRec.LengthAndFlags)
+	startOffset := targetRec.StartOffset
+
+	// Slab Index = 1 + WitnessCount + (StartOffset / 8MB)
+	mduIdx := 1 + b.WitnessMduCount + (startOffset / builder.MduSize)
+
+	mduPath = filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIdx))
+	return mduIdx, mduPath, length, nil
+}
+
 type MultiReadCloser struct {
 	readers []io.Reader
 	closers []io.Closer
