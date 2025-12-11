@@ -35,15 +35,14 @@ When registering, SPs declare their intended service mode via `MsgRegisterProvid
 *   **Cold:** Biased towards `Archive` / `General`.
 *   **Hot:** Biased towards `General` / `Edge`.
 
-#### 6.0.3 Deal Sizing (Normative via RFC: Data Granularity)
-To manage chain state and prevent database dust, NilStore deals are created in specific, governance-approved increments, as defined in `rfcs/rfc-data-granularity-and-economics.md`. This separates the Financial Ledger Unit (`DEAL_SIZE`) from the Physical Retrieval Unit (`MDU_SIZE`).
+#### 6.0.3 Deal Sizing (Dynamic)
+NilStore utilizes **Dynamic Thin Provisioning** for all storage deals.
 
-**Approved Tiers for `DEAL_SIZE`:**
-*   **Tier 1: Developer Slab (4 GiB):** Entry-level capacity for testing.
-*   **Tier 2: Standard Slab (32 GiB):** The baseline network unit, aligned with Filecoin sectors.
-*   **Tier 3: Wholesale Slab (512 GiB):** High-volume tier for Enterprise/Archive use cases.
+*   **No Tiers:** Users do not pre-select a capacity tier.
+*   **Dynamic Expansion:** Deals start with minimal state and automatically expand as content is added via `MsgUpdateDealContent`.
+*   **Hard Cap:** The protocol enforces a maximum capacity of **512 GiB** per Deal ID to prevent state bloat and ensure manageable failure domains. Large datasets should be split across multiple Deals.
 
-The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,388,608 bytes (8 MiB)**, as it is tied to cryptographic safety (KZG Trusted Setup).
+The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,388,608 bytes (8 MiB)**.
 
 ### 6.1 The Unified Market & Elasticity
 

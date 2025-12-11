@@ -217,6 +217,12 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   [x] **Task:** Implement interactive Performance Market visualization in `nil-website` (The Latency Racer).
 *   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
+### 5. Work Stream: Protocol Cleanup (Dynamic Sizing)
+*   [ ] **Proto:** Remove `DealSize` enum and `deal_size` field from `types.proto`.
+*   [ ] **Logic:** Update `MsgCreateDeal` to ignore tier, defaulting to a "Thin Provisioned" state (0 bytes).
+*   [ ] **CLI:** Remove `tier` argument from `nil-cli create-deal`.
+*   [ ] **Web:** Remove Tier selection from Dashboard UI.
+
 ## Winter Roadmap: StripeReplica & Thick Client (Phase 3)
 
 **Goal:** Enable client-side encryption, erasure coding, and KZG commitment generation in the browser (Thick Client) to support the Mode 2 (StripeReplica) architecture.
