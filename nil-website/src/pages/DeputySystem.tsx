@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { UserSecret, ShieldCheck, Gavel, Scale } from "lucide-react"; // Assuming lucide-react has these, if not I'll swap. Gavel/Scale/Shield/User are standard.
+import { Search, ShieldCheck, Gavel, Scale } from "lucide-react"; // Assuming lucide-react has these, if not I'll swap. Gavel/Scale/Shield/User are standard.
 
 export const DeputySystem = () => {
   return (
@@ -40,7 +40,7 @@ export const DeputySystem = () => {
         {/* Section 2: The Solution */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <UserSecret className="w-5 h-5 text-purple-500" /> Solution: The "Mystery Shopper"
+            <Search className="w-5 h-5 text-purple-500" /> Solution: The "Mystery Shopper"
           </h3>
           <p className="text-muted-foreground mb-6">
             Instead of a judge, the user summons a <strong>Deputy</strong> (a random third-party node) to fetch the file for them.
