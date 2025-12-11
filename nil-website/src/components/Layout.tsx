@@ -18,30 +18,26 @@ export const Layout = () => {
     { type: "link", name: "Dashboard", path: "/dashboard" },
     { 
       type: "dropdown", 
-      name: "Testnet", 
+      name: "Network", 
       items: [
         { name: "Leaderboard", path: "/leaderboard" },
         { name: "Performance", path: "/performance" },
-        { name: "Proofs", path: "/proofs" },
+        { name: "Live Proofs", path: "/proofs" },
+        { name: "Economy Sim", path: "/economy" },
       ] 
     },
     { 
       type: "dropdown", 
-      name: "Learn", 
+      name: "Resources", 
       items: [
         { name: "Architecture", path: "/technology" },
-        { name: "Economy", path: "/economy" },
         { name: "Security", path: "/security" },
         { name: "Governance", path: "/governance" },
+        { name: "Whitepaper", path: "/whitepaper" }, // Handled by router or redirect
+        { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true },
+        { name: "FAQ", path: "/faq" },
       ] 
     },
-    { 
-        type: "dropdown", 
-        name: "Resources", 
-        items: [
-          { name: "FAQ", path: "/faq" },
-        ] 
-      },
   ];
 
   const toggleMobileGroup = (name: string) => {
@@ -74,7 +70,7 @@ export const Layout = () => {
                 className="font-extrabold tracking-tight text-xl hidden sm:block" 
                 style={{
                   fontFamily: "'Montserrat', sans-serif",
-                  backgroundImage: "linear-gradient(135deg, #FFF 0%, #AAA 100%)", // Default light mode fallback
+                  backgroundImage: "linear-gradient(135deg, #FFF 0%, #AAA 100%)", 
                 }}
               >
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500 hover:brightness-125 transition-all duration-300">
@@ -117,16 +113,6 @@ export const Layout = () => {
           {/* 3. RIGHT: Actions */}
           <div className="flex items-center gap-3 sm:gap-4">
               
-              {/* GitHub */}
-              <a 
-                href="https://github.com/Nil-Store/nil-store" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="hidden sm:flex items-center justify-center w-9 h-9 rounded-full bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border"
-              >
-                <Github className="w-5 h-5" />
-              </a>
-
               <div className="h-6 w-[1px] bg-border/50 hidden sm:block"></div>
 
               <ModeToggle />
@@ -189,20 +175,35 @@ export const Layout = () => {
                                         exit={{ height: 0, opacity: 0, y: -10 }}
                                         className="overflow-hidden pt-4 pl-2 flex flex-col gap-3"
                                     >
-                                        {item.items!.map(sub => (
-                                            <Link
-                                                key={sub.path}
-                                                to={sub.path}
-                                                onClick={() => setIsOpen(false)}
-                                                className={`block py-2 pl-4 border-l-2 text-lg font-medium transition-all ${
-                                                    isActive(sub.path) 
-                                                    ? "border-primary text-primary" 
-                                                    : "border-border/30 text-muted-foreground hover:text-foreground hover:border-foreground/50"
-                                                }`}
-                                            >
-                                                {sub.name}
-                                            </Link>
-                                        ))}
+                                        {item.items!.map(sub => {
+                                            if (sub.external) {
+                                                return (
+                                                    <a
+                                                        key={sub.path}
+                                                        href={sub.path}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block py-2 pl-4 border-l-2 border-border/30 text-lg font-medium text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all"
+                                                    >
+                                                        {sub.name} ↗
+                                                    </a>
+                                                )
+                                            }
+                                            return (
+                                                <Link
+                                                    key={sub.path}
+                                                    to={sub.path}
+                                                    onClick={() => setIsOpen(false)}
+                                                    className={`block py-2 pl-4 border-l-2 text-lg font-medium transition-all ${
+                                                        isActive(sub.path) 
+                                                        ? "border-primary text-primary" 
+                                                        : "border-border/30 text-muted-foreground hover:text-foreground hover:border-foreground/50"
+                                                    }`}
+                                                >
+                                                    {sub.name}
+                                                </Link>
+                                            )
+                                        })}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
