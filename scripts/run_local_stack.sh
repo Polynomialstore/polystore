@@ -10,11 +10,12 @@ LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
 CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
+EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
-FAUCET_AMOUNT="${NIL_AMOUNT:-1000000000000000000aatom,100000000stake}"
+export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
@@ -22,6 +23,8 @@ BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 # Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
+NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
+export NIL_EVM_DEV_PRIVKEY
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -80,10 +83,11 @@ init_chain() {
 
   # Fund faucet + create validator
   "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
-  # Pre-fund a well-known dev EVM-mapped account used in E2E tests so that
-  # MsgCreateDealFromEvm can deduct stake from its owner without relying on the
-  # faucet service timing.
-  "$NILCHAIND_BIN" genesis add-genesis-account nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  # Pre-fund the EVM dev account (derived from the local Foundry mnemonic) so
+  # that MsgCreateDealFromEvm / NilBridge deployments have gas without relying
+  # on the faucet timing. This address is the bech32 mapping of the default
+  # Foundry EVM deployer (0x4dd2C8c449581466Df3F62b007A24398DD858f5d).
+  "$NILCHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
 
@@ -96,7 +100,7 @@ init_chain() {
   perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
   perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
-  perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $CHAIN_ID/" "$APP_TOML"
+  perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
   # Fallback patcher in case formats change (pure string replace to avoid extra deps)
   python3 - "$APP_TOML" <<'PY' || true
 import sys, pathlib
@@ -158,7 +162,7 @@ start_chain() {
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
-    --api.enable true \
+    --api.enable \
     >"$LOG_DIR/nilchaind.log" 2>&1 &
   echo $! > "$PID_DIR/nilchaind.pid"
   sleep 1
@@ -174,7 +178,7 @@ start_faucet() {
   banner "Starting faucet service"
   (
     cd "$ROOT_DIR/nil_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="$FAUCET_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! > "$PID_DIR/faucet.pid"
@@ -217,6 +221,18 @@ start_bridge() {
     echo "Foundry tools not found; skipping NilBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
     return
   fi
+
+  banner "Waiting for EVM RPC (8545)..."
+  local attempts=30
+  local i
+  for i in $(seq 1 "$attempts"); do
+    if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8545 --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
+      echo "EVM RPC is ready."
+      break
+    fi
+    echo "EVM RPC not ready (attempt $i/$attempts); sleeping 1s..."
+    sleep 1
+  done
 
   banner "Deploying NilBridge to local EVM"
   if "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then

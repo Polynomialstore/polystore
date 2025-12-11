@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -25,8 +24,8 @@ var (
 	// keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
 	EIP712DomainTypeHash = crypto.Keccak256([]byte("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"))
 
-	// keccak256("CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce)")
-	CreateDealTypeHash = crypto.Keccak256([]byte("CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce)"))
+	// keccak256("CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)")
+	CreateDealTypeHash = crypto.Keccak256([]byte("CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)"))
 
 	// keccak256("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)")
 	UpdateContentTypeHash = crypto.Keccak256([]byte("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)"))
@@ -49,21 +48,14 @@ func HashDomainSeparator(chainID *big.Int) common.Hash {
 func HashCreateDeal(intent *EvmCreateDealIntent) (common.Hash, error) {
     creatorAddr := common.HexToAddress(intent.CreatorEvm)
     
-    // Parse BigInts
-    escrow, ok := new(big.Int).SetString(intent.InitialEscrow.String(), 10)
-    if !ok { return common.Hash{}, fmt.Errorf("invalid escrow amount") }
-    
-    spend, ok := new(big.Int).SetString(intent.MaxMonthlySpend.String(), 10)
-    if !ok { return common.Hash{}, fmt.Errorf("invalid max monthly spend") }
-
     return crypto.Keccak256Hash(
         CreateDealTypeHash,
         pad32(creatorAddr.Bytes()),
         math.PaddedBigBytes(big.NewInt(int64(intent.SizeTier)), 32),
         math.PaddedBigBytes(big.NewInt(int64(intent.DurationBlocks)), 32),
         keccak256String(intent.ServiceHint),
-        math.PaddedBigBytes(escrow, 32),
-        math.PaddedBigBytes(spend, 32),
+        keccak256String(intent.InitialEscrow.String()), // Hash the string representation of Coin
+        keccak256String(intent.MaxMonthlySpend.String()), // Hash the string representation of Coin
         math.PaddedBigBytes(big.NewInt(int64(intent.Nonce)), 32),
     ), nil
 }

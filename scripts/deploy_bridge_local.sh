@@ -17,8 +17,14 @@ if ! command -v cast >/dev/null 2>&1; then
 fi
 
 if [ -z "$PRIVATE_KEY" ]; then
-  # Derive the faucet dev key used by the local stack (index 0).
-  PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC" | sed 's/^0x//')
+  # Prefer the shared dev EVM key (used in e2e tests and pre-funded in genesis)
+  # if provided, otherwise derive from the local mnemonic.
+  if [ -n "${NIL_EVM_DEV_PRIVKEY:-}" ]; then
+    PRIVATE_KEY="${NIL_EVM_DEV_PRIVKEY#0x}"
+  else
+    # Derive the faucet dev key used by the local stack (index 0).
+    PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC" | sed 's/^0x//')
+  fi
 fi
 
 echo ">>> Deploying NilBridge to $RPC_URL ..."

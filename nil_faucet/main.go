@@ -83,6 +83,8 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Sending funds to %s", req.Address)
 
+	amount := envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
+	log.Printf("Faucet effective amount for sending: %s", amount) // Debug log
 	cmd := exec.Command("nilchaind", "tx", "bank", "send",
 		"faucet", req.Address, amount,
 		"--chain-id", chainID,

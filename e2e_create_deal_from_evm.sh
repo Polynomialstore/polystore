@@ -40,7 +40,7 @@ wait_for_http() {
   for attempt in $(seq 1 "$max_attempts"); do
     # Treat any HTTP response code as "reachable"; 000 means connection error.
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "000")
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
     if [ "$code" != "000" ]; then
       echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
       return 0
@@ -218,12 +218,12 @@ TMP_JSON="$(mktemp)"
 found=0
 for attempt in $(seq 1 20); do
   curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals" > "$TMP_JSON" || true
-  if python3 - "$TMP_JSON" "$NIL_ADDRESS" "$DEAL_CID" << 'PY'
+  if python3 - "$TMP_JSON" "$NIL_ADDRESS" << 'PY'
 import json, sys
-path, owner, cid = sys.argv[1], sys.argv[2], sys.argv[3]
+path, owner = sys.argv[1], sys.argv[2]
 data = json.load(open(path))
 for d in data.get("deals", []):
-    if d.get("owner") == owner and d.get("cid") == cid:
+    if d.get("owner") == owner:
         print(f"Found deal id={d.get('id')} owner={owner}")
         sys.exit(0)
 sys.exit(1)

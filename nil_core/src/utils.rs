@@ -92,6 +92,30 @@ mod tests {
         let one = BigUint::from(1u32);
         assert_eq!(bytes_to_fr_be(&z), one);
     }
+
+    #[test]
+    fn frs_to_blobs_packs_scalars_in_order() {
+        let frs: Vec<BigUint> = (0u32..8)
+            .map(|i| BigUint::from(i))
+            .collect();
+
+        let blobs = frs_to_blobs(&frs);
+        assert_eq!(blobs.len(), 1, "expected single blob for 8 frs");
+
+        let blob = &blobs[0];
+        assert_eq!(blob.len(), BYTES_PER_BLOB, "blob size must match BYTES_PER_BLOB");
+
+        for (i, fr) in frs.iter().enumerate() {
+            let offset = i * 32;
+            let expected = fr_to_bytes_be(fr);
+            assert_eq!(
+                &blob[offset..offset + 32],
+                &expected,
+                "scalar at index {} must be encoded at correct position",
+                i
+            );
+        }
+    }
 }
 
 pub fn symbols_to_frs(symbols: &[Vec<u8>]) -> Vec<BigUint> {

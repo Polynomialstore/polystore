@@ -445,3 +445,35 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
     *   **Phase 6: Deletion & Reupload:** Simulate deletion, then re-upload a file to reuse space. Assert `manifest_root` updates correctly and `allocated_length` remains stable (if no new User Data MDUs were needed).
 
 **Definition of Done:** The end-to-end chain interaction correctly updates the `Deal.manifest_root` and `Deal.allocated_length` on-chain, and these changes are reflected accurately when querying the chain.
+
+## 11. Active Agent Work Queue (Current)
+
+This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
+
+### 11.1 EVM Integration UX (Phase 5 Step 2–3)
+- [ ] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
+- [ ] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
+- [ ] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `nil-website` (Connect MetaMask, chain config, RPC URL).
+- [ ] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
+
+### 11.2 Protocol Cleanup (Dynamic Sizing)
+- [ ] Remove `DealSize` enum and `deal_size` field from `nilchain/proto/nilchain/nilchain/v1/types.proto` and regenerate Go/Rust types.
+- [ ] Update `MsgCreateDeal` and `MsgCreateDealFromEvm` handlers to ignore any legacy tier/size_tier fields and treat deals as thin-provisioned (0 bytes until content is committed).
+- [ ] Update `nil_cli` (`create-deal`/gateway flows) to drop any `tier` argument and align with the thin-provisioning semantics.
+- [ ] Update `nil_s3` and `nil-website` so the dashboard, deal explorer, and gateway endpoints no longer reference tiers, and instead rely on `size_bytes`/`allocated_length` and MDUs.
+- [ ] Extend/adjust migrations and tests so dynamic sizing is covered end-to-end (genesis migration, keeper tests, CLI tests).
+
+### 11.3 Gateway & File Lifecycle E2E
+- [x] Stabilize `/gateway/upload`, `/gateway/create-deal-evm`, and `/gateway/update-deal-content-evm` so that a full “allocate capacity → upload file → commit content → fetch file” flow works reliably via both curl and the web UI.
+- [x] Ensure errors like “failed to parse tx response” and “deal creation failed: deal_id not found in transaction events” are surfaced as non-200 responses from the gateway (no silent success).
+- [x] Expand shell-based e2e scripts (`scripts/e2e_lifecycle.sh`) to cover: deal creation (EVM), upload, update-deal-content, LCD verification of `manifest_root` and size, and fetch verification.
+    - *Note:* Currently debugging a "insufficient funds" error despite faucet fix. EIP-712 verification is re-enabled.
+
+### 11.4 Frontend Browser E2E (Cypress/Playwright)
+- [ ] Introduce a lightweight browser e2e suite (Cypress or Playwright) under `nil-website` that runs against `./scripts/run_local_stack.sh start`.
+- [ ] Add a smoke test that: connects a wallet (using a test account), creates a deal via the dashboard, uploads a file, commits content, and asserts the deal row shows a non-zero size and a manifest root.
+- [ ] Add a smoke test for the deal explorer to confirm that an uploaded file appears and can be fetched via the gateway.
+
+### 11.5 Core & WASM Health
+- [ ] Keep `nil_core` and `nil_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
+- [ ] Ensure the WASM Mode 2 path (`expand_mdu` / `expand_file`) is exercised by tests (Rust integration tests and, where feasible, frontend tests) so “Invalid scalar”/encoding issues are caught automatically.
