@@ -42,17 +42,18 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="absolute top-full left-1/2 -translate-x-1/2 pt-4 z-[110]"
+            // Fixed positioning relative to the viewport center, effectively creating a consistent "Mega Menu" location
+            className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="w-[400px] bg-background/80 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl p-3 ring-1 ring-black/5 overflow-hidden">
+            <div className="w-[600px] bg-background border border-border/50 rounded-2xl shadow-2xl p-4 overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
               
-              {/* Grid Layout */}
-              <div className="grid gap-1">
+              {/* Grid Layout - 2 Columns */}
+              <div className="grid grid-cols-2 gap-2">
                 {items.map((item) => {
                   const active = location.pathname === item.path;
                   
@@ -67,28 +68,28 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   return (
                     <Wrapper
                         key={item.path}
-                        className={`group flex items-start gap-4 p-4 rounded-2xl transition-all duration-200 ${
+                        className={`group flex items-start gap-3 p-3 rounded-xl transition-all duration-200 ${
                             active 
-                            ? "bg-secondary/60" 
-                            : "hover:bg-secondary/40"
+                            ? "bg-secondary" 
+                            : "hover:bg-secondary/50"
                         }`}
                     >
                         {/* Icon Box */}
-                        <div className={`mt-1 p-2 rounded-lg shrink-0 transition-colors ${
-                            active ? "bg-primary/20 text-primary" : "bg-secondary/50 text-muted-foreground group-hover:text-primary group-hover:bg-primary/10"
+                        <div className={`mt-0.5 p-2 rounded-lg shrink-0 transition-colors ${
+                            active ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground group-hover:text-primary group-hover:bg-primary/10"
                         }`}>
                             {item.icon}
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                                <span className={`text-sm font-bold ${active ? "text-primary" : "text-foreground group-hover:text-foreground"}`}>
+                                <span className={`text-sm font-bold truncate ${active ? "text-primary" : "text-foreground"}`}>
                                     {item.name}
                                 </span>
                                 {item.external && <ArrowUpRight className="w-3 h-3 text-muted-foreground" />}
                             </div>
-                            <p className="text-xs text-muted-foreground leading-relaxed mt-0.5 group-hover:text-muted-foreground/80">
+                            <p className="text-xs text-muted-foreground leading-tight mt-0.5 line-clamp-2">
                                 {item.description}
                             </p>
                         </div>
