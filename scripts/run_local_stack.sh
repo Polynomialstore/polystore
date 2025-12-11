@@ -18,6 +18,8 @@ FAUCET_AMOUNT="${NIL_AMOUNT:-1000000000000000000aatom,100000000stake}"
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
+BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
+BRIDGE_ADDRESS=""
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -201,11 +203,36 @@ start_gateway() {
   echo "gateway pid $(cat "$PID_DIR/gateway.pid"), logs: $LOG_DIR/gateway.log"
 }
 
+start_bridge() {
+  local mode="${NIL_DEPLOY_BRIDGE:-auto}"
+  if [ "$mode" = "0" ]; then
+    echo "Skipping bridge deployment (NIL_DEPLOY_BRIDGE=0)"
+    return
+  fi
+  if ! command -v forge >/dev/null 2>&1 || ! command -v cast >/dev/null 2>&1; then
+    echo "Foundry tools not found; skipping NilBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
+    return
+  fi
+
+  banner "Deploying NilBridge to local EVM"
+  if "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
+    if [ -f "$BRIDGE_ADDR_FILE" ]; then
+      BRIDGE_ADDRESS="$(cat "$BRIDGE_ADDR_FILE" | tr -d '\n' | tr -d '\r')"
+      echo "NilBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
+    else
+      echo "Bridge deploy script completed but address file missing; check /tmp/bridge_deploy.log"
+    fi
+  else
+    echo "Bridge deploy script failed; see /tmp/bridge_deploy.log. Continuing without bridge."
+  fi
+}
+
 start_web() {
   banner "Starting web (Vite dev server)"
   (
     cd "$ROOT_DIR/nil-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
+    VITE_BRIDGE_ADDRESS="${BRIDGE_ADDRESS:-${VITE_BRIDGE_ADDRESS:-}}" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! > "$PID_DIR/website.pid"
   )
@@ -220,6 +247,7 @@ start_all() {
   register_demo_provider
   start_faucet
   start_gateway
+  start_bridge
   start_web
   banner "Stack ready"
   cat <<EOF
@@ -229,6 +257,7 @@ EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31
 Faucet:      http://localhost:8081/faucet
 Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard
+Bridge:      ${BRIDGE_ADDRESS:-not deployed (set NIL_DEPLOY_BRIDGE=1 + install forge/cast)}
 Home:        $CHAIN_HOME
 To stop:     ./scripts/run_local_stack.sh stop
 EOF
