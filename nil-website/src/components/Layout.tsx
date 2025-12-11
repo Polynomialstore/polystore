@@ -110,7 +110,7 @@ export const Layout = () => {
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="fixed inset-0 top-16 bg-background/95 backdrop-blur-lg z-40 md:hidden flex flex-col p-6 border-t border-border/50"
+              className="fixed inset-0 top-16 bg-background backdrop-blur-lg z-50 md:hidden flex flex-col p-6 border-t border-border/50"
             >
               <div className="flex flex-col gap-6 text-lg font-medium">
                 {navLinks.map((link) => (
