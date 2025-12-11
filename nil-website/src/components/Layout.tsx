@@ -1,26 +1,52 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState } from "react";
-import { Menu, X, Github } from "lucide-react";
+import { Menu, X, Github, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ConnectWallet } from "./ConnectWallet";
+import { NavDropdown } from "./NavDropdown";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
 
-  const navLinks = [
-    { name: "Dashboard", path: "/dashboard" },
-    { name: "Technology", path: "/technology" },
-    { name: "Leaderboard", path: "/leaderboard" },
-    { name: "Performance", path: "/performance" },
-    { name: "Proofs", path: "/proofs" },
-    { name: "Economy", path: "/economy" },
-    { name: "Security", path: "/security" },
-    { name: "Governance", path: "/governance" },
+  // Navigation Hierarchy
+  const navStructure = [
+    { type: "link", name: "Dashboard", path: "/dashboard" },
+    { 
+      type: "dropdown", 
+      name: "Testnet", 
+      items: [
+        { name: "Leaderboard", path: "/leaderboard" },
+        { name: "Performance", path: "/performance" },
+        { name: "Proofs", path: "/proofs" },
+      ] 
+    },
+    { 
+      type: "dropdown", 
+      name: "Learn", 
+      items: [
+        { name: "Architecture", path: "/technology" },
+        { name: "Economy", path: "/economy" },
+        { name: "Security", path: "/security" },
+        { name: "Governance", path: "/governance" },
+      ] 
+    },
+    { 
+        type: "dropdown", 
+        name: "Resources", 
+        items: [
+          { name: "FAQ", path: "/faq" },
+        ] 
+      },
   ];
+
+  const toggleMobileGroup = (name: string) => {
+    setMobileExpanded(mobileExpanded === name ? null : name);
+  };
 
   return (
     <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300">
@@ -51,26 +77,31 @@ export const Layout = () => {
           </div>
 
           {/* 2. CENTER: Desktop Navigation (Visible only on LG+) */}
-          <div className="hidden lg:flex items-center gap-1">
-            {navLinks.map((link) => (
-              <Link 
-                key={link.path}
-                to={link.path} 
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-all relative ${
-                  isActive(link.path) 
-                    ? "text-primary bg-primary/10" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
+          <div className="hidden lg:flex items-center gap-2">
+            {navStructure.map((item) => {
+                if (item.type === "dropdown") {
+                    return <NavDropdown key={item.name} label={item.name} items={item.items!} />;
+                }
+                return (
+                    <Link 
+                        key={item.path}
+                        to={item.path!} 
+                        className={`px-3 py-2 text-sm font-medium rounded-md transition-all relative ${
+                        isActive(item.path!) 
+                            ? "text-primary bg-primary/10" 
+                            : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        }`}
+                    >
+                        {item.name}
+                    </Link>
+                );
+            })}
           </div>
 
           {/* 3. RIGHT: Actions & Mobile Toggle */}
           <div className="flex items-center gap-2 sm:gap-4">
               
-              {/* GitHub (Desktop Only to save space) */}
+              {/* GitHub (Desktop Only) */}
               <a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hidden sm:block text-muted-foreground hover:text-foreground transition-colors">
                 <Github className="w-5 h-5" />
               </a>
@@ -78,7 +109,7 @@ export const Layout = () => {
               <ModeToggle />
               <ConnectWallet />
 
-              {/* Mobile Menu Toggle (Visible < LG) */}
+              {/* Mobile Menu Toggle */}
               <button 
                 onClick={() => setIsOpen(!isOpen)} 
                 className="lg:hidden p-2 rounded-md hover:bg-secondary text-foreground"
@@ -97,22 +128,60 @@ export const Layout = () => {
               animate={{ opacity: 1, height: "100vh" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
-              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-white dark:bg-zinc-950 border-t border-border"
+              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-white dark:bg-zinc-950 border-t border-border pb-24"
             >
-              <div className="flex flex-col p-6 space-y-2">
-                {navLinks.map((link) => (
-                  <Link 
-                    key={link.path}
-                    to={link.path} 
-                    onClick={() => setIsOpen(false)}
-                    className={`text-lg font-medium py-4 border-b border-border/10 flex items-center justify-between ${
-                      isActive(link.path) ? "text-primary" : "text-foreground/80"
-                    }`}
-                  >
-                    {link.name}
-                    {isActive(link.path) && <div className="w-2 h-2 rounded-full bg-primary" />}
-                  </Link>
-                ))}
+              <div className="flex flex-col p-6 space-y-4">
+                {navStructure.map((item) => {
+                    if (item.type === "link") {
+                        return (
+                            <Link 
+                                key={item.path}
+                                to={item.path!} 
+                                onClick={() => setIsOpen(false)}
+                                className={`text-lg font-medium py-3 border-b border-border/10 flex items-center justify-between ${
+                                isActive(item.path!) ? "text-primary" : "text-foreground/80"
+                                }`}
+                            >
+                                {item.name}
+                                {isActive(item.path!) && <div className="w-2 h-2 rounded-full bg-primary" />}
+                            </Link>
+                        );
+                    }
+                    // Dropdown (Accordion style)
+                    const isExpanded = mobileExpanded === item.name;
+                    return (
+                        <div key={item.name} className="border-b border-border/10 pb-2">
+                            <button 
+                                onClick={() => toggleMobileGroup(item.name)}
+                                className="w-full flex items-center justify-between text-lg font-medium py-3 text-foreground/80"
+                            >
+                                {item.name}
+                                <ChevronDown className={`w-5 h-5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                            </button>
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="overflow-hidden pl-4 flex flex-col gap-2"
+                                    >
+                                        {item.items!.map(sub => (
+                                            <Link
+                                                key={sub.path}
+                                                to={sub.path}
+                                                onClick={() => setIsOpen(false)}
+                                                className={`block py-2 text-base ${isActive(sub.path) ? "text-primary font-bold" : "text-muted-foreground"}`}
+                                            >
+                                                {sub.name}
+                                            </Link>
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    );
+                })}
                 
                 <div className="pt-8 space-y-4">
                   <Link 
@@ -148,8 +217,8 @@ export const Layout = () => {
             <div>
               <h4 className="font-bold mb-4 text-foreground">Core Tech</h4>
               <ul className="space-y-2">
-                <li><Link to="/technology/sharding">Data Sharding</Link></li>
-                <li><Link to="/technology/kzg">KZG Commitments</Link></li>
+                <li><Link to="/technology">Architecture</Link></li>
+                <li><Link to="/economy">Economy</Link></li>
               </ul>
             </div>
             <div>
