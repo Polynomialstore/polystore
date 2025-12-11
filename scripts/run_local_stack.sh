@@ -20,6 +20,8 @@ NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
+# Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
+NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
