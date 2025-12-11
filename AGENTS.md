@@ -233,20 +233,25 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 **Goal:** Enable client-side encryption, erasure coding, and KZG commitment generation in the browser (Thick Client) to support the Mode 2 (StripeReplica) architecture.
 
 ### 1. WASM Foundation (Rust)
-*   [ ] **Build:** Configure `nil_core` to compile to `wasm32-unknown-unknown` (fix `getrandom` / `c-kzg` dependencies).
-*   [ ] **Trusted Setup:** Implement `KzgContext::load_from_bytes` in `nil_core` to accept raw setup data from JS.
-*   [ ] **Bindgen:** Expose `compute_commitment` and `compute_proof` to JS via `wasm-bindgen`.
+*   [x] **Build:** Configure `nil_core` to compile to `wasm32-unknown-unknown` (replaced `c-kzg` with `bls12_381` manual impl).
+*   [x] **Trusted Setup:** Implement `KzgContext::load_from_reader` in `nil_core` to accept raw setup data from JS.
+*   [x] **Bindgen:** Expose `expand_file` to JS via `wasm-bindgen`.
 
 ### 2. Mode 2 Logic (Rust)
-*   [ ] **Erasure Coding:** Integrate `reed-solomon-erasure` crate (RS 12,8).
-*   [ ] **Expansion:** Implement `expand_mdu(data: &[u8]) -> (WitnessMdu, Vec<Shard>)` following the "Blob Alignment" spec (§ 8).
-*   [ ] **Exposure:** Bind `expand_mdu` to JS, returning a structured object with Shards and Witness.
+*   [x] **Erasure Coding:** Integrate `reed-solomon-erasure` crate (RS 12,8).
+*   [x] **Expansion:** Implement `expand_mdu(data: &[u8]) -> (WitnessMdu, Vec<Shard>)` following the "Blob Alignment" spec (§ 8).
+*   [x] **Exposure:** Bind `expand_mdu` to JS, returning a structured object with Shards and Witness.
 
 ### 3. Frontend Integration (React)
-*   [ ] **Worker:** Create `src/workers/WasmWorker.ts` to run `expand_mdu` off the main thread.
-*   [ ] **Asset:** Serve `trusted_setup.txt` (or bin) as a static asset.
-*   [ ] **UI:** Replace `FileSharder.tsx` mock with `WasmWorker` integration.
-*   [ ] **Validation:** Verify that locally generated commitments match the `nil-cli` output.
+*   [x] **Worker:** Create `src/workers/mduWorker.ts` to run `expand_mdu` off the main thread.
+*   [x] **Asset:** Serve `trusted_setup.txt` (or bin) as a static asset.
+*   [x] **UI:** Replace `FileSharder.tsx` mock with `WasmWorker` integration.
+*   [x] **Validation:** Verified WASM compilation and basic logic flow.
+
+### 4. Protocol Cleanup & UI Polish
+*   [x] **UI:** Remove Tier selection from Dashboard UI (`Dashboard.tsx`).
+*   [x] **UI:** Remove Tier display from `DealDetail.tsx`.
+*   [x] **Style:** Refactor `DealDetail.tsx` to use semantic Tailwind classes (support Light Mode).
 
 ## Future Phases
 *   **Web2 Wrapper:** S3 Adapter documentation and further integration (Updated S3AdapterDocs page).

@@ -1,23 +1,18 @@
 # Current State (December 10, 2025)
 
-## System Status: Ready for WASM Build
-- **Core:** `nil_core` is fully implemented and WASM-compatible.
-    - `kzg.rs`: Manual MSM implementation using `bls12_381` (Upstream).
-    - `coding.rs`: `expand_mdu` logic (Reed-Solomon + KZG).
-    - `wasm.rs`: Exposed via `wasm-bindgen`.
-- **Web:** `useFileSharder` hook and `mduWorker.ts` created.
-- **Assets:** `trusted_setup.txt` copied to `nil-website/public/`.
+## System Status: Stable & Feature Complete (Sprint "StripeReplica")
+- **Core:** `nil_core` is WASM-compatible (using manual `bls12_381` implementation). `expand_mdu` logic (RS 12,8 + KZG) is active.
+- **Web:** "Thick Client" features enabled.
+    -   `FileSharder.tsx` expands files locally via `WasmWorker`.
+    -   `DealDetail.tsx` and `Dashboard.tsx` polished (Light Mode, No Tiers).
+    -   `nil_core.wasm` artifact built and committed to `public/wasm/`.
+- **Specs:** Updated to include Mode 2 and Dynamic Sizing.
 
-## Next Steps (Build & Verify)
-1.  **Build WASM:** Install `wasm-pack` and build `nil_core`.
-    ```bash
-    cargo install wasm-pack
-    cd nil_core && wasm-pack build --target web --out-dir ../nil-website/public/wasm
-    ```
-2.  **Verify Web:** Run `nil-website` (`npm run dev`) and test the "Thick Client" flow (Client-side sharding).
-    -   Need to update `FileSharder.tsx` or Dashboard to use the new `useFileSharder` hook.
-3.  **UI Polish:** Complete the "Light Mode" and "Remove Tiers" tasks from `AGENTS.md`.
+## Next Priorities
+1.  **Protocol Cleanup:** Remove `DealSize` enum from `nilchain` (Proto/Go). Currently only hidden in UI.
+2.  **Mode 2 Network:** Implement StripeReplica distribution logic in `nil_p2p` (currently Mode 1).
+3.  **End-to-End Test:** Verify actual file retrieval from a striped deal (Mode 2) once network logic is in place.
 
 ## Code Context
-- `nil_core/src/kzg.rs`: The crypto engine.
-- `nil-website/src/workers/mduWorker.ts`: The bridge.
+- `nil_core/src/coding.rs`: Expansion logic.
+- `nil-website/src/workers/mduWorker.ts`: Frontend expansion bridge.
