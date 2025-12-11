@@ -2,7 +2,7 @@
 
 This document outlines the high-level tasks required to expand `website-spec.md` into a comprehensive, file-by-file specification of the `nil-website` project.
 
-**Status:** ALL TASKS COMPLETED (Spec updated to include all items below).
+**Status:** IN PROGRESS (Educational Content Audit Active).
 
 ## 1. Core Configuration & Environment
 - [x] **Build & Environment Spec:** Define exact configurations for `vite.config.ts`, `tsconfig.json`, and `tailwind.config.js`.
@@ -34,20 +34,36 @@ This document outlines the high-level tasks required to expand `website-spec.md`
 ## 7. Utilities & Libraries
 - [x] **Utils:** `src/lib/` function specs (`address.ts`, `status.ts`, `cn`).
 
-## 8. Educational Content (New)
-These pages are required to explain the novel cryptographic and economic mechanisms of NilStore.
-
-- [ ] **KZG Deep Dive:** Create a dedicated page explaining the KZG Commitment algorithm.
-    *   **High Level:** "Polynomials as Files" (The `[3, 1, 4]` example).
-    *   **Rigorous:** Elliptic Curve Pairings, SRS, and q-SDH assumption.
-    *   **Application:** How NilStore uses Triple Proofs to bind Deal Root -> MDU -> Blob -> Byte.
-- [ ] **Retrieval Solved:** A guide on how NilStore inverts the storage model.
-    *   **Unified Liveness:** Receipts = Storage Proofs.
-    *   **Triple Proof:** Trustless verification of petabytes.
-    *   **Mode 2:** Erasure Coding and Self-Healing.
-- [ ] **The Deputy System:** Explaining the "Mystery Shopper" network.
-    *   **Concept:** Routing around damage vs. Courts.
-    *   **Audit Debt:** How nodes are forced to audit neighbors.
-    *   **Participation:** How users can run a node to earn rewards.
-
 ---
+
+## 8. Educational Content Remediation (Audit Findings)
+The following updates are required to align the website with the final Architecture (Mode 2, Triple Proof, Unified Liveness).
+
+### 8.1 Fix Existing Pages
+- [ ] **`src/pages/KZGDeepDive.tsx`**:
+    *   **Update:** Replace generic "Proof" text with specific **Triple Proof** logic.
+    *   **Visualize:** Show the 3-Hop Chain: `Deal Root` -> `MDU` -> `Blob` -> `Byte`.
+    *   **Example:** Add the "Polynomial Interpolation" example (`[3, 1, 4]`).
+    *   **Correction:** Clarify that Commitments bind to **1 MB Atomic Units** (Blobs), not 8 MB chunks directly.
+
+- [ ] **`src/pages/ShardingDeepDive.tsx`**:
+    *   **Correction:** Change `RS(12,9)` to **`RS(12,8)`**.
+    *   **Correction:** Update terminology: **1 MB Shards** (Atomic), **8 MB MDUs** (User Unit).
+    *   **Add Concept:** **Replicated Metadata**. Explain that *every* node holds the Witness Map to verify *any* shard independently.
+    *   **Add Concept:** **Self-Healing**. Explain how a new node reconstructs data from neighbors trustlessly.
+
+- [ ] **`src/pages/PerformanceDeepDive.tsx`**:
+    *   **Add Concept:** **Incremental Signing (Fair Exchange)**. Explain that speed is not enough; users must also *pay* (sign) incrementally to prevent "Free Riding".
+
+### 8.2 Create New Content
+- [ ] **`src/pages/DeputySystem.tsx`** (New):
+    *   **The Problem:** "Ghosting" SPs and "He Said, She Said" disputes.
+    *   **The Solution:** The **Deputy** (Mystery Shopper) routing around damage.
+    *   **Mechanism:** Ephemeral Keys + Audit Debt.
+- [ ] **`src/pages/NilFS.tsx`** (Optional/Advanced):
+    *   Explain the **Filesystem on Slab** concept.
+    *   Visual: Mapping `Hash("video.mp4")` -> `Offset 500`.
+
+### 8.3 Global Updates
+- [ ] **`src/pages/Technology.tsx`**: Update the list of "Deep Dives" to include the Deputy System.
+- [ ] **`src/pages/Home.tsx`**: Ensure the "Features" grid mentions **Self-Healing** (Mode 2) and **Triple Proof** explicitly.
