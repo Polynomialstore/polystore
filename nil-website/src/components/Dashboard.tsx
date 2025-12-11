@@ -380,14 +380,14 @@ export function Dashboard() {
       <StatusBar />
       
       {rpcMismatch && (
-        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
+        <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/20 rounded-full">
-              <RefreshCw className="w-5 h-5 text-red-400" />
+            <div className="p-2 bg-destructive/20 rounded-full">
+              <RefreshCw className="w-5 h-5 text-destructive" />
             </div>
             <div>
-              <h3 className="font-bold text-red-200">Critical Node Mismatch</h3>
-              <p className="text-sm text-red-300">
+              <h3 className="font-bold text-destructive-foreground">Critical Node Mismatch</h3>
+              <p className="text-sm text-destructive-foreground/80">
                 Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
                 <br/>Please restart your local stack or check your <code>run_local_stack.sh</code> configuration.
               </p>
@@ -397,14 +397,14 @@ export function Dashboard() {
       )}
 
       {isWrongNetwork && (
-        <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-4 flex items-center justify-between">
+        <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-yellow-500/20 rounded-full">
-              <RefreshCw className="w-5 h-5 text-yellow-400" />
+              <RefreshCw className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div>
-              <h3 className="font-bold text-yellow-200">Wrong Network</h3>
-              <p className="text-sm text-yellow-300">
+              <h3 className="font-bold text-yellow-700 dark:text-yellow-200">Wrong Network</h3>
+              <p className="text-sm text-yellow-600 dark:text-yellow-300">
                 Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilChain Local).
               </p>
             </div>
@@ -418,23 +418,23 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-900/30 p-6 rounded-xl border border-gray-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
         <div>
-            <h2 className="text-2xl font-bold text-white">My Storage Deals</h2>
-            <p className="text-gray-400 text-sm mt-1">Manage your active file contracts</p>
+            <h2 className="text-2xl font-bold text-foreground">My Storage Deals</h2>
+            <p className="text-muted-foreground text-sm mt-1">Manage your active file contracts</p>
         </div>
         <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-3">
                 <button 
                     onClick={handleRequestFunds}
                     disabled={faucetLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-md transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
                 >
                     {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
                     {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
                 </button>
                 {faucetTx && (
-                  <div className="flex items-center gap-2 text-xs text-green-400 bg-green-950/30 px-2 py-1 rounded border border-green-500/20">
+                  <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
                     <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate max-w-[120px]" title={faucetTx}>
                         Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
@@ -443,8 +443,8 @@ export function Dashboard() {
                   </div>
                 )}
                 <div className="text-right">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
-                    <div className="font-mono text-indigo-400 bg-indigo-950/30 px-3 py-1 rounded text-sm border border-indigo-500/20">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
+                    <div className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10">
                         {nilAddress}
                     </div>
                 </div>
@@ -455,27 +455,27 @@ export function Dashboard() {
       {statusMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
           statusTone === 'error'
-            ? 'border-red-800 bg-red-900/30 text-red-200'
+            ? 'border-destructive/50 bg-destructive/10 text-destructive'
             : statusTone === 'success'
-            ? 'border-green-800 bg-green-900/20 text-green-200'
-            : 'border-slate-800 bg-slate-900/40 text-slate-200'
+            ? 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400'
+            : 'border-border bg-secondary/50 text-muted-foreground'
         }`}>
           {statusMsg}
         </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 space-y-4">
-          <div className="flex items-center gap-2 text-white font-semibold">
-            <Coins className="w-4 h-4 text-yellow-400" />
+        <div className="bg-card rounded-xl border border-border p-6 space-y-4 shadow-sm">
+          <div className="flex items-center gap-2 text-foreground font-semibold">
+            <Coins className="w-4 h-4 text-yellow-500" />
             Wallet & Funds
           </div>
-          <div className="text-sm text-gray-400 space-y-3">
-            <div className="font-mono text-indigo-300 break-all">Address: {address || nilAddress}</div>
+          <div className="text-sm text-muted-foreground space-y-3">
+            <div className="font-mono text-primary break-all">Address: {address || nilAddress}</div>
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-gray-950/40 border border-gray-800 rounded p-2">
-                <div className="text-gray-500 uppercase tracking-wide">EVM (atom)</div>
-                <div className="font-mono text-green-300">
+              <div className="bg-secondary/50 border border-border rounded p-2">
+                <div className="text-muted-foreground uppercase tracking-wide">EVM (atom)</div>
+                <div className="font-mono text-green-600 dark:text-green-400">
                   {(() => {
                     if (!evmBalance) return '—'
                     const anyBal = evmBalance as any
@@ -490,42 +490,44 @@ export function Dashboard() {
                   })()}
                 </div>
               </div>
-              <div className="bg-gray-950/40 border border-gray-800 rounded p-2">
-                <div className="text-gray-500 uppercase tracking-wide">Cosmos stake</div>
-                <div className="font-mono text-blue-300">
+              <div className="bg-secondary/50 border border-border rounded p-2">
+                <div className="text-muted-foreground uppercase tracking-wide">Cosmos stake</div>
+                <div className="font-mono text-blue-600 dark:text-blue-400">
                   {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => disconnect()}
-              className="text-xs text-gray-500 hover:text-white underline"
-            >
-              Disconnect
-            </button>
-            <span className="text-gray-700">|</span>
-            <button
-              onClick={() => switchNetwork()}
-              className="text-xs text-indigo-400 hover:text-indigo-300 underline"
-            >
-              Force Switch Network
-            </button>
+            <div className="flex items-center gap-2">
+                <button
+                onClick={() => disconnect()}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                Disconnect
+                </button>
+                <span className="text-border">|</span>
+                <button
+                onClick={() => switchNetwork()}
+                className="text-xs text-primary hover:text-primary/80 underline"
+                >
+                Force Switch Network
+                </button>
+            </div>
           </div>
         </div>
 
-        <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-0 overflow-hidden flex flex-col">
+        <div className="bg-card rounded-xl border border-border p-0 overflow-hidden flex flex-col shadow-sm">
           {/* Tabs */}
-          <div className="flex border-b border-gray-800">
+          <div className="flex border-b border-border">
               <button 
                 onClick={() => setActiveTab('alloc')}
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'alloc' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'}`}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'alloc' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
               >
                   <HardDrive className="w-4 h-4" />
                   1. Alloc Capacity
               </button>
               <button 
                 onClick={() => setActiveTab('content')}
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'content' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'}`}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'content' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
               >
                   <Database className="w-4 h-4" />
                   2. Commit Content
@@ -535,52 +537,52 @@ export function Dashboard() {
           <div className="p-6 flex-1">
             {activeTab === 'alloc' ? (
                 <div className="space-y-4">
-                    <p className="text-xs text-gray-400">Reserve storage space on the network by creating a "Container".</p>
+                    <p className="text-xs text-muted-foreground">Reserve storage space on the network by creating a "Container".</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Size Tier</span>
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Size Tier</span>
                             <select 
                                 value={sizeTier} 
                                 onChange={e => setSizeTier(e.target.value)}
-                                className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             >
                                 <option value="1">Tier 1: 4 GiB (Dev)</option>
                                 <option value="2">Tier 2: 32 GiB (Std)</option>
                                 <option value="3">Tier 3: 512 GiB (Wholesale)</option>
                             </select>
                         </label>
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Duration (blocks)</span>
-                            <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
+                            <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
                         </label>
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Initial Escrow</span>
-                            <input value={initialEscrow} onChange={e => setInitialEscrow(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
+                            <input value={initialEscrow} onChange={e => setInitialEscrow(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
                         </label>
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Max Monthly Spend</span>
-                            <input value={maxMonthlySpend} onChange={e => setMaxMonthlySpend(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm" />
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
+                            <input value={maxMonthlySpend} onChange={e => setMaxMonthlySpend(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
                         </label>
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Replication</span>
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
                             <input
                                 type="number"
                                 min={1}
                                 max={12}
                                 value={replication}
                                 onChange={e => setReplication(e.target.value)}
-                                className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm"
+                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
                         </label>
                     </div>
                     <div className="flex items-center justify-between pt-2">
-                        <div className="text-xs text-gray-500">
-                            {createTx && <div className="text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0,10)}...</div>}
+                        <div className="text-xs text-muted-foreground">
+                            {createTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0,10)}...</div>}
                         </div>
                         <button
                             onClick={handleCreateDeal}
                             disabled={dealLoading}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-md disabled:opacity-50"
+                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
                             {dealLoading ? 'Allocating...' : 'Allocate'}
                         </button>
@@ -588,14 +590,14 @@ export function Dashboard() {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    <p className="text-xs text-gray-400">Upload a file and commit its cryptographic hash to your deal.</p>
+                    <p className="text-xs text-muted-foreground">Upload a file and commit its cryptographic hash to your deal.</p>
                     <div className="grid grid-cols-1 gap-3 text-sm">
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">Target Deal ID</span>
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                             <select 
                                 value={targetDealId} 
                                 onChange={e => setTargetDealId(e.target.value)}
-                                className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             >
                                 <option value="">Select a Deal...</option>
                                 {deals.filter(d => d.owner === nilAddress).map(d => (
@@ -603,37 +605,37 @@ export function Dashboard() {
                                 ))}
                             </select>
                         </label>
-                        <label className="space-y-1 text-gray-400">
-                            <span className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-2">
-                                <Upload className="w-3 h-3 text-indigo-400" />
+                        <label className="space-y-1">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                                <Upload className="w-3 h-3 text-primary" />
                                 Upload & Shard
                             </span>
                             <input
                                 type="file"
                                 onChange={handleFileChange}
                                 disabled={uploadLoading}
-                                className="w-full text-xs text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
+                                className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
                             />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
-                            <label className="space-y-1 text-gray-400">
-                                <span className="text-xs uppercase tracking-wide text-gray-500">Root CID</span>
-                                <input value={cid} onChange={e => setCid(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm font-mono text-xs" />
+                            <label className="space-y-1">
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Root CID</span>
+                                <input value={cid} onChange={e => setCid(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs focus:outline-none focus:border-primary" />
                             </label>
-                            <label className="space-y-1 text-gray-400">
-                                <span className="text-xs uppercase tracking-wide text-gray-500">Size (Bytes)</span>
-                                <input value={sizeBytes} onChange={e => setSizeBytes(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white text-sm font-mono text-xs" />
+                            <label className="space-y-1">
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Size (Bytes)</span>
+                                <input value={sizeBytes} onChange={e => setSizeBytes(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs focus:outline-none focus:border-primary" />
                             </label>
                         </div>
                     </div>
                     <div className="flex items-center justify-between pt-2">
-                        <div className="text-xs text-gray-500">
-                            {updateTx && <div className="text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
+                        <div className="text-xs text-muted-foreground">
+                            {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
                         </div>
                         <button
                             onClick={handleUpdateContent}
                             disabled={updateLoading || !cid || !targetDealId}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-md disabled:opacity-50"
+                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
                             {updateLoading ? 'Committing...' : 'Commit Content'}
                         </button>
@@ -646,63 +648,63 @@ export function Dashboard() {
 
       {loading ? (
         <div className="text-center py-24">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Syncing with NilChain...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Syncing with NilChain...</p>
         </div>
       ) : deals.length === 0 ? (
-        <div className="bg-gray-900/50 rounded-xl p-16 text-center border border-gray-800 border-dashed">
-            <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
-                <HardDrive className="w-8 h-8 text-gray-500" />
+        <div className="bg-card rounded-xl p-16 text-center border border-border border-dashed shadow-sm">
+            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-6">
+                <HardDrive className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">No active deals</h3>
-            <p className="text-gray-400 mb-6 max-w-md mx-auto">Alloc capacity above to get started.</p>
+            <h3 className="text-lg font-medium text-foreground mb-2">No active deals</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Alloc capacity above to get started.</p>
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/50 shadow-xl">
-              <table className="min-w-full divide-y divide-gray-800">
-                  <thead className="bg-gray-950/50">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-muted/50">
                       <tr>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Deal ID</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Content Hash (CID)</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Size</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tier</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Retrievals</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Hash (CID)</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
                       </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-border">
                       {deals.map((deal) => (
                       <tr
                         key={deal.id}
-                        className="hover:bg-white/5 transition-colors cursor-pointer"
+                        className="hover:bg-muted/50 transition-colors cursor-pointer"
                         onClick={() => setSelectedDeal(deal)}
                       >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">#{deal.id}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
                               <td
-                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-indigo-400"
+                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
                                 title={deal.cid}
                               >
-                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-gray-600 italic">Empty</span>}
+                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                 {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '—'}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                 {deal.deal_size === 1 ? '4 GiB' : deal.deal_size === 2 ? '32 GiB' : deal.deal_size === 3 ? '512 GiB' : 'Unk'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                   {deal.cid ? (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
                                           Active
                                       </span>
                                   ) : (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
                                           Allocated
                                       </span>
                                   )}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                 {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
                               </td>
                       </tr>
@@ -712,32 +714,32 @@ export function Dashboard() {
           </div>
 
           {providers.length > 0 && (
-            <div className="mt-6 overflow-hidden rounded-xl border border-gray-800 bg-gray-900/40">
-              <div className="px-6 py-3 border-b border-gray-800 bg-gray-950/40 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Active Providers
               </div>
-              <table className="min-w-full divide-y divide-gray-800 text-xs">
-                <thead className="bg-gray-950/30">
+              <table className="min-w-full divide-y divide-border text-xs">
+                <thead className="bg-muted/30">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Address</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Capabilities</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-400 uppercase tracking-wider">Total Storage</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800">
+                <tbody className="divide-y divide-border">
                   {providers.map((p) => (
-                    <tr key={p.address} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-2 font-mono text-[11px] text-indigo-300">
+                    <tr key={p.address} className="hover:bg-muted/50 transition-colors">
+                      <td className="px-4 py-2 font-mono text-[11px] text-primary">
                         {p.address.slice(0, 12)}...{p.address.slice(-6)}
                       </td>
-                      <td className="px-4 py-2 text-gray-200">{p.capabilities}</td>
+                      <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
                       <td className="px-4 py-2">
-                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                           {p.status}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-300">
+                      <td className="px-4 py-2 text-right text-muted-foreground">
                         {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}
                       </td>
                     </tr>
@@ -758,44 +760,44 @@ export function Dashboard() {
 
           {/* Liveness & Performance */}
           {proofs.length > 0 && (
-            <div className="mt-6 overflow-hidden rounded-xl border border-gray-800 bg-gray-900/40">
-              <div className="px-6 py-3 border-b border-gray-800 bg-gray-950/40 text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                 <span>Liveness &amp; Performance</span>
-                {proofsLoading && <span className="text-[10px] text-gray-500">Syncing proofs…</span>}
+                {proofsLoading && <span className="text-[10px] text-muted-foreground">Syncing proofs…</span>}
               </div>
-              <table className="min-w-full divide-y divide-gray-800 text-xs">
-                <thead className="bg-gray-950/30">
+              <table className="min-w-full divide-y divide-border text-xs">
+                <thead className="bg-muted/30">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Deal</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Provider</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Tier</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Block</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-400 uppercase tracking-wider">Valid</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Block</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Valid</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800">
+                <tbody className="divide-y divide-border">
                   {(() => {
                     const myDealIds = new Set(deals.map((d) => d.id))
                     const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
                     return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
-                      <tr key={p.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-2 text-gray-200">
+                      <tr key={p.id} className="hover:bg-muted/50 transition-colors">
+                        <td className="px-4 py-2 text-foreground">
                           {p.dealId ? `#${p.dealId}` : '—'}
                         </td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-indigo-300">
+                        <td className="px-4 py-2 font-mono text-[11px] text-primary">
                           {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
                         </td>
-                        <td className="px-4 py-2 text-gray-200">
+                        <td className="px-4 py-2 text-foreground">
                           {p.tier || '—'}
                         </td>
-                        <td className="px-4 py-2 text-gray-400">
+                        <td className="px-4 py-2 text-muted-foreground">
                           {p.blockHeight || 0}
                         </td>
                         <td className="px-4 py-2">
                           <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
                             p.valid
-                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                              : 'border-red-500/40 bg-red-500/10 text-red-300'
+                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
                           }`}>
                             {p.valid ? 'OK' : 'FAIL'}
                           </span>

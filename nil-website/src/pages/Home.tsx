@@ -13,17 +13,17 @@ export const Home = () => {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.8 }}
-            className="mx-auto w-64 h-64 mb-4 relative"
+            className="mx-auto w-64 h-64 mb-8 relative rounded-full overflow-hidden shadow-2xl border-4 border-background ring-1 ring-border"
           >
              <img 
                src="/logo_dark.jpg" 
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain dark:hidden mix-blend-multiply"
+               className="absolute inset-0 w-full h-full object-cover dark:hidden"
              />
              <img 
                src="/logo_light.jpg" 
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain hidden dark:block mix-blend-screen"
+               className="absolute inset-0 w-full h-full object-cover hidden dark:block"
              />
           </motion.div>
 
