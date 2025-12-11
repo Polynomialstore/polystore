@@ -1,27 +1,21 @@
 # Current State (December 10, 2025)
 
-## System Status: Stable
-- **KZG Slashing Issue:** RESOLVED.
-    - **Fix:** Switched `nil_core` to use Big Endian for scalar serialization, matching `c-kzg` expectations.
-    - **Verification:** `e2e_flow.sh` passes (valid proofs accepted). `e2e_slashing.sh` confirms invalid proofs are rejected client-side. `nil_core/tests/kzg_endianness_test.rs` prevents regression.
-- **Website Refactor:** MERGED.
-    - `website-refactor` branch merged into `main`.
-    - Includes new Dashboard, Layout, and Deputy System pages.
-- **NilS3 Architecture:** Filesystem on Slab (MDU #0) implemented and integrated.
+## System Status: Building Mode 2
+- **Goal:** Implement "StripeReplica" (Mode 2) with "Thick Client" (WASM).
+- **Core:** `nil_core` is now WASM-compatible!
+    - **Change:** Swapped `c-kzg` for `kzg-rs` to fix `stdlib.h` issues in WASM.
+    - **Status:** Compiles to `wasm32-unknown-unknown`. `kzg.rs` methods are currently STUBS.
+- **Spec:** `spec.md` updated with § 8 "Mode 2: StripeReplica".
+- **Todo:** `AGENTS.md` has a detailed "Winter Roadmap".
 
-## Architecture Highlights
-- **Triple Proof:** Fully implemented. `nil_s3` generates Manifest Blobs and MDU #0. Chain verifies inclusion via `VerifyChainedProof`.
-- **Deal Flow:** 2-Step Process (Capacity -> Content) fully supported by CLI and `nil_s3`.
-- **EVM Bridge:** `GatewayCreateDealFromEvm` allows user-signed intents.
-
-## Next Priorities
-1.  **"Store Wars" Devnet Launch:** Prepare for public testnet.
-    -   Deploy `nilchain` to a cloud server.
-    -   Configure Faucet and Gateway public endpoints.
-2.  **Wasm Client:** Compile `nil_core` to Wasm to enable client-side MDU packing in the browser (removing reliance on `nil_s3` gateway for privacy).
-3.  **Mode 2 (StripeReplica):** Begin implementation of Erasure Coding across providers (RS 12,8) as per `rfc-blob-alignment-and-striping.md`.
+## Next Steps (Immediate)
+1.  **Implement KZG Logic:** Fill in the stubs in `nil_core/src/kzg.rs` using `kzg-rs` and `bls12_381`.
+    -   Implement `blob_to_commitment` (Map bytes -> Scalars -> Commit).
+    -   Implement `load_from_file` (and `load_from_bytes`).
+2.  **Implement Expansion:** Create `expand_mdu` in `nil_core` using `reed-solomon-erasure`.
+3.  **Frontend:** Build the WasmWorker.
 
 ## Code Context
-- `nil_core/src/utils.rs`: Big Endian KZG utils.
-- `nil_s3/main.go`: Gateway logic (now uses `IngestNewDeal`).
-- `e2e_flow.sh`: Main "Happy Path" integration test.
+- `nil_core/src/kzg.rs`: The crypto wrapper. Currently contains stubs. NEEDS IMPLEMENTATION.
+- `nil_core/Cargo.toml`: Dependencies updated for WASM (`kzg-rs`, `getrandom` feature).
+- `SCOPE_STRIPEREPLICA.md`: Detailed scope of the current sprint.

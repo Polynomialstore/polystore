@@ -10,13 +10,16 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 debug-print = []
 
 [dependencies]
-c-kzg = "2.1.5"
+kzg-rs = "0.2.7"
+bls12_381 = "0.8"
+reed-solomon-erasure = "6.0"
 hex = "0.4.3"
 libc = "0.2"
 num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
 rand = "0.9.2"
+getrandom = { version = "0.3.0", features = ["wasm_js"] }
 sha2 = "0.10.9"
 thiserror = "2.0.17"
 rs_merkle = "1.5.0"
