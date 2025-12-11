@@ -2,7 +2,7 @@ import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'w
 import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useMemo, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu, ArrowUpRight } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -14,6 +14,7 @@ import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { BridgeStatus } from './BridgeStatus'
 import { BridgeActions } from './BridgeActions'
+import { FileSharder } from './FileSharder'
 
 interface Deal {
   id: string
@@ -53,7 +54,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
-  const [activeTab, setActiveTab] = useState<'alloc' | 'content'>('alloc')
+  const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
   const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
@@ -128,6 +129,7 @@ export function Dashboard() {
   const [targetDealId, setTargetDealId] = useState('')
   const [cid, setCid] = useState('')
   const [sizeBytes, setSizeBytes] = useState('0')
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null)
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
@@ -255,8 +257,13 @@ export function Dashboard() {
       const result = await upload(file, address)
       setCid(result.cid)
       setSizeBytes(String(result.sizeBytes))
+      setUploadFileName(result.filename || file.name)
       setStatusTone('neutral')
-      setStatusMsg(`File uploaded. Root CID derived: ${result.cid.slice(0, 16)}...`)
+      setStatusMsg(`File uploaded and sharded. Manifest root: ${result.cid.slice(0, 16)}...`)
+      // Auto-commit if a deal is already selected.
+      if (targetDealId) {
+        await handleUpdateContent(result.cid, result.sizeBytes)
+      }
     } catch (e: any) {
       console.error(e)
       setStatusTone('error')
@@ -310,24 +317,27 @@ export function Dashboard() {
       }
   }
 
-  const handleUpdateContent = async () => {
-      if (!targetDealId) { alert('Deal ID required'); return }
-      if (!cid) { alert('CID required'); return }
-      
-      try {
-          await submitUpdate({
-              creator: address || nilAddress,
-              dealId: Number(targetDealId),
-              cid: cid.trim(),
-              sizeBytes: Number(sizeBytes)
-          })
-          setStatusTone('success')
-          setStatusMsg('Content Committed! The network will now replicate your data.')
-          if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
-      } catch (e) {
-          setStatusTone('error')
-          setStatusMsg('Content commit failed.')
-      }
+  const handleUpdateContent = async (manifest?: string, size?: number) => {
+    const manifestRoot = manifest || cid
+    const manifestSize = size ?? Number(sizeBytes)
+
+    if (!targetDealId) { alert('Select a deal to commit into'); return }
+    if (!manifestRoot) { alert('Upload a file first'); return }
+    
+    try {
+        await submitUpdate({
+            creator: address || nilAddress,
+            dealId: Number(targetDealId),
+            cid: manifestRoot.trim(),
+            sizeBytes: manifestSize
+        })
+        setStatusTone('success')
+        setStatusMsg(`Content committed to deal ${targetDealId}.`)
+        if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
+    } catch (e) {
+        setStatusTone('error')
+        setStatusMsg('Content commit failed.')
+    }
   }
 
   async function refreshDealsAfterCreate(owner: string, newDealId: string) {
@@ -526,6 +536,13 @@ export function Dashboard() {
                   <Database className="w-4 h-4" />
                   2. Commit Content
               </button>
+              <button 
+                onClick={() => setActiveTab('mdu')}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'mdu' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
+              >
+                  <Cpu className="w-4 h-4" />
+                  Local MDU (WASM)
+              </button>
           </div>
 
           <div className="p-6 flex-1">
@@ -570,7 +587,7 @@ export function Dashboard() {
                         </button>
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === 'content' ? (
                 <div className="space-y-4">
                     <p className="text-xs text-muted-foreground">Upload a file and commit its cryptographic hash to your deal.</p>
                     <div className="grid grid-cols-1 gap-3 text-sm">
@@ -592,7 +609,7 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                                 <Upload className="w-3 h-3 text-primary" />
-                                Upload & Shard
+                                Upload & Shard (gateway)
                             </span>
                             <input
                                 type="file"
@@ -602,29 +619,48 @@ export function Dashboard() {
                             />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
-                            <label className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Root CID</span>
-                                <input value={cid} onChange={e => setCid(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs focus:outline-none focus:border-primary" />
-                            </label>
-                            <label className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Size (Bytes)</span>
-                                <input value={sizeBytes} onChange={e => setSizeBytes(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs focus:outline-none focus:border-primary" />
-                            </label>
+                            <div className="space-y-1">
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Manifest Root (auto)</span>
+                                <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                  {cid ? cid : <span className="text-muted-foreground">Upload a file to populate</span>}
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Size (bytes)</span>
+                                <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                  {sizeBytes && sizeBytes !== '0' ? sizeBytes : <span className="text-muted-foreground">Upload a file</span>}
+                                </div>
+                            </div>
                         </div>
+                        {uploadFileName && (
+                          <div className="text-xs text-muted-foreground">
+                            Last upload: <span className="font-semibold text-foreground">{uploadFileName}</span>
+                          </div>
+                        )}
                     </div>
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-xs text-muted-foreground">
                             {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
                         </div>
                         <button
-                            onClick={handleUpdateContent}
+                            onClick={() => handleUpdateContent()}
                             disabled={updateLoading || !cid || !targetDealId}
                             className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
-                            {updateLoading ? 'Committing...' : 'Commit Content'}
+                            {updateLoading ? 'Committing...' : 'Commit uploaded content'}
                         </button>
                     </div>
                 </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Run the Rust WASM sharder locally to produce MDUs and commitments before sending to the gateway.</p>
+                  <div className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-1 rounded-md flex items-center gap-1">
+                    <ArrowUpRight className="w-3 h-3" /> Offloads heavy work to your browser.
+                  </div>
+                </div>
+                <FileSharder />
+              </div>
             )}
           </div>
         </div>
@@ -650,10 +686,11 @@ export function Dashboard() {
                   <thead className="bg-muted/50">
                       <tr>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Hash (CID)</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -686,6 +723,14 @@ export function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                 {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(deal.id); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                  className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                                >
+                                  Upload to deal
+                                </button>
                               </td>
                       </tr>
                       ))}
