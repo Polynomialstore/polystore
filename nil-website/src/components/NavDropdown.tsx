@@ -39,6 +39,9 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
         <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? "rotate-180 text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
       </button>
 
+      {/* Invisible bridge to connect button to dropdown (prevents gap flickers) */}
+      <div className="absolute top-full left-0 w-full h-6 bg-transparent" />
+
       <AnimatePresence>
         {isOpen && (
           <motion.div

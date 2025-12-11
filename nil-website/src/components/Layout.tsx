@@ -57,7 +57,7 @@ export const Layout = () => {
         <div className="absolute inset-0 bg-background/70 backdrop-blur-xl border-b border-white/5 dark:border-white/5 shadow-sm"></div>
         
         {/* Cyber Gradient Line (Bottom) */}
-        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-60"></div>
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-30"></div>
 
         <div className="container mx-auto px-4 h-16 flex items-center justify-between relative z-10">
           
