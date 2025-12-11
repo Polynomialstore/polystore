@@ -71,33 +71,33 @@ export const ShardingDeepDive = () => {
         {/* Section 2: Configurable Erasure Coding */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Layers className="w-5 h-5 text-purple-500" /> Configurable Erasure Coding
+            <Layers className="w-5 h-5 text-purple-500" /> Mode 2: StripeReplica (RS 12,8)
           </h3>
           <p className="text-muted-foreground mb-6">
-            Each DU is mathematically split using Reed-Solomon encoding (RS). You can configure the redundancy level <strong>per file</strong>, choosing from profiles like "Standard", "Archive", or "Mission Critical".
+            Each 8 MiB MDU is mathematically split using Reed-Solomon encoding into <strong>12 Atomic Shards</strong> of <strong>1 MB</strong> each.
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <p className="text-sm text-muted-foreground mb-4">
-              <strong>Example:</strong> A "Standard" profile might use RS(12,9), meaning data is split into 12 shards, and any 9 are needed to reconstruct the original DU.
+              <strong>The Math:</strong> We use a standard <strong>RS(12,8)</strong> configuration. This means the 8 MiB of user data is split into 8 Data Shards, and we generate 4 Parity Shards for redundancy.
             </p>
             <div className="flex justify-around items-center text-center mt-6">
               <div className="flex flex-col items-center">
-                <span className="text-4xl font-bold text-blue-400">9</span>
-                <span className="text-sm text-muted-foreground">Data Shards (k)</span>
+                <span className="text-4xl font-bold text-blue-400">8</span>
+                <span className="text-sm text-muted-foreground">Data Shards (1 MB)</span>
               </div>
               <span className="text-3xl text-muted-foreground">+</span>
               <div className="flex flex-col items-center">
-                <span className="text-4xl font-bold text-purple-400">3</span>
-                <span className="text-sm text-muted-foreground">Parity Shards (n-k)</span>
+                <span className="text-4xl font-bold text-purple-400">4</span>
+                <span className="text-sm text-muted-foreground">Parity Shards (1 MB)</span>
               </div>
               <span className="text-3xl text-muted-foreground">=</span>
               <div className="flex flex-col items-center">
                 <span className="text-4xl font-bold text-green-400">12</span>
-                <span className="text-sm text-muted-foreground">Total Shards (n)</span>
+                <span className="text-sm text-muted-foreground">Total Nodes</span>
               </div>
             </div>
             <p className="text-sm text-muted-foreground italic mt-6">
-              This means you could lose 3 entire nodes (25% of the network) and your data is still safe.
+              You can lose any 4 nodes (33% of the network) and recover the file instantly.
             </p>
           </div>
         </section>
@@ -105,23 +105,23 @@ export const ShardingDeepDive = () => {
         {/* Section 3: Distribution & Repair */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <ArrowRightLeft className="w-5 h-5 text-green-500" /> System-Defined Placement
+            <ArrowRightLeft className="w-5 h-5 text-green-500" /> Self-Healing & Verification
           </h3>
           <p className="text-muted-foreground mb-6">
-            To prevent "Sybil Attacks" (where a single user pretends to be 10 different nodes to trick the system), NilStore uses <strong>Deterministic Slotting</strong>.
+            To prevent "Sybil Attacks" and ensure data integrity without centralization:
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm mb-6">
-            <p className="text-sm text-muted-foreground font-mono">
-              Target_Slot = Hash(DealID + BlockHash + ShardIndex)
+            <h4 className="font-bold text-foreground mb-2">Replicated Metadata ("The Map")</h4>
+            <p className="text-sm text-muted-foreground">
+              While the <strong>Data</strong> is stripped (1 MB per node), the <strong>Metadata</strong> (Witness MDU) is replicated to <strong>all 12 nodes</strong>.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              This means the blockchain decides where data goes, not the user. This forces diversity and ensures robust decentralization.
+              This allows any single node to cryptographically prove they hold the correct shard ("Shared-Nothing Verification") without needing to ask their neighbors.
             </p>
           </div>
           <ul className="list-disc list-inside text-muted-foreground space-y-2 mb-6">
-            <li><strong>Customizable Resilience:</strong> You choose the safety level for each file.</li>
-            <li><strong>Parallel Throughput:</strong> Client software downloads from the fastest available subset of nodes simultaneously.</li>
-            <li><strong>Efficient Repair:</strong> If a node fails, the network mathematically reconstructs only the specific missing shard, without needing to move the full file.</li>
+            <li><strong>Atomic Repair:</strong> If a node fails, a new node can reconstruct the missing 1 MB shard by asking any 8 neighbors, validating them against the Witness Map trustlessly.</li>
+            <li><strong>Parallel Throughput:</strong> Users download from 12 nodes simultaneously, aggregating bandwidth.</li>
           </ul>
         </section>
 

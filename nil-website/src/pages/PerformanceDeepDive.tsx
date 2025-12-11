@@ -126,6 +126,33 @@ export const PerformanceDeepDive = () => {
             </p>
           </div>
         </section>
+
+        {/* Section 2: Fair Exchange */}
+        <section>
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
+            <Trophy className="w-5 h-5 text-purple-500" /> Fair Exchange: Incremental Signing
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Speed is worthless if the user refuses to pay. To prevent "Free Riders" (users who download data but don't sign the receipt), NilStore uses an <strong>Incremental Signing Protocol</strong> (Tit-for-Tat).
+          </p>
+          <div className="bg-card border border-border p-6 rounded-xl shadow-sm grid md:grid-cols-3 gap-4 text-center">
+            <div className="p-4 bg-secondary/20 rounded-lg">
+                <div className="text-lg font-bold text-foreground mb-1">Step 1</div>
+                <div className="text-sm text-muted-foreground">Provider sends <strong>Chunk 1</strong> (e.g. 10MB).</div>
+            </div>
+            <div className="p-4 bg-secondary/20 rounded-lg">
+                <div className="text-lg font-bold text-foreground mb-1">Step 2</div>
+                <div className="text-sm text-muted-foreground">User verifies & <strong>Signs Receipt</strong>.</div>
+            </div>
+            <div className="p-4 bg-secondary/20 rounded-lg">
+                <div className="text-lg font-bold text-foreground mb-1">Step 3</div>
+                <div className="text-sm text-muted-foreground">Provider unlocks <strong>Chunk 2</strong>.</div>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4 italic text-center">
+            This reduces the "At-Risk" capital to near zero. Trust is established byte-by-byte.
+          </p>
+        </section>
       </motion.div>
     </div>
   );

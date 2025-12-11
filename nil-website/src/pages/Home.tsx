@@ -95,7 +95,7 @@ export const Home = () => {
           <FeatureCard 
             icon={<Shield className="w-8 h-8 text-green-400" />}
             title="Unified Liveness"
-            desc="Zero Wasted Work. User retrievals *are* the storage proofs. We don't separate 'auditing' from 'serving'. High traffic = High security."
+            desc="Zero Wasted Work. User retrievals *are* the storage proofs. Triple Proof verification guarantees integrity for every byte. High traffic = High security."
           />
           <FeatureCard 
             icon={<Activity className="w-8 h-8 text-blue-400" />}
@@ -105,7 +105,7 @@ export const Home = () => {
           <FeatureCard 
             icon={<Database className="w-8 h-8 text-purple-400" />}
             title="Elasticity & Privacy"
-            desc="Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically, funded by user escrow. Zero-Knowledge encryption ensures privacy."
+            desc="Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically. Self-Healing (Mode 2) ensures durability even if nodes fail. Zero-Knowledge encryption."
           />
         </div>
 
