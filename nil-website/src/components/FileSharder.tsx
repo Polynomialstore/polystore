@@ -1,31 +1,30 @@
-import { useState, useCallback } from 'react';
-import { useProofs } from '../context/ProofContext';
+import { useState, useCallback, useEffect } from 'react';
+import { useAccount, useConnect } from 'wagmi';
+import { injected } from 'wagmi/connectors';
+import { useFileSharder } from '../hooks/useFileSharder';
+import { RefreshCw, Wallet, Upload, AlertCircle, FileJson, Cpu } from 'lucide-react';
 
-interface Shard {
+interface ShardItem {
   id: number;
-  data: Uint8Array;
-  hash: string;
+  commitments: string[]; // Hex strings from witness
   status: 'pending' | 'processing' | 'sealed';
 }
 
 export function FileSharder() {
-  const [shards, setShards] = useState<Shard[]>([]);
+  const { address, isConnected } = useAccount();
+  const { connectAsync } = useConnect();
+  const { status: wasmStatus, error: wasmError, initWasm, expandMdu } = useFileSharder();
+  
+  const [shards, setShards] = useState<ShardItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [walletAddress, setWalletAddress] = useState("");
-  const { addSimulatedProof } = useProofs();
+  const [logs, setLogs] = useState<string[]>([]);
 
-  const connectWallet = () => {
-      setIsConnecting(true);
-      // Simulate delay
-      setTimeout(() => {
-          setWalletConnected(true);
-          setWalletAddress("nil1user" + Math.random().toString(36).substring(2, 8));
-          setIsConnecting(false);
-      }, 1500);
-  };
+  useEffect(() => {
+      initWasm('/trusted_setup.txt');
+  }, []);
+
+  const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -38,79 +37,72 @@ export function FileSharder() {
   }, []);
 
   const processFile = async (file: File) => {
-    if (!walletConnected) {
-        alert("Please connect wallet first!");
+    if (!isConnected) {
+        alert("Connect wallet first");
         return;
     }
-    
+    if (wasmStatus !== 'ready') {
+        alert("WASM not ready. " + (wasmError || "Initializing..."));
+        return;
+    }
+
     setProcessing(true);
     setShards([]);
-    
+    setLogs([]);
+    addLog(`Processing file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     const chunkSize = 8 * 1024 * 1024; // 8 MiB
     const totalChunks = Math.ceil(bytes.length / chunkSize);
-    const newShards: Shard[] = [];
-
-    // 1. Request Faucet Funds (Simulation of gas/storage payment)
-    try {
-        await fetch('http://localhost:8081/faucet', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: "user" }) // In real app, use real address
-        });
-        console.log("Faucet funds requested");
-    } catch (e) {
-        console.error("Faucet error", e);
-    }
+    
+    // Create placeholders
+    const newShards: ShardItem[] = Array.from({ length: totalChunks }, (_, i) => ({
+        id: i,
+        commitments: [],
+        status: 'pending'
+    }));
+    setShards(newShards);
 
     for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, bytes.length);
-      const chunk = bytes.slice(start, end);
-      
-      // Calculate SHA-256 hash (Binding)
-      const hashBuffer = await window.crypto.subtle.digest('SHA-256', chunk);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, bytes.length);
+        
+        let chunk = bytes.slice(start, end);
+        // Pad to exactly 8MB
+        if (chunk.length < chunkSize) {
+            const padded = new Uint8Array(chunkSize);
+            padded.set(chunk);
+            chunk = padded;
+        }
 
-      newShards.push({
-        id: i,
-        data: chunk,
-        hash: hashHex,
-        status: 'pending'
-      });
+        setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'processing' } : s));
+        addLog(`> Expanding MDU #${i} (RS 12,8 + KZG)...`);
+
+        try {
+            // Call WASM
+            const result = await expandMdu(chunk);
+            // result = { witness: [ [u8;48]... ], shards: [...] }
+            
+            // Convert witness to hex for display
+            // The witness is Vec<Vec<u8>> from serde
+            const witness: number[][] = result.witness;
+            const commitments = witness.map((w) => 
+                '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')
+            );
+
+            setShards(prev => prev.map((s, idx) => idx === i ? { ...s, commitments, status: 'sealed' } : s));
+            addLog(`> MDU #${i} sealed. 96 Commitments generated.`);
+            addLog(`> Root: ${commitments[0].slice(0,10)}...`);
+            
+        } catch (e: any) {
+            console.error(e);
+            addLog(`Error expanding MDU #${i}: ${e.message}`);
+        }
     }
-
-    setShards(newShards);
+    
     setProcessing(false);
-    
-    // Simulate "Sealing" animation
-    simulateSealing(newShards);
-  };
-
-  const simulateSealing = async (items: Shard[]) => {
-    // 2. "Upload" to S3 Adapter (Simulation)
-    // In a real app, we would PUT to /api/v1/object/{filename}
-    // Here we simulate the chain effect
-    
-    for (let i = 0; i < items.length; i++) {
-        await new Promise(r => setTimeout(r, 50)); // Fast ripple effect
-        setShards(prev => prev.map((s, idx) => 
-            idx === i ? { ...s, status: 'sealed' } : s
-        ));
-    }
-    
-    // Add to shared map state (Visual Feedback)
-    if (items.length > 0) {
-        addSimulatedProof({
-            id: `tx-${Date.now().toString().substring(6)}`,
-            creator: walletAddress,
-            commitment: items[0].hash, // Using SHA256 hash as proxy for commitment
-            block_height: "Pending",
-            source: "simulated"
-        });
-    }
+    addLog("Done. Client-side expansion complete.");
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -120,7 +112,7 @@ export function FileSharder() {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       processFile(e.dataTransfer.files[0]);
     }
-  }, []);
+  }, [wasmStatus, isConnected]); // Deps needed for closure to see current state?
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -130,25 +122,28 @@ export function FileSharder() {
 
   return (
     <div className="w-full space-y-6">
-      {!walletConnected ? (
+      {!isConnected ? (
           <button 
-            onClick={connectWallet} 
-            disabled={isConnecting}
-            className={`w-full py-12 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 font-bold transition-all flex flex-col items-center gap-4
-                ${isConnecting ? 'opacity-50 cursor-not-allowed animate-pulse' : 'hover:border-primary/50 hover:bg-primary/5'}
-            `}
+            onClick={() => connectAsync({ connector: injected() })}
+            className="w-full py-12 border-2 border-dashed border-border rounded-xl text-muted-foreground font-bold transition-all flex flex-col items-center gap-4 hover:border-primary/50 hover:bg-secondary/50"
           >
-              <div className="text-4xl">{isConnecting ? '🔄' : '🔌'}</div>
-              {isConnecting ? 'Connecting Wallet...' : 'Connect Wallet to Start'}
+              <div className="text-4xl">🔌</div>
+              Connect Wallet to Start
           </button>
       ) : (
       <>
       <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-green-400">
+          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
-              Connected: <span className="font-mono font-bold">{walletAddress}</span>
+              Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
           </div>
-          <button onClick={() => setWalletConnected(false)} className="text-xs text-muted-foreground hover:text-foreground">Disconnect</button>
+          <div className="flex items-center gap-2 text-xs">
+             <span className={`px-2 py-0.5 rounded-full border ${
+                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+             }`}>
+                 WASM: {wasmStatus}
+             </span>
+          </div>
       </div>
 
       {/* Dropzone */}
@@ -160,38 +155,38 @@ export function FileSharder() {
         className={`
           border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200
           ${isDragging 
-            ? 'border-green-400 bg-green-400/10 scale-[1.02]' 
-            : 'border-slate-700 hover:border-slate-500 bg-slate-900/50'
+            ? 'border-primary bg-primary/10 scale-[1.02]' 
+            : 'border-border hover:border-primary/50 bg-card'
           }
         `}
       >
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center text-3xl">
-            📂
+          <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center text-3xl">
+            <Cpu className="w-8 h-8 text-foreground" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-slate-200">Drop a file to Shard</h3>
-            <p className="text-slate-400 mt-2">
-              Or <label className="text-green-400 hover:underline cursor-pointer">
-                browse
-                <input type="file" className="hidden" onChange={handleFileSelect} />
-              </label> to split it into 8 MiB Data Units (DUs).
+            <h3 className="text-xl font-bold text-foreground">Client-Side Expansion</h3>
+            <p className="text-muted-foreground mt-2">
+              Drop a file to split it into <span className="text-primary font-bold">12-Stripe RS Erasure Codes</span> and generate <span className="text-primary font-bold">KZG Commitments</span> locally via WASM.
             </p>
+            <label className="mt-4 inline-block text-primary hover:underline cursor-pointer text-sm">
+                Browse Files
+                <input type="file" className="hidden" onChange={handleFileSelect} />
+            </label>
           </div>
         </div>
       </div>
 
       {/* Visualization Grid */}
       {shards.length > 0 && (
-        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
-          {/* ... existing visualization code ... */}
+        <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"/>
-              Lattice Visualization
+            <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
+              <FileJson className="w-5 h-5 text-primary" />
+              Manifest Visualization
             </h3>
-            <div className="text-sm text-slate-400 font-mono">
-              {shards.filter(s => s.status === 'sealed').length} / {shards.length} DUs Sealed
+            <div className="text-sm text-muted-foreground font-mono">
+              {shards.filter(s => s.status === 'sealed').length} / {shards.length} MDUs Sealed
             </div>
           </div>
 
@@ -200,43 +195,35 @@ export function FileSharder() {
               <div 
                 key={shard.id}
                 className={`
-                  aspect-square rounded-lg p-2 flex flex-col justify-between text-[10px] font-mono transition-all duration-500
+                  aspect-square rounded-lg p-2 flex flex-col justify-between text-[10px] font-mono transition-all duration-500 border
                   ${shard.status === 'sealed' 
-                    ? 'bg-green-500/20 border border-green-500/50 text-green-200 shadow-[0_0_10px_rgba(74,222,128,0.2)]' 
-                    : 'bg-slate-800 border border-slate-700 text-slate-500'
+                    ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300' 
+                    : shard.status === 'processing'
+                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-300 animate-pulse'
+                    : 'bg-secondary border-border text-muted-foreground'
                   }
                 `}
-                title={`Hash: ${shard.hash}`}
+                title={shard.commitments[0] || 'Pending...'}
               >
                 <div className="flex justify-between opacity-50">
                   <span>#{shard.id}</span>
                   <span>8MB</span>
                 </div>
                 <div className="truncate text-[8px] opacity-75">
-                  {shard.status === 'sealed' ? shard.hash.substring(0, 8) : '...'}
+                  {shard.status === 'sealed' ? shard.commitments[0].slice(0, 8) : shard.status === 'processing' ? 'Encrypting...' : 'Pending'}
                 </div>
               </div>
             ))}
           </div>
           
-          <div className="mt-4 p-4 bg-slate-950 rounded border border-slate-800 text-xs font-mono text-slate-400">
-            <p className="mb-2 text-green-400 font-bold">System Activity:</p>
-            {processing ? (
-                <p>Processing file...</p>
-            ) : shards.length > 0 ? (
-                <div className="space-y-1">
-                    <p>{'>'} Connected as {walletAddress}</p>
-                    <p>{'>'} File split into {shards.length} Data Units.</p>
-                    <p>{'>'} Binding values (SHA-256) computed.</p>
-                    <p>{'>'} Requesting Faucet Funds...</p>
-                    <p>{'>'} Distributing to Storage Nodes...</p>
-                    {shards.filter(s => s.status === 'sealed').length === shards.length && (
-                        <p className="text-green-400">{'>'} All shards verified and sealed.</p>
-                    )}
-                </div>
-            ) : (
-                <p>Waiting for input...</p>
-            )}
+          <div className="mt-4 p-4 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
+            <p className="mb-2 text-primary font-bold">System Activity:</p>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+                {logs.map((log, i) => (
+                    <p key={i}>{log}</p>
+                ))}
+                {processing && <p className="animate-pulse">...</p>}
+            </div>
           </div>
         </div>
       )}

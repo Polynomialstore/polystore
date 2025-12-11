@@ -118,7 +118,6 @@ export function Dashboard() {
   }
 
   // Step 1: Alloc State
-  const [sizeTier, setSizeTier] = useState('1')
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
@@ -297,7 +296,7 @@ export function Dashboard() {
       try {
         const res = await submitDeal({
           creator: address || nilAddress,
-          sizeTier: Number(sizeTier),
+          sizeTier: 0, // Ignored by new logic
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
@@ -540,18 +539,6 @@ export function Dashboard() {
                     <p className="text-xs text-muted-foreground">Reserve storage space on the network by creating a "Container".</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Size Tier</span>
-                            <select 
-                                value={sizeTier} 
-                                onChange={e => setSizeTier(e.target.value)}
-                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            >
-                                <option value="1">Tier 1: 4 GiB (Dev)</option>
-                                <option value="2">Tier 2: 32 GiB (Std)</option>
-                                <option value="3">Tier 3: 512 GiB (Wholesale)</option>
-                            </select>
-                        </label>
-                        <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
                             <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
                         </label>
@@ -668,7 +655,6 @@ export function Dashboard() {
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Hash (CID)</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
                       </tr>
@@ -689,9 +675,6 @@ export function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                 {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '—'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                                {deal.deal_size === 1 ? '4 GiB' : deal.deal_size === 2 ? '32 GiB' : deal.deal_size === 3 ? '512 GiB' : 'Unk'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                   {deal.cid ? (
@@ -770,7 +753,6 @@ export function Dashboard() {
                   <tr>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Block</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Valid</th>
                   </tr>
@@ -786,9 +768,6 @@ export function Dashboard() {
                         </td>
                         <td className="px-4 py-2 font-mono text-[11px] text-primary">
                           {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-foreground">
-                          {p.tier || '—'}
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">
                           {p.blockHeight || 0}
