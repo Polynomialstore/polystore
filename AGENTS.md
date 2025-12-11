@@ -232,11 +232,31 @@ Future agents utilizing this documentation must be aware of the following archit
 - **Simulation vs. Reality:** The `FileSharder.tsx` component is a visual simulation using SHA-256 and is **not** part of the actual transaction pipeline.
 - **Action Item:** Future work involves compiling the Rust `nil_core` crate to Wasm to enable true "Thick Client" functionality (Local KZG generation, MDU packing, and autonomous SP negotiation) directly in the browser.
 
-## 9. `nil_s3` Refactor: Implementing Filesystem on Slab (TDD Plan)
+## 9. Current Architecture State: Mode 2 & NilFS (As of Dec 2025)
 
-This section outlines the Test-Driven Development (TDD) plan for refactoring the `nil_s3` Gateway to implement the "Filesystem on Slab" architecture as defined in `notes/triple-proof.md`. Each step includes specific tests to pass before considering the task complete.
+**Status:** Specs Aligned. Implementation Pending.
 
-### 9.1 Task 1: Define Go Structs for MDU #0 Layout
+We have finalized the design for **Mode 2 (StripeReplica)** and the **NilFS Layout**.
+
+### 9.1 Mode 2 Alignment
+*   **Atomic Unit:** 1 MB Shard.
+*   **MDU Unit:** 8 MB (8 Shards x 1 MB).
+*   **Configuration:** RS(12, 8). 12 Providers per Deal.
+*   **Verification:** Uses **Replicated Metadata** (Witness MDUs) to enable Shared-Nothing Verification.
+*   **Source of Truth:** `rfcs/rfc-blob-alignment-and-striping.md`.
+
+### 9.2 NilFS Layout (Spec Status)
+*   **Current Target (V1):** Fixed 6MB Table. Simple, Robust, but limited capacity (98k files).
+    *   **Decision:** We are implementing **V1** for the current Devnet.
+*   **Future Upgrade (V2):** Detached Paths / Inode #1.
+    *   **Decision:** Deferred to Mainnet.
+    *   **Reference:** `notes/triple-proof-review.md`.
+
+## 10. `nil_s3` Refactor: Implementing Filesystem on Slab (TDD Plan)
+
+This section outlines the Test-Driven Development (TDD) plan for refactoring the `nil_s3` Gateway to implement the "Filesystem on Slab" architecture. Each step includes specific tests to pass before considering the task complete.
+
+### 10.1 Task 1: Define Go Structs for MDU #0 Layout (V1 Schema)
 
 **Description:** Define Go structs (`FileTableHeader`, `FileRecordV1`) for the MDU #0 Super-Manifest layout in a new package `nil_s3/pkg/layout`. This includes bit-packing logic for `length_and_flags`.
 
@@ -258,7 +278,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Definition of Done:** `go test ./pkg/layout` passes with 100% coverage of struct definition and serialization/deserialization logic. All bit-packing and size assertions are correct.
 
-### 9.2 Task 2: Implement `Mdu0Builder` Logic
+### 10.2 Task 2: Implement `Mdu0Builder` Logic
 
 **Description:** Develop a `Mdu0Builder` module responsible for initializing, modifying, and serializing the 8MB MDU #0 buffer. This builder must account for the Root Table containing roots for MDU #0 itself, **Witness MDUs**, and User Data MDUs.
 
@@ -295,7 +315,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Definition of Done:** `go test ./pkg/builder` passes, creating valid 8MB binary images, and correctly handling the Root Table indexing for Witness and User Data MDUs.
 
-### 9.3 Task 3: Refactor `GatewayUpload` (Service Layer)
+### 10.3 Task 3: Refactor `GatewayUpload` (Service Layer)
 
 **Description:** Modify the `GatewayUpload` handler (`nil_s3/main.go`) to utilize the `Mdu0Builder` and the new "Filesystem on Slab" logic, including the generation and storage of **Witness MDUs**.
 
@@ -331,7 +351,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Definition of Done:** The `GatewayUpload` handler correctly processes new file uploads, managing the MDU #0 and Witness MDUs states locally, and returning the necessary information for `MsgUpdateDealContent` (new `ManifestRoot`, `allocated_length`).
 
-### 9.4 Task 4: Refactor `GatewayFetch` (Filesystem Resolution)
+### 10.4 Task 4: Refactor `GatewayFetch` (Filesystem Resolution)
 
 **Description:** Update the `GatewayFetch` handler to resolve files by their path within a Deal, rather than requiring a direct CID for a single file. This involves reading MDU #0 and retrieving Blob Commitments from Witness MDUs for proof generation.
 
@@ -355,7 +375,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Definition of Done:** `GatewayFetch` correctly resolves file paths, retrieves `FileRecord`s, reads Blob Commitments from Witness MDUs, and streams the correct byte ranges from the User Data MDUs.
 
-### 9.5 Task 5: Implement `GatewayUpdateDealContent` Refactor (Chain Interaction)
+### 10.5 Task 5: Implement `GatewayUpdateDealContent` Refactor (Chain Interaction)
 
 **Description:** Modify `GatewayUpdateDealContentFromEvm` (and potentially `GatewayUpdateDealContent`) to properly handle the `allocated_length` field and ensure the on-chain representation matches the `nil_s3`'s understanding of the Deal's state.
 
