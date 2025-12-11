@@ -77,3 +77,26 @@ To neutralize this risk, client SDKs and SPs MUST implement **Incremental Signin
 | **Wash Trading** | System-Defined Placement (Randomness) | **Low** |
 
 The system relies on **Cryptography** for Integrity and **Incremental Settlement** for Fair Exchange.
+
+---
+
+## 5. The Escape Hatch: Voluntary Rotation
+
+While the system uses **System-Defined Placement** to prevent Sybil attacks, we acknowledge that legitimate users may need to fire a specifically abusive Provider (e.g., one engaging in "Selective Service" or extortion).
+
+### 5.1 The Mechanism: `MsgRequestRotation`
+*   **Action:** The Deal Owner submits a transaction requesting the removal of `SP_Bad` from `Deal_ID`.
+*   **Protocol Response:**
+    1.  The Protocol removes `SP_Bad`.
+    2.  The Protocol recruits a replacement `SP_New` using the standard **Random Placement Algorithm** (User cannot choose).
+    3.  `SP_New` replicates the missing shard from neighbors.
+
+### 5.2 The Risk: Sybil Grinding
+A malicious user might repeatedly fire `SP_Random` until the protocol assigns `SP_Friend` (a node they control), eventually capturing the entire deal.
+
+### 5.3 The Defense: Cost & Cooldowns
+To prevent grinding, the protocol enforces strict friction:
+
+1.  **Replication Cost:** The User must pay the full bandwidth cost to replicate the shard to the new provider.
+2.  **Cooldown (Rate Limit):** A specific Deal Slot (e.g., Shard #5) can only be voluntarily rotated once per **Cooldown Period** (e.g., 7 days).
+    *   *Effect:* Even if an attacker is willing to pay infinite fees, the time required to grind a specific set of providers becomes measured in years, neutralizing the attack.
