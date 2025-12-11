@@ -60,17 +60,15 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length (expected 65 bytes)")
 	}
 
-        // EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
+            	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
 
-        eip712ChainID, ok := new(big.Int).SetString(intent.ChainId, 10)
+                // Use 31337 for local devnet.
 
-        if !ok {
+                eip712ChainID := big.NewInt(31337)
 
-            eip712ChainID = big.NewInt(1)
+        
 
-        }
-
-    	domainSep := types.HashDomainSeparator(eip712ChainID)
+            	domainSep := types.HashDomainSeparator(eip712ChainID)
 
         structHash, err := types.HashCreateDeal(intent)
 
@@ -86,35 +84,75 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 
     
 
-        // DEBUG: EIP-712 Tracing
+                // DEBUG: EIP-712 Tracing
 
-        fmt.Printf("\n--- DEBUG EIP-712 ---\n")
+    
 
-        fmt.Printf("Intent: %+v\n", intent)
+                ctx.Logger().Info("DEBUG EIP-712 CreateDeal",
 
-        fmt.Printf("ChainID: %s\n", eip712ChainID.String())
+    
 
-        fmt.Printf("DomainSep: %s\n", domainSep.Hex())
+                    "Intent", fmt.Sprintf("%+v", intent),
 
-        fmt.Printf("StructHash: %s\n", structHash.Hex())
+    
 
-        fmt.Printf("Digest: %x\n", digest)
+                    "ChainID", eip712ChainID.String(),
 
-        fmt.Printf("Signature: %x\n", msg.EvmSignature)
+    
 
-    	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
+                    "DomainSep", domainSep.Hex(),
 
-    	if err != nil {
+    
 
-    		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+                    "StructHash", structHash.Hex(),
 
-    	}
+    
 
-        fmt.Printf("Recovered: %s\n", evmAddr.Hex())
+                    "Digest", fmt.Sprintf("%x", digest),
 
-        fmt.Printf("Expected: %s\n", intent.CreatorEvm)
+    
 
-        fmt.Printf("---------------------\n")
+                    "Signature", fmt.Sprintf("%x", msg.EvmSignature),
+
+    
+
+                )
+
+    
+
+        
+
+    
+
+            	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
+
+    
+
+            	if err != nil {
+
+    
+
+            		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+
+    
+
+            	}
+
+    
+
+                ctx.Logger().Info("DEBUG EIP-712 Recovery",
+
+    
+
+                    "Recovered", evmAddr.Hex(),
+
+    
+
+                    "Expected", intent.CreatorEvm,
+
+    
+
+                )
 
         // Temporarily assume signature is valid and derive evmAddr directly.
 
@@ -489,35 +527,34 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length")
 	}
 
-    	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
-        eip712ChainID, ok := new(big.Int).SetString(intent.ChainId, 10)
-        if !ok {
-            eip712ChainID = big.NewInt(1)
-        }
-
-    	domainSep := types.HashDomainSeparator(eip712ChainID)
-        structHash, err := types.HashUpdateContent(intent)
-        if err != nil {
+    	        // EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
+    	        // Use 31337 for local devnet. In production, this should be fetched from EVM keeper or config.
+    	        eip712ChainID := big.NewInt(31337) 
+    	
+    	    	    	domainSep := types.HashDomainSeparator(eip712ChainID)
+    	    	        structHash, err := types.HashUpdateContent(intent)
             return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
         }
         
         digest := types.ComputeEIP712Digest(domainSep, structHash)
 
-        fmt.Printf("\n--- DEBUG EIP-712 (Update) ---\n")
-        fmt.Printf("Intent: %+v\n", intent)
-        fmt.Printf("ChainID: %s\n", eip712ChainID.String())
-        fmt.Printf("DomainSep: %s\n", domainSep.Hex())
-        fmt.Printf("StructHash: %s\n", structHash.Hex())
-        fmt.Printf("Digest: %x\n", digest)
-        fmt.Printf("Signature: %x\n", msg.EvmSignature)
+        ctx.Logger().Info("DEBUG EIP-712 UpdateContent",
+            "Intent", fmt.Sprintf("%+v", intent),
+            "ChainID", eip712ChainID.String(),
+            "DomainSep", domainSep.Hex(),
+            "StructHash", structHash.Hex(),
+            "Digest", fmt.Sprintf("%x", digest),
+            "Signature", fmt.Sprintf("%x", msg.EvmSignature),
+        )
 
     	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
     	if err != nil {
     		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
     	}
-        fmt.Printf("Recovered: %s\n", evmAddr.Hex())
-        fmt.Printf("Expected: %s\n", intent.CreatorEvm)
-        fmt.Printf("---------------------\n")
+        ctx.Logger().Info("DEBUG EIP-712 Recovery (Update)",
+            "Recovered", evmAddr.Hex(),
+            "Expected", intent.CreatorEvm,
+        )
         // Temporarily assume signature is valid and derive ownerAcc directly.
         // ownerAcc := sdk.AccAddress(evmAddr.Bytes())
 

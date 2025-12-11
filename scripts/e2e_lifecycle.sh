@@ -115,6 +115,8 @@ echo "    NIL: $NIL_ADDRESS"
 
 fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
 sleep 5 # Give chain time to process funding transaction
+echo "==> Verifying balance for $NIL_ADDRESS..."
+"$ROOT_DIR/nilchain/nilchaind" query bank balances "$NIL_ADDRESS" --home "$ROOT_DIR/_artifacts/nilchain_data" --output json
 
 # 2. Upload File
 echo "==> Uploading file 'README.md' to Gateway..."
@@ -161,8 +163,8 @@ intent = {
     "creator_evm": acct.address,
     "duration_blocks": 100,
     "service_hint": "General",
-    "initial_escrow": "1000000stake",
-    "max_monthly_spend": "500000stake",
+    "initial_escrow": "1000000",
+    "max_monthly_spend": "500000",
     "nonce": initial_nonce,
     "chain_id": chain_id,
     "size_tier": 0, # Legacy field required for EIP-712 signature
