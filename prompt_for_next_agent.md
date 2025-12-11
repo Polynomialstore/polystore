@@ -10,29 +10,26 @@
 - **Retrieval:** `nil_s3` correctly retrieves files using the FAT in MDU #0.
 
 ## The Slashing Issue
-- **Symptom:** `MsgProveLiveness` transactions are successfully submitted but result in a `slash` (burn) event on-chain.
-- **Error:** The on-chain verification (`VerifyChainedProof`) fails.
-- **Investigation Findings (Dec 10, 2025):**
-    - **Reproduction:** Created `nil_core/tests/repro_issue.rs`.
-        - `test_repro_verification_failure`: A blob with `blob[0]=1` (rest 0) fails to evaluate to `1` at `z=1` (standard root index 0). It yields `0x36...`.
-        - `test_constant_polynomial`: A blob with ALL `1`s correctly evaluates to `1` at `z=1`.
-    - **Conclusion 1:** `c-kzg` (v2.1.5) definitely treats the input Blob as **Evaluations** (not Coefficients).
-    - **Conclusion 2:** There is a mismatch in the **Evaluation Domain** or **Index Ordering** between `nil_core` assumptions (Natural Order, Generator=7) and the `c-kzg` build/trusted setup.
-    - **Failed Fixes:**
-        - **Bit-Reversal:** Applying bit-reversal to inputs did NOT resolve the mismatch.
-        - **Endianness:** Switching to Big Endian inputs did NOT resolve the mismatch.
-        - **Generator Search:** Brute-forcing generators (2-100) did not find a matching shift.
+- **Symptom:** `MsgProveLiveness` transactions were resulting in `slash` (burn) events on-chain due to invalid KZG proofs.
+- **Root Cause Identified (Dec 10, 2025):**
+    - The `c-kzg` library (v2.1.5) and the provided `trusted_setup.txt` expect **Big Endian** byte representation for Scalars (Blob elements and evaluation point `z`).
+    - `nil_core` was incorrectly using Little Endian (`fr_to_bytes_le`) for `z_for_cell` and `frs_to_blobs`.
+    - This caused `z=1` to be interpreted as a massive integer, leading to incorrect evaluations.
+- **Fix Applied:**
+    - Updated `nil_core/src/utils.rs` to use `fr_to_bytes_be` in `z_for_cell` and `frs_to_blobs`.
+    - Recompiled `nil_core` (Release) and `nil_cli` (Release).
+- **Verification:**
+    - Created `nil_core/tests/repro_issue.rs` which confirms that `z=1` (BE) and `blob=[1, 0...]` (BE) now correctly produce `y=1`.
 
 ## Next Steps
-1.  **Resolve Domain Mismatch:**
-    -   Inspect `c-kzg` (v2.1.5) source or `trusted_setup.txt` generation parameters to determine the exact Roots of Unity permutation used.
-    -   Update `nil_core/src/utils.rs` (`z_for_cell` and `frs_to_blobs`) to match this permutation.
-    -   Verify fix using `nil_core/tests/repro_issue.rs`.
-2.  **Verify FFI:** Once `nil_core` tests pass, double-check `nilchain/x/crypto_ffi/binding.go` for any remaining byte-slicing errors.
-3.  **Resolve Slashing:** Apply the fix to `nil_core` to enable successful on-chain proofs.
+1.  **Redeploy & Verify:**
+    -   Rebuild `nilchain` to link against the updated `libnil_core.a` (in `nil_core/target/release`).
+    -   Restart `nilchaind` and `nil_s3`.
+    -   Run `e2e_test.sh` or manual proof submission to verify `slash` events are gone.
+2.  **Clean Up:**
+    -   Remove `nil_core/tests/repro_issue.rs` once full E2E is confirmed (or keep as regression test).
 
 ## Code Context
-- `nil_core/tests/repro_issue.rs`: **CRITICAL**. Contains the reproduction case.
-- `nil_core/src/utils.rs`: Contains the `z_for_cell` and `frs_to_blobs` logic that needs fixing.
-- `demos/kzg/kzg_toy.py`: Python reference implementation (seems to use standard order, might differ from C lib).
-- `nilchain/x/nilchain/keeper/msg_server.go`: On-chain verification logic.
+- `nil_core/src/utils.rs`: **FIXED**. Uses Big Endian.
+- `nil_core/tests/repro_issue.rs`: Regression test.
+- `nilchain/x/crypto_ffi/binding.go`: Go bindings (verified correct, passes raw bytes).

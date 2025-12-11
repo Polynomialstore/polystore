@@ -25,7 +25,7 @@ pub fn z_for_cell(idx: usize) -> [u8; 32] {
     let omega = get_root_of_unity_4096();
     let idx_bn = BigUint::from(idx);
     let z = omega.modpow(&idx_bn, &modulus);
-    fr_to_bytes_le(&z) // Changed to LE
+    fr_to_bytes_be(&z) // Changed to BE
 }
 
 pub fn sha256_to_fr(data: &[u8]) -> BigUint {
@@ -119,7 +119,7 @@ pub fn frs_to_blobs(frs: &[BigUint]) -> Vec<Vec<u8>> {
         for (i, fr) in chunk.iter().enumerate() {
             // Natural Order: Place fr[i] at blob[i]
             let offset = i * 32;
-            let bytes = fr_to_bytes_le(fr); // Changed to LE
+            let bytes = fr_to_bytes_be(fr); // Changed to BE
             blob[offset..offset+32].copy_from_slice(&bytes);
         }
 
