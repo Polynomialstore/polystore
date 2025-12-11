@@ -47,6 +47,34 @@ done
 $BINARY genesis gentx user 100000000stake --chain-id $CHAIN_ID --home $HOME_DIR --keyring-backend test > /dev/null 2>&1
 $BINARY genesis collect-gentxs --home $HOME_DIR > /dev/null 2>&1
 
+# Inject aatom metadata for EVM
+GENESIS="$HOME_DIR/config/genesis.json"
+python3 - "$GENESIS" <<'PY' || true
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+bank = data.get("app_state", {}).get("bank", {})
+md = bank.get("denom_metadata", [])
+if not any(m.get("base") == "aatom" for m in md):
+    md.append({
+        "description": "EVM fee token metadata",
+        "denom_units": [
+            {"denom": "aatom", "exponent": 0, "aliases": ["uatom"]},
+            {"denom": "atom", "exponent": 18, "aliases": []},
+        ],
+        "base": "aatom",
+        "display": "atom",
+        "name": "",
+        "symbol": "",
+        "uri": "",
+        "uri_hash": ""
+    })
+    print("Injected aatom metadata into genesis")
+bank["denom_metadata"] = md
+data["app_state"]["bank"] = bank
+json.dump(data, open(path, "w"), indent=1)
+PY
+
 # Config: Fast blocks
 sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "1s"/' $HOME_DIR/config/config.toml
 sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0token"/' $HOME_DIR/config/app.toml
@@ -83,9 +111,15 @@ dd if=/dev/zero of=$MDU_FILE bs=1M count=8 2>/dev/null
 # Create a BAD MDU file (different content) for invalid proof test
 dd if=/dev/urandom of=$BAD_MDU_FILE bs=1M count=8 2>/dev/null
 
-yes | $BINARY tx nilchain create-deal "QmTestSlash" 8388608 100 1000 100 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+echo ">>> Creating Deal (Capacity)..."
+yes | $BINARY tx nilchain create-deal 1 1000 1000000000 1000000000 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+echo ">>> Waiting for block..."
+sleep 5
 
-echo ">>> Deal created. Waiting for block..."
+echo ">>> Updating Content..."
+yes | $BINARY tx nilchain update-deal-content --deal-id 1 --cid "QmTestSlash" --size 8388608 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+
+echo ">>> Deal updated. Waiting for block..."
 sleep 2
 
 # --- Test Case 1: Invalid Proof ---
