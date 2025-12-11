@@ -69,13 +69,7 @@ export const Layout = () => {
                   <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md" alt="Logo Dark" />
                   <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" alt="Logo Light" />
               </div>
-              <span 
-                className="font-extrabold tracking-tight text-xl hidden sm:block" 
-                style={{
-                  fontFamily: "'Montserrat', sans-serif",
-                  backgroundImage: "linear-gradient(135deg, #FFF 0%, #AAA 100%)", 
-                }}
-              >
+              <span className="font-extrabold tracking-tight text-xl hidden sm:block font-sans">
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500 hover:brightness-125 transition-all duration-300">
                     NilStore
                 </span>
