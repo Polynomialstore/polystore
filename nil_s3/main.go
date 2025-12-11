@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,16 @@ var (
 
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
+
+// extractJSONBody attempts to locate the first JSON object in a mixed CLI output.
+func extractJSONBody(b []byte) []byte {
+	start := bytes.IndexByte(b, '{')
+	end := bytes.LastIndexByte(b, '}')
+	if start == -1 || end == -1 || end <= start {
+		return nil
+	}
+	return b[start : end+1]
+}
 
 type fileIndexEntry struct {
 	CID      string `json:"cid"`
@@ -186,7 +197,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		cid = manifestRoot
 		allocatedLength = allocLen
-		
+
 		// For backward compatibility (legacy index), we assume size is file size?
 		// We need file size. IngestNewDeal doesn't return it directly but calculates it.
 		// Let's just stat the file or use header.Size?
@@ -472,9 +483,13 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.Unmarshal(out, &txRes); err != nil {
-		log.Printf("GatewayCreateDealFromEvm failed to parse JSON: %v. Output: %s", err, string(out))
-		http.Error(w, "failed to parse tx response", http.StatusInternalServerError)
-		return
+		// CLI can emit prefix lines (warnings, broadcast summaries). Try to salvage the JSON body.
+		body := extractJSONBody(out)
+		if len(body) == 0 || json.Unmarshal(body, &txRes) != nil {
+			log.Printf("GatewayCreateDealFromEvm failed to parse JSON: %v. Output: %s", err, string(out))
+			http.Error(w, "failed to parse tx response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if txRes.Code != 0 {
@@ -499,77 +514,77 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		)
 		qOut, _ := qCmd.CombinedOutput()
 
-				var qRes struct {
-					Logs []struct {
-						Events []struct {
-							Type       string `json:"type"`
-							Attributes []struct {
-								Key   string `json:"key"`
-								Value string `json:"value"`
-							} `json:"attributes"`
-						} `json:"events"`
-					} `json:"logs"`
-					Events []struct {
-						Type       string `json:"type"`
-						Attributes []struct {
-							Key   string `json:"key"`
-							Value string `json:"value"`
-						} `json:"attributes"`
-					} `json:"events"`
-				}
-		
-				if err := json.Unmarshal(qOut, &qRes); err == nil {
-					// Scan Logs (legacy/standard)
-					for _, log := range qRes.Logs {
-						for _, event := range log.Events {
-							if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
-								for _, attr := range event.Attributes {
-									if attr.Key == "id" || attr.Key == "deal_id" {
-										dealID = attr.Value
-										break
-									}
-								}
-							}
-						}
-						if dealID != "" {
-							break
-						}
-					}
-					// Scan Top-level Events (if Logs was empty or ID not found)
-					if dealID == "" {
-						for _, event := range qRes.Events {
-							if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
-								for _, attr := range event.Attributes {
-									if attr.Key == "id" || attr.Key == "deal_id" {
-										dealID = attr.Value
-										break
-									}
-								}
-							}
-							if dealID != "" {
+		var qRes struct {
+			Logs []struct {
+				Events []struct {
+					Type       string `json:"type"`
+					Attributes []struct {
+						Key   string `json:"key"`
+						Value string `json:"value"`
+					} `json:"attributes"`
+				} `json:"events"`
+			} `json:"logs"`
+			Events []struct {
+				Type       string `json:"type"`
+				Attributes []struct {
+					Key   string `json:"key"`
+					Value string `json:"value"`
+				} `json:"attributes"`
+			} `json:"events"`
+		}
+
+		if err := json.Unmarshal(qOut, &qRes); err == nil {
+			// Scan Logs (legacy/standard)
+			for _, log := range qRes.Logs {
+				for _, event := range log.Events {
+					if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
+						for _, attr := range event.Attributes {
+							if attr.Key == "id" || attr.Key == "deal_id" {
+								dealID = attr.Value
 								break
 							}
 						}
 					}
-					
+				}
+				if dealID != "" {
+					break
+				}
+			}
+			// Scan Top-level Events (if Logs was empty or ID not found)
+			if dealID == "" {
+				for _, event := range qRes.Events {
+					if event.Type == "nilchain.nilchain.EventCreateDeal" || event.Type == "create_deal" {
+						for _, attr := range event.Attributes {
+							if attr.Key == "id" || attr.Key == "deal_id" {
+								dealID = attr.Value
+								break
+							}
+						}
+					}
 					if dealID != "" {
 						break
 					}
 				}
 			}
-		
-			if dealID == "" {
-				log.Printf("Error: deal_id not found in tx events after polling. TxHash: %s", txHash)
-				http.Error(w, "deal creation failed: deal_id not found in transaction events", http.StatusInternalServerError)
-				return
-			} else {
-				log.Printf("GatewayCreateDealFromEvm confirmed: deal_id=%s", dealID)
-			}		
-		    resp := map[string]any{
-		        "status":  "success",
-		        "tx_hash": txHash,
-		        "deal_id": dealID,
-		    }
+
+			if dealID != "" {
+				break
+			}
+		}
+	}
+
+	if dealID == "" {
+		log.Printf("Error: deal_id not found in tx events after polling. TxHash: %s", txHash)
+		http.Error(w, "deal creation failed: deal_id not found in transaction events", http.StatusInternalServerError)
+		return
+	} else {
+		log.Printf("GatewayCreateDealFromEvm confirmed: deal_id=%s", dealID)
+	}
+	resp := map[string]any{
+		"status":  "success",
+		"tx_hash": txHash,
+		"deal_id": dealID,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("GatewayCreateDealFromEvm encode error: %v", err)
@@ -751,9 +766,9 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 // This is a Mode 1 (FullReplica) helper for local/testnet flows where
 // the gateway acts as both ingress and provider. For devnet correctness,
 // it atomically:
-//   1) Verifies that the requested owner matches the on-chain Deal owner.
-//   2) Submits a retrieval proof (MsgProveLiveness) on-chain.
-//   3) Streams the file back to the caller.
+//  1. Verifies that the requested owner matches the on-chain Deal owner.
+//  2. Submits a retrieval proof (MsgProveLiveness) on-chain.
+//  3. Streams the file back to the caller.
 func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -802,7 +817,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		// We also need Manifest Path.
 		// Ingest stores the specific Manifest Blob at "manifest.bin".
 		manifestPath := filepath.Join(uploadDir, cid, "manifest.bin")
-		
+
 		txHash, err := submitRetrievalProofNew(dealID, mduIdx, mduPath, manifestPath)
 		if err != nil {
 			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
@@ -822,7 +837,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer content.Close()
-		
+
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", strconv.FormatUint(size, 10))
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
@@ -1332,7 +1347,7 @@ func decodeHex(s string) ([]byte, error) {
 		h, ok1 := fromHexChar(src[i*2])
 		l, ok2 := fromHexChar(src[i*2+1])
 		if !ok1 || !ok2 {
-			 return nil, fmt.Errorf("invalid hex char")
+			return nil, fmt.Errorf("invalid hex char")
 		}
 		dst[i] = (h << 4) | l
 	}
