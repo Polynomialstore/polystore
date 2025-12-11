@@ -50,7 +50,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             exit={{ opacity: 0, y: -8, x: "-50%", scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
             // Fixed positioning relative to the viewport center, effectively creating a consistent "Mega Menu" location
-            className="fixed top-13 left-1/2 z-[110]"
+            className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
             <div className="w-[600px] bg-background border-b border-x border-t-0 border-border/50 rounded-b-2xl rounded-t-none shadow-2xl p-4 overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
