@@ -145,8 +145,8 @@ python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex('$MANIFEST_BLOB_HE
 
 # 2. Create Deal (Alloc)
 echo ">>> Creating Deal (Alloc)..."
-# DealSize 1 = 4GB. Duration 100. Escrow 1000000. Spend 5000.
-CREATE_RES=$(yes | $BINARY tx nilchain create-deal 1 100 1000000 5000 --service-hint "General" --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657 --output json)
+# Duration 100. Escrow 1000000. Spend 5000.
+CREATE_RES=$(yes | $BINARY tx nilchain create-deal 100 1000000 5000 --service-hint "General" --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657 --output json)
 CREATE_HASH=$(echo $CREATE_RES | jq -r '.txhash')
 
 echo ">>> Waiting for CreateDeal (Tx: $CREATE_HASH)..."

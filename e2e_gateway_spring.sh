@@ -29,11 +29,11 @@ if [ "$CID" == "null" ]; then
   exit 1
 fi
 
-# 2. Create Deal (Capacity) - Tier 1 (4GiB)
+# 2. Create Deal (Capacity)
 echo "=== 2. Creating Deal (Capacity) ==="
 # Note: Creator is faucet logic in Gateway, so we pass empty creator or dummy
 DEAL_RESP=$(curl -s -X POST http://localhost:8080/gateway/create-deal \
-  -d "{\"creator\":\"\", \"size_tier\":1, \"duration_blocks\":100, \"initial_escrow\":\"1000000\", \"max_monthly_spend\":\"500000\"}")
+  -d "{\"creator\":\"\", \"duration_blocks\":100, \"initial_escrow\":\"1000000\", \"max_monthly_spend\":\"500000\"}")
 echo "Create Deal Resp: $DEAL_RESP"
 TX_HASH=$(echo $DEAL_RESP | jq -r '.tx_hash')
 

@@ -10,8 +10,10 @@ import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
 import { appConfig } from '../config'
-import { StatusBar } from './StatusBar'
 import { DealDetail } from './DealDetail'
+import { StatusBar } from './StatusBar'
+import { BridgeStatus } from './BridgeStatus'
+import { BridgeActions } from './BridgeActions'
 
 interface Deal {
   id: string
@@ -25,7 +27,6 @@ interface Deal {
   current_replication?: string
   max_monthly_spend?: string
   providers?: string[]
-  deal_size?: number
 }
 
 interface Provider {
@@ -161,12 +162,6 @@ export function Dashboard() {
         const data = await response.json()
         if (data.deals) {
             const all: Deal[] = data.deals.map((d: any) => {
-              let dealSizeVal = 0
-              if (d.deal_size === 'DEAL_SIZE_4GIB') dealSizeVal = 1
-              else if (d.deal_size === 'DEAL_SIZE_32GIB') dealSizeVal = 2
-              else if (d.deal_size === 'DEAL_SIZE_512GIB') dealSizeVal = 3
-              else if (typeof d.deal_size === 'number') dealSizeVal = d.deal_size
-
               // Helper to convert base64 to hex
               const toHex = (str: string) => {
                   if (!str) return ''
@@ -198,7 +193,6 @@ export function Dashboard() {
                 current_replication: d.current_replication,
                 max_monthly_spend: d.max_monthly_spend,
                 providers: Array.isArray(d.providers) ? d.providers : [],
-                deal_size: dealSizeVal,
               }
             })
             let filtered = owner ? all.filter((d) => d.owner === owner) : all
@@ -296,7 +290,6 @@ export function Dashboard() {
       try {
         const res = await submitDeal({
           creator: address || nilAddress,
-          sizeTier: 0, // Ignored by new logic
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
@@ -377,6 +370,8 @@ export function Dashboard() {
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
+      <BridgeStatus />
+      <BridgeActions />
       
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
@@ -588,7 +583,9 @@ export function Dashboard() {
                             >
                                 <option value="">Select a Deal...</option>
                                 {deals.filter(d => d.owner === nilAddress).map(d => (
-                                    <option key={d.id} value={d.id}>Deal #{d.id} ({d.cid ? 'Active' : 'Empty'}) - {d.deal_size === 1 ? '4GiB' : d.deal_size === 2 ? '32GiB' : '512GiB'}</option>
+                                    <option key={d.id} value={d.id}>
+                                      Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
+                                    </option>
                                 ))}
                             </select>
                         </label>

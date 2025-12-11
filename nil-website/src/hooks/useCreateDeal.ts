@@ -3,7 +3,6 @@ import { appConfig } from '../config'
 
 export interface CreateDealInput {
   creator: string
-  sizeTier: number // 1=4GiB, 2=32GiB, 3=512GiB
   duration: number
   initialEscrow: string
   maxMonthlySpend: string
@@ -31,6 +30,7 @@ export function useCreateDeal() {
       const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
       const nextNonce = currentNonce + 1
       window.localStorage.setItem(nonceKey, String(nextNonce))
+      const sizeTier = 0 // Legacy field retained for signature compatibility; ignored by chain logic.
 
       // EIP-712 Typed Data
       const domain = {
@@ -60,7 +60,7 @@ export function useCreateDeal() {
 
       const message = {
         creator: evmAddress,
-        size_tier: Number(input.sizeTier),
+        size_tier: sizeTier,
         duration: Number(input.duration),
         service_hint: serviceHint,
         initial_escrow: input.initialEscrow,
@@ -89,7 +89,7 @@ export function useCreateDeal() {
       // Backend expects chain_id as string in the intent JSON.
       const intent = {
         creator_evm: evmAddress,
-        size_tier: input.sizeTier,
+        size_tier: sizeTier,
         duration_blocks: input.duration,
         service_hint: serviceHint,
         initial_escrow: input.initialEscrow,

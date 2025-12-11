@@ -62,6 +62,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_COSMOS_CHAIN_ID` | `test-1` | Chain ID for the Cosmos layer. |
 | `VITE_EVM_RPC` | `http://localhost:8545` | JSON-RPC endpoint for the EVM layer. |
 | `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
+| `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
 
 #### Build Configuration
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
@@ -183,10 +184,10 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
 
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates the capacity allocation transaction.
-*   **Input:** `CreateDealInput` (sizeTier, duration, escrow, maxSpend, replication).
+*   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
 *   **EIP-712 Signature:**
     *   **Domain:** `NilStore` (Verifying Contract: `0x0...0`).
-    *   **Type:** `CreateDeal(address creator, uint32 size_tier, uint64 duration, string service_hint, uint256 initial_escrow, uint256 max_monthly_spend, uint64 nonce)`.
+    *   **Type:** `CreateDeal(address creator, uint32 size_tier, uint64 duration, string service_hint, uint256 initial_escrow, uint256 max_monthly_spend, uint64 nonce)` (size_tier fixed to `0` for legacy compatibility).
     *   **Nonce Logic:** Manages local nonce counter in `localStorage` (`nilstore:evmNonces:<addr>`).
 *   **API:** POSTs `{ intent, evm_signature }` to `/gateway/create-deal-evm`.
 

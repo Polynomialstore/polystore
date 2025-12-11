@@ -47,26 +47,21 @@ func CmdRegisterProvider() *cobra.Command {
 
 func CmdCreateDeal() *cobra.Command {
     cmd := &cobra.Command{
-        Use:   "create-deal [size-tier] [duration] [initial-escrow] [max-monthly-spend]",
-        Short: "Create a new storage deal (allocate capacity)",
-        Long:  "size-tier: 1=4GiB, 2=32GiB, 3=512GiB",
-        Args:  cobra.ExactArgs(4),
+        Use:   "create-deal [duration] [initial-escrow] [max-monthly-spend]",
+        Short: "Create a new storage deal (allocate capacity with dynamic sizing)",
+        Args:  cobra.ExactArgs(3),
         RunE: func(cmd *cobra.Command, args []string) (err error) {
             clientCtx, err := client.GetClientTxContext(cmd)
             if err != nil {
                 return err
             }
 
-            tierVal, err := strconv.ParseUint(args[0], 10, 32)
-            if err != nil { return err }
-            dealSize := types.DealSize(tierVal)
-
-            duration, err := strconv.ParseUint(args[1], 10, 64)
+            duration, err := strconv.ParseUint(args[0], 10, 64)
             if err != nil { return err }
             
-            initialEscrow, ok := math.NewIntFromString(args[2])
+            initialEscrow, ok := math.NewIntFromString(args[1])
             if !ok { return strconv.ErrSyntax }
-            maxMonthly, ok := math.NewIntFromString(args[3])
+            maxMonthly, ok := math.NewIntFromString(args[2])
             if !ok { return strconv.ErrSyntax }
             hint, err := cmd.Flags().GetString("service-hint")
             if err != nil {
@@ -78,7 +73,6 @@ func CmdCreateDeal() *cobra.Command {
 
             msg := types.MsgCreateDeal{
                 Creator:             clientCtx.GetFromAddress().String(),
-                DealSize:            dealSize,
                 DurationBlocks:      duration,
                 ServiceHint:         hint,
                 InitialEscrowAmount: initialEscrow,

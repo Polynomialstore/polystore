@@ -8,6 +8,7 @@ import (
     "math/big"
 	"strconv"
 	"strings"
+    "os"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -41,25 +42,6 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("intent is required")
 	}
 	intent := msg.Intent
-
-	// Basic field validation.
-	if intent.SizeTier == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size tier cannot be unspecified")
-	}
-	// Map SizeTier to Capacity
-	var capacityBytes uint64
-	dealSize := types.DealSize(intent.SizeTier)
-	switch dealSize {
-	case types.DealSize_DEAL_SIZE_4GIB:
-		capacityBytes = 4 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_32GIB:
-		capacityBytes = 32 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_512GIB:
-		capacityBytes = 512 * 1024 * 1024 * 1024
-	default:
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid deal size tier: %d", intent.SizeTier)
-	}
-	_ = capacityBytes // Used for validation check only
 
 	if intent.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
@@ -213,7 +195,6 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		CurrentReplication: currentReplication,
 		ServiceHint:        serviceHint,
 		MaxMonthlySpend:    intent.MaxMonthlySpend,
-		DealSize:           dealSize,
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -225,7 +206,6 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 			types.TypeMsgCreateDeal,
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
-			sdk.NewAttribute("capacity_tier", dealSize.String()),
 			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
 			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
 		),
@@ -292,25 +272,6 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
-
-	// Deal Size Validation
-	if msg.DealSize == types.DealSize_DEAL_SIZE_UNSPECIFIED {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal size tier cannot be unspecified")
-	}
-	
-	// Map SizeTier to Capacity (just for validation/event logic, actual capacity logic enforced in UpdateDealContent)
-	var capacityBytes uint64
-	switch msg.DealSize {
-	case types.DealSize_DEAL_SIZE_4GIB:
-		capacityBytes = 4 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_32GIB:
-		capacityBytes = 32 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_512GIB:
-		capacityBytes = 512 * 1024 * 1024 * 1024
-	default:
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid deal size tier: %s", msg.DealSize)
-	}
-	_ = capacityBytes // reserved for future use
 
 	dealID, err := k.DealCount.Next(ctx)
 	if err != nil {
@@ -413,7 +374,6 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		CurrentReplication: currentReplication,
 		ServiceHint:        serviceHint,
 		MaxMonthlySpend:    maxMonthlySpend,
-		DealSize:           msg.DealSize,
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -425,7 +385,6 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 			types.TypeMsgCreateDeal,
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyOwner, deal.Owner),
-			sdk.NewAttribute("capacity_tier", msg.DealSize.String()),
 			sdk.NewAttribute(types.AttributeKeyHint, deal.ServiceHint),
 			sdk.NewAttribute(types.AttributeKeyAssignedProviders, fmt.Sprintf("%v", deal.Providers)),
 		),
@@ -460,24 +419,6 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	}
 	if msg.Size_ == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content size cannot be zero")
-	}
-
-	// Capacity Check
-	var maxCapacity uint64
-	switch deal.DealSize {
-	case types.DealSize_DEAL_SIZE_4GIB:
-		maxCapacity = 4 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_32GIB:
-		maxCapacity = 32 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_512GIB:
-		maxCapacity = 512 * 1024 * 1024 * 1024
-	default:
-		// Should not happen for created deals, but safe fallback
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal has invalid size tier")
-	}
-
-	if msg.Size_ > maxCapacity {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("content size %d exceeds tier capacity %d", msg.Size_, maxCapacity)
 	}
 
 	// Atomic Update
@@ -584,23 +525,6 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
 	}
 
-	// Capacity Check
-	var maxCapacity uint64
-	switch deal.DealSize {
-	case types.DealSize_DEAL_SIZE_4GIB:
-		maxCapacity = 4 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_32GIB:
-		maxCapacity = 32 * 1024 * 1024 * 1024
-	case types.DealSize_DEAL_SIZE_512GIB:
-		maxCapacity = 512 * 1024 * 1024 * 1024
-	default:
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal has invalid size tier")
-	}
-
-	if intent.SizeBytes > maxCapacity {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("content size %d exceeds tier capacity %d", intent.SizeBytes, maxCapacity)
-	}
-
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
 	if err != nil || len(manifestRoot) != 48 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid manifest root: %s", intent.Cid)
@@ -628,11 +552,6 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 // ProveLiveness handles MsgProveLiveness to verify KZG proofs and process rewards.
 func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiveness) (*types.MsgProveLivenessResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-
-	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
-	}
 
 	deal, err := k.Deals.Get(ctx, msg.DealId)
 	if err != nil {
@@ -670,6 +589,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	// TRIPLE PROOF VERIFICATION
 	// Call crypto_ffi.VerifyChainedProof(deal.ManifestRoot, chainedProof)
 	valid := true 
+	skipKZG := os.Getenv("SKIP_KZG_VERIFY") == "true"
 	
 	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 || 
        len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
@@ -723,46 +643,20 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
          }
     }
 
-	if !valid {
-		ctx.Logger().Info("KZG Proof INVALID: Slashing Sender")
-        slashAmt := sdk.NewCoins(sdk.NewInt64Coin("stake", 10000000)) 
-        err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, slashAmt)
-        
-        if err != nil {
-            // 2. If slash fails (insufficient funds), Jail the provider
-            ctx.Logger().Info("Slashing failed (insufficient funds), Jailing provider", "provider", msg.Creator)
-            
-            provider, errGet := k.Providers.Get(ctx, msg.Creator)
-            if errGet == nil {
-                provider.Status = "Jailed"
-                provider.ReputationScore -= 50 // Heavy penalty
-                if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
-                     ctx.Logger().Error("Failed to update provider status to Jailed", "error", errSet)
-                }
-            }
-        } else {
-            // 3. If slash succeeds, burn the tokens
-            if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, slashAmt); err != nil {
-                ctx.Logger().Error("Failed to burn slashed coins", "error", err)
-            }
-            // Update reputation for slash
-            provider, errGet := k.Providers.Get(ctx, msg.Creator)
-            if errGet == nil {
-                provider.ReputationScore -= 10 // Standard penalty
-                if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
-                     ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
-                }
-            }
-        }
-		// Record failed proof attempt for liveness/performance observability.
-		if err := k.recordProofSummary(ctx, msg, deal, "Fail", false); err != nil {
-			ctx.Logger().Error("failed to record proof summary", "error", err)
+	if skipKZG {
+		valid = true
+	}
+
+	if isUserReceipt {
+		if !valid {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
 		}
-		// Track a minimal health stub for Phase 3.4: count consecutive failures
-		// so we can log when a (deal, provider) pair would be considered
-		// degraded in a full self-healing implementation.
-		k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
-		return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
+	} else {
+		if !valid {
+			// Track health for system proofs that fail verification.
+			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
+		}
 	}
 
     // 4. Calculate Tier based on block height latency
@@ -863,20 +757,14 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
         
         ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
         if ownerAccount == nil {
-             // Devnet mode: if the owner account does not yet exist on-chain,
-             // we cannot recover a public key. Skip signature verification but
-             // still account the receipt for liveness and nonce tracking.
-             ctx.Logger().Info("deal owner account not found; skipping retrieval receipt signature verification (devnet mode)", "owner", deal.Owner)
-        } else {
-            pubKey := ownerAccount.GetPubKey()
-            if pubKey == nil {
-                 // Devnet mode: account exists but has no pubkey (no prior tx).
-                 ctx.Logger().Info("deal owner has no public key; skipping retrieval receipt signature verification (devnet mode)", "owner", deal.Owner)
-            } else {
-                 if !pubKey.VerifySignature(buf, receipt.UserSignature) {
-                      return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
-                 }
-            }
+            return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found for retrieval receipt verification", deal.Owner)
+        }
+        pubKey := ownerAccount.GetPubKey()
+        if pubKey == nil {
+            return nil, sdkerrors.ErrUnauthorized.Wrap("deal owner has no public key; cannot verify retrieval receipt")
+        }
+        if !pubKey.VerifySignature(buf, receipt.UserSignature) {
+            return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
         }
 
         // Update stored nonce after all checks

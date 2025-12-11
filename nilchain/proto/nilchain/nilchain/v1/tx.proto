@@ -96,7 +96,7 @@ message MsgCreateDeal {
   string service_hint = 5; // "Hot" or "Cold"
   string max_monthly_spend = 6 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
   string initial_escrow_amount = 7 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Initial $STOR amount
-  DealSize deal_size = 8; // The authorized capacity tier (1=4GB, 2=32GB, 3=512GB)
+  // Field 8 (deal_size / DealSize) reserved; static capacity tiers removed in favor of thin provisioning.
 }
 
 // MsgCreateDealResponse defines the response structure for creating a deal.
@@ -113,7 +113,7 @@ message MsgUpdateDealContent {
   string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
   uint64 deal_id = 2;
   string cid = 3; // New Root CID (Manifest)
-  uint64 size = 4; // Actual size of the content (must fit in deal_size tier)
+  uint64 size = 4; // Actual size of the content in bytes
 }
 
 message MsgUpdateDealContentResponse {
@@ -138,7 +138,7 @@ message EvmCreateDealIntent {
   ]; // Monthly spend cap (stake)
   uint64 nonce = 8;             // Per-EVM-address bridge nonce (strictly increasing)
   string chain_id = 9;          // nilchaind chain-id (e.g. "test-1")
-  uint32 size_tier = 10;        // Maps to DealSize enum (1, 2, 3)
+  uint32 size_tier = 10;        // Deprecated: retained only for EIP-712 compatibility (ignored by chain logic).
 }
 
 // EvmUpdateContentIntent captures fields for updating deal content via EVM.

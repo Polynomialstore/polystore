@@ -53,10 +53,13 @@ wait_for_http() {
   return 1
 }
 
-# Static dev key material (matches tools generated vector in this repo).
-EVM_ADDRESS="0x29c8e5bC2c3DA80e7629661c5fa33a82eCFe411d"
-NIL_ADDRESS="nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl"
-DEAL_CID="bafybridgedeale2e"
+CHAIN_ID="${CHAIN_ID:-test-1}"
+EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
+VERIFYING_CONTRACT="0x0000000000000000000000000000000000000000"
+DEAL_CID="0x" # not used in intent anymore, kept for compatibility with older logs
+# Deterministic dev key (Foundry default #0). Override via EVM_PRIVKEY if needed.
+EVM_PRIVKEY="${EVM_PRIVKEY:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
+export EVM_PRIVKEY EVM_CHAIN_ID CHAIN_ID VERIFYING_CONTRACT
 
 echo "==> Starting local stack..."
 "$STACK_SCRIPT" start
@@ -64,25 +67,86 @@ echo "==> Starting local stack..."
 wait_for_http "LCD" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 40 3
 wait_for_http "gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 3
 
-echo "==> Assuming pre-funded nil address from genesis..."
+# Derive addresses from the EVM private key.
+ADDR_JSON=$(python3 - <<PY
+from eth_account import Account
+import binascii, bech32, os
+priv = os.environ["EVM_PRIVKEY"]
+acct = Account.from_key(priv)
+hex_addr = acct.address
+data = bytes.fromhex(hex_addr[2:])
+five = bech32.convertbits(data, 8, 5)
+nil_addr = bech32.bech32_encode("nil", five)
+print(hex_addr)
+print(nil_addr)
+PY
+)
+EVM_ADDRESS=$(echo "$ADDR_JSON" | sed -n '1p')
+NIL_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
+
+echo "==> Using EVM address $EVM_ADDRESS (nil: $NIL_ADDRESS)"
+echo "==> Assuming nil address is pre-funded from genesis..."
 
 echo "==> Creating EVM-bridged deal via gateway..."
-PAYLOAD=$(cat <<EOF
-{
-  "intent": {
-    "creator_evm": "$EVM_ADDRESS",
-    "cid": "$DEAL_CID",
-    "size_bytes": 1048576,
+PAYLOAD=$(python3 - <<'PY'
+import json, os
+from eth_account import Account
+from eth_account.messages import encode_typed_data
+
+priv = os.environ["EVM_PRIVKEY"]
+evm_chain_id = int(os.environ.get("EVM_CHAIN_ID", "31337"))
+chain_id = os.environ.get("CHAIN_ID", "test-1")
+acct = Account.from_key(priv)
+
+intent = {
+    "creator_evm": acct.address,
     "duration_blocks": 100,
     "service_hint": "General",
     "initial_escrow": "1000000",
     "max_monthly_spend": "500000",
     "nonce": 1,
-    "chain_id": "test-1"
-  },
-  "evm_signature": "0x4aa406871392611fe033bd652b8aeb8ccf8b9080f4665dc913ac9ba28adcbc4060ef264a2300963393a81771ef54cde8522744e835ce4e9455cea7d8464de46200"
+    "chain_id": chain_id,
+    "size_tier": 0,  # legacy field kept for signature compatibility; ignored by chain logic
 }
-EOF
+
+domain = {
+    "name": "NilStore",
+    "version": "1",
+    "chainId": evm_chain_id,
+    "verifyingContract": os.environ.get("VERIFYING_CONTRACT", "0x0000000000000000000000000000000000000000"),
+}
+
+types = {
+    "CreateDeal": [
+        {"name": "creator", "type": "address"},
+        {"name": "size_tier", "type": "uint32"},
+        {"name": "duration", "type": "uint64"},
+        {"name": "service_hint", "type": "string"},
+        {"name": "initial_escrow", "type": "uint256"},
+        {"name": "max_monthly_spend", "type": "uint256"},
+        {"name": "nonce", "type": "uint64"},
+    ]
+}
+
+message = {
+    "creator": acct.address,
+    "size_tier": intent["size_tier"],
+    "duration": intent["duration_blocks"],
+    "service_hint": intent["service_hint"],
+    "initial_escrow": intent["initial_escrow"],
+    "max_monthly_spend": intent["max_monthly_spend"],
+    "nonce": intent["nonce"],
+}
+
+signable = encode_typed_data(full_message={"types": types, "primaryType": "CreateDeal", "domain": domain, "message": message})
+sig = Account.sign_message(signable, priv).signature.hex()
+
+payload = {
+    "intent": intent,
+    "evm_signature": sig,
+}
+print(json.dumps(payload))
+PY
 )
 
 RESP=$(curl -sS -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \

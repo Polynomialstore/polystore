@@ -51,7 +51,7 @@ def request_funds(eth_address):
 # --- 1. Create Deal ---
 def create_deal():
     nonce = 1 # Simple nonce handling
-    size_tier = 1 # 4GB
+    size_tier = 0 # Legacy field retained for signatures; ignored by chain logic
     duration = 100
     initial_escrow = 1000000
     max_monthly_spend = 5000000
@@ -129,27 +129,8 @@ def verify_deal(deal_id):
                 if 'deal' in data:
                     deal = data['deal']
                     print(f"Deal found: {deal}")
-                    
-                    # Verify Size Tier mapping
-                    deal_size_raw = deal.get('deal_size', 0)
-                    if deal_size_raw == 'DEAL_SIZE_4GIB':
-                         deal_size_enum = 1
-                    elif deal_size_raw == 'DEAL_SIZE_32GIB':
-                         deal_size_enum = 2
-                    elif deal_size_raw == 'DEAL_SIZE_512GIB': # Verify exact string if possible, assuming 512
-                         deal_size_enum = 3
-                    else:
-                         try:
-                             deal_size_enum = int(deal_size_raw)
-                         except:
-                             deal_size_enum = 0
-
-                    if deal_size_enum != 1:
-                        print(f"WARNING: Expected deal_size=1 (Tier 1), got {deal_size_raw} -> {deal_size_enum}")
-                        # sys.exit(1) # Don't exit yet, just warn
-                    else:
-                        print(f"Deal size enum matches (1) from {deal_size_raw}")
-
+                    if 'deal_size' in deal and deal.get('deal_size'):
+                        print(f"WARNING: deal_size should be empty/removed, got {deal.get('deal_size')}")
                     return deal
         except Exception as e:
             print(f"Polling error: {e}")
@@ -161,17 +142,10 @@ def verify_deal(deal_id):
 
 # --- 3. Upload Content ---
 def upload_content():
-    # Create a dummy file
     content = b"Hello NilStore E2E Test" * 100
     files = {'file': ('test.txt', content)}
     
     print("Uploading file...")
-    # We need the user address for upload sharding usually, but checking Dashboard.tsx:
-    # useUpload calls gateway/upload which might expect headers or logic.
-    # Dashboard.tsx: const result = await upload(file, address)
-    # useUpload.ts: formData.append('file', file)
-    #               response = await fetch(`${appConfig.gatewayBase}/gateway/upload?owner=${owner}`, ...
-    
     resp = requests.post(f"{GATEWAY_URL}/gateway/upload?owner={account.address}", files=files)
     if resp.status_code != 200:
         print(f"Upload failed: {resp.text}")
@@ -179,7 +153,7 @@ def upload_content():
     
     data = resp.json()
     print(f"Upload Success: {data}")
-    return data['cid'], data['size_bytes']
+    return data['cid'], data['size_bytes'], content
 
 # --- 4. Update Content ---
 def update_content(deal_id, cid, size_bytes):
@@ -236,6 +210,20 @@ def update_content(deal_id, cid, size_bytes):
     
     data = resp.json()
     print(f"UpdateContent Success: {data}")
+    return data
+
+# --- 5b. Fetch & Verify Bytes ---
+def fetch_and_verify(cid, deal_id, owner, original_bytes):
+    print("Fetching from gateway to verify content bytes...")
+    fetch_url = f"{GATEWAY_URL}/gateway/fetch/{cid}?deal_id={deal_id}&owner={owner}&file_path=test.txt"
+    fetched = requests.get(fetch_url)
+    if fetched.status_code != 200:
+        print(f"Fetch failed: HTTP {fetched.status_code} {fetched.text}")
+        sys.exit(1)
+    if fetched.content != original_bytes:
+        print("❌ Fetched content does not match original upload")
+        sys.exit(1)
+    print("✅ Gateway fetch returned byte-identical content")
 
 # --- 5. Final Verify ---
 def verify_final(deal_id, cid, size_bytes):
@@ -280,88 +268,16 @@ def verify_final(deal_id, cid, size_bytes):
     print("Final Verification FAILED: Timeout")
     sys.exit(1)
 
-    print("Final Verification PASSED!")
-
-# --- 6. Retrieve Content ---
-def retrieve_content(deal_id, cid, expected_content, nil_address):
-    print(f"Retrieving content for CID {cid}...")
-    import urllib.parse
-    
-    # URL Encode the CID (it's 0x... hex, but gateway might expect it encoded or raw? 
-    # e2e_gateway_retrieval.sh says: print(urllib.parse.quote(sys.argv[1]))
-    # And the CID there is 0x... hex string. So we should quote it.
-    encoded_cid = urllib.parse.quote(cid)
-    
-    url = f"{GATEWAY_URL}/gateway/fetch/{encoded_cid}?deal_id={deal_id}&owner={nil_address}"
-    
-    for attempt in range(10):
-        try:
-            resp = requests.get(url)
-            if resp.status_code == 200:
-                retrieved_content = resp.content
-                if retrieved_content != expected_content:
-                    print(f"FAIL: Retrieved content mismatch! Got {len(retrieved_content)} bytes, expected {len(expected_content)}")
-                    sys.exit(1)
-                
-                print("Retrieval Verification PASSED! Content matches.")
-                return
-            else:
-                print(f"Retrieval attempt {attempt+1} failed: {resp.status_code} {resp.text}")
-                
-        except Exception as e:
-            print(f"Retrieval attempt {attempt+1} error: {e}")
-        
-        time.sleep(2)
-
-    print("Retrieval FAILED after all attempts.")
-    sys.exit(1)
-
-def main():
-    try:
-        request_funds(account.address)
-        deal_id = create_deal()
-        verify_deal(deal_id)
-        cid, size_bytes = upload_content() # This function returns the dummy content implicitly? No, it returns CID/size.
-        # We need to capture the content to verify it.
-        # Let's refactor upload_content to return content or let main define it.
-        
-        # Refactor: define content in main
-        content = b"Hello NilStore E2E Test" * 100
-        
-        # We need to hack upload_content to accept content or just override it.
-        # Actually, let's just modify upload_content to take content as arg in a separate replace block if needed.
-        # For now, let's assume we can change upload_content in this block? 
-        # No, "upload_content" is defined above. 
-        # I will redefine `upload_content` here to accept `content`? No that's messy.
-        # I will change the call to `upload_content` and update the definition in a separate tool call? 
-        # Wait, I can see `upload_content` in the file.
-        
-        # Let's just create a new function `upload_custom_content` or just modify `upload_content` in a previous step?
-        # The user instructions are to "extend".
-        
-        # Let's look at the existing `upload_content`. It creates dummy content inside.
-        # I should modify `upload_content` to return the content it used, or accept it.
-        pass
-    except Exception:
-        pass
 
 if __name__ == "__main__":
-    # Redefine main execution block
     try:
         request_funds(account.address)
         deal_id = create_deal()
         verify_deal(deal_id)
-        
-        # We need to get the content used in upload. 
-        # Existing upload_content uses: content = b"Hello NilStore E2E Test" * 100
-        expected_content = b"Hello NilStore E2E Test" * 100
-        
-        cid, size_bytes = upload_content()
+        cid, size_bytes, content = upload_content()
         update_content(deal_id, cid, size_bytes)
         verify_final(deal_id, cid, size_bytes)
-        
-        retrieve_content(deal_id, cid, expected_content, eth_to_nil(account.address))
-        
+        fetch_and_verify(cid, deal_id, eth_to_nil(account.address), content)
     except Exception as e:
         print(f"Test failed with exception: {e}")
         sys.exit(1)

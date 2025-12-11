@@ -15,7 +15,10 @@ self.onmessage = async (e: MessageEvent) => {
             // 1. Import the WASM JS wrapper
             // Note: In Vite dev, direct import from /public might need special handling
             // But standard dynamic import works for static assets usually.
-            wasmModule = await import('/wasm/nil_core.js'); // ignore-error
+            const wasmUrl = new URL('/wasm/nil_core.js', import.meta.url).toString();
+            // Vite keeps /public assets at root, so we explicitly ignore bundler resolution here.
+            // @ts-ignore - module typing is provided in src/types/wasm.d.ts
+            wasmModule = await import(/* @vite-ignore */ wasmUrl);
             
             // 2. Initialize WASM memory
             await wasmModule.default(); 

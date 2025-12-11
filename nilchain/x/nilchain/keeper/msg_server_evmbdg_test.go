@@ -1,12 +1,14 @@
 package keeper_test
 
 import (
+	"bytes"
+	"crypto/ecdsa"
 	"encoding/hex"
+	"math/big"
 	"strings"
 	"testing"
 
 	"cosmossdk.io/math"
-	"github.com/ethereum/go-ethereum/accounts"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +17,41 @@ import (
 	"nilchain/x/nilchain/keeper"
 	"nilchain/x/nilchain/types"
 )
+
+func parseChainIDToBig(chainID string) *big.Int {
+	if id, ok := new(big.Int).SetString(chainID, 10); ok {
+		return id
+	}
+	return big.NewInt(1)
+}
+
+func makeManifestRootHex(fill byte) string {
+	return "0x" + hex.EncodeToString(bytes.Repeat([]byte{fill}, 48))
+}
+
+func signCreateIntentEIP712(t *testing.T, intent *types.EvmCreateDealIntent, privKey *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	chainID := parseChainIDToBig(intent.ChainId)
+	structHash, err := types.HashCreateDeal(intent)
+	require.NoError(t, err)
+	domainSep := types.HashDomainSeparator(chainID)
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
+	sig, err := gethCrypto.Sign(digest, privKey)
+	require.NoError(t, err)
+	return sig
+}
+
+func signUpdateIntentEIP712(t *testing.T, intent *types.EvmUpdateContentIntent, privKey *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	chainID := parseChainIDToBig(intent.ChainId)
+	structHash, err := types.HashUpdateContent(intent)
+	require.NoError(t, err)
+	domainSep := types.HashDomainSeparator(chainID)
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
+	sig, err := gethCrypto.Sign(digest, privKey)
+	require.NoError(t, err)
+	return sig
+}
 
 func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 	f := initFixture(t)
@@ -53,12 +90,7 @@ func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 		ChainId:         chainID,
 	}
 
-	msgText, err := types.BuildEvmCreateDealMessage(intent)
-	require.NoError(t, err)
-
-	hash := accounts.TextHash([]byte(msgText))
-	sig, err := gethCrypto.Sign(hash, privKey)
-	require.NoError(t, err)
+	sig := signCreateIntentEIP712(t, intent, privKey)
 
 	// Sender is the fee payer / relayer.
 	senderBz := []byte("relayer____________")
@@ -124,11 +156,7 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 		Nonce:           1,
 		ChainId:         chainID,
 	}
-	createMsgText, err := types.BuildEvmCreateDealMessage(createIntent)
-	require.NoError(t, err)
-	createHash := accounts.TextHash([]byte(createMsgText))
-	createSig, err := gethCrypto.Sign(createHash, privKey)
-	require.NoError(t, err)
+	createSig := signCreateIntentEIP712(t, createIntent, privKey)
 
 	senderBz := []byte("relayer_create____")
 	sender, _ := f.addressCodec.BytesToString(senderBz)
@@ -145,16 +173,12 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 	updateIntent := &types.EvmUpdateContentIntent{
 		CreatorEvm: evmAddr.Hex(),
 		DealId:     createRes.DealId,
-		Cid:        "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", // 48-byte hex
+		Cid:        makeManifestRootHex(0xab), // 48-byte hex
 		SizeBytes:  1024 * 1024 * 100,                                                     // 100 MB
 		Nonce:      2,
 		ChainId:    chainID,
 	}
-	updateMsgText, err := types.BuildEvmUpdateContentMessage(updateIntent)
-	require.NoError(t, err)
-	updateHash := accounts.TextHash([]byte(updateMsgText))
-	updateSig, err := gethCrypto.Sign(updateHash, privKey)
-	require.NoError(t, err)
+	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
 	updateRes, err := msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
 		Sender:       sender,
@@ -215,11 +239,7 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 		Nonce:           1,
 		ChainId:         chainID,
 	}
-	createMsgText, err := types.BuildEvmCreateDealMessage(createIntent)
-	require.NoError(t, err)
-	createHash := accounts.TextHash([]byte(createMsgText))
-	createSig, err := gethCrypto.Sign(createHash, alicePrivKey)
-	require.NoError(t, err)
+	createSig := signCreateIntentEIP712(t, createIntent, alicePrivKey)
 
 	createRes, err := msgServer.CreateDealFromEvm(f.ctx, &types.MsgCreateDealFromEvm{
 		Sender:       sender,
@@ -232,16 +252,12 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 	updateIntent := &types.EvmUpdateContentIntent{
 		CreatorEvm: bobEvmAddr.Hex(),
 		DealId:     createRes.DealId,
-		Cid:        "0xbbbbbb0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Cid:        makeManifestRootHex(0xbb),
 		SizeBytes:  100,
 		Nonce:      1,
 		ChainId:    chainID,
 	}
-	updateMsgText, err := types.BuildEvmUpdateContentMessage(updateIntent)
-	require.NoError(t, err)
-	updateHash := accounts.TextHash([]byte(updateMsgText))
-	updateSig, err := gethCrypto.Sign(updateHash, bobPrivKey)
-	require.NoError(t, err)
+	updateSig := signUpdateIntentEIP712(t, updateIntent, bobPrivKey)
 
 	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
 		Sender:       sender,
@@ -252,7 +268,7 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 	require.Contains(t, err.Error(), "unauthorized")
 }
 
-func TestUpdateDealContentFromEvm_CapacityExceeded(t *testing.T) {
+func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
@@ -275,7 +291,7 @@ func TestUpdateDealContentFromEvm_CapacityExceeded(t *testing.T) {
 	senderBz := []byte("relayer_cap_______")
 	sender, _ := f.addressCodec.BytesToString(senderBz)
 
-	// 1. Create a 4 GiB Deal
+	// 1. Create a Deal (tier field is ignored by dynamic sizing)
 	createIntent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
 		SizeTier:        1, // 4 GiB
@@ -286,11 +302,7 @@ func TestUpdateDealContentFromEvm_CapacityExceeded(t *testing.T) {
 		Nonce:           1,
 		ChainId:         chainID,
 	}
-	createMsgText, err := types.BuildEvmCreateDealMessage(createIntent)
-	require.NoError(t, err)
-	createHash := accounts.TextHash([]byte(createMsgText))
-	createSig, err := gethCrypto.Sign(createHash, privKey)
-	require.NoError(t, err)
+	createSig := signCreateIntentEIP712(t, createIntent, privKey)
 
 	createRes, err := msgServer.CreateDealFromEvm(f.ctx, &types.MsgCreateDealFromEvm{
 		Sender:       sender,
@@ -299,28 +311,28 @@ func TestUpdateDealContentFromEvm_CapacityExceeded(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 2. Try to commit 5 GiB content
+	// 2. Commit 5 GiB content; dynamic sizing should allow this.
 	updateIntent := &types.EvmUpdateContentIntent{
 		CreatorEvm: evmAddr.Hex(),
 		DealId:     createRes.DealId,
-		Cid:        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		Cid:        makeManifestRootHex(0xcc),
 		SizeBytes:  5 * 1024 * 1024 * 1024, // 5 GiB
 		Nonce:      2,
 		ChainId:    chainID,
 	}
-	updateMsgText, err := types.BuildEvmUpdateContentMessage(updateIntent)
-	require.NoError(t, err)
-	updateHash := accounts.TextHash([]byte(updateMsgText))
-	updateSig, err := gethCrypto.Sign(updateHash, privKey)
-	require.NoError(t, err)
+	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
-	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+	updateRes, err := msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
 		Sender:       sender,
 		Intent:       updateIntent,
 		EvmSignature: updateSig,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "exceeds tier capacity")
+	require.NoError(t, err)
+	require.True(t, updateRes.Success)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, createRes.DealId)
+	require.NoError(t, err)
+	require.Equal(t, updateIntent.SizeBytes, deal.Size_)
 }
 
 func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
@@ -354,12 +366,7 @@ func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 		ChainId:         sdk.UnwrapSDKContext(f.ctx).ChainID(),
 	}
 
-	msgText, err := types.BuildEvmCreateDealMessage(intent)
-	require.NoError(t, err)
-
-	hash := accounts.TextHash([]byte(msgText))
-	sig, err := gethCrypto.Sign(hash, privKey)
-	require.NoError(t, err)
+	sig := signCreateIntentEIP712(t, intent, privKey)
 
 	// Corrupt the signature.
 	sig[0] ^= 0xFF
@@ -408,11 +415,7 @@ func TestCreateDealFromEvm_ReplayNonce(t *testing.T) {
 			Nonce:           nonce,
 			ChainId:         chainID,
 		}
-		msgText, err := types.BuildEvmCreateDealMessage(intent)
-		require.NoError(t, err)
-		hash := accounts.TextHash([]byte(msgText))
-		sig, err := gethCrypto.Sign(hash, privKey)
-		require.NoError(t, err)
+		sig := signCreateIntentEIP712(t, intent, privKey)
 
 		senderBz := []byte("relayer_replay____")
 		sender, _ := f.addressCodec.BytesToString(senderBz)
@@ -464,11 +467,7 @@ func TestCreateDealFromEvm_WrongChainID(t *testing.T) {
 		ChainId:         "wrong-chain",
 	}
 
-	msgText, err := types.BuildEvmCreateDealMessage(intent)
-	require.NoError(t, err)
-	hash := accounts.TextHash([]byte(msgText))
-	sig, err := gethCrypto.Sign(hash, privKey)
-	require.NoError(t, err)
+	sig := signCreateIntentEIP712(t, intent, privKey)
 
 	senderBz := []byte("relayer_chain_____")
 	sender, _ := f.addressCodec.BytesToString(senderBz)

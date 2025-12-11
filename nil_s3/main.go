@@ -228,7 +228,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 // included in the request for future user-signed flows.
 type createDealRequest struct {
 	Creator         string `json:"creator"`
-	DealSizeTier    uint32 `json:"size_tier"`
 	DurationBlocks  uint64 `json:"duration_blocks"`
 	ServiceHint     string `json:"service_hint"`
 	InitialEscrow   string `json:"initial_escrow"`
@@ -260,17 +259,16 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.DealSizeTier == 0 || req.InitialEscrow == "" || req.MaxMonthlySpend == "" {
+	if req.InitialEscrow == "" || req.MaxMonthlySpend == "" {
 		http.Error(w, "missing fields", http.StatusBadRequest)
 		return
 	}
 
-	tierStr := strconv.FormatUint(uint64(req.DealSizeTier), 10)
-durationStr := strconv.FormatUint(req.DurationBlocks, 10)
+	durationStr := strconv.FormatUint(req.DurationBlocks, 10)
 	if durationStr == "0" {
 		durationStr = defaultDuration
 	}
-hint := strings.TrimSpace(req.ServiceHint)
+	hint := strings.TrimSpace(req.ServiceHint)
 	if hint == "" {
 		hint = "General"
 	}
@@ -295,7 +293,6 @@ hint := strings.TrimSpace(req.ServiceHint)
 	cmd := execCommand(
 		nilchaindBin,
 		"tx", "nilchain", "create-deal",
-		tierStr,
 		durationStr,
 		req.InitialEscrow,
 		req.MaxMonthlySpend,
@@ -416,33 +413,11 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Light validation of the intent shape.
+	// Light validation of the intent shape (creator_evm present).
 	rawCreator, okCreator := req.Intent["creator_evm"].(string)
-	rawTier, okTier := req.Intent["size_tier"]
-
-	if !okCreator || strings.TrimSpace(rawCreator) == "" || !okTier {
-		http.Error(w, "intent must include creator_evm and size_tier", http.StatusBadRequest)
+	if !okCreator || strings.TrimSpace(rawCreator) == "" {
+		http.Error(w, "intent must include creator_evm", http.StatusBadRequest)
 		return
-	}
-
-	// Best-effort numeric check for size_tier > 0.
-	switch v := rawTier.(type) {
-	case float64:
-		if v <= 0 {
-			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
-			return
-		}
-	case int64:
-		if v <= 0 {
-			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
-			return
-		}
-	case json.Number:
-		n, err := v.Int64()
-		if err != nil || n <= 0 {
-			http.Error(w, "size_tier must be positive", http.StatusBadRequest)
-			return
-		}
 	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-deal-*.json")

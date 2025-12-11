@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { useFileSharder } from '../hooks/useFileSharder';
-import { RefreshCw, Wallet, Upload, AlertCircle, FileJson, Cpu } from 'lucide-react';
+import { FileJson, Cpu } from 'lucide-react';
 
 interface ShardItem {
   id: number;

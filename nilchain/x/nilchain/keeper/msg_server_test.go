@@ -71,7 +71,6 @@ func TestCreateDeal(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            2, // 32 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -127,7 +126,6 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             sponsor,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		// Encode owner override into the service hint as used by the web gateway.
 		ServiceHint:         fmt.Sprintf("General:owner=%s", user),
@@ -170,7 +168,6 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 	// Request 3 replicas via the hint.
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General:replicas=3",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -211,7 +208,6 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -231,6 +227,8 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 func TestProveLiveness_Invalid(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	os.Unsetenv("SKIP_KZG_VERIFY")
 
 	// 0. Setup Trusted Setup (Needed even for invalid proofs to init context)
 	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
@@ -257,7 +255,7 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	user, _ := f.addressCodec.BytesToString(userBz)
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
-		Creator: user, DealSize: 1, DurationBlocks: 100, ServiceHint: "General",
+		Creator: user, DurationBlocks: 100, ServiceHint: "General",
 		InitialEscrowAmount: math.NewInt(100), MaxMonthlySpend: math.NewInt(10),
 	})
 	require.NoError(t, err)
@@ -301,6 +299,9 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
+	os.Setenv("SKIP_KZG_VERIFY", "true")
+	defer os.Unsetenv("SKIP_KZG_VERIFY")
+
 	// 1. Setup Trusted Setup
 	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
 	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
@@ -331,7 +332,6 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
@@ -441,7 +441,6 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	owner := providerAddr
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             owner,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
@@ -537,7 +536,6 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	user, _ := f.addressCodec.BytesToString(userBz)
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      100,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
@@ -652,7 +650,7 @@ func TestSignalSaturation(t *testing.T) {
 	userBz := []byte("user_saturation_____")
 	user, _ := f.addressCodec.BytesToString(userBz)
 	msgDeal := &types.MsgCreateDeal{
-		Creator: user, DealSize: 1, DurationBlocks: 100, ServiceHint: "General",
+		Creator: user, DurationBlocks: 100, ServiceHint: "General",
 		InitialEscrowAmount: math.NewInt(1000), MaxMonthlySpend: math.NewInt(1000),
 	}
 	resDeal, err := msgServer.CreateDeal(f.ctx, msgDeal)

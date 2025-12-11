@@ -110,7 +110,7 @@ dd if=/dev/zero of=$MDU_FILE bs=1M count=8
 
 # Create Deal (Alice) - Step 1: Capacity
 echo ">>> Creating Deal (Capacity)..."
-yes | $BINARY tx nilchain create-deal 1 1000 1000000000 1000000000 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx nilchain create-deal 1000 1000000000 1000000000 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 sleep 5
 
 # Update Deal Content - Step 2: Content

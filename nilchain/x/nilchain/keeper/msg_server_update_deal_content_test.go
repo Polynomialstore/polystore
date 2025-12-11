@@ -33,7 +33,6 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	// 1. Create Deal (Capacity) - 4 GiB
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(1000000),
@@ -85,7 +84,6 @@ func TestUpdateDealContent_Unauthorized(t *testing.T) {
 	// 1. Create Deal as Alice
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             alice,
-		DealSize:            1,
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(1000000),
@@ -104,7 +102,7 @@ func TestUpdateDealContent_Unauthorized(t *testing.T) {
 	require.Contains(t, err.Error(), "unauthorized")
 }
 
-func TestUpdateDealContent_CapacityExceeded(t *testing.T) {
+func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
@@ -122,10 +120,9 @@ func TestUpdateDealContent_CapacityExceeded(t *testing.T) {
 	userBz := []byte("user_capacity_______")
 	user, _ := f.addressCodec.BytesToString(userBz)
 
-	// 1. Create Deal (Capacity) - 4 GiB
+	// 1. Create Deal (thin-provisioned; tier is ignored)
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1, // 4 GiB
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(1000000),
@@ -133,17 +130,21 @@ func TestUpdateDealContent_CapacityExceeded(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 2. Try to commit 5 GiB
+	// 2. Commit a large payload (5 GiB); dynamic sizing should allow this.
 	size := uint64(5 * 1024 * 1024 * 1024) 
 
-	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+	resUpd, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator: user,
 		DealId:  resDeal.DealId,
 		Cid:     validManifestCid,
 		Size_:   size,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "exceeds tier capacity")
+	require.NoError(t, err)
+	require.True(t, resUpd.Success)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, size, deal.Size_)
 }
 
 func TestUpdateDealContent_InvalidInput(t *testing.T) {
@@ -166,7 +167,6 @@ func TestUpdateDealContent_InvalidInput(t *testing.T) {
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DealSize:            1,
 		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(1000000),

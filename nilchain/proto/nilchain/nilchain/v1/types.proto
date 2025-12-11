@@ -6,14 +6,6 @@ import "cosmos_proto/cosmos.proto";
 
 option go_package = "nilchain/x/nilchain/types";
 
-// DealSize represents the authorized capacity tiers for storage deals.
-enum DealSize {
-  DEAL_SIZE_UNSPECIFIED = 0;
-  DEAL_SIZE_4GIB = 1;   // Developer Slab
-  DEAL_SIZE_32GIB = 2;  // Standard Slab (Filecoin Sector Aligned)
-  DEAL_SIZE_512GIB = 3; // Wholesale Slab
-}
-
 // Deal represents a storage deal between a user and the network.
 message Deal {
   uint64 id = 1;
@@ -28,7 +20,7 @@ message Deal {
   uint64 current_replication = 10; // e.g., 12 for base layer, increases with hot replicas
   string service_hint = 11; // "Hot" or "Cold"
   string max_monthly_spend = 12 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
-  DealSize deal_size = 13; // The authorized capacity tier (Immutable)
+  // Field 13 (deal_size / DealSize) reserved for removed capacity tiers.
   uint64 total_mdus = 14; // Total number of MDUs in the deal
 }
 
