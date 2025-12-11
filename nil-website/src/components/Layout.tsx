@@ -64,10 +64,12 @@ export const Layout = () => {
           {/* 1. LEFT: Logo */}
           <div className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
             <Link to="/" className="flex items-center gap-3" onClick={() => setIsOpen(false)}>
-              <div className="relative w-9 h-9 transition-transform group-hover:scale-110 duration-300 rounded-full border border-border overflow-hidden p-0.5 bg-background/50">
-                  <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full" alt="Logo Dark" />
-                  <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full" alt="Logo Light" />
+              <div className="relative w-9 h-9">
+                  <div className="absolute inset-0 bg-primary/40 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-150"></div>
+                  <div className="relative w-full h-full transition-transform group-hover:scale-110 duration-300 rounded-full border border-border overflow-hidden p-0.5 bg-background/50">
+                    <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full" alt="Logo Dark" />
+                    <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full" alt="Logo Light" />
+                  </div>
               </div>
               <span className="font-extrabold tracking-tight text-xl hidden sm:block font-sans">
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500 hover:brightness-125 transition-all duration-300">
