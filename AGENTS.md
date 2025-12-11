@@ -466,11 +466,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
 ### 11.3 Gateway & File Lifecycle E2E
 - [x] Stabilize `/gateway/upload`, `/gateway/create-deal-evm`, and `/gateway/update-deal-content-evm` so that a full “allocate capacity → upload file → commit content → fetch file” flow works reliably via both curl and the web UI.
 - [x] Ensure errors like “failed to parse tx response” and “deal creation failed: deal_id not found in transaction events” are surfaced as non-200 responses from the gateway (no silent success).
-- [ ] Expand shell-based e2e scripts (`scripts/e2e_lifecycle.sh`) to cover: deal creation (EVM), upload, update-deal-content, LCD verification of `manifest_root` and size, and fetch verification.
-    - *Status:* **BROKEN / WIP**.
-    - *Root Cause Found:* The "insufficient funds" error was due to EIP-712 signature verification recovering the wrong address because of a Chain ID mismatch (`nilchaind` used 1, Client used 31337).
-    - *Current State:* Attempted to hardcode Chain ID 31337 in `nilchain/x/nilchain/keeper/msg_server.go`, but introduced **syntax errors** during the edit. The code does not compile.
-    - *Next Steps:* Fix syntax errors in `msg_server.go` (specifically around line 539 in `UpdateDealContentFromEvm`), ensure it uses ChainID 31337, and re-run `e2e_lifecycle.sh`.
+- [x] Expand shell-based e2e scripts (`scripts/e2e_lifecycle.sh`) to cover: deal creation (EVM), upload, update-deal-content, LCD verification of `manifest_root` and size, and fetch verification.
+    - *Status:* **COMPLETED**.
+    - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
 - [ ] Introduce a lightweight browser e2e suite (Cypress or Playwright) under `nil-website` that runs against `./scripts/run_local_stack.sh start`.

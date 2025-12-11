@@ -527,40 +527,39 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length")
 	}
 
-    	        // EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
-    	        // Use 31337 for local devnet. In production, this should be fetched from EVM keeper or config.
-    	        eip712ChainID := big.NewInt(31337) 
-    	
-    	    	    	domainSep := types.HashDomainSeparator(eip712ChainID)
-    	    	        structHash, err := types.HashUpdateContent(intent)
-            return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
-        }
-        
-        digest := types.ComputeEIP712Digest(domainSep, structHash)
+	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
+	// Use 31337 for local devnet. In production, this should be fetched from EVM keeper or config.
+	eip712ChainID := big.NewInt(31337)
 
-        ctx.Logger().Info("DEBUG EIP-712 UpdateContent",
-            "Intent", fmt.Sprintf("%+v", intent),
-            "ChainID", eip712ChainID.String(),
-            "DomainSep", domainSep.Hex(),
-            "StructHash", structHash.Hex(),
-            "Digest", fmt.Sprintf("%x", digest),
-            "Signature", fmt.Sprintf("%x", msg.EvmSignature),
-        )
+	domainSep := types.HashDomainSeparator(eip712ChainID)
+	structHash, err := types.HashUpdateContent(intent)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
+	}
 
-    	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
-    	if err != nil {
-    		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
-    	}
-        ctx.Logger().Info("DEBUG EIP-712 Recovery (Update)",
-            "Recovered", evmAddr.Hex(),
-            "Expected", intent.CreatorEvm,
-        )
-        // Temporarily assume signature is valid and derive ownerAcc directly.
-        // ownerAcc := sdk.AccAddress(evmAddr.Bytes())
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
 
-	// // Map to Cosmos Address
-	// ownerAcc := sdk.AccAddress(evmAddr.Bytes()) // This needs to be derived outside.
-	
+	ctx.Logger().Info("DEBUG EIP-712 UpdateContent",
+		"Intent", fmt.Sprintf("%+v", intent),
+		"ChainID", eip712ChainID.String(),
+		"DomainSep", domainSep.Hex(),
+		"StructHash", structHash.Hex(),
+		"Digest", fmt.Sprintf("%x", digest),
+		"Signature", fmt.Sprintf("%x", msg.EvmSignature),
+	)
+
+	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
+	if err != nil {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+	}
+	ctx.Logger().Info("DEBUG EIP-712 Recovery (Update)",
+		"Recovered", evmAddr.Hex(),
+		"Expected", intent.CreatorEvm,
+	)
+
+	// Map to Cosmos Address
+	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
+
 	// Execute Update Logic
 	// We call the internal logic directly to avoid resigning internal Msg
 	deal, err := k.Deals.Get(ctx, intent.DealId)
@@ -568,9 +567,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", intent.DealId)
 	}
 
-	// if deal.Owner != ownerAcc.String() { // TEMPORARILY DISABLED
-	// 	return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
-	// }
+	if deal.Owner != ownerAcc.String() {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
+	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
 	if err != nil || len(manifestRoot) != 48 {
