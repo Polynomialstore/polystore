@@ -65,7 +65,7 @@ export const Layout = () => {
           <div className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
             <Link to="/" className="flex items-center gap-3" onClick={() => setIsOpen(false)}>
               <div className="relative w-9 h-9">
-                  <div className="absolute inset-0 bg-primary/40 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-150"></div>
+                  <div className="absolute inset-0 bg-primary/60 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-150"></div>
                   <div className="relative w-full h-full transition-transform group-hover:scale-110 duration-300 rounded-full border border-border overflow-hidden p-0.5 bg-background/50">
                     <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full" alt="Logo Dark" />
                     <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full" alt="Logo Light" />
@@ -80,7 +80,7 @@ export const Layout = () => {
           </div>
 
           {/* 2. CENTER: Desktop Navigation */}
-          <div className="hidden lg:flex items-center gap-1 bg-secondary/30 p-1 rounded-full border border-white/5 backdrop-blur-md shadow-inner">
+          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 bg-secondary/30 p-1 rounded-full border border-white/5 backdrop-blur-md shadow-inner">
             {navStructure.map((item) => (
                 <NavDropdown key={item.name} label={item.name} items={item.items!} />
             ))}
