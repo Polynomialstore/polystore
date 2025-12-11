@@ -363,11 +363,11 @@ export function Dashboard() {
 
   if (!isConnected) return (
     <div className="p-12 text-center">
-        <h2 className="text-xl font-semibold text-gray-300 mb-2">Connect Your Wallet</h2>
-        <p className="text-gray-500 mb-4">Access your storage deals and manage your files.</p>
+        <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
+        <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
         <button
           onClick={() => connectAsync({ connector: injected() })}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md shadow"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md shadow transition-colors"
         >
           <Wallet className="w-4 h-4" />
           Connect MetaMask
