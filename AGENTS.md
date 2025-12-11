@@ -221,7 +221,12 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   [ ] **Proto:** Remove `DealSize` enum and `deal_size` field from `types.proto`.
 *   [ ] **Logic:** Update `MsgCreateDeal` to ignore tier, defaulting to a "Thin Provisioned" state (0 bytes).
 *   [ ] **CLI:** Remove `tier` argument from `nil-cli create-deal`.
-*   [ ] **Web:** Remove Tier selection from Dashboard UI.
+*   [ ] **Web:** Remove Tier selection from Dashboard UI (`Dashboard.tsx`).
+*   [ ] **Web:** Remove Tier display from `DealDetail.tsx`.
+
+### 6. Work Stream: UI Polish
+*   [ ] **DealDetail:** Refactor `DealDetail.tsx` to use semantic Tailwind classes (support Light Mode).
+*   [ ] **Visualization:** Update Deal Explorer to visualize "Stripe Layout" (12 columns) instead of just linear blobs.
 
 ## Winter Roadmap: StripeReplica & Thick Client (Phase 3)
 
