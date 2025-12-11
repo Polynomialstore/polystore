@@ -33,7 +33,8 @@ var (
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
-	fastShardMode   = envDefault("NIL_FAST_SHARD", "1") == "1"
+	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
+	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 
 	execCommand = exec.Command
 )
@@ -767,17 +768,37 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		"--keyring-backend", "test",
 		"--home", homeDir,
 		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
+		"--output", "json",
 	)
 
 	out, err := cmd.CombinedOutput()
-	outStr := string(out)
 	if err != nil {
-		log.Printf("GatewayUpdateDealContentFromEvm failed: %s", outStr)
+		log.Printf("GatewayUpdateDealContentFromEvm failed (CLI error): %s", string(out))
 		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	txHash := extractTxHash(outStr)
+	var txRes struct {
+		TxHash string `json:"txhash"`
+		Code   int    `json:"code"`
+		RawLog string `json:"raw_log"`
+	}
+	if err := json.Unmarshal(out, &txRes); err != nil {
+		body := extractJSONBody(out)
+		if len(body) == 0 || json.Unmarshal(body, &txRes) != nil {
+			log.Printf("GatewayUpdateDealContentFromEvm failed to parse JSON: %v. Output: %s", err, string(out))
+			http.Error(w, "failed to parse tx response", http.StatusInternalServerError)
+			return
+		}
+	}
+	if txRes.Code != 0 {
+		log.Printf("GatewayUpdateDealContentFromEvm tx failed with code %d: %s", txRes.Code, txRes.RawLog)
+		http.Error(w, fmt.Sprintf("tx failed: %s", txRes.RawLog), http.StatusInternalServerError)
+		return
+	}
+
+	txHash := txRes.TxHash
 	log.Printf("GatewayUpdateDealContentFromEvm success: txhash=%s", txHash)
 
 	resp := map[string]any{
