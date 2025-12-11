@@ -1,4 +1,4 @@
-use crate::kzg::{BLOB_SIZE, KzgCommitment, KzgContext, KzgError, MDU_SIZE};
+use crate::kzg::{BLOB_SIZE, KzgContext, KzgError, MDU_SIZE};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use thiserror::Error;
 

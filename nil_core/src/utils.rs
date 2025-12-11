@@ -53,7 +53,7 @@ pub fn bytes_to_fr_be(bytes: &[u8]) -> BigUint {
 
 // Kept for compatibility if needed, but not used for c-kzg
 pub fn fr_to_bytes_le(fr: &BigUint) -> [u8; 32] {
-    let mut bytes = fr.to_bytes_le();
+    let bytes = fr.to_bytes_le();
     let mut out = [0u8; 32];
     if bytes.len() > 32 {
         panic!("Fr too large");
@@ -80,6 +80,18 @@ pub fn file_to_symbols(data: &[u8]) -> Vec<Vec<u8>> {
         symbols.push(symbol);
     }
     symbols
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn z_for_cell_zero_is_one() {
+        let z = z_for_cell(0);
+        let one = BigUint::from(1u32);
+        assert_eq!(bytes_to_fr_be(&z), one);
+    }
 }
 
 pub fn symbols_to_frs(symbols: &[Vec<u8>]) -> Vec<BigUint> {

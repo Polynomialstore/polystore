@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use nil_core::{
     kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, MDU_SIZE},
-    utils::{BYTES_PER_BLOB, frs_to_blobs, z_for_cell},
+    utils::{frs_to_blobs, z_for_cell},
 };
 use num_bigint::BigUint;
 use rand::rngs::StdRng;
@@ -164,7 +164,7 @@ fn run_shard(
         KzgContext::load_from_file(&ts_path).context("Failed to load KZG trusted setup")?;
 
     println!("Sharding file: {:?}", file);
-    let mut raw_data = std::fs::read(&file).context("Failed to read input file")?;
+    let raw_data = std::fs::read(&file).context("Failed to read input file")?;
     let original_len = raw_data.len();
 
     // We treat the file as a stream of bytes. We pack them into MDUs.

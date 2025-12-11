@@ -1,8 +1,8 @@
 use crate::utils::{fr_to_bytes_be, get_modulus, get_root_of_unity_4096};
 use blake2::{Blake2s256, Digest};
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Gt, Scalar};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ff::PrimeField;
-use group::{Curve, Group};
+use group::Curve;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
@@ -56,7 +56,7 @@ impl KzgContext {
         Self::load_from_reader(reader)
     }
 
-    pub fn load_from_reader<R: BufRead>(mut reader: R) -> Result<Self, KzgError> {
+    pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, KzgError> {
         let mut lines = reader.lines();
 
         let n_g1_str = lines

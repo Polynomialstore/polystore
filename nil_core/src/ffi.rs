@@ -30,9 +30,9 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
             let _ = KZG_CTX.set(ctx); // Ignore error if set concurrently
             0
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Failed to load KzgContext: {:?}", e); // Use eprintln for errors
+            eprintln!("ERROR: Failed to load KzgContext");
             -3 // Failed to load
         }
     }
@@ -70,13 +70,13 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
                 }
                 0 // Success
             }
-            Err(e) => {
-                eprintln!("ERROR: Failed to create MDU Merkle root: {:?}", e);
+            Err(_e) => {
+                eprintln!("ERROR: Failed to create MDU Merkle root");
                 -4 // Merkle root creation failed
             }
         },
-        Err(e) => {
-            eprintln!("ERROR: Failed to get KZG commitments for MDU: {:?}", e);
+        Err(_e) => {
+            eprintln!("ERROR: Failed to get KZG commitments for MDU");
             -3 // Commitment calculation failed
         }
     }
@@ -134,9 +134,9 @@ pub extern "C" fn nil_verify_mdu_proof(
             eprintln!("ERROR: Merkle proof invalid.");
             return 0; // Merkle proof invalid
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Merkle proof verification error: {:?}", e);
+            eprintln!("ERROR: Merkle proof verification error");
             return -3; // Internal Merkle proof error
         }
     }
@@ -154,9 +154,9 @@ pub extern "C" fn nil_verify_mdu_proof(
             eprintln!("ERROR: KZG opening proof invalid.");
             0 // KZG proof invalid
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: KZG verification error: {:?}", e);
+            eprintln!("ERROR: KZG verification error");
             -4 // Internal KZG verification error
         }
     }
@@ -308,9 +308,9 @@ pub extern "C" fn nil_compute_manifest_commitment(
             }
             0
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Failed to compute manifest: {:?}", e);
+            eprintln!("ERROR: Failed to compute manifest");
             -3
         }
     }
@@ -355,9 +355,9 @@ pub extern "C" fn nil_compute_manifest_proof(
             }
             0
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Failed to compute manifest proof: {:?}", e);
+            eprintln!("ERROR: Failed to compute manifest proof");
             -3
         }
     }
@@ -431,9 +431,9 @@ pub extern "C" fn nil_verify_chained_proof(
             eprintln!("ERROR: Hop 1 (Manifest) verification failed.");
             return 0;
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Hop 1 error: {:?}", e);
+            eprintln!("ERROR: Hop 1 error");
             return -3;
         }
     }
@@ -452,9 +452,9 @@ pub extern "C" fn nil_verify_chained_proof(
             eprintln!("ERROR: Hop 2 (Merkle) verification failed.");
             return 0;
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Hop 2 error: {:?}", e);
+            eprintln!("ERROR: Hop 2 error");
             return -4;
         }
     }
@@ -472,9 +472,9 @@ pub extern "C" fn nil_verify_chained_proof(
             eprintln!("ERROR: Hop 3 (Blob KZG) verification failed.");
             0
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "debug-print")]
-            eprintln!("ERROR: Hop 3 error: {:?}", e);
+            eprintln!("ERROR: Hop 3 error");
             -5
         }
     }
