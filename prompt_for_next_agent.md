@@ -7,7 +7,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 - **Chain & EVM:**
   - `nilchaind` boots cleanly via `./scripts/run_local_stack.sh start` using Go at `/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go`.
   - EVM JSON-RPC is active on `http://localhost:8545` with `evm-chain-id = 31337`.
-  - `MsgCreateDealFromEvm` is working: `/gateway/create-deal-evm` successfully creates deal `id=0` on-chain using an EIP‑712–signed payload (sample intent in the user’s curl and in `e2e_create_deal_from_evm.sh`).
+  - `MsgCreateDealFromEvm` is **currently broken** due to syntax errors in `msg_server.go` introduced during an attempted fix for EIP-712 verification.
   - Deals now use `manifest_root` (48‑byte KZG commitment) + `size` instead of `cid`/tiers.
 
 - **Gateway (`nil_s3`):**
@@ -45,39 +45,51 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 These are the key things that are currently not fully solved and should be top-of-mind for the next agent. They are also captured (in more detail) as checkboxes in `AGENTS.md` §11.
 
-1. **Bridge deployment (`NilBridge.sol`) still failing:**
+1. **EIP-712 Signature Verification & "Insufficient Funds" Error (CRITICAL):**
+   - **Symptom:** `CreateDealFromEvm` fails with `insufficient funds` even though the faucet funded the account.
+   - **Root Cause:** A Chain ID mismatch in the EIP-712 domain separator. `nilchaind` defaults to ChainID 1 (because parsing `intent.ChainId="test-1"` fails), while the Python/Client signs with EVM ChainID 31337. This causes `recoverEvmAddress` to return a wrong (random) address, which has 0 balance.
+   - **Current State:** The file `nilchain/x/nilchain/keeper/msg_server.go` has been modified to hardcode `ChainID = 31337`, but the last edits introduced **syntax errors** (around lines 534-539 in `UpdateDealContentFromEvm`). The build is broken.
+   - **Action Item:** Fix the syntax errors in `msg_server.go` and verify that the hardcoded ChainID fix works. Then verify the E2E lifecycle.
+
+2. **Bridge deployment (`NilBridge.sol`) still failing:**
    - `scripts/deploy_bridge_local.sh` runs a Foundry script with `forge`, but broadcasts fail:
      - Initially: `insufficient funds` for deployer.
      - After adding a pre-funded bech32 account for the Foundry dev key and a shared `NIL_EVM_DEV_PRIVKEY` in `scripts/run_local_stack.sh`, broadcast now fails with `error code -32002: request timed out` from `eth_sendRawTransaction`.
    - `run_local_stack.sh` invokes the deploy script every start with `NIL_DEPLOY_BRIDGE=1` by default, but `_artifacts/bridge_address.txt` is never written.
    - NilBridge is therefore **not** yet available to the dashboard widgets; `VITE_BRIDGE_ADDRESS` remains unset or zero.
 
-2. **End-to-end deal lifecycle is only partially covered by tests:**
+3. **End-to-end deal lifecycle is only partially covered by tests:**
    - We have:
      - `e2e_create_deal_from_evm.sh` which starts the stack and exercises `/gateway/create-deal-evm`, but:
        - It still assumes a `cid` field in deals and doesn’t align with the new `manifest_root/size` schema.
        - It uses a specific EVM key (0x4f3e…) that is not the same as the MetaMask key from the user’s curl (0xf793…); both work, but expectations aren’t unified.
    - There is **no single script** that does:
      - `upload` → `create-deal-evm` → `update-deal-content-evm` → LCD check → `fetch` verification.
+   - `scripts/e2e_lifecycle.sh` was created to fill this gap but is currently blocked by the EIP-712 issue.
 
-3. **Ownership semantics for `UpdateDealContentFromEvm`:**
+4. **Ownership semantics for `UpdateDealContentFromEvm`:**
    - Chain-side enforcement:
      - `CreateDealFromEvm` maps the EVM `creator_evm` into `deal.Owner` (bech32 of the EVM address bytes).
      - `UpdateDealContentFromEvm` recomputes the EIP‑712 digest, recovers the EVM signer, and maps it to a bech32 address; it then requires `deal.Owner == ownerAcc.String()`.
    - In manual testing, an update with a mismatched EVM key rightly fails with `only deal owner can update content: unauthorized`; after the gateway fix, this now surfaces as `HTTP 500` with the error text.
    - The next agent should make sure the **UI and tests are aligned on which EVM account is the “owner”** used for both create and update (and that MetaMask flows stick to that account).
 
-4. **Performance of `/gateway/upload`:**
-   - Running the full triple-proof ingest path is currently very slow on local hardware (minutes).
-   - `NIL_FAST_SHARD=1` exists as a fast stub but produces non-KZG CIDs that are **not** valid manifest roots for EVM update flows.
-   - There is no gating in the UI yet to prevent committing content using a fake/fast CID, so further work is needed either to:
-     - Optimize the full path, or
-     - Clearly separate “demo fast CID uploads” from “real manifest-root uploads” in both backend and frontend.
-
 ## 3. What the Next Agent Should Do First
 
-1. **Finish EVM UX for create + update (no bridge yet):**
-   - Choose a single dev EVM key (ideally the one used in `e2e_create_deal_from_evm.sh`) and drive this sequence:
+1. **Fix `msg_server.go` Syntax Errors:**
+   - Open `nilchain/x/nilchain/keeper/msg_server.go`.
+   - Go to `UpdateDealContentFromEvm` function (around line 530).
+   - Fix the broken `HashUpdateContent` call structure. Ensure proper error handling and variable usage.
+   - Verify that `eip712ChainID` is set to `big.NewInt(31337)` in both `CreateDealFromEvm` and `UpdateDealContentFromEvm`.
+
+2. **Verify Fix with `e2e_lifecycle.sh`:**
+   - Run `./scripts/e2e_lifecycle.sh`.
+   - Ensure `nilchaind` compiles successfully.
+   - Verify that the `CreateDeal` transaction succeeds (no "insufficient funds" or "exit status 1").
+   - Verify that `UpdateDealContent` succeeds.
+
+3. **Finish EVM UX for create + update (no bridge yet):**
+   - Once the chain side is fixed, choose a single dev EVM key (ideally the one used in `e2e_create_deal_from_evm.sh`) and drive this sequence:
      - Start stack: `./scripts/run_local_stack.sh start`.
      - Upload a small file via `/gateway/upload` and capture `manifest_root` + `size_bytes`.
      - Create a deal via `/gateway/create-deal-evm` (either through the web UI using MetaMask or via the script).
@@ -86,23 +98,6 @@ These are the key things that are currently not fully solved and should be top-o
    - If any step fails:
      - Inspect LCD tx responses directly (`/cosmos/tx/v1beta1/txs/<hash>`).
      - Fix either the EIP‑712 layer (`nilchain/x/nilchain/types/eip712.go`, hooks in `nil-website`, or payloads in scripts) or gateway parsing accordingly.
-
-2. **Update shell e2e scripts to match the new semantics:**
-   - Bring `e2e_create_deal_from_evm.sh` in sync with the current chain schema:
-     - Stop relying on `cid` in deals.
-     - Assert on `owner`, presence of a deal ID, and optionally `service_hint`.
-   - Add a new e2e script (or extend `nil_s3/e2e_comprehensive.sh`) to perform the full lifecycle mentioned above, and to fail loudly on:
-     - `failed to parse tx response`
-     - `deal creation failed: deal_id not found`
-     - `tx failed: <reason>` for update.
-
-3. **Revisit NilBridge deployment once core flows are solid:**
-   - Re-enable and debug `scripts/deploy_bridge_local.sh`:
-     - It now uses `NIL_EVM_DEV_PRIVKEY` (set in `scripts/run_local_stack.sh`) but still fails to broadcast.
-     - Investigate the `-32002: request timed out` error by:
-       - Checking nilchaind EVM JSON-RPC logs.
-       - Possibly adjusting gas settings or enabling EVM module wiring in the Cosmos app (if still partially disabled for simulations).
-   - Once deployment succeeds, ensure `_artifacts/bridge_address.txt` is written and wired through `run_local_stack.sh` into `VITE_BRIDGE_ADDRESS` so the dashboard bridge widgets can read it.
 
 ## 4. Key Files to Look At
 
