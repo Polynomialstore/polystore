@@ -17,8 +17,8 @@ if ! command -v cast >/dev/null 2>&1; then
 fi
 
 if [ -z "$PRIVATE_KEY" ]; then
-  # Derive the faucet dev key used by the local stack.
-  PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC" --derivation-path "m/44'/60'/0'/0/0" | sed 's/^0x//')
+  # Derive the faucet dev key used by the local stack (index 0).
+  PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC" | sed 's/^0x//')
 fi
 
 echo ">>> Deploying NilBridge to $RPC_URL ..."
