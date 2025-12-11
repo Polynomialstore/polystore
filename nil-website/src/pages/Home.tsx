@@ -13,17 +13,17 @@ export const Home = () => {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.8 }}
-            className="mx-auto w-64 h-64 mb-4 relative"
+            className="mx-auto w-64 h-64 mb-8 relative rounded-full overflow-hidden shadow-2xl border-4 border-background ring-1 ring-border"
           >
              <img 
                src="/logo_dark.jpg" 
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain dark:hidden mix-blend-multiply"
+               className="absolute inset-0 w-full h-full object-cover dark:hidden"
              />
              <img 
                src="/logo_light.jpg" 
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain hidden dark:block mix-blend-screen"
+               className="absolute inset-0 w-full h-full object-cover hidden dark:block"
              />
           </motion.div>
 
@@ -95,7 +95,7 @@ export const Home = () => {
           <FeatureCard 
             icon={<Shield className="w-8 h-8 text-green-400" />}
             title="Unified Liveness"
-            desc="Zero Wasted Work. User retrievals *are* the storage proofs. We don't separate 'auditing' from 'serving'. High traffic = High security."
+            desc="Zero Wasted Work. User retrievals *are* the storage proofs. Triple Proof verification guarantees integrity for every byte. High traffic = High security."
           />
           <FeatureCard 
             icon={<Activity className="w-8 h-8 text-blue-400" />}
@@ -105,7 +105,7 @@ export const Home = () => {
           <FeatureCard 
             icon={<Database className="w-8 h-8 text-purple-400" />}
             title="Elasticity & Privacy"
-            desc="Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically, funded by user escrow. Zero-Knowledge encryption ensures privacy."
+            desc="Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically. Self-Healing (Mode 2) ensures durability even if nodes fail. Zero-Knowledge encryption."
           />
         </div>
 

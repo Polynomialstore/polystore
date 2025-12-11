@@ -41,10 +41,10 @@ export const KZGDeepDive = () => {
         {/* Section 2: Commitment */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Zap className="w-5 h-5 text-yellow-500" /> 2. The Commitment (C_root)
+            <Zap className="w-5 h-5 text-yellow-500" /> 2. The Commitment (Atomic Blob)
           </h3>
           <p className="text-muted-foreground mb-6">
-            After data is sharded and mapped to field elements, we compute a single, compact KZG commitment for each blob of 8 MiB. This commitment ($C_root$) acts as a tamper-proof cryptographic fingerprint of the data.
+            We divide data into <strong>1 MB Atomic Blobs</strong>. Each blob is treated as a polynomial $P(x)$. We evaluate this polynomial at the secret $\tau$ to get a single 48-byte Commitment.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6 mb-6">
@@ -52,37 +52,53 @@ export const KZGDeepDive = () => {
               whileHover={{ scale: 1.02 }}
               className="bg-primary/5 p-6 rounded-2xl text-center border border-primary/20"
             >
-              <h4 className="font-bold text-lg text-primary mb-2">Blob (Input Data Unit)</h4>
-              <div className="text-4xl font-bold my-4 text-foreground">8 MB</div>
-              <p className="text-sm text-muted-foreground">262,144 Field Elements</p>
+              <h4 className="font-bold text-lg text-primary mb-2">Atomic Blob</h4>
+              <div className="text-4xl font-bold my-4 text-foreground">1 MB</div>
+              <p className="text-sm text-muted-foreground">32,768 Field Elements</p>
             </motion.div>
             <motion.div 
               whileHover={{ scale: 1.02 }}
               className="bg-green-500/5 p-6 rounded-2xl text-center border border-green-500/20"
             >
-              <h4 className="font-bold text-lg text-green-600 mb-2">Commitment (Output)</h4>
+              <h4 className="font-bold text-lg text-green-600 mb-2">Commitment</h4>
               <div className="text-4xl font-bold my-4 text-foreground">48 Bytes</div>
-              <p className="text-sm text-muted-foreground">Single Elliptic Curve Point</p>
+              <p className="text-sm text-muted-foreground">Unique Polynomial ID</p>
             </motion.div>
           </div>
         </section>
 
-        {/* Section 3: Proof & Verification Protocol */}
+        {/* Section 3: The Triple Proof */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <CheckCircle className="w-5 h-5 text-green-500" /> 3. Unified Verification
+            <CheckCircle className="w-5 h-5 text-green-500" /> 3. The Triple Proof (Scale)
           </h3>
           <p className="text-muted-foreground mb-6">
-            In the <strong>Performance Market</strong>, we don't just audit data in the background. When a user retrieves a file, the Storage Provider attaches a KZG proof to the data stream.
+            How do you verify a 1 Petabyte dataset with a single hash? NilStore uses a <strong>3-Hop Verification Chain</strong> to bind every byte to the Deal Root.
           </p>
-          <div className="bg-card p-6 rounded-xl border border-border mb-6">
-            <p className="text-sm text-muted-foreground">
-              <strong>The "Double-Pay" Innovation:</strong> The user signs a receipt for the valid data. This receipt serves two purposes:
-            </p>
-            <ul className="list-disc list-inside text-sm text-muted-foreground mt-2 ml-2">
-                <li>It proves the user got their file (Bandwidth Fee).</li>
-                <li>It proves the node has the data (Storage Reward).</li>
-            </ul>
+          <div className="bg-card p-6 rounded-xl border border-border mb-6 space-y-4">
+            <div className="flex items-center gap-4">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">1</div>
+                <div>
+                    <h4 className="font-bold text-foreground">Hop 1: The Manifest</h4>
+                    <p className="text-sm text-muted-foreground">Verify the <strong>MDU Root</strong> is part of the Deal's Manifest. (KZG)</p>
+                </div>
+            </div>
+            <div className="w-0.5 h-6 bg-border ml-4"></div>
+            <div className="flex items-center gap-4">
+                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">2</div>
+                <div>
+                    <h4 className="font-bold text-foreground">Hop 2: The Structure</h4>
+                    <p className="text-sm text-muted-foreground">Verify the <strong>Blob Commitment</strong> is part of the MDU. (Merkle)</p>
+                </div>
+            </div>
+            <div className="w-0.5 h-6 bg-border ml-4"></div>
+            <div className="flex items-center gap-4">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold">3</div>
+                <div>
+                    <h4 className="font-bold text-foreground">Hop 3: The Data</h4>
+                    <p className="text-sm text-muted-foreground">Verify the <strong>Data Byte</strong> belongs to the Blob Polynomial. (KZG Evaluation)</p>
+                </div>
+            </div>
           </div>
           <div className="bg-secondary/30 p-8 rounded-2xl border border-border overflow-hidden relative">
             
@@ -104,7 +120,7 @@ export const KZGDeepDive = () => {
                   transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
                   className="absolute top-1/3 bg-yellow-100 border border-yellow-400 px-3 py-1 rounded-full text-xs font-bold text-yellow-700 shadow-sm z-10"
                 >
-                  Challenge (z)
+                  Challenge (MDU 5, Byte 100)
                 </motion.div>
 
                 {/* Response Packet */}
@@ -114,7 +130,7 @@ export const KZGDeepDive = () => {
                   transition={{ duration: 2, delay: 1, repeat: Infinity, repeatDelay: 1 }}
                   className="absolute bottom-1/3 bg-green-100 border border-green-400 px-3 py-1 rounded-full text-xs font-bold text-green-700 shadow-sm z-10"
                 >
-                  Proof ($\pi$, y)
+                  Triple Proof ($\pi_1, \pi_2, \pi_3$)
                 </motion.div>
 
                 {/* Connection Line */}
@@ -130,7 +146,7 @@ export const KZGDeepDive = () => {
 
             <div className="mt-4 text-center">
               <div className="inline-block bg-background/50 text-foreground font-mono p-3 rounded-lg border border-border shadow-lg">
-                e(C - [y], G2) ?= e($\pi$, [$\tau$] - [z])
+                Chain Check: Valid(Root, $\pi$) == TRUE
               </div>
             </div>
           </div>

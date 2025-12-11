@@ -1,6 +1,7 @@
 import { ShardingDeepDive } from "./ShardingDeepDive";
 import { KZGDeepDive } from "./KZGDeepDive";
 import { PerformanceDeepDive } from "./PerformanceDeepDive";
+import { DeputySystem } from "./DeputySystem";
 
 export const Technology = () => {
   return (
@@ -39,9 +40,20 @@ export const Technology = () => {
         <div className="flex gap-6 group">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 font-bold shrink-0">3</div>
+            <div className="w-0.5 flex-grow bg-border my-2"></div>
           </div>
           <div className="w-full pb-12">
             <PerformanceDeepDive />
+          </div>
+        </div>
+
+        {/* Step 4 */}
+        <div className="flex gap-6 group">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-500 font-bold shrink-0">4</div>
+          </div>
+          <div className="w-full pb-12">
+            <DeputySystem />
           </div>
         </div>
       </div>

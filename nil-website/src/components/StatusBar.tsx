@@ -6,10 +6,10 @@ import { useAccount, useChainId } from 'wagmi'
 function Badge({ label, status }: { label: string; status: ServiceStatus }) {
   const colors =
     status === 'ok'
-      ? 'bg-green-500/10 text-green-300 border-green-500/30'
+      ? 'bg-green-500/10 text-green-600 dark:text-green-300 border-green-500/30'
       : status === 'warn'
-      ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
-      : 'bg-red-500/10 text-red-300 border-red-500/30'
+      ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-300 border-yellow-500/30'
+      : 'bg-destructive/10 text-destructive border-destructive/30'
   const text =
     status === 'ok'
       ? 'OK'
@@ -58,16 +58,16 @@ export function StatusBar() {
       : <Badge label="Wallet: Not connected" status="warn" />
 
   return (
-    <div className="flex flex-wrap gap-2 items-center bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-xs text-slate-200">
+    <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">
       <Badge label={`LCD`} status={summary.lcd} />
       <Badge label={`EVM`} status={summary.evm} />
       <Badge label={`Faucet`} status={summary.faucet} />
       <Badge label={`Chain ID`} status={summary.chainIdMatch} />
       {walletBadge}
-      {height && <span className="text-slate-400">Height: {height}</span>}
-      {chainName && <span className="text-slate-500">LCD Chain: {chainName}</span>}
+      {height && <span className="opacity-75">Height: {height}</span>}
+      {chainName && <span className="opacity-75">LCD Chain: {chainName}</span>}
       {evmChainId !== undefined && (
-        <span className="text-slate-500">EVM Chain: {evmChainId}</span>
+        <span className="opacity-75">EVM Chain: {evmChainId}</span>
       )}
     </div>
   )
