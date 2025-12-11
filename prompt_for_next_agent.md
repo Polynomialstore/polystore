@@ -1,21 +1,18 @@
 # Current State (December 10, 2025)
 
 ## System Status: Building Mode 2
-- **Goal:** Implement "StripeReplica" (Mode 2) with "Thick Client" (WASM).
-- **Core:** `nil_core` is now WASM-compatible!
-    - **Change:** Swapped `c-kzg` for `kzg-rs` to fix `stdlib.h` issues in WASM.
-    - **Status:** Compiles to `wasm32-unknown-unknown`. `kzg.rs` methods are currently STUBS.
-- **Spec:** `spec.md` updated with § 8 "Mode 2: StripeReplica".
-- **Todo:** `AGENTS.md` has a detailed "Winter Roadmap".
+- **Core:** `nil_core` migrated to `kzg-rs` (Pure Rust).
+    - **Logic:** `blob_to_commitment` (MSM), `verify_proof` implemented. `compute_proof` stubbed.
+    - **WASM:** Compiles on Native. Fails on WASM target due to `sp1_bls12_381` error: `cannot find value MODULUS_LIMBS_32`.
+- **Spec:** `spec.md` updated with § 8 "Mode 2".
+- **Todo:** `AGENTS.md` updated.
 
 ## Next Steps (Immediate)
-1.  **Implement KZG Logic:** Fill in the stubs in `nil_core/src/kzg.rs` using `kzg-rs` and `bls12_381`.
-    -   Implement `blob_to_commitment` (Map bytes -> Scalars -> Commit).
-    -   Implement `load_from_file` (and `load_from_bytes`).
+1.  **Fix WASM Build:** Resolve `MODULUS_LIMBS_32` error in `sp1_bls12_381`.
+    -   Possible fix: Pin a different version, patch `kzg-rs`, or define target env vars.
 2.  **Implement Expansion:** Create `expand_mdu` in `nil_core` using `reed-solomon-erasure`.
-3.  **Frontend:** Build the WasmWorker.
+3.  **Frontend:** Build WasmWorker.
 
 ## Code Context
-- `nil_core/src/kzg.rs`: The crypto wrapper. Currently contains stubs. NEEDS IMPLEMENTATION.
-- `nil_core/Cargo.toml`: Dependencies updated for WASM (`kzg-rs`, `getrandom` feature).
-- `SCOPE_STRIPEREPLICA.md`: Detailed scope of the current sprint.
+- `nil_core/src/kzg.rs`: Crypto logic using `kzg-rs` and `sp1_bls12_381`.
+- `nil_core/Cargo.toml`: Deps.

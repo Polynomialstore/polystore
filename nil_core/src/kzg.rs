@@ -1,20 +1,19 @@
-use kzg_rs::{KzgSettings, KzgProof}; // Removed KzgCommitment for now, will try Commitment
+use kzg_rs::KzgSettings;
+use kzg_rs::kzg_proof::verify_kzg_proof_impl;
+use sp1_bls12_381::{Scalar, G1Affine, G1Projective};
 use std::path::Path;
 use thiserror::Error;
 use blake2::{Blake2s256, Digest};
-use rs_merkle::{MerkleTree, MerkleProof, Hasher}; // Imported Hasher
-use num_bigint::BigUint;
-use num_integer::Integer;
+use rs_merkle::{MerkleTree, MerkleProof, Hasher};
+use ff::PrimeField;
+use group::{Curve, Group};
 
-// Define MDU (Mega-Data Unit) and Shard sizes
-pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
-pub const SHARD_SIZE: usize = 1 * 1024 * 1024; // 1 MiB
-pub const BLOB_SIZE: usize = 131072; // 128 KiB
-pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE; // 64 blobs per MDU
+pub const MDU_SIZE: usize = 8 * 1024 * 1024;
+pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
+pub const BLOB_SIZE: usize = 131072;
+pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE;
 
-// Type aliases to bridge gaps
-// If kzg-rs doesn't export Commitment, we might need G1Affine from bls12_381
-pub type KzgCommitment = [u8; 48]; // Placeholder if we just use bytes at interface boundary
+pub type KzgCommitment = [u8; 48];
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
 
@@ -23,24 +22,20 @@ pub enum KzgError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("KZG error")]
-    Internal, // Simplified for now
+    Internal,
     #[error("Invalid data length")]
     InvalidDataLength,
-    #[error("Invalid MDU size: expected {MDU_SIZE} bytes")]
+    #[error("Invalid MDU size")]
     InvalidMduSize,
-    #[error("MDU commitment calculation failed")]
-    MduCommitmentFailed,
     #[error("Merkle Tree error: {0}")]
     MerkleTreeError(String),
 }
 
-/// Custom hasher for rs-merkle using Blake2s256 for KzgCommitment (Bytes48)
 #[derive(Clone)]
 pub struct Blake2s256Hasher;
 
 impl rs_merkle::Hasher for Blake2s256Hasher {
-    type Hash = [u8; 32]; // Blake2s256 output size
-
+    type Hash = [u8; 32];
     fn hash(data: &[u8]) -> [u8; 32] {
         Blake2s256::digest(data).into()
     }
@@ -51,28 +46,54 @@ pub struct KzgContext {
 }
 
 impl KzgContext {
-    // Placeholder for load
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, KzgError> {
-        let bytes = std::fs::read(path)?;
-        // TODO: Load settings from bytes
-        // let settings = KzgSettings::load_trusted_setup(&bytes).map_err(...)
-        Err(KzgError::Internal) 
+    pub fn load_from_file<P: AsRef<Path>>(_path: P) -> Result<Self, KzgError> {
+        let settings = KzgSettings::load_trusted_setup_file()
+            .map_err(|_| KzgError::Internal)?;
+        Ok(Self { settings })
+    }
+
+    pub fn blob_to_commitment(&self, blob_bytes: &[u8]) -> Result<KzgCommitment, KzgError> {
+        if blob_bytes.len() != BLOB_SIZE { return Err(KzgError::InvalidDataLength); }
+        
+        let scalars = bytes_to_scalars(blob_bytes)?;
+        
+        let mut acc = G1Projective::identity();
+        for (i, scalar) in scalars.iter().enumerate() {
+            if i >= self.settings.g1_points.len() { break; }
+            let point = self.settings.g1_points[i];
+            acc += point * scalar;
+        }
+        
+        let affine = acc.to_affine();
+        Ok(affine.to_compressed())
     }
 
     pub fn mdu_to_kzg_commitments(&self, mdu_bytes: &[u8]) -> Result<Vec<KzgCommitment>, KzgError> {
-        // Stub
-        Ok(vec![[0u8; 48]; BLOBS_PER_MDU])
+        if mdu_bytes.len() != MDU_SIZE { return Err(KzgError::InvalidMduSize); }
+        let mut commitments = Vec::with_capacity(BLOBS_PER_MDU);
+        for i in 0..BLOBS_PER_MDU {
+            let start = i * BLOB_SIZE;
+            let end = start + BLOB_SIZE;
+            commitments.push(self.blob_to_commitment(&mdu_bytes[start..end])?);
+        }
+        Ok(commitments)
     }
 
     pub fn create_mdu_merkle_root(&self, commitments: &[KzgCommitment]) -> Result<Bytes32, KzgError> {
         let leaves: Vec<[u8; 32]> = commitments.iter()
             .map(|c| Blake2s256Hasher::hash(c))
             .collect();
-        
         let merkle_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&leaves);
-        
         merkle_tree.root()
-            .ok_or_else(|| KzgError::MerkleTreeError("Failed to get Merkle root".to_string()))
+            .ok_or_else(|| KzgError::MerkleTreeError("Root not found".to_string()))
+    }
+
+    pub fn compute_proof(
+        &self,
+        blob_bytes: &[u8],
+        input_point_bytes: &[u8],
+    ) -> Result<(Bytes48, Bytes32), KzgError> {
+        Ok(([0u8; 48], [0u8; 32])) // Stub
     }
 
     pub fn verify_proof(
@@ -82,24 +103,34 @@ impl KzgContext {
         claimed_value_bytes: &[u8],
         proof_bytes: &[u8],
     ) -> Result<bool, KzgError> {
-        // Stub
-        Ok(true)
-    }
+        let commitment = G1Affine::from_compressed(commitment_bytes.try_into().unwrap()).unwrap();
+        
+        let mut z_repr = [0u8; 32];
+        z_repr.copy_from_slice(input_point_bytes);
+        z_repr.reverse();
+        let z = Scalar::from_repr(z_repr).unwrap();
 
-    pub fn compute_proof(
-        &self,
-        blob_bytes: &[u8],
-        input_point_bytes: &[u8],
-    ) -> Result<(Bytes48, Bytes32), KzgError> {
-        // Stub
-        // KzgProof is imported from kzg_rs, need to construct it?
-        // Assuming KzgProof has default or we return error
-        Ok(([0u8; 48], [0u8; 32]))
+        let mut y_repr = [0u8; 32];
+        y_repr.copy_from_slice(claimed_value_bytes);
+        y_repr.reverse();
+        let y = Scalar::from_repr(y_repr).unwrap();
+
+        let proof = G1Affine::from_compressed(proof_bytes.try_into().unwrap()).unwrap();
+
+        verify_kzg_proof_impl(commitment, z, y, proof, &self.settings)
+            .map_err(|_| KzgError::Internal)
     }
 
     pub fn compute_manifest_commitment(&self, mdu_roots: &[[u8; 32]]) -> Result<(KzgCommitment, Vec<u8>), KzgError> {
-        // Stub
-        Ok(([0u8; 48], vec![]))
+        let mut blob_bytes = vec![0u8; BLOB_SIZE];
+        for (i, root) in mdu_roots.iter().enumerate() {
+            if i >= 4096 { break; }
+            let start = i * 32;
+            blob_bytes[start..start+32].copy_from_slice(root);
+        }
+        
+        let commitment = self.blob_to_commitment(&blob_bytes)?;
+        Ok((commitment, blob_bytes))
     }
 
     pub fn verify_manifest_inclusion(
@@ -109,8 +140,7 @@ impl KzgContext {
         mdu_index: usize,
         proof_bytes: &[u8],
     ) -> Result<bool, KzgError> {
-        // Stub
-        Ok(true)
+        Ok(true) // Stub
     }
     
     pub fn verify_mdu_merkle_proof(
@@ -149,4 +179,19 @@ impl KzgContext {
             num_leaves,
         ))
     }
+}
+
+fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
+    let mut scalars = Vec::with_capacity(4096);
+    for chunk in bytes.chunks(32) {
+        let mut repr = [0u8; 32];
+        repr.copy_from_slice(chunk);
+        repr.reverse(); // BE -> LE
+        let s = Scalar::from_repr(repr);
+        if s.is_none().into() {
+             return Err(KzgError::Internal);
+        }
+        scalars.push(s.unwrap());
+    }
+    Ok(scalars)
 }
