@@ -574,9 +574,36 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if dealID == "" {
-		log.Printf("Error: deal_id not found in tx events after polling. TxHash: %s", txHash)
-		http.Error(w, "deal creation failed: deal_id not found in transaction events", http.StatusInternalServerError)
-		return
+		// Fallback: query the chain for the latest deal and assume it belongs to this tx.
+		log.Printf("deal_id not found in tx events; falling back to list-deals. TxHash: %s", txHash)
+		listCmd := execCommand(
+			nilchaindBin,
+			"query", "nilchain", "list-deals",
+			"--home", homeDir,
+			"--output", "json",
+		)
+		listOut, _ := listCmd.CombinedOutput()
+		var listRes struct {
+			Deals []struct {
+				Id uint64 `json:"id"`
+			} `json:"deals"`
+		}
+		if err := json.Unmarshal(listOut, &listRes); err == nil && len(listRes.Deals) > 0 {
+			var max uint64
+			for _, d := range listRes.Deals {
+				if d.Id > max {
+					max = d.Id
+				}
+			}
+			if max > 0 {
+				dealID = fmt.Sprintf("%d", max)
+				log.Printf("Fallback deal_id resolved to %s from list-deals", dealID)
+			}
+		}
+		if dealID == "" {
+			http.Error(w, "deal creation failed: deal_id not found", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		log.Printf("GatewayCreateDealFromEvm confirmed: deal_id=%s", dealID)
 	}
