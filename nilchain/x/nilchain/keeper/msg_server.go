@@ -691,6 +691,17 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
          }
          
          if valid {
+             ctx.Logger().Info("VerifyChainedProof Input",
+                 "ManifestRoot", hex.EncodeToString(deal.ManifestRoot),
+                 "MduIndex", chainedProof.MduIndex,
+                 "MduRootFr", hex.EncodeToString(chainedProof.MduRootFr),
+                 "BlobCommitment", hex.EncodeToString(chainedProof.BlobCommitment),
+                 "BlobIndex", chainedProof.BlobIndex,
+                 "MerklePath", hex.EncodeToString(flattenedMerkle),
+                 "ZValue", hex.EncodeToString(chainedProof.ZValue),
+                 "YValue", hex.EncodeToString(chainedProof.YValue),
+                 "KzgOpening", hex.EncodeToString(chainedProof.KzgOpeningProof),
+             )
              v, err := crypto_ffi.VerifyChainedProof(
                 deal.ManifestRoot,
                 chainedProof.MduIndex,

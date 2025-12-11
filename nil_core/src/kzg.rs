@@ -251,7 +251,7 @@ impl KzgContext {
         let bn = bytes_to_fr_be(mdu_root_bytes);
         let modulus = get_modulus();
         let fr = bn.mod_floor(&modulus);
-        let y_bytes = fr_to_bytes_be(&fr); // Changed to BE
+        let y_bytes = fr_to_bytes_be(&fr); // Reverted to BE
 
         // 3. Reuse standard verify_proof
         self.verify_proof(

@@ -25,7 +25,7 @@ pub fn z_for_cell(idx: usize) -> [u8; 32] {
     let omega = get_root_of_unity_4096();
     let idx_bn = BigUint::from(idx);
     let z = omega.modpow(&idx_bn, &modulus);
-    fr_to_bytes_be(&z) // Changed to BE
+    fr_to_bytes_le(&z) // Changed to LE
 }
 
 pub fn sha256_to_fr(data: &[u8]) -> BigUint {
@@ -117,48 +117,11 @@ pub fn frs_to_blobs(frs: &[BigUint]) -> Vec<Vec<u8>> {
         
 
         for (i, fr) in chunk.iter().enumerate() {
-
-            // Bit-reverse the index for placement
-
-            // c-kzg expects blob[j] to be the value at omega^rev(j).
-
-            // We want value at omega^i to be fr[i].
-
-            // So we want blob[j] such that rev(j) = i.
-
-            // So j = rev(i).
-
-            // Wait.
-
-            // If blob[j] corresponds to omega^rev(j).
-
-            // And we want it to hold value for omega^i.
-
-            // Then rev(j) = i.
-
-            // So j = rev(i).
-
-            // Yes.
-
-            
-
-            let j = reverse_bits(i, 12);
-
-            let offset = j * 32;
-
-            let bytes = fr_to_bytes_be(fr); // Reverted to BE
-
+            // Natural Order: Place fr[i] at blob[i]
+            let offset = i * 32;
+            let bytes = fr_to_bytes_le(fr); // Changed to LE
             blob[offset..offset+32].copy_from_slice(&bytes);
-
         }
-
-        // If chunk is smaller than 4096, remaining indices in blob are already 0.
-
-        // 0 corresponds to value 0 at those points.
-
-        // This effectively pads the data with zeros in the natural domain.
-
-        
 
         blobs.push(blob);
 

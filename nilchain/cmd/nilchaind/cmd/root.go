@@ -26,6 +26,7 @@ import (
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 
 	"nilchain/app"
+	"nilchain/x/crypto_ffi"
 )
 
 // NewRootCmd creates a new root command for nilchaind. It is called once in the main function.
@@ -56,6 +57,16 @@ func NewRootCmd() *cobra.Command {
 		Short:         "nilchain node",
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Initialize KZG Trusted Setup
+			tsPath := os.Getenv("NIL_TRUSTED_SETUP")
+			if tsPath == "" {
+				tsPath = "nilchain/trusted_setup.txt"
+			}
+			if err := crypto_ffi.Init(tsPath); err != nil {
+				// Don't fail hard to allow simple CLI usage without setup
+				cmd.Println("WARNING: Failed to init KZG:", err)
+			}
+
 			// set the default command outputs
 			cmd.SetOut(cmd.OutOrStdout())
 			cmd.SetErr(cmd.ErrOrStderr())
