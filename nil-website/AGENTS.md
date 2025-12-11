@@ -34,4 +34,20 @@ This document outlines the high-level tasks required to expand `website-spec.md`
 ## 7. Utilities & Libraries
 - [x] **Utils:** `src/lib/` function specs (`address.ts`, `status.ts`, `cn`).
 
+## 8. Educational Content (New)
+These pages are required to explain the novel cryptographic and economic mechanisms of NilStore.
+
+- [ ] **KZG Deep Dive:** Create a dedicated page explaining the KZG Commitment algorithm.
+    *   **High Level:** "Polynomials as Files" (The `[3, 1, 4]` example).
+    *   **Rigorous:** Elliptic Curve Pairings, SRS, and q-SDH assumption.
+    *   **Application:** How NilStore uses Triple Proofs to bind Deal Root -> MDU -> Blob -> Byte.
+- [ ] **Retrieval Solved:** A guide on how NilStore inverts the storage model.
+    *   **Unified Liveness:** Receipts = Storage Proofs.
+    *   **Triple Proof:** Trustless verification of petabytes.
+    *   **Mode 2:** Erasure Coding and Self-Healing.
+- [ ] **The Deputy System:** Explaining the "Mystery Shopper" network.
+    *   **Concept:** Routing around damage vs. Courts.
+    *   **Audit Debt:** How nodes are forced to audit neighbors.
+    *   **Participation:** How users can run a node to earn rewards.
+
 ---
