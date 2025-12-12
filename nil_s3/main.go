@@ -22,6 +22,9 @@ import (
 
 	"github.com/btcsuite/btcutil/bech32"
 	"github.com/gorilla/mux"
+
+	"nil_s3/pkg/builder"
+	"nil_s3/pkg/layout"
 )
 
 // Configurable paths & chain settings (overridable via env).
@@ -263,6 +266,7 @@ func main() {
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest/{cid}", GatewayManifest).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
@@ -364,6 +368,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 	var cid string
 	var size uint64
+	var fileSize uint64
 	var allocatedLength uint64
 
 	// Canonical NilFS ingest by default (MDU #0 + Witness + User MDUs + ManifestRoot).
@@ -405,7 +410,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, manifestRoot, allocLen, err := IngestAppendToDeal(path, chainCID, maxMdus)
+		b, manifestRoot, allocLen, err := IngestAppendToDeal(path, chainCID, maxMdus)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
 			return
@@ -413,7 +418,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		cid = manifestRoot
 		allocatedLength = allocLen
 		if info, err := os.Stat(path); err == nil {
-			size = uint64(info.Size())
+			fileSize = uint64(info.Size())
+		}
+		if b != nil {
+			size = totalSizeBytesFromMdu0(b)
 		}
 	} else {
 		switch {
@@ -425,10 +433,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
 				return
 			}
+			fileSize = size
 
 		case os.Getenv("NIL_FAST_INGEST") == "1":
 			// Semi-canonical dev path: NilFS slab without Witness MDUs.
-			_, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
+			b, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
 				return
@@ -436,12 +445,15 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			cid = manifestRoot
 			allocatedLength = allocLen
 			if info, err := os.Stat(path); err == nil {
-				size = uint64(info.Size())
+				fileSize = uint64(info.Size())
+			}
+			if b != nil {
+				size = totalSizeBytesFromMdu0(b)
 			}
 
 		default:
 			// Full canonical ingest (Triple-Proof valid).
-			_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
+			b, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
 				return
@@ -449,9 +461,17 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			cid = manifestRoot
 			allocatedLength = allocLen
 			if info, err := os.Stat(path); err == nil {
-				size = uint64(info.Size())
+				fileSize = uint64(info.Size())
+			}
+			if b != nil {
+				size = totalSizeBytesFromMdu0(b)
 			}
 		}
+	}
+
+	// Backstop: preserve previous behavior if we could not compute a non-zero total size.
+	if size == 0 {
+		size = fileSize
 	}
 
 	// Record this file in a simple local index so we can serve it back
@@ -464,6 +484,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"cid":              cid,
 		"manifest_root":    cid,
 		"size_bytes":       size,
+		"file_size_bytes":  fileSize,
 		"allocated_length": allocatedLength,
 		"filename":         header.Filename,
 	}
@@ -471,6 +492,23 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("GatewayUpload encode error: %v", err)
 	}
+}
+
+func totalSizeBytesFromMdu0(b *builder.Mdu0Builder) uint64 {
+	if b == nil {
+		return 0
+	}
+	var total uint64
+	for i := uint32(0); i < b.Header.RecordCount; i++ {
+		rec := b.GetFileRecord(i)
+		// Path[0]==0 marks a tombstone in NilFS V1.
+		if rec.Path[0] == 0 {
+			continue
+		}
+		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		total += length
+	}
+	return total
 }
 
 // GatewayCreateDeal accepts a spec-aligned payload and creates a deal on-chain.
@@ -1213,6 +1251,110 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", entry.Filename))
 	}
 	http.ServeFile(w, r, entry.Path)
+}
+
+type nilfsFileEntry struct {
+	Path        string `json:"path"`
+	SizeBytes   uint64 `json:"size_bytes"`
+	StartOffset uint64 `json:"start_offset"`
+	Flags       uint8  `json:"flags"`
+}
+
+// GatewayListFiles returns the NilFS V1 file table for a manifest root.
+// Optional query params:
+// - deal_id + owner: best-effort authz against on-chain deal owner (cid match enforced if the deal is already committed).
+func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	cid := strings.TrimSpace(vars["cid"])
+	if cid == "" {
+		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	if dealIDStr != "" || owner != "" {
+		if dealIDStr == "" || owner == "" {
+			http.Error(w, "deal_id and owner must be provided together", http.StatusBadRequest)
+			return
+		}
+		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid deal_id", http.StatusBadRequest)
+			return
+		}
+
+		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+		if err != nil {
+			log.Printf("GatewayListFiles: failed to fetch deal %d: %v", dealID, err)
+			http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
+			return
+		}
+		if dealOwner == "" || dealOwner != owner {
+			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+			return
+		}
+		if dealCID != "" && dealCID != cid {
+			http.Error(w, "cid does not match deal", http.StatusBadRequest)
+			return
+		}
+	}
+
+	dealDir := filepath.Join(uploadDir, cid)
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+	mdu0Data, err := os.ReadFile(mdu0Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "slab not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("GatewayListFiles: failed to read MDU #0: %v", err)
+		http.Error(w, "failed to read slab", http.StatusInternalServerError)
+		return
+	}
+
+	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	if err != nil {
+		log.Printf("GatewayListFiles: failed to parse MDU #0: %v", err)
+		http.Error(w, "failed to parse slab", http.StatusInternalServerError)
+		return
+	}
+
+	files := make([]nilfsFileEntry, 0, b.Header.RecordCount)
+	var total uint64
+	for i := uint32(0); i < b.Header.RecordCount; i++ {
+		rec := b.GetFileRecord(i)
+		// Tombstone slot.
+		if rec.Path[0] == 0 {
+			continue
+		}
+		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
+		length, flags := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		total += length
+		files = append(files, nilfsFileEntry{
+			Path:        name,
+			SizeBytes:   length,
+			StartOffset: rec.StartOffset,
+			Flags:       flags,
+		})
+	}
+
+	resp := map[string]any{
+		"manifest_root":    cid,
+		"total_size_bytes": total,
+		"files":            files,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("GatewayListFiles encode error: %v", err)
+	}
 }
 
 // GatewayManifest serves the manifest (shard output JSON) for a given Root CID.
