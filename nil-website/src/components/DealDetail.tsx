@@ -26,10 +26,19 @@ interface ManifestData {
   }[]
 }
 
+interface NilfsFileEntry {
+  path: string
+  size_bytes: number
+  start_offset: number
+  flags: number
+}
+
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [manifest, setManifest] = useState<ManifestData | null>(null)
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [loadingManifest, setLoadingManifest] = useState(false)
+  const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
+  const [loadingFiles, setLoadingFiles] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
 
@@ -39,9 +48,12 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
       fetchManifest(deal.cid)
+      fetchFiles(deal.cid, deal.id, nilAddress)
+    } else {
+      setFiles(null)
     }
     fetchHeat(deal.id)
-  }, [deal.cid, deal.id])
+  }, [deal.cid, deal.id, nilAddress])
 
   async function fetchManifest(cid: string) {
     setLoadingManifest(true)
@@ -55,6 +67,32 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       console.error('Failed to fetch manifest', e)
     } finally {
       setLoadingManifest(false)
+    }
+  }
+
+  async function fetchFiles(cid: string, dealId: string, owner: string) {
+    if (!cid || !dealId || !owner) return
+    setLoadingFiles(true)
+    try {
+      const url = `${appConfig.gatewayBase}/gateway/list-files/${encodeURIComponent(
+        cid,
+      )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(owner)}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        setFiles([])
+        return
+      }
+      const json = await res.json()
+      if (Array.isArray(json.files)) {
+        setFiles(json.files as NilfsFileEntry[])
+      } else {
+        setFiles([])
+      }
+    } catch (e) {
+      console.error('Failed to fetch NilFS file list', e)
+      setFiles([])
+    } finally {
+      setLoadingFiles(false)
     }
   }
 
@@ -169,20 +207,47 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 </div>
                 
                 {deal.cid && (
-                    <div className="sm:col-span-2 mt-2">
-                        <button
-                        onClick={() => {
-                            if (!deal.cid || !nilAddress) return
-                            const url = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
-                            deal.cid,
-                            )}?deal_id=${encodeURIComponent(deal.id)}&owner=${encodeURIComponent(nilAddress)}`
-                            window.open(url, '_blank')
-                        }}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
-                        >
-                        <ArrowDownRight className="w-4 h-4" />
-                        Download File & Verify Retrieval
-                        </button>
+                    <div className="sm:col-span-2 mt-2 space-y-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      {loadingFiles ? (
+                        <div className="text-xs text-muted-foreground">Loading file table…</div>
+                      ) : files && files.length > 0 ? (
+                        <div className="space-y-2">
+                          {files.map((f) => {
+                            const downloadUrl = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
+                              deal.cid,
+                            )}?deal_id=${encodeURIComponent(deal.id)}&owner=${encodeURIComponent(
+                              nilAddress,
+                            )}&file_path=${encodeURIComponent(f.path)}`
+                            return (
+                              <div
+                                key={`${f.path}:${f.start_offset}`}
+                                className="flex items-center justify-between gap-3 bg-secondary/50 border border-border rounded px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                    {f.path}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {f.size_bytes} bytes
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => window.open(downloadUrl, '_blank')}
+                                  className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
+                                >
+                                  <ArrowDownRight className="w-4 h-4" />
+                                  Download
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground italic">
+                          No files found for this manifest root.
+                        </div>
+                      )}
                     </div>
                 )}
             </div>

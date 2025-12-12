@@ -39,6 +39,19 @@ interface Provider {
   reputation_score: string
 }
 
+type StagedUpload = {
+  cid: string
+  sizeBytes: number
+  fileSizeBytes: number
+  allocatedLength?: number
+  filename: string
+}
+
+type NilfsContentFile = {
+  path: string
+  sizeBytes: number
+}
+
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
@@ -127,9 +140,10 @@ export function Dashboard() {
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
-  const [cid, setCid] = useState('')
-  const [sizeBytes, setSizeBytes] = useState('0')
-  const [uploadFileName, setUploadFileName] = useState<string | null>(null)
+  const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
+  const [contentFiles, setContentFiles] = useState<NilfsContentFile[] | null>(null)
+  const [contentFilesLoading, setContentFilesLoading] = useState(false)
+  const [contentFilesError, setContentFilesError] = useState<string | null>(null)
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
@@ -143,6 +157,93 @@ export function Dashboard() {
     }
     return counts
   }, [proofs])
+
+  const targetDeal = useMemo(() => {
+    if (!targetDealId) return null
+    return deals.find((d) => d.id === targetDealId) || null
+  }, [deals, targetDealId])
+
+  const contentManifestRoot = stagedUpload?.cid || targetDeal?.cid || ''
+
+  useEffect(() => {
+    setStagedUpload(null)
+    setContentFiles(null)
+    setContentFilesError(null)
+    setContentFilesLoading(false)
+  }, [targetDealId])
+
+  useEffect(() => {
+    const manifestRoot = stagedUpload?.cid || targetDeal?.cid
+    if (!manifestRoot || !targetDealId || !nilAddress) {
+      setContentFiles(null)
+      setContentFilesError(null)
+      setContentFilesLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    const isRecord = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null
+
+    const load = async () => {
+      setContentFilesLoading(true)
+      setContentFilesError(null)
+      try {
+        const url = `${appConfig.gatewayBase}/gateway/list-files/${encodeURIComponent(
+          manifestRoot,
+        )}?deal_id=${encodeURIComponent(targetDealId)}&owner=${encodeURIComponent(nilAddress)}`
+        const res = await fetch(url)
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `Gateway returned ${res.status}`)
+        }
+        const payload: unknown = await res.json().catch(() => null)
+        const filesVal = isRecord(payload) ? payload['files'] : null
+
+        const nextFiles: NilfsContentFile[] = []
+        if (Array.isArray(filesVal)) {
+          for (const item of filesVal) {
+            if (!isRecord(item)) continue
+            const pathVal = item['path']
+            const sizeVal = item['size_bytes']
+            const path = typeof pathVal === 'string' ? pathVal : ''
+            const sizeNum =
+              typeof sizeVal === 'number'
+                ? sizeVal
+                : typeof sizeVal === 'string'
+                  ? Number(sizeVal)
+                  : 0
+            if (path) {
+              nextFiles.push({
+                path,
+                sizeBytes: Number.isFinite(sizeNum) ? sizeNum : 0,
+              })
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setContentFiles(nextFiles)
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load NilFS file table'
+        if (!cancelled) {
+          setContentFiles([])
+          setContentFilesError(msg)
+        }
+      } finally {
+        if (!cancelled) {
+          setContentFilesLoading(false)
+        }
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [nilAddress, stagedUpload?.cid, targetDeal?.cid, targetDealId])
 
   useEffect(() => {
     if (address) {
@@ -253,17 +354,31 @@ export function Dashboard() {
     if (!file || !address) {
       return
     }
+    if (!targetDealId) {
+      setStatusTone('error')
+      setStatusMsg('Select a target deal before uploading.')
+      return
+    }
     try {
-      const result = await upload(file, address)
-      setCid(result.cid)
-      setSizeBytes(String(result.sizeBytes))
-      setUploadFileName(result.filename || file.name)
-      setStatusTone('neutral')
-      setStatusMsg(`File uploaded and sharded. Manifest root: ${result.cid.slice(0, 16)}...`)
-      // Auto-commit if a deal is already selected.
-      if (targetDealId) {
-        await handleUpdateContent(result.cid, result.sizeBytes)
+      const opts: { dealId?: string } = {}
+      if (targetDeal?.cid) {
+        // Only append once the deal already has a committed manifest root on-chain.
+        opts.dealId = targetDealId
       }
+
+      const result = await upload(file, address, opts)
+      setStagedUpload({
+        cid: result.cid,
+        sizeBytes: result.sizeBytes,
+        fileSizeBytes: result.fileSizeBytes,
+        allocatedLength: result.allocatedLength,
+        filename: result.filename || file.name,
+      })
+      setStatusTone('neutral')
+      setStatusMsg(`File uploaded and sharded. New manifest root: ${result.cid.slice(0, 16)}...`)
+
+      // Auto-commit into the selected deal.
+      await handleUpdateContent(result.cid, result.sizeBytes)
     } catch (e: any) {
       console.error(e)
       setStatusTone('error')
@@ -317,10 +432,7 @@ export function Dashboard() {
       }
   }
 
-  const handleUpdateContent = async (manifest?: string, size?: number) => {
-    const manifestRoot = manifest || cid
-    const manifestSize = size ?? Number(sizeBytes)
-
+  const handleUpdateContent = async (manifestRoot: string, manifestSize: number) => {
     if (!targetDealId) { alert('Select a deal to commit into'); return }
     if (!manifestRoot) { alert('Upload a file first'); return }
     
@@ -334,9 +446,10 @@ export function Dashboard() {
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
         if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
+        setStagedUpload(null)
     } catch (e) {
         setStatusTone('error')
-        setStatusMsg('Content commit failed.')
+        setStatusMsg('Content commit failed. Check gateway + chain logs.')
     }
   }
 
@@ -587,71 +700,141 @@ export function Dashboard() {
                         </button>
                     </div>
                 </div>
-            ) : activeTab === 'content' ? (
-                <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">Upload a file and commit its cryptographic hash to your deal.</p>
-                    <div className="grid grid-cols-1 gap-3 text-sm">
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
-                            <select 
-                                value={targetDealId} 
-                                onChange={e => setTargetDealId(e.target.value)}
-                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            >
-                                <option value="">Select a Deal...</option>
-                                {deals.filter(d => d.owner === nilAddress).map(d => (
-                                    <option key={d.id} value={d.id}>
-                                      Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                                <Upload className="w-3 h-3 text-primary" />
-                                Upload & Shard (gateway)
-                            </span>
-                            <input
-                                type="file"
-                                onChange={handleFileChange}
-                                disabled={uploadLoading}
-                                className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
-                            />
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Manifest Root (auto)</span>
-                                <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
-                                  {cid ? cid : <span className="text-muted-foreground">Upload a file to populate</span>}
-                                </div>
+              ) : activeTab === 'content' ? (
+                  <div className="space-y-4">
+                      <p className="text-xs text-muted-foreground">Upload a file and commit its cryptographic hash to your deal.</p>
+                      <div className="grid grid-cols-1 gap-3 text-sm">
+                          <label className="space-y-1">
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
+                              <select 
+                                  value={targetDealId} 
+                                  onChange={e => setTargetDealId(e.target.value)}
+                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                              >
+                                  <option value="">Select a Deal...</option>
+                                  {deals.filter(d => d.owner === nilAddress).map(d => (
+                                      <option key={d.id} value={d.id}>
+                                        Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
+                                      </option>
+                                  ))}
+                              </select>
+                          </label>
+                          {targetDealId && (
+                            <div className="text-xs text-muted-foreground">
+                              On-chain:{" "}
+                              {targetDeal?.cid ? (
+                                <span className="font-mono text-primary">{`${targetDeal.cid.slice(0, 18)}...`}</span>
+                              ) : (
+                                <span className="italic">Empty container</span>
+                              )}{" "}
+                              • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
                             </div>
-                            <div className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Size (bytes)</span>
-                                <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
-                                  {sizeBytes && sizeBytes !== '0' ? sizeBytes : <span className="text-muted-foreground">Upload a file</span>}
-                                </div>
-                            </div>
-                        </div>
-                        {uploadFileName && (
-                          <div className="text-xs text-muted-foreground">
-                            Last upload: <span className="font-semibold text-foreground">{uploadFileName}</span>
+                          )}
+                          <label className="space-y-1">
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                                  <Upload className="w-3 h-3 text-primary" />
+                                  Upload & Shard (gateway)
+                              </span>
+                              <input
+                                  type="file"
+                                  onChange={handleFileChange}
+                                  disabled={uploadLoading || !targetDealId}
+                                  className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
+                              />
+                          </label>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Manifest Root</span>
+                                  <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                    {stagedUpload?.cid ? stagedUpload.cid : <span className="text-muted-foreground">Upload a file to populate</span>}
+                                  </div>
+                              </div>
+                              <div className="space-y-1">
+                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Total Size (bytes)</span>
+                                  <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                    {stagedUpload?.sizeBytes ? String(stagedUpload.sizeBytes) : <span className="text-muted-foreground">Upload a file</span>}
+                                  </div>
+                              </div>
                           </div>
-                        )}
-                    </div>
-                    <div className="flex items-center justify-between pt-2">
-                        <div className="text-xs text-muted-foreground">
-                            {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
-                        </div>
-                        <button
-                            onClick={() => handleUpdateContent()}
-                            disabled={updateLoading || !cid || !targetDealId}
-                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
-                        >
-                            {updateLoading ? 'Committing...' : 'Commit uploaded content'}
-                        </button>
-                    </div>
-                </div>
-            ) : (
+                          {stagedUpload && (
+                            <div className="text-xs text-muted-foreground">
+                              Last upload: <span className="font-semibold text-foreground">{stagedUpload.filename}</span> • File size:{' '}
+                              <span className="font-mono text-foreground">{stagedUpload.fileSizeBytes}</span>
+                              {stagedUpload.allocatedLength !== undefined && (
+                                <>
+                                  {' '}
+                                  • Allocated MDUs: <span className="font-mono text-foreground">{stagedUpload.allocatedLength}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {targetDealId && contentManifestRoot && (
+                            <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
+                              <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                Files In Slab
+                              </div>
+                              {contentFilesLoading ? (
+                                <div className="text-xs text-muted-foreground">Loading file table…</div>
+                              ) : contentFiles && contentFiles.length > 0 ? (
+                                <div className="space-y-2">
+                                  {contentFiles.map((f) => {
+                                    const downloadUrl = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
+                                      contentManifestRoot,
+                                    )}?deal_id=${encodeURIComponent(targetDealId)}&owner=${encodeURIComponent(
+                                      nilAddress,
+                                    )}&file_path=${encodeURIComponent(f.path)}`
+                                    return (
+                                      <div
+                                        key={f.path}
+                                        className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                            {f.path}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground">
+                                            {f.sizeBytes} bytes
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={() => window.open(downloadUrl, '_blank')}
+                                          className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
+                                        >
+                                          <ArrowDownRight className="w-4 h-4" />
+                                          Download
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground italic">
+                                  No files yet for this manifest.
+                                </div>
+                              )}
+                              {contentFilesError && (
+                                <div className="text-xs text-destructive truncate" title={contentFilesError}>
+                                  {contentFilesError}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                      </div>
+                      <div className="flex items-center justify-between pt-2">
+                          <div className="text-xs text-muted-foreground">
+                              {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
+                          </div>
+                          <button
+                              onClick={() => stagedUpload && handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)}
+                              disabled={updateLoading || !stagedUpload || !targetDealId}
+                              className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                          >
+                              {updateLoading ? 'Committing...' : 'Commit uploaded content'}
+                          </button>
+                      </div>
+                  </div>
+              ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">Run the Rust WASM sharder locally to produce MDUs and commitments before sending to the gateway.</p>
