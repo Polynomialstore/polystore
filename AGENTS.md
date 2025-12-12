@@ -513,7 +513,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Commit gate:** After pass, commit `feat(nil-website): NilFS commit-content UX` and push.
 
 #### 11.6.B Thick‑Client WASM Stabilization (Parallel Track)
-- [ ] **B1. Fix WASM “Invalid scalar” in `expand_mdu/expand_file`.**
+- [x] **B1. Fix WASM “Invalid scalar” in `expand_mdu/expand_file`.**
     - **Change:** Repair scalar field mapping / roots‑of‑unity coordinate logic in `nil_core` WASM so browser outputs match native.
     - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
     - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
