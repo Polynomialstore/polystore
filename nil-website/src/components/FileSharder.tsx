@@ -26,6 +26,20 @@ export function FileSharder() {
 
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
+  const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes < 0) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+  };
+
+  const formatDuration = (ms: number) => {
+    if (!Number.isFinite(ms) || ms < 0) return '—';
+    if (ms < 1000) return `${ms.toFixed(0)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  };
+
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -46,10 +60,11 @@ export function FileSharder() {
         return;
     }
 
+    const startTs = performance.now();
     setProcessing(true);
     setShards([]);
     setLogs([]);
-    addLog(`Processing file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
 
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
@@ -77,7 +92,7 @@ export function FileSharder() {
         }
 
         setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'processing' } : s));
-        addLog(`> Expanding MDU #${i} (RS 12,8 + KZG)...`);
+        addLog(`> Expanding MDU #${i} (KZG)...`);
 
         try {
             // Call WASM
@@ -102,7 +117,15 @@ export function FileSharder() {
     }
     
     setProcessing(false);
-    addLog("Done. Client-side expansion complete.");
+    const elapsedMs = performance.now() - startTs;
+    const mib = file.size / (1024 * 1024);
+    const seconds = elapsedMs / 1000;
+    const mibPerSec = seconds > 0 ? mib / seconds : 0;
+    addLog(
+      `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
+        file.size,
+      )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
+    );
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -167,11 +190,11 @@ export function FileSharder() {
           <div>
             <h3 className="text-xl font-bold text-foreground">Client-Side Expansion</h3>
             <p className="text-muted-foreground mt-2">
-              Drop a file to split it into <span className="text-primary font-bold">12-Stripe RS Erasure Codes</span> and generate <span className="text-primary font-bold">KZG Commitments</span> locally via WASM.
+              Drop a file to split it into <span className="text-primary font-bold">128 KiB Data Units</span> and generate <span className="text-primary font-bold">KZG Commitments</span> locally via WASM.
             </p>
-            <label className="mt-4 inline-block text-primary hover:underline cursor-pointer text-sm">
-                Browse Files
-                <input type="file" className="hidden" onChange={handleFileSelect} />
+            <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+              Browse Files
+              <input type="file" className="hidden" onChange={handleFileSelect} />
             </label>
           </div>
         </div>
