@@ -9,7 +9,7 @@ CHAIN_ID="test-1"
 # 1. Upload File (New Deal Flow)
 echo ">>> Uploading file..."
 echo "Hello World" > test_file.txt
-UPLOAD_RESP=$(curl -s -X POST -F "file=@test_file.txt" "$GATEWAY_URL/gateway/upload")
+UPLOAD_RESP=$(timeout 600s curl -s -X POST -F "file=@test_file.txt" "$GATEWAY_URL/gateway/upload")
 echo "Upload Response: $UPLOAD_RESP"
 
 CID=$(echo $UPLOAD_RESP | jq -r '.cid')

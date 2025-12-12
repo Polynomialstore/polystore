@@ -24,7 +24,7 @@ echo "File Size: $FILE_SIZE bytes"
 
 # 2. Upload (Ingest)
 echo ">>> [2] Uploading to Gateway..."
-UPLOAD_RESP=$(curl -s -X POST -F "file=@$TMP_DIR/test_random.bin;filename=test_random.bin" "$GATEWAY_URL/gateway/upload")
+UPLOAD_RESP=$(timeout 600s curl -s -X POST -F "file=@$TMP_DIR/test_random.bin;filename=test_random.bin" "$GATEWAY_URL/gateway/upload")
 echo "Upload Response: $UPLOAD_RESP"
 
 CID=$(echo $UPLOAD_RESP | jq -r '.cid')
@@ -46,7 +46,7 @@ CREATOR="nil1lhyz4d0jfda4a2xxsjxekec3zcalzqttajqrg0" # Use faucet/genesis accoun
 # Or just "nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl" (pre-funded dev)
 CREATOR="nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl"
 
-CREATE_RESP=$(curl -s -X POST -H "Content-Type: application/json" -d '{
+CREATE_RESP=$(timeout 10s curl -s -X POST -H "Content-Type: application/json" -d '{
     "creator": "'$CREATOR'",
     "duration_blocks": 1000,
     "initial_escrow": "1000000",
@@ -72,7 +72,7 @@ echo "✅ Deal ID: $DEAL_ID"
 
 # 4. Commit Content
 echo ">>> [4] Committing Content..."
-COMMIT_RESP=$(curl -s -X POST -H "Content-Type: application/json" -d '{
+COMMIT_RESP=$(timeout 10s curl -s -X POST -H "Content-Type: application/json" -d '{
     "deal_id": '$DEAL_ID',
     "cid": "'$CID'",
     "size_bytes": '$SIZE_BYTES'
@@ -140,7 +140,7 @@ echo "Initial Bytes Served: $INIT_BYTES"
 
 # Fetch
 echo ">>> Fetching file..."
-curl -s "$GATEWAY_URL/gateway/fetch/$CID?deal_id=$DEAL_ID&owner=$CREATOR&file_path=test_random.bin" > $TMP_DIR/fetched.bin
+timeout 10s curl -s "$GATEWAY_URL/gateway/fetch/$CID?deal_id=$DEAL_ID&owner=$CREATOR&file_path=test_random.bin" > $TMP_DIR/fetched.bin
 
 # Verify Content
 if diff $TMP_DIR/test_random.bin $TMP_DIR/fetched.bin >/dev/null; then

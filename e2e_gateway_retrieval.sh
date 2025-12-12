@@ -79,11 +79,11 @@ echo "Using OWNER_ADDR=$OWNER_ADDR"
 	# Always (re)create a tiny file so full ingest stays under curl timeouts.
 	dd if=/dev/zero of="$TEST_FILE" bs=1K count=1 >/dev/null 2>&1
 
-UPLOAD_RESP="$(timeout 10s curl -s -X POST -F "file=@${TEST_FILE}" -F "owner=${OWNER_ADDR}" "$GATEWAY_BASE/gateway/upload")"
+UPLOAD_RESP="$(timeout 600s curl -s -X POST -F "file=@${TEST_FILE}" -F "owner=${OWNER_ADDR}" "$GATEWAY_BASE/gateway/upload")"
 echo "Upload response: $UPLOAD_RESP"
 
-	CID="$(echo "$UPLOAD_RESP" | jq -r '.cid')"
-	MANIFEST_ROOT="$(echo "$UPLOAD_RESP" | jq -r '.manifest_root // .cid')"
+		CID="$(echo "$UPLOAD_RESP" | jq -r '.cid')"
+		MANIFEST_ROOT="$(echo "$UPLOAD_RESP" | jq -r '.manifest_root // .cid')"
 	SIZE_BYTES="$(echo "$UPLOAD_RESP" | jq -r '.size_bytes')"
 	if [ -z "$CID" ] || [ "$CID" = "null" ] || [ -z "$MANIFEST_ROOT" ] || [ "$MANIFEST_ROOT" = "null" ] || [ -z "$SIZE_BYTES" ] || [ "$SIZE_BYTES" = "null" ]; then
 	  echo "Failed to parse cid/manifest_root/size_bytes from upload response"
