@@ -292,23 +292,17 @@ impl KzgContext {
 }
 
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
-    let modulus = get_modulus();
+    // Map arbitrary 32-byte chunks (stored big-endian in blobs) into Scalars.
+    // Using `from_bytes_wide` avoids BigUint/mod_floor overhead and is reliable on wasm.
     let mut scalars = Vec::with_capacity(4096);
     for chunk in bytes.chunks(32) {
-        let mut repr = [0u8; 32];
-        repr.copy_from_slice(chunk);
-        repr.reverse();
-        if let Some(scalar) = Option::from(Scalar::from_repr(repr)) {
-            scalars.push(scalar);
-            continue;
+        let mut wide = [0u8; 64];
+        // Place chunk as the low limb in little-endian form.
+        for (i, b) in chunk.iter().enumerate() {
+            wide[i] = *b;
         }
-
-        let reduced = BigUint::from_bytes_be(chunk).mod_floor(&modulus);
-        let mut reduced_repr = fr_to_bytes_be(&reduced);
-        reduced_repr.reverse();
-        let scalar = Option::from(Scalar::from_repr(reduced_repr))
-            .ok_or_else(|| KzgError::Internal("Invalid scalar".into()))?;
-        scalars.push(scalar);
+        wide[..32].reverse();
+        scalars.push(Scalar::from_bytes_wide(&wide));
     }
     Ok(scalars)
 }
@@ -351,5 +345,27 @@ mod tests {
 
         let scalars = bytes_to_scalars(&blob).expect("arbitrary blob bytes should reduce");
         assert_eq!(scalars.len(), 4096);
+    }
+
+    #[test]
+    fn bytes_to_scalars_matches_biguint_reduction() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+        let mut blob = vec![0u8; BLOB_SIZE];
+        rng.fill_bytes(&mut blob);
+
+        let modulus = get_modulus();
+        let expected: Vec<Scalar> = blob
+            .chunks_exact(32)
+            .map(|chunk| {
+                let reduced = BigUint::from_bytes_be(chunk).mod_floor(&modulus);
+                let mut repr = fr_to_bytes_be(&reduced);
+                repr.reverse();
+                Option::from(Scalar::from_repr(repr))
+                    .expect("reduced value must be a valid scalar")
+            })
+            .collect();
+
+        let got = bytes_to_scalars(&blob).expect("bytes_to_scalars should succeed");
+        assert_eq!(got, expected);
     }
 }
