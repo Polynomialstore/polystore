@@ -38,7 +38,7 @@ wait_for_http() {
   echo "==> Waiting for $name at $url ..."
   for attempt in $(seq 1 "$max_attempts"); do
     local code
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
+    code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
     if [ "$code" != "000" ]; then
       echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
       return 0
@@ -63,7 +63,7 @@ get_account_sequence() {
 
   echo "==> Getting account sequence for $addr ..." >&2
   for attempt in $(seq 1 "$max_attempts"); do
-    resp=$(curl -sS "$lcd_base/cosmos/auth/v1beta1/accounts/$addr")
+    resp=$(timeout 10s curl -sS "$lcd_base/cosmos/auth/v1beta1/accounts/$addr")
     seq=$(echo "$resp" | python3 -c "import sys, json; print(json.load(sys.stdin).get('account', {}).get('sequence', ''))")
     if [ -n "$seq" ]; then
       echo "$seq"
@@ -81,7 +81,7 @@ fund_account() {
   local faucet_base="$2"
   echo "==> Funding account $addr ..."
   # Allow failure in case already funded or faucet flake, subsequent steps will catch it
-  curl -sS -X POST -H "Content-Type: application/json" -d "{\"address\":\"$addr\"}" "$faucet_base/faucet" || true
+  timeout 10s curl -sS -X POST -H "Content-Type: application/json" -d "{\"address\":\"$addr\"}" "$faucet_base/faucet" || true
   echo ""
 }
 
@@ -116,7 +116,8 @@ echo "    NIL: $NIL_ADDRESS"
 fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
 sleep 5 # Give chain time to process funding transaction
 echo "==> Verifying balance for $NIL_ADDRESS..."
-"$ROOT_DIR/nilchain/nilchaind" query bank balances "$NIL_ADDRESS" --home "$ROOT_DIR/_artifacts/nilchain_data" --output json
+BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
+echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
 
 # 2. Upload File
 echo "==> Uploading file 'README.md' to Gateway..."
@@ -224,7 +225,7 @@ print(f"Payload before dump (CreateDeal): {payload}", file=sys.stderr)
 print(json.dumps(payload))
 PY
 )
-  CREATE_RESP=$(curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
+  CREATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
     -H "Content-Type: application/json" \
     -d "$CREATE_PAYLOAD")
 
@@ -334,7 +335,7 @@ print(f"Payload before dump (UpdateContent): {payload}", file=sys.stderr)
 print(json.dumps(payload))
 PY
 )
-  UPDATE_RESP=$(curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
+  UPDATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
     -d "$UPDATE_PAYLOAD")
 
@@ -358,7 +359,7 @@ fi
 # 5. Verify on LCD
 echo "==> Verifying Deal on LCD..."
 sleep 3 # Give it a moment to index if needed
-DEAL_JSON=$(curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+DEAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
 
 TMP_DEAL_JSON_FILE=$(mktemp)
 echo "$DEAL_JSON" > "$TMP_DEAL_JSON_FILE"
@@ -401,7 +402,7 @@ echo "    Success: Deal $DEAL_ID has correct CID $CHAIN_CID"
 echo "==> Fetching file from Gateway..."
 # For gateway fetch, we need deal_id and owner
 FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS"
-curl -sS -o fetched_README.md "$FETCH_URL"
+timeout 10s curl -sS -o fetched_README.md "$FETCH_URL"
 
 # Compare
 if cmp -s "$ROOT_DIR/README.md" fetched_README.md; then

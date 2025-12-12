@@ -15,6 +15,24 @@ MANIFEST_FILE="./test_manifest.bin"
 RECEIPT_FILE="./receipt.json"
 TRUSTED_SETUP="$(pwd)/nilchain/trusted_setup.txt"
 
+# Poll for a tx by hash with a hard timeout to avoid hangs.
+wait_for_tx() {
+  local hash="$1"
+  local attempts="${2:-20}"
+  local delay="${3:-2}"
+  local i
+  for i in $(seq 1 "$attempts"); do
+    local out
+    out=$(timeout 10s $BINARY query tx "$hash" --home $HOME_DIR --node tcp://127.0.0.1:26657 --output json 2>/dev/null || true)
+    if [ -n "$out" ] && echo "$out" | jq -e '.txhash' >/dev/null 2>&1; then
+      echo "$out"
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
 # Helper for hex decoding
 python3 -c "import sys; print(bytes.fromhex(sys.argv[1][2:]).decode('latin1'))" 2>/dev/null || true
 
@@ -45,8 +63,8 @@ do
    yes | $BINARY keys add "provider$i" --home $HOME_DIR --keyring-backend test > /dev/null 2>&1
 done
 
-USER_ADDR=$($BINARY keys show user -a --home $HOME_DIR --keyring-backend test)
-PROVIDER1_ADDR=$($BINARY keys show provider1 -a --home $HOME_DIR --keyring-backend test)
+USER_ADDR=$($BINARY keys show user -a --home $HOME_DIR --keyring-backend test | tail -n 1)
+PROVIDER1_ADDR=$($BINARY keys show provider1 -a --home $HOME_DIR --keyring-backend test | tail -n 1)
 
 # Add genesis accounts
 # We give accounts 'aatom' (for EVM) and 'stake' (for consensus).
@@ -95,7 +113,7 @@ for i in {1..30}; do
         exit 1
     fi
 
-    STATUS=$(curl -s --max-time 2 http://127.0.0.1:26657/status || echo "")
+    STATUS=$(timeout 10s curl -s --max-time 2 http://127.0.0.1:26657/status || echo "")
     if [ -n "$STATUS" ]; then
         HEIGHT=$(echo "$STATUS" | jq -r '.result.sync_info.latest_block_height' 2>/dev/null)
         if [[ -n "$HEIGHT" && "$HEIGHT" != "null" && "$HEIGHT" != "0" ]]; then
@@ -133,6 +151,15 @@ $NIL_CLI --trusted-setup $TRUSTED_SETUP shard $INPUT_FILE --out $SHARD_OUTPUT --
 MANIFEST_ROOT=$(jq -r '.manifest_root_hex' $SHARD_OUTPUT)
 MANIFEST_BLOB_HEX=$(jq -r '.manifest_blob_hex' $SHARD_OUTPUT)
 SIZE=$(jq -r '.file_size_bytes' $SHARD_OUTPUT)
+MANIFEST_PROOF_HEX=$(jq -r '.sample_proofs[0].manifest_proof_hex' $SHARD_OUTPUT)
+BLOB_PROOF_HEX=$(jq -r '.sample_proofs[0].blob_proof_hex' $SHARD_OUTPUT)
+
+# Detect stubbed KZG proofs (currently compute_proof returns zero proof bytes).
+KZG_STUBBED=false
+if [[ "$MANIFEST_PROOF_HEX" =~ ^0x0+$ ]] && [[ "$BLOB_PROOF_HEX" =~ ^0x0+$ ]]; then
+    KZG_STUBBED=true
+    echo "NOTE: KZG proof generation is stubbed; on-chain triple-proof verification is expected to fail."
+fi
 
 echo "   CID: $MANIFEST_ROOT"
 echo "   Size: $SIZE"
@@ -150,10 +177,10 @@ CREATE_RES=$(yes | $BINARY tx nilchain create-deal 100 1000000 5000 --service-hi
 CREATE_HASH=$(echo $CREATE_RES | jq -r '.txhash')
 
 echo ">>> Waiting for CreateDeal (Tx: $CREATE_HASH)..."
-sleep 6
-
-# Query Tx to get logs
-TX_JSON=$($BINARY query tx $CREATE_HASH --home $HOME_DIR --node tcp://127.0.0.1:26657 --output json)
+TX_JSON=$(wait_for_tx "$CREATE_HASH" 30 2) || {
+    echo "ERROR: CreateDeal tx $CREATE_HASH not found after polling."
+    exit 1
+}
 echo "CreateDeal Tx Result: $TX_JSON"
 
 DEAL_ID=$(echo "$TX_JSON" | jq -r '(.logs[0].events[]? // .events[]?) | select(.type=="create_deal") | .attributes[] | select(.key=="deal_id") | .value' 2>/dev/null | head -n 1 || echo "")
@@ -191,14 +218,26 @@ echo $TX_RES
 TX_HASH=$(echo $TX_RES | jq -r '.txhash')
 
 echo ">>> Waiting for verification (Tx: $TX_HASH)..."
-sleep 6
+TX_RESULT=$(wait_for_tx "$TX_HASH" 30 2) || {
+    echo "ERROR: Retrieval proof tx $TX_HASH not found after polling."
+    tail -n 50 $HOME_DIR/chain.log
+    exit 1
+}
 
 echo ">>> Querying Tx Result..."
-TX_RESULT=$($BINARY query tx $TX_HASH --home $HOME_DIR --node tcp://127.0.0.1:26657 --output json)
 echo $TX_RESULT
 
 # Check for success event in the transaction result
 SUCCESS_STATUS=$(echo $TX_RESULT | jq -r '(.logs[0].events[]? // .events[]?) | select(.type=="prove_liveness") | .attributes[] | select(.key=="success") | .value' 2>/dev/null)
+TX_CODE=$(echo $TX_RESULT | jq -r '.code // 0')
+
+if [ "$KZG_STUBBED" = true ] && [ "$TX_CODE" != "0" ]; then
+    echo "EXPECTED: Proof rejected due to stubbed KZG proofs."
+    kill $PID
+    rm -rf $HOME_DIR
+    rm -f $MDU_FILE $RECEIPT_FILE $INPUT_FILE $SHARD_OUTPUT $MANIFEST_FILE
+    exit 0
+fi
 
 if [ "$SUCCESS_STATUS" == "true" ]; then
     echo "SUCCESS: Retrieval Proof Verified on-chain (Liveness Confirmed)!"

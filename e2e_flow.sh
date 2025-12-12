@@ -90,7 +90,7 @@ PID=$!
 # Wait for chain to start and produce blocks
 echo ">>> Waiting for chain to start..."
 for i in {1..120}; do
-    if curl -s --max-time 5 http://127.0.0.1:26657/status > /dev/null; then
+    if timeout 10s curl -s --max-time 5 http://127.0.0.1:26657/status > /dev/null; then
         echo "Chain started!"
         break
     fi

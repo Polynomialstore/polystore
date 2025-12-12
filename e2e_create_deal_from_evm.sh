@@ -40,7 +40,7 @@ wait_for_http() {
   for attempt in $(seq 1 "$max_attempts"); do
     # Treat any HTTP response code as "reachable"; 000 means connection error.
     local code
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
+    code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
     if [ "$code" != "000" ]; then
       echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
       return 0
@@ -122,8 +122,8 @@ types = {
         {"name": "size_tier", "type": "uint32"},
         {"name": "duration", "type": "uint64"},
         {"name": "service_hint", "type": "string"},
-        {"name": "initial_escrow", "type": "uint256"},
-        {"name": "max_monthly_spend", "type": "uint256"},
+        {"name": "initial_escrow", "type": "string"},
+        {"name": "max_monthly_spend", "type": "string"},
         {"name": "nonce", "type": "uint64"},
     ]
 }
@@ -149,7 +149,7 @@ print(json.dumps(payload))
 PY
 )
 
-RESP=$(curl -sS -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
+RESP=$(timeout 10s curl -sS -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD")
 echo "Gateway response: $RESP"
@@ -174,7 +174,7 @@ PY
 echo "==> Polling LCD for tx $TX_HASH..."
 tx_ok=0
 for attempt in $(seq 1 20); do
-  TX_JSON=$(curl -sS "$LCD_BASE/cosmos/tx/v1beta1/txs/$TX_HASH" || true)
+  TX_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/tx/v1beta1/txs/$TX_HASH" || true)
   status=$(printf '%s' "$TX_JSON" | python3 - << 'PY'
 import json, sys
 raw = sys.stdin.read()
@@ -217,7 +217,7 @@ echo "==> Polling LCD for created deal..."
 TMP_JSON="$(mktemp)"
 found=0
 for attempt in $(seq 1 20); do
-  curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals" > "$TMP_JSON" || true
+  timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals" > "$TMP_JSON" || true
   if python3 - "$TMP_JSON" "$NIL_ADDRESS" << 'PY'
 import json, sys
 path, owner = sys.argv[1], sys.argv[2]
