@@ -337,3 +337,19 @@ fn parse_scalar(bytes: &[u8]) -> Result<Scalar, KzgError> {
     }
     Ok(s.unwrap())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{RngCore, SeedableRng};
+
+    #[test]
+    fn bytes_to_scalars_accepts_arbitrary_blob_bytes() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut blob = vec![0u8; BLOB_SIZE];
+        rng.fill_bytes(&mut blob);
+
+        let scalars = bytes_to_scalars(&blob).expect("arbitrary blob bytes should reduce");
+        assert_eq!(scalars.len(), 4096);
+    }
+}
