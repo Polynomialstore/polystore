@@ -109,6 +109,8 @@ init_chain() {
   # on the faucet timing. This address is the bech32 mapping of the default
   # Foundry EVM deployer (0x4dd2C8c449581466Df3F62b007A24398DD858f5d).
   "$NILCHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  # Pre-fund additional EVM demo account (0xf7931ff7fc55d19ef4a8139fa7e4b3f06e03f2e2).
+  "$NILCHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
 
   # Also pre-fund the EVM signer account used by gateway/e2e (derived from EVM_PRIVKEY if set).
   # This avoids relying on the faucet, which uses nilchaind CLI txs that can hang on some setups.
