@@ -23,15 +23,14 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 ## 2. Known Issues / Open Threads
 
-1. **Thick‑client WASM path still failing:** “Invalid scalar” in `nil_core` WASM `expand_mdu/expand_file` (see Option D / B1).
+1. **Thick‑client WASM path:** “Invalid scalar” fixed by rebuilding the `nil_core` wasm bundle and wiring an automatic rebuild into `nil-website` dev/build (see `nil-website/package.json` `predev`/`prebuild`).
 2. **Dynamic sizing cleanup** remains pending but not blocking the demo.
 3. **Frontend MetaMask UX** (Wagmi/Viem provider + Connect flow) still incomplete per AGENTS.md §11.1.
 
 ## 3. What the Next Agent Should Do First
 
-1. **Option D / B1 — Fix WASM “Invalid scalar”.**
-   - Investigate scalar/roots‑of‑unity mapping in `nil_core` WASM bindings.
-   - Add parity tests vs native `nil_cli shard` once fixed (B2).
+1. **Option D / B2 — Add native↔WASM parity tests for MDU expansion.**
+   - For a fixed 8MB fixture chunk, assert WASM `expand_file` output matches native expansion (and/or gateway canonical ingest).
 
 2. **Protocol Cleanup (Dynamic Sizing)** — remove legacy tiers and align thin‑provisioning end‑to‑end (AGENTS.md §11.2).
 

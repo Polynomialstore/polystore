@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "wasm:build": "command -v wasm-pack >/dev/null 2>&1 || { echo \"wasm-pack not found (install via: cargo install wasm-pack)\"; exit 1; }; cd ../nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core",
+    "predev": "npm run wasm:build",
+    "prebuild": "npm run wasm:build",
     "dev": "vite",
     "build": "tsc && vite build",
     "test:unit": "tsx --test src/lib/eip712.test.ts",
