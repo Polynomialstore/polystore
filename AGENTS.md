@@ -470,6 +470,11 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] Expand shell-based e2e scripts (`scripts/e2e_lifecycle.sh`) to cover: deal creation (EVM), upload, update-deal-content, LCD verification of `manifest_root` and size, and fetch verification.
     - *Status:* **COMPLETED**.
     - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
+- [ ] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
+    - Root cause is KZG commitment performance in `nil_core` (currently ~60s per 8 MiB MDU on a dev laptop due to naive per-scalar multiplication in `nil_core/src/kzg.rs`), plus multiple MDUs per upload (User + Witness + MDU #0).
+    - Add gateway cancellation/timeout propagation (use `r.Context()` + a sane per-request deadline) so aborted HTTP requests stop expensive `nil_cli` work.
+    - Add tests that fail on hangs: Go unit tests for `nil_s3` (mock `nil_cli` and assert timeout/cancel behavior) + JS unit tests in `nil-website` (fetch-with-timeout/AbortController).
+    - After perf fix, reduce `scripts/e2e_lifecycle.sh` upload timeout from `600s` to `<=60s`.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
 - [ ] Introduce a lightweight browser e2e suite (Cypress or Playwright) under `nil-website` that runs against `./scripts/run_local_stack.sh start`.
@@ -484,13 +489,13 @@ This section tracks the currently active TODOs for the AI agent working in this 
 **Goal:** Make the devnet demo fully spec‑aligned for Mode 1 today (Gateway‑first), while stabilizing the Mode 2 Thick‑Client WASM path in parallel.
 
 #### 11.6.A Gateway‑First Canonicalization (V1 NilFS + Triple Proof)
-- [ ] **A1. Make `/gateway/upload` canonical by default.**
+- [x] **A1. Make `/gateway/upload` canonical by default.**
     - **Change:** Replace `fastShardQuick` / `IngestNewDealFast` as the default with `IngestNewDeal` (full NilFS slab build: MDU #0 + Witness MDUs + User MDUs + ManifestRoot).
     - **Keep fake modes only behind explicit env:** e.g. `NIL_FAKE_INGEST=1` for simulations.
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes with *no* ingest env flags set, and the returned `manifest_root` matches the on‑chain `Deal.manifest_root` after commit.
     - **Commit gate:** After pass, commit `feat(nil_s3): default to canonical ingest` and push to both remotes.
 
-- [ ] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
+- [x] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
     - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
     - **Pass gate:** New e2e scenario uploads 2 files into the same deal (no new deal created) and:
         1. `allocated_length` only grows if new User MDUs are needed,
