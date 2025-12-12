@@ -20,21 +20,50 @@ if [ -z "$PRIVATE_KEY" ]; then
   # Prefer the shared dev EVM key (used in e2e tests and pre-funded in genesis)
   # if provided, otherwise derive from the local mnemonic.
   if [ -n "${NIL_EVM_DEV_PRIVKEY:-}" ]; then
-    PRIVATE_KEY="${NIL_EVM_DEV_PRIVKEY#0x}"
+    PRIVATE_KEY="${NIL_EVM_DEV_PRIVKEY}"
   else
     # Derive the faucet dev key used by the local stack (index 0).
-    PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC" | sed 's/^0x//')
+    PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC")
   fi
+fi
+
+# Ensure 0x prefix for vm.envUint
+if [[ ! "$PRIVATE_KEY" =~ ^0x ]]; then
+  PRIVATE_KEY="0x$PRIVATE_KEY"
 fi
 
 echo ">>> Deploying NilBridge to $RPC_URL ..."
 export PRIVATE_KEY
 pushd "$REPO_ROOT/nil_bridge" >/dev/null
+
+# Clean previous broadcast logs to avoid confusion
+rm -rf broadcast/ cache/
+
+# Run forge and capture output. 
+# We disable 'set -e' temporarily to handle forge failure gracefully.
+set +e
 DEPLOY_LOG=$(forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC_URL" \
   --broadcast \
-  --legacy 2>&1 | tee /dev/fd/3 3>/dev/null)
+  --legacy 2>&1)
+FORGE_EXIT=$?
+set -e
 popd >/dev/null
+
+# Check if forge failed
+if [ $FORGE_EXIT -ne 0 ]; then
+  echo "✖ Forge script failed. Output:" >&2
+  echo "$DEPLOY_LOG" >&2
+  
+  # Special case: if tx is already in mempool or timed out, we might be able to recover if we can find the address in the log
+  if echo "$DEPLOY_LOG" | grep -q "tx already in mempool"; then
+     echo "⚠ Tx already in mempool. Attempting to parse address anyway..." >&2
+  elif echo "$DEPLOY_LOG" | grep -q "request timed out"; then
+     echo "⚠ Broadcast timed out. Attempting to parse address anyway..." >&2
+  else
+     exit 1
+  fi
+fi
 
 BRIDGE_ADDR=$(echo "$DEPLOY_LOG" | grep -Eo "0x[a-fA-F0-9]{40}" | tail -n 1)
 if [ -z "$BRIDGE_ADDR" ]; then

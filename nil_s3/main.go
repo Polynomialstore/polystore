@@ -142,6 +142,36 @@ func fundAddressOnce(addr string) {
 	}
 }
 
+func runTxWithRetry(args ...string) ([]byte, error) {
+	maxRetries := 5
+	var out []byte
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		cmd := execCommand(nilchaindBin, args...)
+		out, err = cmd.CombinedOutput()
+		outStr := string(out)
+
+		if err != nil {
+			if strings.Contains(outStr, "account sequence mismatch") {
+				log.Printf("runTxWithRetry: account sequence mismatch (CLI error, attempt %d/%d), retrying...", i+1, maxRetries)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			return out, err
+		}
+
+		if strings.Contains(outStr, "account sequence mismatch") {
+			log.Printf("runTxWithRetry: account sequence mismatch (CheckTx error, attempt %d/%d), retrying...", i+1, maxRetries)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		return out, nil
+	}
+	return out, err
+}
+
 func main() {
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
@@ -380,8 +410,7 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 
 	// NOTE: We sign as the faucet/system key for now. The logical creator is
 	// provided in req.Creator and can be wired into on-chain state later.
-	cmd := execCommand(
-		nilchaindBin,
+	out, err := runTxWithRetry(
 		"tx", "nilchain", "create-deal",
 		durationStr,
 		req.InitialEscrow,
@@ -395,7 +424,6 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		"--gas-prices", gasPrices,
 	)
 
-	out, err := cmd.CombinedOutput()
 	outStr := string(out)
 	if err != nil {
 		log.Printf("GatewayCreateDeal failed: %s", outStr)
@@ -446,8 +474,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
 
-	cmd := execCommand(
-		nilchaindBin,
+	out, err := runTxWithRetry(
 		"tx", "nilchain", "update-deal-content",
 		"--deal-id", dealIDStr,
 		"--cid", req.Cid,
@@ -460,7 +487,6 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		"--gas-prices", gasPrices,
 	)
 
-	out, err := cmd.CombinedOutput()
 	outStr := string(out)
 	if err != nil {
 		log.Printf("GatewayUpdateDealContent failed: %s", outStr)
@@ -537,8 +563,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpPath)
 
-	cmd := execCommand(
-		nilchaindBin,
+	out, err := runTxWithRetry(
 		"tx", "nilchain", "create-deal-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
@@ -551,7 +576,6 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		"--output", "json",
 	)
 
-	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("GatewayCreateDealFromEvm failed: %s", string(out))
 		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
@@ -750,8 +774,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpPath)
 
-	cmd := execCommand(
-		nilchaindBin,
+	out, err := runTxWithRetry(
 		"tx", "nilchain", "update-deal-content-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
@@ -764,7 +787,6 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		"--output", "json",
 	)
 
-	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("GatewayUpdateDealContentFromEvm failed (CLI error): %s", string(out))
 		http.Error(w, fmt.Sprintf("tx failed: %v", err), http.StatusInternalServerError)
@@ -1373,8 +1395,7 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	defer os.Remove(tmpPath)
 
 	// 2) Submit the receipt as a retrieval proof.
-	submitCmd := execCommand(
-		nilchaindBin,
+	submitOut, err := runTxWithRetry(
 		"tx", "nilchain", "submit-retrieval-proof",
 		tmpPath,
 		"--from", providerKeyName,
@@ -1384,7 +1405,6 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		"--yes",
 		"--gas-prices", gasPrices,
 	)
-	submitOut, err := submitCmd.CombinedOutput()
 	outStr := string(submitOut)
 	if err != nil {
 		return "", fmt.Errorf("submit-retrieval-proof failed: %w (%s)", err, outStr)

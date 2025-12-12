@@ -451,8 +451,8 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
-- [ ] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
-- [ ] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
+- [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
+- [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
 - [ ] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `nil-website` (Connect MetaMask, chain config, RPC URL).
 - [ ] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
