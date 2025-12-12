@@ -24,7 +24,7 @@ echo "File Size: $FILE_SIZE bytes"
 
 # 2. Upload (Ingest)
 echo ">>> [2] Uploading to Gateway..."
-UPLOAD_RESP=$(timeout 600s curl -s -X POST -F "file=@$TMP_DIR/test_random.bin;filename=test_random.bin" "$GATEWAY_URL/gateway/upload")
+UPLOAD_RESP=$(timeout 60s curl -s -X POST -F "file=@$TMP_DIR/test_random.bin;filename=test_random.bin" "$GATEWAY_URL/gateway/upload")
 echo "Upload Response: $UPLOAD_RESP"
 
 CID=$(echo $UPLOAD_RESP | jq -r '.cid')

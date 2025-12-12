@@ -15,10 +15,10 @@ This file is the short brief for the next agent. The canonical, longer TODO list
   - Fake modes are still available only behind explicit env flags:
     - `NIL_FAKE_INGEST=1` → old SHA‑based `fastShardQuick` (dev/sim only).
     - `NIL_FAST_INGEST=1` → `IngestNewDealFast` (no witness MDUs; not Triple‑Proof valid).
-  - **Timeout hardening:** `shardFile` uses `NIL_SHARD_TIMEOUT_SECONDS` (default 600s) so gateway doesn’t 30s‑timeout during canonical KZG sharding.
+  - **Timeout hardening:** `shardFile` uses `NIL_SHARD_TIMEOUT_SECONDS` (default 60s) so gateway doesn’t 30s‑timeout during canonical KZG sharding.
 
 - **E2E scripts:**
-  - All upload curls now use a finite but long timeout (`timeout 600s`) to avoid hangs during canonical ingest.
+  - All upload curls now use a finite but long timeout (`timeout 60s`) to avoid hangs during canonical ingest.
   - `./scripts/e2e_lifecycle.sh` passes end‑to‑end with **no ingest env flags set** (Create Deal EVM → Upload → Commit Content EVM → Fetch).
 
 ## 2. Known Issues / Open Threads

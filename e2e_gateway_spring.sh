@@ -19,7 +19,7 @@ echo "Hello NilStore Spring" > test_spring.txt
 # 1. Upload
 echo "=== 1. Uploading File ==="
 # Canonical ingest may take a few minutes (KZG + witness generation), so allow more time here.
-UPLOAD_RESP=$(timeout 600s curl -s -F "file=@test_spring.txt" -F "owner=$OWNER_ADDR" http://localhost:8080/gateway/upload)
+UPLOAD_RESP=$(timeout 60s curl -s -F "file=@test_spring.txt" -F "owner=$OWNER_ADDR" http://localhost:8080/gateway/upload)
 echo "Upload Resp: $UPLOAD_RESP"
 MANIFEST_ROOT=$(echo $UPLOAD_RESP | jq -r '.manifest_root // .cid')
 SIZE=$(echo $UPLOAD_RESP | jq -r '.size_bytes')
