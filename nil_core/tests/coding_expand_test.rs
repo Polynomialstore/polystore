@@ -33,6 +33,20 @@ fn expand_mdu_zero_data_shapes_are_valid() {
 }
 
 #[test]
+#[ignore]
+fn expand_mdu_nonzero_data_succeeds() {
+    let ts = get_trusted_setup_path();
+    let ctx = KzgContext::load_from_file(&ts).expect("load trusted setup");
+
+    let mut data = vec![0u8; 8 * 1024 * 1024];
+    for (i, b) in data.iter_mut().enumerate() {
+        *b = ((i * 31) % 256) as u8;
+    }
+
+    expand_mdu(&ctx, &data).expect("expand_mdu should succeed for non-zero data");
+}
+
+#[test]
 fn expand_mdu_rejects_wrong_size() {
     let ts = get_trusted_setup_path();
     let ctx = KzgContext::load_from_file(&ts).expect("load trusted setup");

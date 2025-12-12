@@ -292,16 +292,23 @@ impl KzgContext {
 }
 
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
+    let modulus = get_modulus();
     let mut scalars = Vec::with_capacity(4096);
     for chunk in bytes.chunks(32) {
         let mut repr = [0u8; 32];
         repr.copy_from_slice(chunk);
         repr.reverse();
-        let s = Scalar::from_repr(repr);
-        if bool::from(s.is_none()) {
-            return Err(KzgError::Internal("Invalid scalar".into()));
+        if let Some(scalar) = Option::from(Scalar::from_repr(repr)) {
+            scalars.push(scalar);
+            continue;
         }
-        scalars.push(s.unwrap());
+
+        let reduced = BigUint::from_bytes_be(chunk).mod_floor(&modulus);
+        let mut reduced_repr = fr_to_bytes_be(&reduced);
+        reduced_repr.reverse();
+        let scalar = Option::from(Scalar::from_repr(reduced_repr))
+            .ok_or_else(|| KzgError::Internal("Invalid scalar".into()))?;
+        scalars.push(scalar);
     }
     Ok(scalars)
 }
