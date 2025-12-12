@@ -48,10 +48,3 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 - Start local stack: `./scripts/run_local_stack.sh start`
 - Backend lifecycle gate: `./scripts/e2e_lifecycle.sh`
-
-
-if this task is finished update the file prompt_for_next_agent.md with the next highest priority item on the todo list
-
-if there are more todo in this task, update prompt_for_next_agent.md to indicate what is left
-
-commit all your changes
