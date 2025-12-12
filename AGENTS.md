@@ -479,3 +479,53 @@ This section tracks the currently active TODOs for the AI agent working in this 
 ### 11.5 Core & WASM Health
 - [ ] Keep `nil_core` and `nil_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
 - [ ] Ensure the WASM Mode 2 path (`expand_mdu` / `expand_file`) is exercised by tests (Rust integration tests and, where feasible, frontend tests) so “Invalid scalar”/encoding issues are caught automatically.
+
+### 11.6 Canonical NilFS Upload + Thick Client Parity (Option D)
+**Goal:** Make the devnet demo fully spec‑aligned for Mode 1 today (Gateway‑first), while stabilizing the Mode 2 Thick‑Client WASM path in parallel.
+
+#### 11.6.A Gateway‑First Canonicalization (V1 NilFS + Triple Proof)
+- [ ] **A1. Make `/gateway/upload` canonical by default.**
+    - **Change:** Replace `fastShardQuick` / `IngestNewDealFast` as the default with `IngestNewDeal` (full NilFS slab build: MDU #0 + Witness MDUs + User MDUs + ManifestRoot).
+    - **Keep fake modes only behind explicit env:** e.g. `NIL_FAKE_INGEST=1` for simulations.
+    - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes with *no* ingest env flags set, and the returned `manifest_root` matches the on‑chain `Deal.manifest_root` after commit.
+    - **Commit gate:** After pass, commit `feat(nil_s3): default to canonical ingest` and push to both remotes.
+
+- [ ] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
+    - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
+    - **Pass gate:** New e2e scenario uploads 2 files into the same deal (no new deal created) and:
+        1. `allocated_length` only grows if new User MDUs are needed,
+        2. `FileTableHeader.record_count` increases,
+        3. both files fetch correctly by path.
+    - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
+
+- [ ] **A3. Remove “CID-only” fallback paths once NilFS is canonical.**
+    - **Change:** Stop relying on the local filename→CID index for fetch/UX; always resolve through `MDU #0` File Table + Roots.
+    - **Pass gate:** `GatewayFetch(deal_id, path=...)` works after restart (state derived from slab only), and legacy CID fetch still works via path mapping for Mode 1.
+    - **Commit gate:** After pass, commit `refactor(nil_s3): fetch via NilFS tables` and push.
+
+- [ ] **A4. Update Commit‑Content UI to be NilFS‑aware.**
+    - **Change:** “Commit Content” tab shows a per‑deal file list from NilFS, supports multiple uploads into one deal, and uses returned `manifest_root` + `allocated_length` for `update-deal-content-evm`.
+    - **Pass gate:** Manual happy‑path in browser:
+        1. Create deal,
+        2. Upload file → returns canonical ManifestRoot,
+        3. Commit content → deal becomes Active with correct size,
+        4. Fetch from Deal Explorer succeeds.
+    - **Commit gate:** After pass, commit `feat(nil-website): NilFS commit-content UX` and push.
+
+#### 11.6.B Thick‑Client WASM Stabilization (Parallel Track)
+- [ ] **B1. Fix WASM “Invalid scalar” in `expand_mdu/expand_file`.**
+    - **Change:** Repair scalar field mapping / roots‑of‑unity coordinate logic in `nil_core` WASM so browser outputs match native.
+    - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
+    - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
+
+- [ ] **B2. Add native↔WASM parity tests for MDU expansion.**
+    - **Change:** For a fixed fixture file, assert:
+        1. WASM `expand_file` MDUs/roots/commitments equal `nil_cli shard` output,
+        2. resulting ManifestRoot equals canonical gateway ingest ManifestRoot.
+    - **Pass gate:** Parity tests run in CI/local (Rust + JS) and fail on drift.
+    - **Commit gate:** After pass, commit `test: WASM/native expansion parity` and push.
+
+- [ ] **B3. (Deferred) Integrate client‑side pre‑sharding into gateway.**
+    - **Change:** Add an optional gateway endpoint to accept pre‑expanded MDUs + Witness data from browser (Mode 2), but keep Gateway‑first flow as default until stable.
+    - **Pass gate:** Feature flag works end‑to‑end on localhost without breaking Mode 1.
+    - **Commit gate:** After pass, commit `feat(nil_s3,nil-website): pre-sharded upload path` and push.
