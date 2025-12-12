@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
+import { ConnectWallet } from "./ConnectWallet";
 import { useState } from "react";
 import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, Shield, HelpCircle, Vote } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -98,6 +99,8 @@ export const Layout = () => {
               >
                 <Github className="w-5 h-5" />
               </a>
+
+              <ConnectWallet className="hidden sm:flex" />
 
               <ModeToggle />
               

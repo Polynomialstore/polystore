@@ -1,5 +1,4 @@
 import { createConfig, http, WagmiProvider } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defineChain } from 'viem'
 import React from 'react'
@@ -11,8 +10,8 @@ export const nilChain = defineChain({
   name: 'NilChain Local',
   nativeCurrency: {
     decimals: 18,
-    name: 'AATOM',
-    symbol: 'AATOM',
+    name: 'NIL',
+    symbol: 'NIL',
   },
   rpcUrls: {
     default: { http: [appConfig.evmRpc] },
@@ -23,11 +22,9 @@ export const nilChain = defineChain({
 })
 
 export const config = createConfig({
-  chains: [nilChain, mainnet, sepolia],
+  chains: [nilChain],
   transports: {
     [nilChain.id]: http(appConfig.evmRpc),
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
   },
 })
 

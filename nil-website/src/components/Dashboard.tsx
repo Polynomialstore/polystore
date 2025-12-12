@@ -478,12 +478,12 @@ export function Dashboard() {
             <div className="font-mono text-primary break-all">Address: {address || nilAddress}</div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-secondary/50 border border-border rounded p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">EVM (atom)</div>
+                <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
                 <div className="font-mono text-green-600 dark:text-green-400">
                   {(() => {
                     if (!evmBalance) return '—'
                     const anyBal = evmBalance as any
-                    const symbol = anyBal.symbol ?? 'AATOM'
+                    const symbol = anyBal.symbol ?? 'NIL'
                     const raw = anyBal.value as bigint | undefined
                     const decimals = typeof anyBal.decimals === 'number' ? anyBal.decimals : 18
                     if (raw == null) {

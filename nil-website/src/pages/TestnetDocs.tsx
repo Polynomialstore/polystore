@@ -106,7 +106,7 @@ export const TestnetDocs = () => {
                 </div>
                 <div>
                     <span className="text-gray-400 block">Currency Symbol</span>
-                    <span className="font-mono text-indigo-300">AATOM</span>
+                    <span className="font-mono text-indigo-300">NIL</span>
                 </div>
             </div>
             <div className="mt-6 pt-4 border-t border-indigo-500/20">

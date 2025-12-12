@@ -454,8 +454,8 @@ This section tracks the currently active TODOs for the AI agent working in this 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
 - [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
-- [ ] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `nil-website` (Connect MetaMask, chain config, RPC URL).
-- [ ] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
+- [x] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `nil-website` (Connect MetaMask, chain config, RPC URL).
+- [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
 ### 11.2 Protocol Cleanup (Dynamic Sizing)
 - [ ] Remove `DealSize` enum and `deal_size` field from `nilchain/proto/nilchain/nilchain/v1/types.proto` and regenerate Go/Rust types.

@@ -25,8 +25,8 @@ export function useNetwork() {
                      chainId: `0x${appConfig.chainId.toString(16)}`,
                      chainName: 'NilChain Local',
                      nativeCurrency: {
-                         name: 'AATOM',
-                         symbol: 'AATOM',
+                         name: 'NIL',
+                         symbol: 'NIL',
                          decimals: 18,
                      },
                      rpcUrls: [appConfig.evmRpc],
