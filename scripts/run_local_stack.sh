@@ -25,6 +25,9 @@ BRIDGE_ADDRESS=""
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
 export NIL_EVM_DEV_PRIVKEY
+# Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
+# Consensus wiring for the EVM mempool is disabled in-app unless you opt in with
+# NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1.
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
 export NIL_DISABLE_EVM_MEMPOOL
 if [ ! -x "$GO_BIN" ]; then

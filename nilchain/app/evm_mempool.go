@@ -65,18 +65,39 @@ func (app *App) initEVMMempool() error {
 
 	app.evmMempool = evmMempool
 
-	// Wire EVM mempool into BaseApp.
-	app.SetMempool(evmMempool)
+	// Always use the EVM-aware CheckTx handler so nonce-gap EVM txs are routed
+	// into the EVM mempool for future promotion.
 	checkTxHandler := evmmempool.NewCheckTxHandler(evmMempool)
 	app.SetCheckTxHandler(checkTxHandler)
 
-	proposalHandler := baseapp.NewDefaultProposalHandler(evmMempool, app.App)
-	proposalHandler.SetSignerExtractionAdapter(
-		evmmempool.NewEthSignerExtractionAdapter(
-			sdkmempool.NewDefaultSignerExtractionAdapter(),
-		),
-	)
-	app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
+	// For localhost we keep the EVM mempool for JSON-RPC pending txs, but avoid
+	// wiring it into consensus by default. The upstream EVM mempool consensus hooks
+	// (SelectBy + EventBus notifications) have been observed to stall single-node
+	// chains. Set NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1 to opt in.
+	if os.Getenv("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS") == "1" {
+		app.SetMempool(evmMempool)
+		logger.Info("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1; wiring EVM mempool into BaseApp")
+
+		// The upstream ExperimentalEVMMempool PrepareProposal handler can stall
+		// single-node consensus on localhost. Even when opting into consensus wiring,
+		// we default to a no-op PrepareProposal so CometBFT proposes its FIFO tx list.
+		// Set NIL_DISABLE_EVM_PREPARE_PROPOSAL=0 to opt back into EVM selection.
+		if os.Getenv("NIL_DISABLE_EVM_PREPARE_PROPOSAL") == "0" {
+			proposalHandler := baseapp.NewDefaultProposalHandler(evmMempool, app.App)
+			proposalHandler.SetSignerExtractionAdapter(
+				evmmempool.NewEthSignerExtractionAdapter(
+					sdkmempool.NewDefaultSignerExtractionAdapter(),
+				),
+			)
+			app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
+			logger.Info("using EVM mempool PrepareProposal handler")
+		} else {
+			app.SetPrepareProposal(baseapp.NoOpPrepareProposal())
+			logger.Info("NIL_DISABLE_EVM_PREPARE_PROPOSAL!=0; using NoOp PrepareProposal")
+		}
+	} else {
+		logger.Info("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS!=1; EVM mempool enabled only for JSON-RPC")
+	}
 
 	logger.Info("configured EVM mempool successfully")
 
