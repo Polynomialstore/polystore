@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect } from 'wagmi'
-import { injected } from 'wagmi/connectors'
 import { Wallet, LogOut, RefreshCw, AlertTriangle } from 'lucide-react'
 import { appConfig } from '../config'
+import { injectedConnector } from '../context/Web3Provider'
 import { useNetwork } from '../hooks/useNetwork'
 import { formatUnits } from 'viem'
 
@@ -40,7 +40,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
     try {
       // Attempt to auto-add + switch the chain (best-effort).
       await switchNetwork().catch(() => undefined)
-      await connectAsync({ connector: injected() })
+      await connectAsync({ connector: injectedConnector })
       await switchNetwork().catch(() => undefined)
     } catch (e: any) {
       setError(e?.message || 'Failed to connect wallet')

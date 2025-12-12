@@ -1,5 +1,4 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
-import { injected } from 'wagmi/connectors'
 import { ethToNil } from '../lib/address'
 import { useEffect, useMemo, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu, ArrowUpRight } from 'lucide-react'
@@ -15,6 +14,8 @@ import { StatusBar } from './StatusBar'
 import { BridgeStatus } from './BridgeStatus'
 import { BridgeActions } from './BridgeActions'
 import { FileSharder } from './FileSharder'
+import { injectedConnector } from '../context/Web3Provider'
+import { formatUnits } from 'viem'
 
 interface Deal {
   id: string
@@ -481,7 +482,7 @@ export function Dashboard() {
         <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
         <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
         <button
-          onClick={() => connectAsync({ connector: injected() })}
+          onClick={() => connectAsync({ connector: injectedConnector })}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md shadow transition-colors"
         >
           <Wallet className="w-4 h-4" />
@@ -595,15 +596,11 @@ export function Dashboard() {
                 <div className="font-mono text-green-600 dark:text-green-400">
                   {(() => {
                     if (!evmBalance) return '—'
-                    const anyBal = evmBalance as any
-                    const symbol = anyBal.symbol ?? 'NIL'
-                    const raw = anyBal.value as bigint | undefined
-                    const decimals = typeof anyBal.decimals === 'number' ? anyBal.decimals : 18
-                    if (raw == null) {
-                      return anyBal.formatted ? `${anyBal.formatted} ${symbol}` : `0 ${symbol}`
-                    }
-                    const asNumber = Number(raw) / 10 ** decimals
-                    return `${asNumber} ${symbol}`
+                    const symbol = evmBalance.symbol || 'NIL'
+                    const formatted = formatUnits(evmBalance.value, evmBalance.decimals)
+                    const [whole, frac] = formatted.split('.')
+                    const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
+                    return `${trimmed} ${symbol}`
                   })()}
                 </div>
               </div>

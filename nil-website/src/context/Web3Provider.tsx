@@ -1,6 +1,7 @@
 import { createConfig, http, WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defineChain } from 'viem'
+import { injected } from 'wagmi/connectors'
 import React from 'react'
 import { appConfig } from '../config'
 
@@ -21,8 +22,11 @@ export const nilChain = defineChain({
   },
 })
 
+export const injectedConnector = injected()
+
 export const config = createConfig({
   chains: [nilChain],
+  connectors: [injectedConnector],
   transports: {
     [nilChain.id]: http(appConfig.evmRpc),
   },

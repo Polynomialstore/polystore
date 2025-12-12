@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
-import { injected } from 'wagmi/connectors';
+import { injectedConnector } from '../context/Web3Provider';
 import { useFileSharder } from '../hooks/useFileSharder';
 import { FileJson, Cpu } from 'lucide-react';
 
@@ -124,7 +124,7 @@ export function FileSharder() {
     <div className="w-full space-y-6">
       {!isConnected ? (
           <button 
-            onClick={() => connectAsync({ connector: injected() })}
+            onClick={() => connectAsync({ connector: injectedConnector })}
             className="w-full py-12 border-2 border-dashed border-border rounded-xl text-muted-foreground font-bold transition-all flex flex-col items-center gap-4 hover:border-primary/50 hover:bg-secondary/50"
           >
               <div className="text-4xl">🔌</div>

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { injected } from 'wagmi/connectors'
 import {
   useAccount,
   useBalance,
@@ -7,10 +6,10 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi'
-import { createPublicClient, http } from 'viem'
+import { createPublicClient, formatUnits, http } from 'viem'
 import { ArrowUpRight, Loader2, PlugZap } from 'lucide-react'
 import { appConfig } from '../config'
-import { nilChain } from '../context/Web3Provider'
+import { injectedConnector, nilChain } from '../context/Web3Provider'
 import { nilBridgeAbi } from '../abi/nilBridge'
 
 function randomBytes32(): `0x${string}` {
@@ -92,8 +91,10 @@ export function BridgeActions() {
   const evmBalance = useMemo(() => {
     if (!balance) return '—'
     const symbol = balance.symbol || 'NIL'
-    const formatted = typeof balance.value === 'bigint' ? Number(balance.value) / 10 ** balance.decimals : 0
-    return `${formatted} ${symbol}`
+    const formatted = formatUnits(balance.value, balance.decimals)
+    const [whole, frac] = formatted.split('.')
+    const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
+    return `${trimmed} ${symbol}`
   }, [balance])
 
   if (!bridgeAddress) {
@@ -108,7 +109,7 @@ export function BridgeActions() {
     setStatus(null)
     try {
       if (!isConnected) {
-        await connectAsync({ connector: injected() })
+        await connectAsync({ connector: injectedConnector })
       }
       const height = nextHeight ? BigInt(nextHeight) : BigInt(Date.now())
       const root = normalizeBytes32(stateRoot)
