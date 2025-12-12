@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
 import { ethToNil } from '../lib/address'
+import { fetchWithTimeout } from '../lib/http'
 
 export interface UploadResult {
   cid: string
@@ -38,10 +39,11 @@ export function useUpload() {
         form.append('max_user_mdus', String(opts.maxUserMdus))
       }
 
-      const res = await fetch(`${appConfig.gatewayBase}/gateway/upload`, {
-        method: 'POST',
-        body: form,
-      })
+      const res = await fetchWithTimeout(
+        `${appConfig.gatewayBase}/gateway/upload`,
+        { method: 'POST', body: form },
+        60_000,
+      )
       if (!res.ok) {
         const txt = await res.text()
         throw new Error(txt || 'Upload failed')

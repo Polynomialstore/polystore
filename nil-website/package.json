@@ -9,7 +9,7 @@
     "prebuild": "npm run wasm:build",
     "dev": "vite",
     "build": "tsc && vite build",
-    "test:unit": "tsx --test src/lib/eip712.test.ts",
+    "test:unit": "tsx --test src/lib/eip712.test.ts src/lib/http.test.ts",
     "test:e2e": "playwright test",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
