@@ -1,0 +1,65 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { hashTypedData, recoverTypedDataAddress } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+
+import { buildCreateDealTypedData, buildUpdateContentTypedData } from './eip712'
+
+const CHAIN_ID = 31337
+const TEST_PRIVKEY =
+  '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1' as const
+const TEST_ACCOUNT = privateKeyToAccount(TEST_PRIVKEY)
+
+// viem's typed-data helpers require domain.chainId as bigint.
+function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {
+  return {
+    ...typedData,
+    domain: { ...typedData.domain, chainId: BigInt(typedData.domain.chainId) },
+  } as any
+}
+
+test('CreateDeal typed data hashes to chain digest', async () => {
+  const intent = {
+    creator_evm: TEST_ACCOUNT.address,
+    size_tier: 0,
+    duration_blocks: 100,
+    service_hint: 'General:replicas=1',
+    initial_escrow: '1000000',
+    max_monthly_spend: '5000000',
+    nonce: 1,
+  }
+
+  const typedData = buildCreateDealTypedData(intent, CHAIN_ID)
+  const viemTypedData = asViemTypedData(typedData)
+  const digest = hashTypedData(viemTypedData)
+  assert.equal(
+    digest.toLowerCase(),
+    '0xddbe7fe68280cae2deaf1cbab16fdce310ed6c3bb239b1d4a0752a77ab556300',
+  )
+
+  const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)
+  const recovered = await recoverTypedDataAddress({ ...viemTypedData, signature })
+  assert.equal(recovered.toLowerCase(), TEST_ACCOUNT.address.toLowerCase())
+})
+
+test('UpdateContent typed data hashes to chain digest', async () => {
+  const intent = {
+    creator_evm: TEST_ACCOUNT.address,
+    deal_id: 0,
+    cid: '0xdeadbeef',
+    size_bytes: 1234,
+    nonce: 2,
+  }
+
+  const typedData = buildUpdateContentTypedData(intent, CHAIN_ID)
+  const viemTypedData = asViemTypedData(typedData)
+  const digest = hashTypedData(viemTypedData)
+  assert.equal(
+    digest.toLowerCase(),
+    '0x7dedec3bdb9f467336903adbb108d6a92d381655900f2cfc1f46306fe7bc4587',
+  )
+
+  const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)
+  const recovered = await recoverTypedDataAddress({ ...viemTypedData, signature })
+  assert.equal(recovered.toLowerCase(), TEST_ACCOUNT.address.toLowerCase())
+})

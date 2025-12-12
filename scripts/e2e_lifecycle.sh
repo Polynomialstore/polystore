@@ -149,82 +149,16 @@ echo "    Current account sequence for NIL_ADDRESS: $CURRENT_NIL_SEQUENCE"
 
 CREATE_RESP=""
 for i in $(seq 1 5); do
-  CREATE_PAYLOAD=$(python3 - <<PY
-import json, os, sys
-from eth_account import Account
-from eth_account.messages import encode_typed_data
-
-priv = os.environ["EVM_PRIVKEY"]
-evm_chain_id = int(os.environ.get("EVM_CHAIN_ID", "31337"))
-chain_id = os.environ.get("CHAIN_ID", "test-1")
-acct = Account.from_key(priv)
-initial_nonce = int("${CURRENT_NIL_SEQUENCE}") + $i - 1
-
-intent = {
-    "creator_evm": acct.address,
-    "duration_blocks": 100,
-    "service_hint": "General",
-    "initial_escrow": "1000000",
-    "max_monthly_spend": "500000",
-    "nonce": initial_nonce,
-    "chain_id": chain_id,
-    "size_tier": 0, # Legacy field required for EIP-712 signature
-}
-
-domain = {
-    "name": "NilStore",
-    "version": "1",
-    "chainId": evm_chain_id,
-    "verifyingContract": os.environ.get("VERIFYING_CONTRACT"),
-}
-
-types = {
-    "CreateDeal": [
-        {"name": "creator", "type": "address"},
-        {"name": "size_tier", "type": "uint32"},
-        {"name": "duration", "type": "uint64"},
-        {"name": "service_hint", "type": "string"},
-        {"name": "initial_escrow", "type": "string"},
-        {"name": "max_monthly_spend", "type": "string"},
-        {"name": "nonce", "type": "uint64"},
-    ]
-}
-
-message = {
-    "creator": acct.address,
-    "size_tier": intent["size_tier"],
-    "duration": intent["duration_blocks"],
-    "service_hint": intent["service_hint"],
-    "initial_escrow": intent["initial_escrow"],
-    "max_monthly_spend": intent["max_monthly_spend"],
-    "nonce": initial_nonce,
-}
-
-typed_data = {
-    "domain": domain,
-    "types": types,
-    "primaryType": "CreateDeal",
-    "message": message,
-}
-
-signable = encode_typed_data(full_message={"types": types, "primaryType": "CreateDeal", "domain": domain, "message": message})
-sig = Account.sign_message(signable, priv).signature.hex()
-
-# Debug print:
-print("-- EIP-712 Typed Data (CreateDeal) --", file=sys.stderr)
-print(json.dumps(typed_data, indent=2), file=sys.stderr)
-# Debug print:
-print("-- Generated Signature (CreateDeal) --", file=sys.stderr)
-print(sig, file=sys.stderr)
-
-payload = {
-    "intent": intent,
-    "evm_signature": sig,
-}
-print(f"Payload before dump (CreateDeal): {payload}", file=sys.stderr)
-print(json.dumps(payload))
-PY
-)
+  initial_nonce=$((CURRENT_NIL_SEQUENCE + i - 1))
+  CREATE_PAYLOAD=$(
+    NONCE="$initial_nonce" \
+    DURATION_BLOCKS=100 \
+    SERVICE_HINT="General" \
+    INITIAL_ESCROW="1000000" \
+    MAX_MONTHLY_SPEND="500000" \
+    SIZE_TIER=0 \
+    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
+  )
   CREATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
     -H "Content-Type: application/json" \
     -d "$CREATE_PAYLOAD")
@@ -262,79 +196,14 @@ echo "    Current account sequence for NIL_ADDRESS for update: $CURRENT_NIL_SEQU
 
 UPDATE_RESP=""
 for i in $(seq 1 5); do
-  UPDATE_PAYLOAD=$(python3 - <<PY
-import json, os, sys
-from eth_account import Account
-from eth_account.messages import encode_typed_data
-
-priv = os.environ["EVM_PRIVKEY"]
-evm_chain_id = int(os.environ.get("EVM_CHAIN_ID", "31337"))
-chain_id = os.environ.get("CHAIN_ID", "test-1")
-acct = Account.from_key(priv)
-deal_id = int("${DEAL_ID}")
-cid = "${MANIFEST_ROOT}"
-size_bytes = int("${SIZE_BYTES}")
-update_nonce = int("${CURRENT_NIL_SEQUENCE_FOR_UPDATE}") + $i - 1
-
-intent = {
-    "creator_evm": acct.address,
-    "deal_id": deal_id,
-    "cid": cid,
-    "size_bytes": size_bytes,
-    "nonce": update_nonce,
-    "chain_id": chain_id,
-}
-
-domain = {
-    "name": "NilStore",
-    "version": "1",
-    "chainId": evm_chain_id,
-    "verifyingContract": os.environ.get("VERIFYING_CONTRACT"),
-}
-
-types = {
-    "UpdateContent": [
-        {"name": "creator", "type": "address"},
-        {"name": "deal_id", "type": "uint64"},
-        {"name": "cid", "type": "string"},
-        {"name": "size", "type": "uint64"},
-        {"name": "nonce", "type": "uint64"},
-    ]
-}
-
-message = {
-    "creator": acct.address,
-    "deal_id": deal_id,
-    "cid": cid,
-    "size": size_bytes,
-    "nonce": update_nonce,
-}
-
-typed_data = {
-    "domain": domain,
-    "types": types,
-    "primaryType": "UpdateContent",
-    "message": message,
-}
-
-signable = encode_typed_data(full_message={"types": types, "primaryType": "UpdateContent", "domain": domain, "message": message})
-sig = Account.sign_message(signable, priv).signature.hex()
-
-# Debug print:
-print("-- EIP-712 Typed Data (UpdateContent) --", file=sys.stderr)
-print(json.dumps(typed_data, indent=2), file=sys.stderr)
-# Debug print:
-print("-- Generated Signature (UpdateContent) --", file=sys.stderr)
-print(sig, file=sys.stderr)
-
-payload = {
-    "intent": intent,
-    "evm_signature": sig,
-}
-print(f"Payload before dump (UpdateContent): {payload}", file=sys.stderr)
-print(json.dumps(payload))
-PY
-)
+  update_nonce=$((CURRENT_NIL_SEQUENCE_FOR_UPDATE + i - 1))
+  UPDATE_PAYLOAD=$(
+    NONCE="$update_nonce" \
+    DEAL_ID="$DEAL_ID" \
+    CID="$MANIFEST_ROOT" \
+    SIZE_BYTES="$SIZE_BYTES" \
+    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+  )
   UPDATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
     -d "$UPDATE_PAYLOAD")

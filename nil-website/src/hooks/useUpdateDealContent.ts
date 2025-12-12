@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
+import { buildUpdateContentTypedData, UpdateContentIntent } from '../lib/eip712'
 
 export interface UpdateDealContentInput {
   creator: string
@@ -28,44 +29,15 @@ export function useUpdateDealContent() {
       const nextNonce = currentNonce + 1
       window.localStorage.setItem(nonceKey, String(nextNonce))
 
-      // EIP-712 Typed Data
-      const domain = {
-        name: 'NilStore',
-        version: '1',
-        chainId: appConfig.chainId, // Use configured EVM chain ID
-        verifyingContract: '0x0000000000000000000000000000000000000000' as const,
-      }
-
-      const types = {
-        EIP712Domain: [
-          { name: 'name', type: 'string' },
-          { name: 'version', type: 'string' },
-          { name: 'chainId', type: 'uint256' },
-          { name: 'verifyingContract', type: 'address' },
-        ],
-        UpdateContent: [
-          { name: 'creator', type: 'address' },
-          { name: 'deal_id', type: 'uint64' },
-          { name: 'cid', type: 'string' },
-          { name: 'size', type: 'uint64' },
-          { name: 'nonce', type: 'uint64' },
-        ],
-      }
-
-      const message = {
-        creator: evmAddress,
-        deal_id: Number(input.dealId),
+      const intent: UpdateContentIntent = {
+        creator_evm: evmAddress,
+        deal_id: input.dealId,
         cid: input.cid,
-        size: Number(input.sizeBytes),
-        nonce: Number(nextNonce),
+        size_bytes: input.sizeBytes,
+        nonce: nextNonce,
       }
 
-      const typedData = {
-        domain,
-        types,
-        primaryType: 'UpdateContent',
-        message,
-      }
+      const typedData = buildUpdateContentTypedData(intent, appConfig.chainId)
 
       const ethereum = (window as any).ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
@@ -78,20 +50,13 @@ export function useUpdateDealContent() {
       })
 
       // Construct intent for backend
-      const intent = {
-        creator_evm: evmAddress,
-        deal_id: input.dealId,
-        cid: input.cid,
-        size_bytes: input.sizeBytes,
-        nonce: nextNonce,
-        chain_id: String(appConfig.chainId),
-      }
+      const gatewayIntent = { ...intent, chain_id: String(appConfig.chainId) }
 
       const response = await fetch(`${appConfig.gatewayBase}/gateway/update-deal-content-evm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          intent,
+          intent: gatewayIntent,
           evm_signature: signature,
         }),
       })

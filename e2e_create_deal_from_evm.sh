@@ -88,65 +88,14 @@ echo "==> Using EVM address $EVM_ADDRESS (nil: $NIL_ADDRESS)"
 echo "==> Assuming nil address is pre-funded from genesis..."
 
 echo "==> Creating EVM-bridged deal via gateway..."
-PAYLOAD=$(python3 - <<'PY'
-import json, os
-from eth_account import Account
-from eth_account.messages import encode_typed_data
-
-priv = os.environ["EVM_PRIVKEY"]
-evm_chain_id = int(os.environ.get("EVM_CHAIN_ID", "31337"))
-chain_id = os.environ.get("CHAIN_ID", "test-1")
-acct = Account.from_key(priv)
-
-intent = {
-    "creator_evm": acct.address,
-    "duration_blocks": 100,
-    "service_hint": "General",
-    "initial_escrow": "1000000",
-    "max_monthly_spend": "500000",
-    "nonce": 1,
-    "chain_id": chain_id,
-    "size_tier": 0,  # legacy field kept for signature compatibility; ignored by chain logic
-}
-
-domain = {
-    "name": "NilStore",
-    "version": "1",
-    "chainId": evm_chain_id,
-    "verifyingContract": os.environ.get("VERIFYING_CONTRACT", "0x0000000000000000000000000000000000000000"),
-}
-
-types = {
-    "CreateDeal": [
-        {"name": "creator", "type": "address"},
-        {"name": "size_tier", "type": "uint32"},
-        {"name": "duration", "type": "uint64"},
-        {"name": "service_hint", "type": "string"},
-        {"name": "initial_escrow", "type": "string"},
-        {"name": "max_monthly_spend", "type": "string"},
-        {"name": "nonce", "type": "uint64"},
-    ]
-}
-
-message = {
-    "creator": acct.address,
-    "size_tier": intent["size_tier"],
-    "duration": intent["duration_blocks"],
-    "service_hint": intent["service_hint"],
-    "initial_escrow": intent["initial_escrow"],
-    "max_monthly_spend": intent["max_monthly_spend"],
-    "nonce": intent["nonce"],
-}
-
-signable = encode_typed_data(full_message={"types": types, "primaryType": "CreateDeal", "domain": domain, "message": message})
-sig = Account.sign_message(signable, priv).signature.hex()
-
-payload = {
-    "intent": intent,
-    "evm_signature": sig,
-}
-print(json.dumps(payload))
-PY
+PAYLOAD=$(
+  NONCE=1 \
+  DURATION_BLOCKS=100 \
+  SERVICE_HINT="General" \
+  INITIAL_ESCROW="1000000" \
+  MAX_MONTHLY_SPEND="500000" \
+  SIZE_TIER=0 \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
 )
 
 RESP=$(timeout 10s curl -sS -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \

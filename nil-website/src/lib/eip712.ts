@@ -1,0 +1,102 @@
+// Shared EIP-712 intent definitions for NilStore.
+// This file is the single source of truth for typed-data shapes used by
+// MetaMask signing, gateway payloads, and parity tests.
+
+export const EIP712_DOMAIN_NAME = 'NilStore' as const
+export const EIP712_DOMAIN_VERSION = '1' as const
+export const EIP712_VERIFYING_CONTRACT =
+  '0x0000000000000000000000000000000000000000' as const
+
+export const EIP712DomainTypes = [
+  { name: 'name', type: 'string' },
+  { name: 'version', type: 'string' },
+  { name: 'chainId', type: 'uint256' },
+  { name: 'verifyingContract', type: 'address' },
+] as const
+
+export const CreateDealTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  CreateDeal: [
+    { name: 'creator', type: 'address' },
+    { name: 'size_tier', type: 'uint32' },
+    { name: 'duration', type: 'uint64' },
+    { name: 'service_hint', type: 'string' },
+    // Amount fields are signed as strings for chain compatibility.
+    { name: 'initial_escrow', type: 'string' },
+    { name: 'max_monthly_spend', type: 'string' },
+    { name: 'nonce', type: 'uint64' },
+  ],
+} as const
+
+export const UpdateContentTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  UpdateContent: [
+    { name: 'creator', type: 'address' },
+    { name: 'deal_id', type: 'uint64' },
+    { name: 'cid', type: 'string' },
+    { name: 'size', type: 'uint64' },
+    { name: 'nonce', type: 'uint64' },
+  ],
+} as const
+
+export interface CreateDealIntent {
+  creator_evm: string
+  size_tier?: number
+  duration_blocks: number
+  service_hint: string
+  initial_escrow: string
+  max_monthly_spend: string
+  nonce: number
+}
+
+export interface UpdateContentIntent {
+  creator_evm: string
+  deal_id: number
+  cid: string
+  size_bytes: number
+  nonce: number
+}
+
+export function buildCreateDealTypedData(intent: CreateDealIntent, chainId: number) {
+  const sizeTier = Number.isFinite(intent.size_tier) ? Number(intent.size_tier) : 0
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: CreateDealTypes,
+    primaryType: 'CreateDeal' as const,
+    message: {
+      creator: intent.creator_evm,
+      size_tier: sizeTier,
+      duration: Number(intent.duration_blocks),
+      service_hint: intent.service_hint,
+      initial_escrow: intent.initial_escrow,
+      max_monthly_spend: intent.max_monthly_spend,
+      nonce: Number(intent.nonce),
+    },
+  }
+}
+
+export function buildUpdateContentTypedData(intent: UpdateContentIntent, chainId: number) {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: UpdateContentTypes,
+    primaryType: 'UpdateContent' as const,
+    message: {
+      creator: intent.creator_evm,
+      deal_id: Number(intent.deal_id),
+      cid: intent.cid,
+      size: Number(intent.size_bytes),
+      nonce: Number(intent.nonce),
+    },
+  }
+}
+
