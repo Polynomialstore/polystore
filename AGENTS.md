@@ -10,6 +10,7 @@
 *   **Prohibited Commands:** Agents are strictly forbidden from running aggressive Git commands like `git clean` or `git reset --hard` as these can lead to irreversible data loss of uncommitted work. If such commands are necessary, confirm with the user first.
 *   **Tests Before Push:** For every non-trivial change, run the most relevant unit/e2e tests before committing. Do not push code that you haven't at least smoke-tested locally.
 *   **Commit & Push Cadence:** Treat this file as the canonical TODO list. As you complete tasks, update the checklist, commit your work with a descriptive message, and push to both remotes (`origin` and `nil-store`) in small, verified increments.
+*   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to both remotes. Keep commits small and descriptive, and avoid batching unrelated changes.
 
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
