@@ -36,6 +36,8 @@ var (
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
 	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
+	// Sharding (nil_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
+	shardTimeout = time.Duration(envInt("NIL_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 
@@ -363,16 +365,29 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	var size uint64
 	var allocatedLength uint64
 
-	// Default to fastShardQuick for immediate response.
-	// This produces a SHA256 "CID" as the manifest_root.
-	// If NIL_FULL_INGEST is set, use the full (slow) ingest path.
-	if os.Getenv("NIL_FULL_INGEST") == "1" {
-		maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
-		if raw := strings.TrimSpace(r.FormValue("max_user_mdus")); raw != "" {
-			if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
-				maxMdus = parsed
-			}
+	// Canonical NilFS ingest by default (MDU #0 + Witness + User MDUs + ManifestRoot).
+	// Legacy/fake modes are only enabled behind explicit env flags:
+	// - NIL_FAKE_INGEST=1: fast SHA256-based manifest_root (dev only, not Triple-Proof valid)
+	// - NIL_FAST_INGEST=1: skip witness generation (faster, still not Triple-Proof valid)
+	maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
+	if raw := strings.TrimSpace(r.FormValue("max_user_mdus")); raw != "" {
+		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
+			maxMdus = parsed
 		}
+	}
+
+	switch {
+	case os.Getenv("NIL_FAKE_INGEST") == "1":
+		// Very fast dev path: SHA256 padded to 48 bytes.
+		var err error
+		cid, size, allocatedLength, err = fastShardQuick(path)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+	case os.Getenv("NIL_FAST_INGEST") == "1":
+		// Semi-canonical dev path: NilFS slab without Witness MDUs.
 		_, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
@@ -380,17 +395,21 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		cid = manifestRoot
 		allocatedLength = allocLen
-
 		if info, err := os.Stat(path); err == nil {
 			size = uint64(info.Size())
 		}
-	} else {
-		// Default to fastShardQuick for devnet/testing.
-		var err error
-		cid, size, allocatedLength, err = fastShardQuick(path)
+
+	default:
+		// Full canonical ingest (Triple-Proof valid).
+		_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
 			return
+		}
+		cid = manifestRoot
+		allocatedLength = allocLen
+		if info, err := os.Stat(path); err == nil {
+			size = uint64(info.Size())
 		}
 	}
 
@@ -1211,13 +1230,13 @@ func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) 
 		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
 	defer cancel()
 	cmd := execNilCli(ctx, args...)
 
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return nil, fmt.Errorf("nil_cli shard timed out after %s", cmdTimeout)
+		return nil, fmt.Errorf("nil_cli shard timed out after %s", shardTimeout)
 	}
 	if err != nil {
 		log.Printf("shardFile: shard failed: %s", string(output))
