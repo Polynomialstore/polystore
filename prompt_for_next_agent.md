@@ -6,51 +6,57 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 - **Chain & EVM:**
   - `nilchaind` boots cleanly via `./scripts/run_local_stack.sh start`.
-  - **Syntax Errors Fixed:** `msg_server.go` is now correct and `UpdateDealContentFromEvm` works as expected with EIP-712.
-  - **Account Sequence Mismatch Fixed:** `nil_s3` gateway now includes a retry mechanism for `tx` commands, making it robust against race conditions.
-  - **Bridge Deployed:** `NilBridge.sol` is successfully deployed to the local EVM. The address is written to `_artifacts/bridge_address.txt` and exported to the web UI.
+  - `UpdateDealContentFromEvm` works with EIP‑712 signatures; gateway retries txs on sequence mismatch.
+  - Local EVM bridge deploy remains stable and writes `_artifacts/bridge_address.txt` for the web UI.
 
-- **Gateway (`nil_s3`):**
-  - **Robustness:** Added `runTxWithRetry` to handle "account sequence mismatch" errors automatically.
-  - **E2E Lifecycle:** Confirmed working via `./scripts/e2e_lifecycle.sh`. Full flow: Create Deal (EVM) -> Upload -> Update Content (EVM) -> Fetch.
+- **Gateway (`nil_s3`) — Canonical NilFS Upload (Option D / A1 DONE):**
+  - `/gateway/upload` now defaults to **canonical ingest** (`IngestNewDeal`): builds a full slab (MDU #0 + Witness MDUs + User MDUs) and returns a real `manifest_root`.
+  - Fake modes are still available only behind explicit env flags:
+    - `NIL_FAKE_INGEST=1` → old SHA‑based `fastShardQuick` (dev/sim only).
+    - `NIL_FAST_INGEST=1` → `IngestNewDealFast` (no witness MDUs; not Triple‑Proof valid).
+  - **Timeout hardening:** `shardFile` uses `NIL_SHARD_TIMEOUT_SECONDS` (default 600s) so gateway doesn’t 30s‑timeout during canonical KZG sharding.
 
-- **Frontend (`nil-website`):**
-  - **Wagmi/Viem:** Dependencies installed.
-  - **Bridge Config:** `VITE_BRIDGE_ADDRESS` is correctly wired in `src/config.ts`.
-  - **Pending:** "Connect MetaMask" button and direct interaction with the deployed bridge contract.
+- **E2E scripts:**
+  - All upload curls now use a finite but long timeout (`timeout 600s`) to avoid hangs during canonical ingest.
+  - `./scripts/e2e_lifecycle.sh` passes end‑to‑end with **no ingest env flags set** (Create Deal EVM → Upload → Commit Content EVM → Fetch).
 
 ## 2. Known Issues / Open Threads
 
-1. **Frontend EVM Integration (Primary Focus):**
-   - The infrastructure is ready, but the UI lacks the "Connect Wallet" button and logic to invoke the bridge.
-   - **Action Item:** Implement the wallet connection flow using Wagmi/Viem and add a simple interaction with `NilBridge` (e.g., viewing deal status or creating a deal via contract).
-
-2. **Protocol Cleanup:**
-   - Dynamic Sizing (removing Tiers) is still a pending roadmap item but not blocking immediate devnet usage.
+1. **A2 not implemented yet:** `/gateway/upload` does **not** append into an existing deal by `deal_id`. Multiple‑file deals aren’t supported on Mode 1 yet.
+2. **Thick‑client WASM path still failing:** “Invalid scalar” in `nil_core` WASM `expand_mdu/expand_file` (see Option D / B1).
+3. **Dynamic sizing cleanup** remains pending but not blocking the demo.
 
 ## 3. What the Next Agent Should Do First
 
-1. **Implement Wallet Connection:**
-   - Add a "Connect MetaMask" button to the dashboard.
-   - Display the connected user's NIL balance (from `aatom` or `stake` on the EVM side).
+1. **Option D / A2 — Append upload into existing deal.**
+   - If a `deal_id` is supplied to `/gateway/upload`, load existing slab from `uploads/<manifest_root>/`:
+     - `mdu_0.bin` + Witness MDUs (`mdu_1..mdu_W.bin`).
+   - Append/overwrite a `FileRecordV1` and update:
+     - Root Table (new user MDU roots),
+     - Witness MDUs (blob commitments),
+     - ManifestRoot aggregation.
+   - Return new `manifest_root` and `allocated_length`.
+   - Add an e2e pass gate: upload two files into the same deal and fetch both by path.
 
-2. **Test Bridge Interaction:**
-   - Use the `useContractWrite` or similar Wagmi hooks to interact with `NilBridge` at `VITE_BRIDGE_ADDRESS`.
-   - Verify that a user can initiate a transaction from the UI that hits the local EVM.
+2. **Option D / B1 (parallel): Fix WASM “Invalid scalar”.**
+   - Investigate scalar/roots‑of‑unity mapping in `nil_core` WASM bindings.
+   - Add parity tests vs native `nil_cli shard` once fixed (B2).
 
-3. **Browser E2E:**
-   - Once the UI is interactive, add a Playwright/Cypress test to verify the "Connect -> Create Deal" flow in a real browser environment.
+## 4. Key Files
 
-## 4. Key Files to Look At
+- Roadmap/context: `AGENTS.md` §11.6.
+- Canonical ingest: `nil_s3/ingest.go`, `nil_s3/main.go` (`GatewayUpload`, `shardFile`).
+- NilFS structs/builders: `nil_s3/pkg/layout/*`, `nil_s3/pkg/builder/*`.
+- WASM path: `nil_core/src/wasm/*`, `nil-website/src/workers/mduWorker.ts`.
 
-- **Agent / roadmap context:** `AGENTS.md`.
-- **Frontend:** `nil-website/src/App.tsx`, `nil-website/src/components/Dashboard.tsx`, `nil-website/src/config.ts`.
-- **Gateway:** `nil_s3/main.go` (reference for how the backend handles deals).
+## 5. How to Run
 
-## 5. How to Run Things
+- Start local stack: `./scripts/run_local_stack.sh start`
+- Backend lifecycle gate: `./scripts/e2e_lifecycle.sh`
 
-- Start/stop the local stack:
-  - `./scripts/run_local_stack.sh start` (Deploys bridge automatically)
-- Run E2E verification (Backend/CLI):
-  - `./scripts/e2e_lifecycle.sh`
-*** End Patch
+
+if this task is finished update the file prompt_for_next_agent.md with the next highest priority item on the todo list
+
+if there are more todo in this task, update prompt_for_next_agent.md to indicate what is left
+
+commit all your changes
