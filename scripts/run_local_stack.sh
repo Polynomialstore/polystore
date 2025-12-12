@@ -25,6 +25,8 @@ BRIDGE_ADDRESS=""
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
 export NIL_EVM_DEV_PRIVKEY
+NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
+export NIL_DISABLE_EVM_MEMPOOL
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -32,6 +34,22 @@ fi
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+wait_for_ports_clear() {
+  local ports=(26657 26656 1317 8545 8080 8081 5173)
+  local attempts=20
+  local delay=0.5
+  local port
+  for port in "${ports[@]}"; do
+    local i
+    for i in $(seq 1 "$attempts"); do
+      if [ -z "$(lsof -ti :"$port" 2>/dev/null || true)" ]; then
+        break
+      fi
+      sleep "$delay"
+    done
+  done
+}
 
 ensure_nilchaind() {
   banner "Building and installing nilchaind (via $GO_BIN)"
@@ -88,6 +106,26 @@ init_chain() {
   # on the faucet timing. This address is the bech32 mapping of the default
   # Foundry EVM deployer (0x4dd2C8c449581466Df3F62b007A24398DD858f5d).
   "$NILCHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+
+  # Also pre-fund the EVM signer account used by gateway/e2e (derived from EVM_PRIVKEY if set).
+  # This avoids relying on the faucet, which uses nilchaind CLI txs that can hang on some setups.
+  if command -v python3 >/dev/null 2>&1; then
+    local signer_nil_addr
+    signer_nil_addr=$(python3 - <<'PY' 2>/dev/null || true
+from eth_account import Account
+import bech32, os
+priv = os.environ.get("EVM_PRIVKEY", "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1")
+acct = Account.from_key(priv)
+data = bytes.fromhex(acct.address[2:])
+five = bech32.convertbits(data, 8, 5)
+print(bech32.bech32_encode("nil", five))
+PY
+    )
+    if [ -n "$signer_nil_addr" ]; then
+      "$NILCHAIND_BIN" genesis add-genesis-account "$signer_nil_addr" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+      echo "Pre-funded EVM signer account $signer_nil_addr"
+    fi
+  fi
   "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
 
@@ -116,6 +154,28 @@ for src, dst in [
     txt = txt.replace(src, dst)
 path.write_text(txt)
 PY
+  if [ "$NIL_DISABLE_EVM_MEMPOOL" = "1" ]; then
+    # JSON-RPC requires the ExperimentalEVMMempool. If we disable that for local
+    # dev/e2e stability, also disable the JSON-RPC server to avoid a panic.
+    python3 - "$APP_TOML" <<'PY' || true
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines()
+out = []
+in_jsonrpc = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        in_jsonrpc = stripped == "[json-rpc]"
+        out.append(line)
+        continue
+    if in_jsonrpc and stripped.startswith("enable ="):
+        out.append("enable = false")
+    else:
+        out.append(line)
+path.write_text("\n".join(out) + "\n")
+PY
+  fi
 }
 
 ensure_metadata() {
@@ -158,7 +218,9 @@ PY
 
 start_chain() {
   banner "Starting nilchaind"
-  nohup "$NILCHAIND_BIN" start \
+  # Local devnet: disable custom EVM mempool/PrepareProposal wiring which can
+  # hang single-node consensus and CLI tx broadcasts.
+  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
@@ -226,7 +288,7 @@ start_bridge() {
   local attempts=30
   local i
   for i in $(seq 1 "$attempts"); do
-    if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8545 --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
+    if timeout 10s curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8545 --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
       echo "EVM RPC is ready."
       break
     fi
@@ -300,9 +362,18 @@ stop_all() {
     pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
-      echo "Cleared processes on port $port ($pids)"
+      sleep 0.5
+      # If still alive, force kill.
+      pids2=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$pids2" ]; then
+        kill -9 $pids2 2>/dev/null || true
+        echo "Force killed processes on port $port ($pids2)"
+      else
+        echo "Cleared processes on port $port ($pids)"
+      fi
     fi
   done
+  wait_for_ports_clear
 }
 
 cmd="${1:-start}"

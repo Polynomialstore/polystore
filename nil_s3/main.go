@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +35,7 @@ var (
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
+	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 
@@ -142,15 +145,82 @@ func fundAddressOnce(addr string) {
 	}
 }
 
-func runTxWithRetry(args ...string) ([]byte, error) {
+// deriveNilchaindDir attempts to find a working directory where nilchaind
+// can locate its trusted setup file via the default relative path
+// "nilchain/trusted_setup.txt". This keeps gateway CLI calls reliable even when
+// the gateway runs from a subdirectory.
+func deriveNilchaindDir() string {
+	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
+		return root
+	}
+
+	if homeDir != "" {
+		dir := homeDir
+		if abs, err := filepath.Abs(homeDir); err == nil {
+			dir = abs
+		}
+		for i := 0; i < 6; i++ {
+			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		dir := wd
+		for i := 0; i < 6; i++ {
+			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	return ""
+}
+
+func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, nilchaindBin, args...)
+	if dir := deriveNilchaindDir(); dir != "" {
+		cmd.Dir = dir
+	}
+	return cmd
+}
+
+func execNilCli(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, nilCliPath, args...)
+}
+
+func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	maxRetries := 5
 	var out []byte
 	var err error
 
 	for i := 0; i < maxRetries; i++ {
-		cmd := execCommand(nilchaindBin, args...)
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
+		cmd := execNilchaind(attemptCtx, args...)
 		out, err = cmd.CombinedOutput()
+		cancel()
 		outStr := string(out)
+
+		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
+			return out, fmt.Errorf("nilchaind command timed out after %s", cmdTimeout)
+		}
 
 		if err != nil {
 			if strings.Contains(outStr, "account sequence mismatch") {
@@ -411,6 +481,7 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	// NOTE: We sign as the faucet/system key for now. The logical creator is
 	// provided in req.Creator and can be wired into on-chain state later.
 	out, err := runTxWithRetry(
+		r.Context(),
 		"tx", "nilchain", "create-deal",
 		durationStr,
 		req.InitialEscrow,
@@ -475,6 +546,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
 
 	out, err := runTxWithRetry(
+		r.Context(),
 		"tx", "nilchain", "update-deal-content",
 		"--deal-id", dealIDStr,
 		"--cid", req.Cid,
@@ -536,7 +608,15 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if creatorNil, err := evmHexToNilAddress(rawCreator); err == nil {
-		fundAddressOnce(creatorNil)
+		// Only hit the faucet if the creator has no on-chain balance.
+		// This avoids bumping the faucet key sequence right before we submit
+		// MsgCreateDealFromEvm (which also signs with faucet), preventing
+		// avoidable account-sequence retries.
+		if ok, berr := creatorHasSomeBalance(creatorNil); berr != nil {
+			log.Printf("GatewayCreateDealFromEvm: balance check failed for %s: %v", creatorNil, berr)
+		} else if !ok {
+			fundAddressOnce(creatorNil)
+		}
 	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-deal-*.json")
@@ -545,6 +625,9 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpPath := tmp.Name()
+	if abs, err := filepath.Abs(tmpPath); err == nil {
+		tmpPath = abs
+	}
 
 	payload := map[string]any{
 		"intent":        req.Intent,
@@ -564,6 +647,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(tmpPath)
 
 	out, err := runTxWithRetry(
+		r.Context(),
 		"tx", "nilchain", "create-deal-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
@@ -657,8 +741,10 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	if dealID == "" {
 		// Fallback: query the chain for the latest deal and assume it belongs to this tx.
 		log.Printf("deal_id not found in tx events; falling back to list-deals. TxHash: %s", txHash)
-		listCmd := execCommand(
-			nilchaindBin,
+		fallbackCtx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
+		defer cancel()
+		listCmd := execNilchaind(
+			fallbackCtx,
 			"query", "nilchain", "list-deals",
 			"--home", homeDir,
 			"--output", "json",
@@ -756,6 +842,9 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpPath := tmp.Name()
+	if abs, err := filepath.Abs(tmpPath); err == nil {
+		tmpPath = abs
+	}
 
 	payload := map[string]any{
 		"intent":        req.Intent,
@@ -775,6 +864,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(tmpPath)
 
 	out, err := runTxWithRetry(
+		r.Context(),
 		"tx", "nilchain", "update-deal-content-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
@@ -902,7 +992,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 
 	// For the devnet, we use the faucet key as both the logical user and provider.
 	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(providerKeyName)
+	providerAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: resolveKeyAddress failed: %v", err)
 		http.Error(w, "failed to resolve provider address", http.StatusInternalServerError)
@@ -920,7 +1010,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	txHash, err := submitRetrievalProofWithParams(req.DealID, epoch, providerKeyName, providerAddr, entry.Path)
+	txHash, err := submitRetrievalProofWithParams(r.Context(), req.DealID, epoch, providerKeyName, providerAddr, entry.Path)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		http.Error(w, "failed to submit retrieval proof (check nilchaind logs)", http.StatusInternalServerError)
@@ -993,7 +1083,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		// Ingest stores the specific Manifest Blob at "manifest.bin".
 		manifestPath := filepath.Join(uploadDir, cid, "manifest.bin")
 
-		txHash, err := submitRetrievalProofNew(dealID, mduIdx, mduPath, manifestPath)
+		txHash, err := submitRetrievalProofNew(r.Context(), dealID, mduIdx, mduPath, manifestPath)
 		if err != nil {
 			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
 			// Don't fail the download if proof fails? Or do?
@@ -1047,14 +1137,18 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2) Submit the retrieval proof before serving the file.
-	txHash, err := submitRetrievalProof(dealID, entry.Path)
-	if err != nil {
-		log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
-		http.Error(w, "failed to submit retrieval proof", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
+	// 2) Submit the retrieval proof in the background so downloads don't hang on
+	// chain/CLI latency in local/devnet flows.
+	go func(path string, id uint64) {
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+		defer cancel()
+		txHash, err := submitRetrievalProof(ctx, id, path)
+		if err != nil {
+			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
+			return
+		}
+		log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
+	}(entry.Path, dealID)
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -1117,9 +1211,14 @@ func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) 
 		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
-	cmd := execCommand(nilCliPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+	cmd := execNilCli(ctx, args...)
 
 	output, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return nil, fmt.Errorf("nil_cli shard timed out after %s", cmdTimeout)
+	}
 	if err != nil {
 		log.Printf("shardFile: shard failed: %s", string(output))
 		return nil, fmt.Errorf("nil_cli shard failed: %w", err)
@@ -1198,6 +1297,18 @@ func envDefault(key, def string) string {
 	return def
 }
 
+func envInt(key string, def int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
 func indexPath() string {
 	return filepath.Join(uploadDir, "index.json")
 }
@@ -1263,15 +1374,23 @@ func lookupFileInIndex(cid string) (*fileIndexEntry, error) {
 }
 
 // resolveKeyAddress returns the bech32 address for a key name in the local keyring.
-func resolveKeyAddress(name string) (string, error) {
-	cmd := execCommand(
-		nilchaindBin,
+func resolveKeyAddress(ctx context.Context, name string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
+	defer cancel()
+	cmd := execNilchaind(
+		cctx,
 		"keys", "show", name,
 		"-a",
 		"--home", homeDir,
 		"--keyring-backend", "test",
 	)
 	out, err := cmd.CombinedOutput()
+	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
+		return "", fmt.Errorf("keys show timed out after %s", cmdTimeout)
+	}
 	if err != nil {
 		return "", fmt.Errorf("keys show failed: %v (%s)", err, string(out))
 	}
@@ -1280,18 +1399,21 @@ func resolveKeyAddress(name string) (string, error) {
 
 // submitRetrievalProof submits a retrieval proof for the given deal and file
 // using the default provider key and epoch.
-func submitRetrievalProof(dealID uint64, filePath string) (string, error) {
+func submitRetrievalProof(ctx context.Context, dealID uint64, filePath string) (string, error) {
 	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(providerKeyName)
+	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
 		return "", fmt.Errorf("resolveKeyAddress failed: %w", err)
 	}
-	return submitRetrievalProofWithParams(dealID, 1, providerKeyName, providerAddr, filePath)
+	return submitRetrievalProofWithParams(ctx, dealID, 1, providerKeyName, providerAddr, filePath)
 }
 
 // submitRetrievalProofWithParams generates a RetrievalReceipt via the CLI and
 // submits it as a retrieval proof, returning the tx hash.
-func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, providerAddr, filePath string) (string, error) {
+func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, providerKeyName, providerAddr, filePath string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	epochStr := strconv.FormatUint(epoch, 10)
 
@@ -1299,6 +1421,9 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	mduPath, isTemp, err := ensureMduFileForProof(filePath)
 	if err != nil {
 		return "", err
+	}
+	if abs, err := filepath.Abs(mduPath); err == nil {
+		mduPath = abs
 	}
 	if isTemp {
 		defer os.Remove(mduPath)
@@ -1348,6 +1473,9 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		return "", err
 	}
 	manifestPath = manTmp.Name()
+	if abs, err := filepath.Abs(manifestPath); err == nil {
+		manifestPath = abs
+	}
 	manTmp.Close()
 	defer os.Remove(manifestPath)
 
@@ -1355,8 +1483,10 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 	mduIndexStr := "0"
 
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
-	signCmd := execCommand(
-		nilchaindBin,
+	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
+	defer cancel()
+	signCmd := execNilchaind(
+		signCtx,
 		"tx", "nilchain", "sign-retrieval-receipt",
 		dealIDStr,
 		providerAddr,
@@ -1371,6 +1501,9 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 		"--offline",
 	)
 	signOut, err := signCmd.Output()
+	if errors.Is(signCtx.Err(), context.DeadlineExceeded) {
+		return "", fmt.Errorf("sign-retrieval-receipt timed out after %s", cmdTimeout)
+	}
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
@@ -1396,6 +1529,7 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 
 	// 2) Submit the receipt as a retrieval proof.
 	submitOut, err := runTxWithRetry(
+		ctx,
 		"tx", "nilchain", "submit-retrieval-proof",
 		tmpPath,
 		"--from", providerKeyName,
@@ -1416,7 +1550,8 @@ func submitRetrievalProofWithParams(dealID, epoch uint64, providerKeyName, provi
 // fetchDealOwnerAndCID calls the LCD to retrieve the deal owner and CID for a given deal ID.
 func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", "", fmt.Errorf("LCD request failed: %w", err)
 	}
@@ -1451,7 +1586,8 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 // ensure users have gone through the faucet flow before deals are created.
 func creatorHasSomeBalance(creator string) (bool, error) {
 	url := fmt.Sprintf("%s/cosmos/bank/v1beta1/balances/%s", lcdBase, creator)
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return false, fmt.Errorf("bank LCD request failed: %w", err)
 	}

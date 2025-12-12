@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 
 	"cosmossdk.io/log"
 
@@ -26,6 +27,11 @@ func (app *App) initEVMMempool() error {
 	logger := app.logger.With(log.ModuleKey, "evm-mempool")
 
 	logger.Info("configuring EVM mempool")
+
+	if os.Getenv("NIL_DISABLE_EVM_MEMPOOL") == "1" {
+		logger.Info("NIL_DISABLE_EVM_MEMPOOL=1; skipping EVM mempool configuration")
+		return nil
+	}
 
 	cosmosPoolMaxTx := evmconfig.GetCosmosPoolMaxTx(app.appOpts, logger)
 	if cosmosPoolMaxTx < 0 {

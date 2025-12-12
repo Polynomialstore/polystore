@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 )
@@ -28,8 +30,10 @@ func aggregateRoots(roots []string) (string, string, error) {
 	tmpOut := tmpRoots.Name() + ".out.json"
 	defer os.Remove(tmpOut)
 	
-	cmd := execCommand(
-		nilCliPath,
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+	cmd := execNilCli(
+		ctx,
 		"--trusted-setup", trustedSetup,
 		"aggregate",
 		"--roots-file", tmpRoots.Name(),
@@ -37,6 +41,9 @@ func aggregateRoots(roots []string) (string, string, error) {
 	)
 	
 	if out, err := cmd.CombinedOutput(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", "", fmt.Errorf("nil_cli aggregate timed out after %s", cmdTimeout)
+		}
 		return "", "", fmt.Errorf("aggregate failed: %s: %w", string(out), err)
 	}
 	

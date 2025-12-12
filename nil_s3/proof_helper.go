@@ -1,18 +1,30 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
 // mduPath must point to the RAW MDU (or padded raw data).
 // mduIndex is the index in the Deal Slab (0=Manifest, 1..W=Witness, W+1..=Data).
-func submitRetrievalProofNew(dealID uint64, mduIndex uint64, mduPath string, manifestPath string) (string, error) {
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, mduIndex uint64, mduPath string, manifestPath string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if abs, err := filepath.Abs(mduPath); err == nil {
+		mduPath = abs
+	}
+	if abs, err := filepath.Abs(manifestPath); err == nil {
+		manifestPath = abs
+	}
 	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(providerKeyName)
+	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
 		return "", fmt.Errorf("resolveKeyAddress failed: %w", err)
 	}
@@ -38,8 +50,10 @@ func submitRetrievalProofNew(dealID uint64, mduIndex uint64, mduPath string, man
 	manifestBlobPath := manifestPath
 
 	// 4. Sign Receipt
-	signCmd := execCommand(
-		nilchaindBin,
+	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
+	defer cancel()
+	signCmd := execNilchaind(
+		signCtx,
 		"tx", "nilchain", "sign-retrieval-receipt",
 		dealIDStr,
 		providerAddr,
@@ -55,6 +69,9 @@ func submitRetrievalProofNew(dealID uint64, mduIndex uint64, mduPath string, man
 	)
 
 	signOut, err := signCmd.Output()
+	if errors.Is(signCtx.Err(), context.DeadlineExceeded) {
+		return "", fmt.Errorf("sign-retrieval-receipt timed out after %s", cmdTimeout)
+	}
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
@@ -79,8 +96,8 @@ func submitRetrievalProofNew(dealID uint64, mduIndex uint64, mduPath string, man
 	defer os.Remove(tmpPath)
 
 	// 5. Submit Proof
-	submitCmd := execCommand(
-		nilchaindBin,
+	submitOut, err := runTxWithRetry(
+		ctx,
 		"tx", "nilchain", "submit-retrieval-proof",
 		tmpPath,
 		"--from", providerKeyName,
@@ -90,7 +107,6 @@ func submitRetrievalProofNew(dealID uint64, mduIndex uint64, mduPath string, man
 		"--yes",
 		"--gas-prices", gasPrices,
 	)
-	submitOut, err := submitCmd.CombinedOutput()
 	outStr := string(submitOut)
 	if err != nil {
 		return "", fmt.Errorf("submit-retrieval-proof failed: %w (%s)", err, outStr)

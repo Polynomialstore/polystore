@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,6 +25,8 @@ var (
 	denom     = envDefault("NIL_DENOM", "stake")
 	gasPrices = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	cooldown  = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
+	nilchaindBin = envDefault("NILCHAIND_BIN", "nilchaind")
+	cmdTimeout   = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 20)) * time.Second
 )
 
 var (
@@ -56,6 +60,56 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8081", r))
 }
 
+// deriveNilchaindDir attempts to find a working directory where nilchaind
+// can locate its trusted setup file via the default relative path
+// "nilchain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
+// the faucet process runs from a subdirectory.
+func deriveNilchaindDir() string {
+	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
+		return root
+	}
+
+	// Walk upwards from homeDir (if absolute) to find nilchain/trusted_setup.txt.
+	if homeDir != "" {
+		dir := homeDir
+		for i := 0; i < 6; i++ {
+			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	// Fallback: walk up from current working directory.
+	if wd, err := os.Getwd(); err == nil {
+		dir := wd
+		for i := 0; i < 6; i++ {
+			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	return ""
+}
+
+func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, nilchaindBin, args...)
+	if dir := deriveNilchaindDir(); dir != "" {
+		cmd.Dir = dir
+	}
+	return cmd
+}
+
 func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == "OPTIONS" {
@@ -85,7 +139,9 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 
 	amount := envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
 	log.Printf("Faucet effective amount for sending: %s", amount) // Debug log
-	cmd := exec.Command("nilchaind", "tx", "bank", "send",
+	ctx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
+	defer cancel()
+	cmd := execNilchaind(ctx, "tx", "bank", "send",
 		"faucet", req.Address, amount,
 		"--chain-id", chainID,
 		"--yes",
@@ -136,7 +192,9 @@ func CreateDeal(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("CreateDeal for %s cid=%s size=%d duration=%d", req.Creator, req.Cid, req.Size, req.Duration)
 
-	cmd := exec.Command("nilchaind", "tx", "nilchain", "create-deal",
+	ctx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
+	defer cancel()
+	cmd := execNilchaind(ctx, "tx", "nilchain", "create-deal",
 		req.Cid,
 		fmt.Sprintf("%d", req.Size),
 		fmt.Sprintf("%d", req.Duration),
