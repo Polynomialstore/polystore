@@ -1,4 +1,4 @@
-use crate::kzg::{BLOB_SIZE, KzgContext, KzgError, MDU_SIZE};
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, KzgError, MDU_SIZE};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use thiserror::Error;
 
@@ -26,29 +26,22 @@ pub struct ExpandedMdu {
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
-    // Mirror nil_cli encode_to_mdu: map bytes into field elements then blobs.
-    use crate::utils::frs_to_blobs;
-    use num_bigint::BigUint;
+    const SCALAR_BYTES: usize = 32;
+    const SCALAR_PAYLOAD_BYTES: usize = 31;
+    const SCALARS_PER_BLOB: usize = BLOB_SIZE / SCALAR_BYTES; // 4096
+    const SCALARS_PER_MDU: usize = BLOBS_PER_MDU * SCALARS_PER_BLOB; // 262_144
+    const MDU_PAYLOAD_BYTES: usize = SCALARS_PER_MDU * SCALAR_PAYLOAD_BYTES; // 8_126_464
 
-    // 1. Chunk into 31-byte scalars (safe for the field)
-    let mut frs = Vec::new();
-    for chunk in raw_data.chunks(31) {
-        let bn = BigUint::from_bytes_be(chunk);
-        frs.push(bn);
-    }
+    let mut mdu = vec![0u8; MDU_SIZE];
+    let payload = raw_data.get(..MDU_PAYLOAD_BYTES).unwrap_or(raw_data);
 
-    // 2. Map Frs into 4096-scalar blobs
-    let blobs = frs_to_blobs(&frs);
-
-    // 3. Flatten blobs into an 8MiB MDU
-    let mut mdu = Vec::with_capacity(MDU_SIZE);
-    for blob in blobs {
-        mdu.extend_from_slice(&blob);
-    }
-
-    // 4. Pad MDU to 8MiB if needed
-    if mdu.len() < MDU_SIZE {
-        mdu.resize(MDU_SIZE, 0);
+    for (scalar_idx, chunk) in payload.chunks(SCALAR_PAYLOAD_BYTES).enumerate() {
+        if scalar_idx >= SCALARS_PER_MDU {
+            break;
+        }
+        let start = scalar_idx * SCALAR_BYTES;
+        let pad = SCALAR_BYTES - chunk.len();
+        mdu[start + pad..start + SCALAR_BYTES].copy_from_slice(chunk);
     }
 
     mdu
@@ -132,4 +125,64 @@ pub fn expand_mdu(ctx: &KzgContext, data: &[u8]) -> Result<ExpandedMdu, CodingEr
     }
 
     Ok(ExpandedMdu { witness, shards })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::frs_to_blobs;
+    use num_bigint::BigUint;
+
+    fn encode_to_mdu_reference(raw_data: &[u8]) -> Vec<u8> {
+        let mut frs = Vec::new();
+        for chunk in raw_data.chunks(31) {
+            frs.push(BigUint::from_bytes_be(chunk));
+        }
+
+        let blobs = frs_to_blobs(&frs);
+
+        let mut mdu = Vec::with_capacity(MDU_SIZE);
+        for blob in blobs {
+            mdu.extend_from_slice(&blob);
+            if mdu.len() >= MDU_SIZE {
+                break;
+            }
+        }
+
+        if mdu.len() < MDU_SIZE {
+            mdu.resize(MDU_SIZE, 0);
+        } else if mdu.len() > MDU_SIZE {
+            mdu.truncate(MDU_SIZE);
+        }
+
+        mdu
+    }
+
+    #[test]
+    fn encode_to_mdu_matches_reference_for_various_sizes() {
+        let sizes = [
+            0usize,
+            1,
+            30,
+            31,
+            32,
+            100,
+            126_975, // just before blob boundary (4096*31)
+            126_976, // exactly one blob payload
+            126_977,
+            253_952, // two blob payloads
+            300_000,
+        ];
+
+        for size in sizes {
+            let mut raw = Vec::with_capacity(size);
+            for i in 0..size {
+                raw.push((((i as u64).wrapping_mul(7).wrapping_add(3)) % 256) as u8);
+            }
+
+            let expected = encode_to_mdu_reference(&raw);
+            let got = encode_to_mdu(&raw);
+            assert_eq!(got, expected, "size={size}");
+        }
+    }
 }
