@@ -161,16 +161,9 @@ mod tests {
     #[test]
     fn encode_to_mdu_matches_reference_for_various_sizes() {
         let sizes = [
-            0usize,
-            1,
-            30,
-            31,
-            32,
-            100,
-            126_975, // just before blob boundary (4096*31)
+            0usize, 1, 30, 31, 32, 100, 126_975, // just before blob boundary (4096*31)
             126_976, // exactly one blob payload
-            126_977,
-            253_952, // two blob payloads
+            126_977, 253_952, // two blob payloads
             300_000,
         ];
 

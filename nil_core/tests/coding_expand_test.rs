@@ -1,4 +1,4 @@
-use nil_core::coding::{expand_mdu, CodingError, ExpandedMdu};
+use nil_core::coding::{CodingError, ExpandedMdu, expand_mdu};
 use nil_core::kzg::KzgContext;
 use std::path::PathBuf;
 

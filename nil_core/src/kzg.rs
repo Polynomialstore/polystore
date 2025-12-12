@@ -1,7 +1,7 @@
 use crate::utils::{fr_to_bytes_be, get_modulus, get_root_of_unity_4096};
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-use ff::PrimeField;
+use ff::{Field, PrimeField};
 use group::Curve;
 use num_bigint::BigUint;
 use num_integer::Integer;
@@ -9,6 +9,7 @@ use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::sync::OnceLock;
 use thiserror::Error;
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
@@ -112,15 +113,34 @@ impl KzgContext {
             return Err(KzgError::InvalidDataLength);
         }
 
-        let scalars = bytes_to_scalars(blob_bytes)?;
+        if blob_bytes.iter().all(|&b| b == 0) {
+            return Ok(zero_blob_commitment());
+        }
 
-        let mut acc = G1Projective::identity();
-        for (i, scalar) in scalars.iter().enumerate() {
+        let mut points = Vec::new();
+        let mut scalars = Vec::new();
+        for (i, chunk) in blob_bytes.chunks_exact(32).enumerate() {
             if i >= self.g1_points.len() {
                 break;
             }
-            acc += self.g1_points[i] * scalar;
+            if chunk.iter().all(|&b| b == 0) {
+                continue;
+            }
+            let mut wide = [0u8; 64];
+            wide[..32].copy_from_slice(chunk);
+            wide[..32].reverse();
+            let scalar = Scalar::from_bytes_wide(&wide);
+            if bool::from(scalar.is_zero()) {
+                continue;
+            }
+            points.push(self.g1_points[i]);
+            scalars.push(scalar);
         }
+        if points.is_empty() {
+            return Ok(zero_blob_commitment());
+        }
+
+        let acc = msm_pippenger_g1(&points, &scalars);
 
         let affine = acc.to_affine();
         Ok(affine.to_compressed())
@@ -291,6 +311,100 @@ impl KzgContext {
     }
 }
 
+fn zero_blob_commitment() -> KzgCommitment {
+    static ZERO: OnceLock<KzgCommitment> = OnceLock::new();
+    *ZERO.get_or_init(|| G1Affine::identity().to_compressed())
+}
+
+fn pippenger_window_size(n: usize) -> usize {
+    match n {
+        0..=32 => 3,
+        33..=64 => 4,
+        65..=128 => 5,
+        129..=256 => 6,
+        257..=512 => 7,
+        513..=1024 => 8,
+        1025..=2048 => 9,
+        2049..=4096 => 10,
+        4097..=8192 => 11,
+        _ => 12,
+    }
+}
+
+#[inline]
+fn pippenger_window(bytes_le: &[u8; 32], bit_offset: usize, window_bits: usize) -> usize {
+    debug_assert!(window_bits > 0 && window_bits <= 16);
+
+    let start_byte = bit_offset / 8;
+    if start_byte >= 32 {
+        return 0;
+    }
+    let start_bit = bit_offset % 8;
+
+    let mut word = 0u32;
+    for i in 0..4 {
+        if start_byte + i < 32 {
+            word |= (bytes_le[start_byte + i] as u32) << (8 * i);
+        }
+    }
+
+    let shifted = word >> start_bit;
+    let mask = (1u32 << window_bits) - 1;
+    (shifted & mask) as usize
+}
+
+fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
+    debug_assert_eq!(points.len(), scalars.len());
+    if points.is_empty() {
+        return G1Projective::identity();
+    }
+
+    let window_bits = pippenger_window_size(points.len());
+    let buckets_len = 1usize << window_bits;
+    let windows = (256 + window_bits - 1) / window_bits;
+
+    let scalar_bytes: Vec<[u8; 32]> = scalars
+        .iter()
+        .map(|s| {
+            let repr = s.to_repr();
+            let mut out = [0u8; 32];
+            out.copy_from_slice(repr.as_ref());
+            out
+        })
+        .collect();
+
+    let mut buckets = vec![G1Projective::identity(); buckets_len];
+    let mut acc = G1Projective::identity();
+
+    for window_index in (0..windows).rev() {
+        if window_index != windows - 1 {
+            for _ in 0..window_bits {
+                acc = acc.double();
+            }
+        }
+
+        buckets.fill(G1Projective::identity());
+
+        let bit_offset = window_index * window_bits;
+        for (i, point) in points.iter().enumerate() {
+            let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+            if w != 0 {
+                buckets[w] += G1Projective::from(*point);
+            }
+        }
+
+        let mut running = G1Projective::identity();
+        let mut window_sum = G1Projective::identity();
+        for idx in (1..buckets_len).rev() {
+            running += buckets[idx];
+            window_sum += running;
+        }
+        acc += window_sum;
+    }
+
+    acc
+}
+
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
     // Map arbitrary 32-byte chunks (stored big-endian in blobs) into Scalars.
     // Using `from_bytes_wide` avoids BigUint/mod_floor overhead and is reliable on wasm.
@@ -360,12 +474,41 @@ mod tests {
                 let reduced = BigUint::from_bytes_be(chunk).mod_floor(&modulus);
                 let mut repr = fr_to_bytes_be(&reduced);
                 repr.reverse();
-                Option::from(Scalar::from_repr(repr))
-                    .expect("reduced value must be a valid scalar")
+                Option::from(Scalar::from_repr(repr)).expect("reduced value must be a valid scalar")
             })
             .collect();
 
         let got = bytes_to_scalars(&blob).expect("bytes_to_scalars should succeed");
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn msm_matches_naive_sum_small_n() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(123);
+        let n = 128;
+
+        let points: Vec<G1Affine> = (0..n)
+            .map(|_| {
+                let mut wide = [0u8; 64];
+                rng.fill_bytes(&mut wide);
+                (G1Projective::generator() * Scalar::from_bytes_wide(&wide)).to_affine()
+            })
+            .collect();
+
+        let scalars: Vec<Scalar> = (0..n)
+            .map(|_| {
+                let mut wide = [0u8; 64];
+                rng.fill_bytes(&mut wide);
+                Scalar::from_bytes_wide(&wide)
+            })
+            .collect();
+
+        let mut naive = G1Projective::identity();
+        for (p, s) in points.iter().zip(scalars.iter()) {
+            naive += G1Projective::from(*p) * s;
+        }
+
+        let fast = msm_pippenger_g1(&points, &scalars);
+        assert_eq!(fast.to_affine(), naive.to_affine());
     }
 }

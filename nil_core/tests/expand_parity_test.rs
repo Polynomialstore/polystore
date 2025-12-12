@@ -1,4 +1,4 @@
-use nil_core::coding::{expand_mdu, ExpandedMdu};
+use nil_core::coding::{ExpandedMdu, expand_mdu};
 use nil_core::kzg::KzgContext;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -10,8 +10,7 @@ fn trusted_setup_ctx() -> KzgContext {
         "/../demos/kzg/trusted_setup.txt"
     ));
     let cursor = std::io::Cursor::new(setup_bytes.as_slice());
-    KzgContext::load_from_reader(std::io::BufReader::new(cursor))
-        .expect("load trusted setup")
+    KzgContext::load_from_reader(std::io::BufReader::new(cursor)).expect("load trusted setup")
 }
 
 fn fixture_data() -> Vec<u8> {
@@ -38,8 +37,10 @@ fn hashes(expanded: ExpandedMdu) -> (String, String) {
     (witness_hex, shards_hex)
 }
 
-const EXPECTED_WITNESS_SHA256: &str = "8312817ee52306f81cc4c9a03b3a23d9c5fdab93f6ca4e4afd6f5ed6307d095f";
-const EXPECTED_SHARDS_SHA256: &str = "bb2644b419c94942f4189cb9fcdde4d4b46ad35d3ae152f7666fb613e2666a7f";
+const EXPECTED_WITNESS_SHA256: &str =
+    "8312817ee52306f81cc4c9a03b3a23d9c5fdab93f6ca4e4afd6f5ed6307d095f";
+const EXPECTED_SHARDS_SHA256: &str =
+    "bb2644b419c94942f4189cb9fcdde4d4b46ad35d3ae152f7666fb613e2666a7f";
 
 fn wasm_pkg_hashes() -> (String, String) {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

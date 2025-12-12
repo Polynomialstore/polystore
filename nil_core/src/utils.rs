@@ -95,15 +95,17 @@ mod tests {
 
     #[test]
     fn frs_to_blobs_packs_scalars_in_order() {
-        let frs: Vec<BigUint> = (0u32..8)
-            .map(|i| BigUint::from(i))
-            .collect();
+        let frs: Vec<BigUint> = (0u32..8).map(|i| BigUint::from(i)).collect();
 
         let blobs = frs_to_blobs(&frs);
         assert_eq!(blobs.len(), 1, "expected single blob for 8 frs");
 
         let blob = &blobs[0];
-        assert_eq!(blob.len(), BYTES_PER_BLOB, "blob size must match BYTES_PER_BLOB");
+        assert_eq!(
+            blob.len(),
+            BYTES_PER_BLOB,
+            "blob size must match BYTES_PER_BLOB"
+        );
 
         for (i, fr) in frs.iter().enumerate() {
             let offset = i * 32;
