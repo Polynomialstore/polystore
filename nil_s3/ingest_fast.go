@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,15 +24,22 @@ import (
 // - Retrieve User Data (since we shard it).
 //
 // IT WILL FAIL:
-// - "Triple Proof" verification on-chain (MsgSubmitRetrievalProof) because
-//   Witness MDUs are missing/empty, so the inclusion proof path
-//   (Manifest -> WitnessBlob -> UserBlob) is broken.
+//   - "Triple Proof" verification on-chain (MsgSubmitRetrievalProof) because
+//     Witness MDUs are missing/empty, so the inclusion proof path
+//     (Manifest -> WitnessBlob -> UserBlob) is broken.
 //
 // Use this for "Upload -> Create Deal" UX testing where heavy proofing isn't required.
-func IngestNewDealFast(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", 0, err
+	}
+
 	// 1. Shard User File
 	userMduPrefix := filePath + ".data"
-	shardOut, err := shardFile(filePath, false, userMduPrefix)
+	shardOut, err := shardFile(ctx, filePath, false, userMduPrefix)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
@@ -50,17 +58,21 @@ func IngestNewDealFast(filePath string, maxUserMdus uint64) (*builder.Mdu0Builde
 		var root [32]byte
 		copy(root[:], rootBytes)
 		// offset is WitnessCount + UserMduIndex
-		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil { return nil, "", 0, err }
+		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil {
+			return nil, "", 0, err
+		}
 	}
 
 	// 4. Append File Record
 	rec := layout.FileRecordV1{
-		StartOffset: 0,
+		StartOffset:    0,
 		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
-		Timestamp: 0,
+		Timestamp:      0,
 	}
 	baseName := filepath.Base(filePath)
-	if len(baseName) > 40 { baseName = baseName[:40] }
+	if len(baseName) > 40 {
+		baseName = baseName[:40]
+	}
 	copy(rec.Path[:], baseName)
 	b.AppendFileRecord(rec)
 
@@ -70,16 +82,18 @@ func IngestNewDealFast(filePath string, maxUserMdus uint64) (*builder.Mdu0Builde
 	tmp0.Write(mdu0Bytes)
 	tmp0Name := tmp0.Name()
 	tmp0.Close()
-	
+
 	mdu0Prefix := tmp0Name + ".shard"
-	mdu0Out, err := shardFile(tmp0Name, false, mdu0Prefix)
-	if err != nil { return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err) }
+	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
+	}
 	os.Remove(tmp0Name)
-	
+
 	if len(mdu0Out.Mdus) == 0 {
 		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
 	}
-	
+
 	// For Fast Mode, we assume the MDU #0 Root IS the Manifest Root.
 	// (Technically incorrect for Triple Proof, but sufficient for visual verification)
 	// Wait, shardFile returns a "ManifestRoot" which is the commitment of the MDU roots.
@@ -89,7 +103,9 @@ func IngestNewDealFast(filePath string, maxUserMdus uint64) (*builder.Mdu0Builde
 
 	// 6. Commit to Storage (Minimal)
 	dealDir := filepath.Join(uploadDir, manifestRoot)
-	if err := os.MkdirAll(dealDir, 0755); err != nil { return nil, "", 0, err }
+	if err := os.MkdirAll(dealDir, 0755); err != nil {
+		return nil, "", 0, err
+	}
 
 	// Store MDU #0 (Raw)
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0644)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,10 +14,18 @@ import (
 const RawMduCapacity = 8126464
 
 // IngestNewDeal creates a new Deal Slab.
-func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, "", 0, err
+	}
+
 	// 1. Shard User File
 	userMduPrefix := filePath + ".data"
-	shardOut, err := shardFile(filePath, false, userMduPrefix)
+	shardOut, err := shardFile(ctx, filePath, false, userMduPrefix)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
@@ -35,7 +44,7 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	// Circular dependency: MDU #0 contains Witness+User roots.
 	// But MDU #0 root is needed for Manifest.
 	// Manifest is Commitment([Root_MDU0, Root_W1...Root_WN, Root_U1...Root_UM]).
-	
+
 	// So:
 	// 1. Calculate Witness Roots.
 	// 2. Calculate User Roots.
@@ -48,25 +57,33 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	for _, mdu := range shardOut.Mdus {
 		for _, blobHex := range mdu.Blobs {
 			blobBytes, err := decodeHex(blobHex)
-			if err != nil { return nil, "", 0, err }
+			if err != nil {
+				return nil, "", 0, err
+			}
 			witnessBuf.Write(blobBytes)
 		}
 	}
 	witnessData := witnessBuf.Bytes()
-	
+
 	// 5. Create and Shard Witness MDUs
 	witnessRoots := []string{}
 	// We need to track paths for moving
 	witnessMduPaths := make([]string, b.WitnessMduCount)
 
 	for i := uint64(0); i < b.WitnessMduCount; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", 0, err
+		}
+
 		start := int(i) * RawMduCapacity
 		end := start + RawMduCapacity
 		var chunk []byte
 		if start >= len(witnessData) {
 			chunk = []byte{0}
 		} else {
-			if end > len(witnessData) { end = len(witnessData) }
+			if end > len(witnessData) {
+				end = len(witnessData)
+			}
 			chunk = witnessData[start:end]
 		}
 
@@ -74,14 +91,14 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 		tmp.Write(chunk)
 		tmpName := tmp.Name()
 		tmp.Close()
-		
+
 		witnessPrefix := tmpName + ".shard"
-		wOut, err := shardFile(tmpName, false, witnessPrefix)
+		wOut, err := shardFile(ctx, tmpName, false, witnessPrefix)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("failed to shard witness MDU %d: %w", i, err)
 		}
 		os.Remove(tmpName)
-		
+
 		generatedMdu := fmt.Sprintf("%s.mdu.0.bin", witnessPrefix)
 		if _, err := os.Stat(generatedMdu); err == nil {
 			witnessMduPaths[i] = generatedMdu
@@ -95,12 +112,14 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 		}
 		wRoot := wOut.Mdus[0].RootHex
 		witnessRoots = append(witnessRoots, wRoot)
-		
+
 		// Set in MDU #0
 		rootBytes, _ := decodeHex(wRoot)
 		var root [32]byte
 		copy(root[:], rootBytes)
-		if err := b.SetRoot(i, root); err != nil { return nil, "", 0, err }
+		if err := b.SetRoot(i, root); err != nil {
+			return nil, "", 0, err
+		}
 	}
 
 	// 6. Set User Roots in MDU #0
@@ -111,17 +130,21 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 		rootBytes, _ := decodeHex(mdu.RootHex)
 		var root [32]byte
 		copy(root[:], rootBytes)
-		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil { return nil, "", 0, err }
+		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil {
+			return nil, "", 0, err
+		}
 	}
 
 	// 7. Append File Record
 	rec := layout.FileRecordV1{
-		StartOffset: 0,
+		StartOffset:    0,
 		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
-		Timestamp: 0,
+		Timestamp:      0,
 	}
 	baseName := filepath.Base(filePath)
-	if len(baseName) > 40 { baseName = baseName[:40] }
+	if len(baseName) > 40 {
+		baseName = baseName[:40]
+	}
 	copy(rec.Path[:], baseName)
 	b.AppendFileRecord(rec)
 
@@ -131,12 +154,14 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	tmp0.Write(mdu0Bytes)
 	tmp0Name := tmp0.Name()
 	tmp0.Close()
-	
+
 	mdu0Prefix := tmp0Name + ".shard"
-	mdu0Out, err := shardFile(tmp0Name, false, mdu0Prefix)
-	if err != nil { return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err) }
+	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
+	}
 	os.Remove(tmp0Name)
-	
+
 	// 9. Aggregate Roots -> Manifest
 	if len(mdu0Out.Mdus) == 0 {
 		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
@@ -144,15 +169,17 @@ func IngestNewDeal(filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, s
 	allRoots = append(allRoots, mdu0Out.Mdus[0].RootHex) // MDU #0 is Index 0
 	allRoots = append(allRoots, witnessRoots...)
 	allRoots = append(allRoots, userRoots...)
-	
-	manifestRoot, manifestBlobHex, err := aggregateRoots(allRoots)
+
+	manifestRoot, manifestBlobHex, err := aggregateRootsWithContext(ctx, allRoots)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
 
 	// 10. Commit to Storage
 	dealDir := filepath.Join(uploadDir, manifestRoot)
-	if err := os.MkdirAll(dealDir, 0755); err != nil { return nil, "", 0, err }
+	if err := os.MkdirAll(dealDir, 0755); err != nil {
+		return nil, "", 0, err
+	}
 
 	// Store Manifest Blob
 	manifestBlob, _ := decodeHex(manifestBlobHex)

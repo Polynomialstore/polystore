@@ -13,6 +13,8 @@ import (
 )
 
 func TestGatewayFetch_ByPath(t *testing.T) {
+	useTempUploadDir(t)
+
 	// Setup Fake Deal
 	manifestRoot := "fake_manifest_root"
 	dealDir := filepath.Join(uploadDir, manifestRoot)

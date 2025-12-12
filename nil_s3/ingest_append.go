@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +19,14 @@ import (
 //
 // NOTE: Mode 1 append currently uses naive MDU-boundary packing:
 // each appended file starts at the next 8 MiB User-Data MDU boundary.
-func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", 0, err
+	}
+
 	oldDir := filepath.Join(uploadDir, existingManifestRoot)
 	mdu0Path := filepath.Join(oldDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
@@ -49,7 +57,7 @@ func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint6
 
 	// Shard new file to produce new User Data MDUs.
 	userMduPrefix := filePath + ".data"
-	shardOut, err := shardFile(filePath, false, userMduPrefix)
+	shardOut, err := shardFile(ctx, filePath, false, userMduPrefix)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
@@ -81,13 +89,13 @@ func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint6
 	}
 
 	// Recompute User roots + Witness data (blob commitments) from the encoded User MDUs.
-	userRoots, witnessData, err := computeUserRootsAndWitnessData(userMduPaths)
+	userRoots, witnessData, err := computeUserRootsAndWitnessData(ctx, userMduPaths)
 	if err != nil {
 		return nil, "", 0, err
 	}
 
 	// Rebuild Witness MDUs from full witnessData.
-	witnessRoots, witnessMduPaths, err := buildWitnessMdusFromData(witnessData, b.WitnessMduCount)
+	witnessRoots, witnessMduPaths, err := buildWitnessMdusFromData(ctx, witnessData, b.WitnessMduCount)
 	if err != nil {
 		return nil, "", 0, err
 	}
@@ -133,7 +141,7 @@ func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint6
 	tmp0.Close()
 
 	mdu0Prefix := tmp0Name + ".shard"
-	mdu0Out, err := shardFile(tmp0Name, false, mdu0Prefix)
+	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
 	os.Remove(tmp0Name)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
@@ -147,7 +155,7 @@ func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint6
 	allRoots = append(allRoots, witnessRoots...)
 	allRoots = append(allRoots, userRoots...)
 
-	manifestRoot, manifestBlobHex, err := aggregateRoots(allRoots)
+	manifestRoot, manifestBlobHex, err := aggregateRootsWithContext(ctx, allRoots)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
@@ -203,7 +211,14 @@ func IngestAppendToDeal(filePath, existingManifestRoot string, maxUserMdus uint6
 
 // computeUserRootsAndWitnessData recomputes User MDU roots and the concatenated
 // blob commitments (Witness data) from a list of encoded User MDU files.
-func computeUserRootsAndWitnessData(userMduPaths []string) ([]string, []byte, error) {
+func computeUserRootsAndWitnessData(ctx context.Context, userMduPaths []string) ([]string, []byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	tmp, err := os.CreateTemp(uploadDir, "user-mdus-*.bin")
 	if err != nil {
 		return nil, nil, err
@@ -231,7 +246,7 @@ func computeUserRootsAndWitnessData(userMduPaths []string) ([]string, []byte, er
 		return nil, nil, err
 	}
 
-	out, err := shardFile(tmpName, true, "")
+	out, err := shardFile(ctx, tmpName, true, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to recompute user roots: %w", err)
 	}
@@ -263,11 +278,19 @@ func computeUserRootsAndWitnessData(userMduPaths []string) ([]string, []byte, er
 }
 
 // buildWitnessMdusFromData shards witnessData into W witness MDUs, returning their roots and paths.
-func buildWitnessMdusFromData(witnessData []byte, witnessCount uint64) ([]string, []string, error) {
+func buildWitnessMdusFromData(ctx context.Context, witnessData []byte, witnessCount uint64) ([]string, []string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	witnessRoots := make([]string, 0, witnessCount)
 	witnessPaths := make([]string, witnessCount)
 
 	for i := uint64(0); i < witnessCount; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+
 		start := int(i) * RawMduCapacity
 		end := start + RawMduCapacity
 		var chunk []byte
@@ -292,7 +315,7 @@ func buildWitnessMdusFromData(witnessData []byte, witnessCount uint64) ([]string
 		tmp.Close()
 
 		prefix := tmpName + ".shard"
-		wOut, err := shardFile(tmpName, false, prefix)
+		wOut, err := shardFile(ctx, tmpName, false, prefix)
 		os.Remove(tmpName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to shard witness MDU %d: %w", i, err)

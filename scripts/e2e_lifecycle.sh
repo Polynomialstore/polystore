@@ -121,11 +121,14 @@ echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.
 
 # 2. Upload File
 echo "==> Uploading file 'README.md' to Gateway..."
-# Canonical NilFS ingest can take a few minutes (nil_cli shard + witness + mdu0),
-# so allow a larger timeout here while still avoiding indefinite hangs.
-UPLOAD_RESP=$(timeout 600s curl --verbose -X POST -F "file=@$ROOT_DIR/README.md" \
+# Canonical NilFS ingest should be fast; enforce a bounded timeout.
+UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
+UPLOAD_START_TS="$(date +%s)"
+UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$ROOT_DIR/README.md" \
   -F "owner=$NIL_ADDRESS" \
   "$GATEWAY_BASE/gateway/upload")
+UPLOAD_END_TS="$(date +%s)"
+echo "    Upload elapsed: $((UPLOAD_END_TS - UPLOAD_START_TS))s"
 echo "    Response: $UPLOAD_RESP"
 
 MANIFEST_ROOT=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['manifest_root'])")

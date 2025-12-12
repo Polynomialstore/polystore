@@ -15,6 +15,8 @@ import (
 )
 
 func TestGatewayListFiles_Basic(t *testing.T) {
+	useTempUploadDir(t)
+
 	manifestRoot := "fake_manifest_root_list"
 	dealDir := filepath.Join(uploadDir, manifestRoot)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
@@ -76,6 +78,8 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 }
 
 func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
+	useTempUploadDir(t)
+
 	manifestRoot := "fake_manifest_root_authz"
 	dealDir := filepath.Join(uploadDir, manifestRoot)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {

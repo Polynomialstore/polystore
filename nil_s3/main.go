@@ -42,10 +42,13 @@ var (
 	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
 	// Sharding (nil_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
 	shardTimeout = time.Duration(envInt("NIL_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
+	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
+	// This is enforced per request so clients never see an infinite hang.
+	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 60))) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 
-	execCommand = exec.Command
+	execCommandContext = exec.CommandContext
 )
 
 // Simple txhash extractor, shared with faucet-style flows.
@@ -195,7 +198,7 @@ func deriveNilchaindDir() string {
 }
 
 func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, nilchaindBin, args...)
+	cmd := execCommandContext(ctx, nilchaindBin, args...)
 	if dir := deriveNilchaindDir(); dir != "" {
 		cmd.Dir = dir
 	}
@@ -203,7 +206,7 @@ func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
 }
 
 func execNilCli(ctx context.Context, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, nilCliPath, args...)
+	return execCommandContext(ctx, nilCliPath, args...)
 }
 
 func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
@@ -295,7 +298,7 @@ func PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Compute CID + size using nil-cli
-	out, err := shardFile(path, false, "")
+	out, err := shardFile(r.Context(), path, false, "")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Sharding failed: %v", err), http.StatusInternalServerError)
 		return
@@ -325,6 +328,13 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	ingestCtx, cancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
+	defer cancel()
+	if ingestCtx.Err() != nil {
+		http.Error(w, "request canceled", http.StatusRequestTimeout)
 		return
 	}
 
@@ -410,8 +420,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		b, manifestRoot, allocLen, err := IngestAppendToDeal(path, chainCID, maxMdus)
+		b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				http.Error(w, err.Error(), http.StatusRequestTimeout)
+				return
+			}
 			http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -437,8 +451,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		case os.Getenv("NIL_FAST_INGEST") == "1":
 			// Semi-canonical dev path: NilFS slab without Witness MDUs.
-			b, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
+			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					http.Error(w, err.Error(), http.StatusRequestTimeout)
+					return
+				}
 				http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -453,8 +471,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			// Full canonical ingest (Triple-Proof valid).
-			b, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
+			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					http.Error(w, err.Error(), http.StatusRequestTimeout)
+					return
+				}
 				http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -1394,7 +1416,11 @@ func GatewayManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // shardFile runs nil-cli shard on the given path and extracts the full output.
-func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) {
+func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*NilCliOutput, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	outPath := path + ".json"
 
 	args := []string{
@@ -1410,13 +1436,16 @@ func shardFile(path string, raw bool, savePrefix string) (*NilCliOutput, error) 
 		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
+	execCtx, cancel := context.WithTimeout(ctx, shardTimeout)
 	defer cancel()
-	cmd := execNilCli(ctx, args...)
+	cmd := execNilCli(execCtx, args...)
 
 	output, err := cmd.CombinedOutput()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return nil, fmt.Errorf("nil_cli shard timed out after %s", shardTimeout)
+	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+		return nil, fmt.Errorf("nil_cli shard timed out after %s: %w", shardTimeout, execCtx.Err())
+	}
+	if errors.Is(execCtx.Err(), context.Canceled) {
+		return nil, execCtx.Err()
 	}
 	if err != nil {
 		log.Printf("shardFile: shard failed: %s", string(output))

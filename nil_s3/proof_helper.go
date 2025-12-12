@@ -35,7 +35,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, mduIndex uint64
 
 	// 1. Encode Target MDU
 	prefix := mduPath + ".proof"
-	_, err = shardFile(mduPath, false, prefix)
+	_, err = shardFile(ctx, mduPath, false, prefix)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode MDU for proof: %w", err)
 	}
@@ -46,7 +46,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, mduIndex uint64
 	// 2. Encode Manifest (MDU #0)
 	// manifestPath points to "manifest.bin", which is the Encoded Manifest Blob.
 	// So we don't need to encode or extract it. It IS the blob.
-	
+
 	manifestBlobPath := manifestPath
 
 	// 4. Sign Receipt
