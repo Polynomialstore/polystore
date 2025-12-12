@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -376,21 +377,37 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch {
-	case os.Getenv("NIL_FAKE_INGEST") == "1":
-		// Very fast dev path: SHA256 padded to 48 bytes.
-		var err error
-		cid, size, allocatedLength, err = fastShardQuick(path)
+	if strings.TrimSpace(dealIDStr) != "" {
+		// Append path: load existing slab by on-chain manifest root, then append.
+		dealID, err := strconv.ParseUint(strings.TrimSpace(dealIDStr), 10, 64)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			http.Error(w, "invalid deal_id", http.StatusBadRequest)
 			return
 		}
 
-	case os.Getenv("NIL_FAST_INGEST") == "1":
-		// Semi-canonical dev path: NilFS slab without Witness MDUs.
-		_, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
+		chainOwner, chainCID, err := fetchDealOwnerAndCID(dealID)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+			log.Printf("GatewayUpload: failed to fetch deal %d: %v", dealID, err)
+			http.Error(w, "failed to fetch deal state", http.StatusInternalServerError)
+			return
+		}
+		if chainCID == "" {
+			http.Error(w, "deal has no committed manifest_root yet", http.StatusBadRequest)
+			return
+		}
+		if owner != "" && chainOwner != "" && owner != chainOwner {
+			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+			return
+		}
+
+		if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+			http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
+			return
+		}
+
+		_, manifestRoot, allocLen, err := IngestAppendToDeal(path, chainCID, maxMdus)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 		cid = manifestRoot
@@ -398,18 +415,42 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		if info, err := os.Stat(path); err == nil {
 			size = uint64(info.Size())
 		}
+	} else {
+		switch {
+		case os.Getenv("NIL_FAKE_INGEST") == "1":
+			// Very fast dev path: SHA256 padded to 48 bytes.
+			var err error
+			cid, size, allocatedLength, err = fastShardQuick(path)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+				return
+			}
 
-	default:
-		// Full canonical ingest (Triple-Proof valid).
-		_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		cid = manifestRoot
-		allocatedLength = allocLen
-		if info, err := os.Stat(path); err == nil {
-			size = uint64(info.Size())
+		case os.Getenv("NIL_FAST_INGEST") == "1":
+			// Semi-canonical dev path: NilFS slab without Witness MDUs.
+			_, manifestRoot, allocLen, err := IngestNewDealFast(path, maxMdus)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+			cid = manifestRoot
+			allocatedLength = allocLen
+			if info, err := os.Stat(path); err == nil {
+				size = uint64(info.Size())
+			}
+
+		default:
+			// Full canonical ingest (Triple-Proof valid).
+			_, manifestRoot, allocLen, err := IngestNewDeal(path, maxMdus)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+			cid = manifestRoot
+			allocatedLength = allocLen
+			if info, err := os.Stat(path); err == nil {
+				size = uint64(info.Size())
+			}
 		}
 	}
 
@@ -1096,22 +1137,19 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 2. Submit Proof
-		// We use mduPath (User Data MDU) and mduIdx (Slab Index)
-		// We also need Manifest Path.
-		// Ingest stores the specific Manifest Blob at "manifest.bin".
+		// 2. Submit Proof in the background so downloads don't hang on CLI/KZG latency.
+		// We use mduPath (User Data MDU) and mduIdx (Slab Index) plus the encoded manifest blob.
 		manifestPath := filepath.Join(uploadDir, cid, "manifest.bin")
-
-		txHash, err := submitRetrievalProofNew(r.Context(), dealID, mduIdx, mduPath, manifestPath)
-		if err != nil {
-			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
-			// Don't fail the download if proof fails? Or do?
-			// For E2E metrics test, we need it to work.
-			// But for UX, download shouldn't fail if chain is slow.
-			// Let's log and proceed.
-		} else {
+		go func(id uint64, idx uint64, path string, manPath string) {
+			ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
+			defer cancel()
+			txHash, err := submitRetrievalProofNew(ctx, id, idx, path, manPath)
+			if err != nil {
+				log.Printf("GatewayFetch: submitRetrievalProofNew failed: %v", err)
+				return
+			}
 			log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
-		}
+		}(dealID, mduIdx, mduPath, manifestPath)
 
 		// 3. Stream Content
 		// Re-open readers via ResolveFileByPath (or optimize to reuse)
@@ -1595,7 +1633,25 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 		owner = v
 	}
 	if v, ok := payload.Deal["cid"].(string); ok {
-		cid = v
+		cid = strings.TrimSpace(v)
+	}
+	if cid == "" {
+		// Newer deal schema exposes manifest_root as base64 or hex.
+		if v, ok := payload.Deal["manifest_root"].(string); ok && strings.TrimSpace(v) != "" {
+			raw := strings.TrimSpace(v)
+			if strings.HasPrefix(raw, "0x") {
+				cid = raw
+			} else if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil && len(decoded) > 0 {
+				cid = "0x" + hex.EncodeToString(decoded)
+			} else {
+				// Fallback: assume already hex without prefix.
+				if _, err := decodeHex(raw); err == nil {
+					cid = "0x" + strings.TrimPrefix(raw, "0x")
+				}
+			}
+		} else if v, ok := payload.Deal["manifest_root_hex"].(string); ok {
+			cid = strings.TrimSpace(v)
+		}
 	}
 	return owner, cid, nil
 }

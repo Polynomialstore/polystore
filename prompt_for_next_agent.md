@@ -11,6 +11,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 - **Gateway (`nil_s3`) — Canonical NilFS Upload (Option D / A1 DONE):**
   - `/gateway/upload` now defaults to **canonical ingest** (`IngestNewDeal`): builds a full slab (MDU #0 + Witness MDUs + User MDUs) and returns a real `manifest_root`.
+  - **Option D / A2 DONE:** If `deal_id` is supplied, `/gateway/upload` appends into the existing slab and returns a new `manifest_root` (multi‑file deals supported).
   - Fake modes are still available only behind explicit env flags:
     - `NIL_FAKE_INGEST=1` → old SHA‑based `fastShardQuick` (dev/sim only).
     - `NIL_FAST_INGEST=1` → `IngestNewDealFast` (no witness MDUs; not Triple‑Proof valid).
@@ -22,25 +23,19 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 ## 2. Known Issues / Open Threads
 
-1. **A2 not implemented yet:** `/gateway/upload` does **not** append into an existing deal by `deal_id`. Multiple‑file deals aren’t supported on Mode 1 yet.
-2. **Thick‑client WASM path still failing:** “Invalid scalar” in `nil_core` WASM `expand_mdu/expand_file` (see Option D / B1).
-3. **Dynamic sizing cleanup** remains pending but not blocking the demo.
+1. **Thick‑client WASM path still failing:** “Invalid scalar” in `nil_core` WASM `expand_mdu/expand_file` (see Option D / B1).
+2. **Dynamic sizing cleanup** remains pending but not blocking the demo.
+3. **Frontend MetaMask UX** (Wagmi/Viem provider + Connect flow) still incomplete per AGENTS.md §11.1.
 
 ## 3. What the Next Agent Should Do First
 
-1. **Option D / A2 — Append upload into existing deal.**
-   - If a `deal_id` is supplied to `/gateway/upload`, load existing slab from `uploads/<manifest_root>/`:
-     - `mdu_0.bin` + Witness MDUs (`mdu_1..mdu_W.bin`).
-   - Append/overwrite a `FileRecordV1` and update:
-     - Root Table (new user MDU roots),
-     - Witness MDUs (blob commitments),
-     - ManifestRoot aggregation.
-   - Return new `manifest_root` and `allocated_length`.
-   - Add an e2e pass gate: upload two files into the same deal and fetch both by path.
-
-2. **Option D / B1 (parallel): Fix WASM “Invalid scalar”.**
+1. **Option D / B1 — Fix WASM “Invalid scalar”.**
    - Investigate scalar/roots‑of‑unity mapping in `nil_core` WASM bindings.
    - Add parity tests vs native `nil_cli shard` once fixed (B2).
+
+2. **Protocol Cleanup (Dynamic Sizing)** — remove legacy tiers and align thin‑provisioning end‑to‑end (AGENTS.md §11.2).
+
+3. **Frontend MetaMask UX** — finish Wagmi/Viem wiring and add Connect + NilBridge happy‑path action (AGENTS.md §11.1).
 
 ## 4. Key Files
 

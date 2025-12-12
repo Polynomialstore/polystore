@@ -285,4 +285,123 @@ else
 fi
 
 rm fetched_README.md
+
+# 7. Upload Second File into Existing Deal
+echo "==> Uploading second file 'ECONOMY.md' into existing deal..."
+UPLOAD2_RESP=$(timeout 600s curl --verbose -X POST -F "file=@$ROOT_DIR/ECONOMY.md" \
+  -F "owner=$NIL_ADDRESS" \
+  -F "deal_id=$DEAL_ID" \
+  "$GATEWAY_BASE/gateway/upload")
+echo "    Response: $UPLOAD2_RESP"
+
+MANIFEST_ROOT_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['manifest_root'])")
+SIZE_BYTES_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['size_bytes'])")
+echo "    New Manifest Root: $MANIFEST_ROOT_2"
+echo "    New File Size: $SIZE_BYTES_2"
+
+if [ -z "$MANIFEST_ROOT_2" ] || [ "$MANIFEST_ROOT_2" == "null" ]; then
+    echo "ERROR: Failed to extract new manifest_root"
+    exit 1
+fi
+
+# 8. Update Deal Content again (EVM)
+echo "==> Updating Deal Content again (Commit New Manifest)..."
+CURRENT_NIL_SEQUENCE_FOR_UPDATE2=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
+if [ "$CURRENT_NIL_SEQUENCE_FOR_UPDATE2" == "" ]; then
+    echo "ERROR: Could not get current NIL_ADDRESS sequence for second update"
+    exit 1
+fi
+echo "    Current account sequence for NIL_ADDRESS for second update: $CURRENT_NIL_SEQUENCE_FOR_UPDATE2"
+
+UPDATE2_RESP=""
+for i in $(seq 1 5); do
+  update_nonce2=$((CURRENT_NIL_SEQUENCE_FOR_UPDATE2 + i - 1))
+  UPDATE2_PAYLOAD=$(
+    NONCE="$update_nonce2" \
+    DEAL_ID="$DEAL_ID" \
+    CID="$MANIFEST_ROOT_2" \
+    SIZE_BYTES="$SIZE_BYTES_2" \
+    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+  )
+  UPDATE2_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
+    -H "Content-Type: application/json" \
+    -d "$UPDATE2_PAYLOAD")
+
+  if echo "$UPDATE2_RESP" | grep -q "account sequence mismatch"; then
+    echo "    Account sequence mismatch, retrying with incremented nonce (attempt $i/5)..."
+    CURRENT_NIL_SEQUENCE_FOR_UPDATE2=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
+    sleep 1
+  else
+    break
+  fi
+done
+
+echo "    Response: $UPDATE2_RESP"
+
+STATUS2=$(echo "$UPDATE2_RESP" | python3 -c "import sys, json; print(json.loads(sys.stdin.read()).get('status', ''))" 2>/dev/null || echo "")
+if [ "$STATUS2" != "success" ]; then
+    echo "ERROR: Second update content failed"
+    exit 1
+fi
+
+# 9. Verify on LCD (new manifest root)
+echo "==> Verifying Deal on LCD after append..."
+sleep 3
+DEAL_JSON_2=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+
+TMP_DEAL_JSON_FILE_2=$(mktemp)
+echo "$DEAL_JSON_2" > "$TMP_DEAL_JSON_FILE_2"
+
+CHAIN_CID_2=$(python3 - <<PY
+import sys, json, base64
+
+with open("$TMP_DEAL_JSON_FILE_2", "r") as f:
+    raw_json_input = f.read()
+
+raw_manifest_root = json.loads(raw_json_input).get('deal', {}).get('manifest_root', '')
+
+if raw_manifest_root:
+    if raw_manifest_root.startswith('0x'):
+        print(raw_manifest_root)
+    else:
+        try:
+            decoded_bytes = base64.b64decode(raw_manifest_root)
+            print('0x' + decoded_bytes.hex())
+        except Exception:
+            print(raw_manifest_root)
+else:
+    print('')
+PY
+)
+rm "$TMP_DEAL_JSON_FILE_2"
+
+if [ "$CHAIN_CID_2" != "$MANIFEST_ROOT_2" ]; then
+    echo "ERROR: Chain CID ($CHAIN_CID_2) does not match New Manifest Root ($MANIFEST_ROOT_2)"
+    exit 1
+fi
+echo "    Success: Deal $DEAL_ID updated to CID $CHAIN_CID_2"
+
+# 10. Fetch Both Files by Path from New Slab (verify sizes)
+echo "==> Fetching both files by path from new slab..."
+FETCH_URL_1="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
+FETCH_URL_2="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
+
+timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1"
+timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2"
+
+ORIG1_SIZE=$(wc -c < "$ROOT_DIR/README.md" | tr -d ' ')
+ORIG2_SIZE=$(wc -c < "$ROOT_DIR/ECONOMY.md" | tr -d ' ')
+FETCH1_SIZE=$(wc -c < fetched_README.bin | tr -d ' ')
+FETCH2_SIZE=$(wc -c < fetched_ECONOMY.bin | tr -d ' ')
+
+if [ "$ORIG1_SIZE" != "$FETCH1_SIZE" ]; then
+    echo "ERROR: README size mismatch after append (orig $ORIG1_SIZE, fetched $FETCH1_SIZE)"
+    exit 1
+fi
+if [ "$ORIG2_SIZE" != "$FETCH2_SIZE" ]; then
+    echo "ERROR: ECONOMY size mismatch after append (orig $ORIG2_SIZE, fetched $FETCH2_SIZE)"
+    exit 1
+fi
+
+rm fetched_README.bin fetched_ECONOMY.bin
 echo "==> E2E Lifecycle Test Passed!"
