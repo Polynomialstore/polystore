@@ -155,6 +155,7 @@ interface StatusSummary {
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.
 *   **E2E Mode (Target):** When `NIL_E2E=1`, use a deterministic test wallet connector / injected provider shim (no MetaMask extension) to make Playwright runs stable and CI-friendly (recommended env: `NIL_E2E_PK` for the dev private key).
+    *   **Provider API (minimum):** EIP‑1193 `request({ method, params })` supports `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_signTypedData_v4`, and `eth_sendTransaction` (optionally `wallet_switchEthereumChain` as a deterministic no-op/error).
 
 ### 3.2 ProofContext (`src/context/ProofContext.tsx`)
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
@@ -190,6 +191,7 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
     *   **Domain:** `NilStore` (Verifying Contract: `0x0...0`).
     *   **Type (target):** `CreateDealV2(address creator, uint64 duration, string service_hint, string initial_escrow, string max_monthly_spend, uint64 nonce)` (capacity tiers removed; message name/version bumped to prevent hash collisions).
         *   **Migration:** During the transition, the chain may accept the legacy CreateDeal typed-data hash to avoid a flag-day across web/scripts.
+    *   **Test vectors (target):** `src/lib/eip712.test.ts` should contain golden vectors shared with the chain verifier to catch drift in field order, domain/version, and string vs `uint256` encoding.
     *   **Nonce Logic:** Manages local nonce counter in `localStorage` (`nilstore:evmNonces:<addr>`).
 *   **API:** POSTs `{ intent, evm_signature }` to `/gateway/create-deal-evm`.
 

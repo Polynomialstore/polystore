@@ -514,6 +514,7 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).
         - Root normalization: accepting both `0x` + mixed-case inputs but writing a single canonical directory key can surface duplicate-directory bugs; enforce canonicalization + explicit conflict errors.
         - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
+        - Streaming contract: validate params + chain state **before** writing any bytes so errors remain JSON; if an error occurs mid-stream, abort the connection (do not try to append JSON).
     - **Expected test coverage:**
         - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
         - Unit: duplicate `file_path` handling is deterministic (prefer last-write-wins) or rejected with a clear `409` until repaired.
@@ -551,6 +552,7 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Implementation sketch (recommended):
             - In `NIL_E2E=1`, `Web3Provider` uses a custom Wagmi connector backed by a fixed dev private key (env: `NIL_E2E_PK`).
             - For Playwright, inject `window.ethereum` early (or rely on the connector only) so app code never needs MetaMask.
+            - Provider API (minimum): `request({ method, params })` supports `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_signTypedData_v4`, and `eth_sendTransaction` (plus `wallet_switchEthereumChain` as a no-op or deterministic error).
     - **Risk hotspots:**
         - Wallet automation is inherently flaky; keep the suite as a true smoke test with stable selectors + bounded timeouts, and avoid brittle UI interactions.
         - If we ever add “real MetaMask” automation, keep it opt-in (separate job/flag) and do not block the main CI signal on it.

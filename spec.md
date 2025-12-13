@@ -138,6 +138,7 @@ NilStore MAY use a content‑addressed *file* manifest at the application layer 
 **Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs:
 
 *   `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below).
+*   For REST/path params, `manifest_root` parsing is strict: 48‑byte compressed BLS12‑381 G1 (96 hex chars, optional `0x` prefix), rejecting invalid encodings and invalid subgroup points (return `400`).
 *   Retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
 *   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
 *   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).

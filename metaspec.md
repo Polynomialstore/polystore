@@ -20,7 +20,7 @@ This meta-spec defines the architecture for NilStore v2.4, adding **Traffic Mana
 The `Deal` is the central state object.
 
 *   **ID:** Unique uint64.
-*   **CID:** Content Identifier (Root).
+*   **Manifest Root (`manifest_root`):** Deal‑level commitment root (48‑byte KZG, BLS12‑381 G1 compressed). Some legacy code/docs may call this a `cid`/“CID”, but it is **not** a file identifier.
 *   **Placement:** System-assigned SP list.
 *   **Escrow:** Combined Storage + Bandwidth balance.
 *   **ServiceHint:** `Hot | Cold`.

@@ -79,10 +79,10 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Role:** Acts as a "Retrieval Proxy" that ensures on-chain proof generation ("Unified Liveness") occurs even for web downloads.
     *   **NilFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
-        *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, and `\\` separators).
+        *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
         *   Unknown `file_path` (or tombstone record) returns `404`.
         *   Duplicate/ambiguous `file_path` entries in the on-disk File Table should fail fast with a clear non-200 (prefer `409`) rather than serving potentially stale bytes.
-        *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
+        *   `manifest_root` is a 48-byte compressed BLS12‑381 G1 commitment (96 hex chars; optional `0x` prefix). Invalid encodings and invalid subgroup points return `400`.
         *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway MUST canonicalize `manifest_root` consistently (decode → re-encode) for filesystem paths and logs to avoid duplicate deal directories.
