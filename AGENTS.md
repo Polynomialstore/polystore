@@ -453,6 +453,8 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 ### 11.0 Immediate Goals (Next)
 
+This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
+
 - [ ] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
     - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
@@ -493,22 +495,26 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/msg_server_test.go`, `nilchain/x/nilchain/keeper/genesis_test.go`
     - **Pass gate:** `CreateDeal` + `CreateDealFromEvm` create deals with `Deal.size == 0` + empty `Deal.manifest_root` until `UpdateDealContent*` is executed; any legacy tier fields are ignored for state.
     - **Test gate:** `cd nilchain && go test ./x/nilchain/keeper -run CreateDeal`
+    - **Commit gate:** After pass, commit `fix(nilchain): thin-provision CreateDeal` and push to both remotes.
 
 - [ ] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
     - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
     - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
     - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
+    - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to both remotes.
 
 - [ ] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
     - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
+    - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to both remotes.
 
 - [ ] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
     - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
     - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `refactor(proto): remove EvmCreateDealIntent.size_tier` and push to both remotes.
 
 ### 11.3 Gateway & File Lifecycle E2E
 - [x] Stabilize `/gateway/upload`, `/gateway/create-deal-evm`, and `/gateway/update-deal-content-evm` so that a full “allocate capacity → upload file → commit content → fetch file” flow works reliably via both curl and the web UI.
@@ -531,26 +537,31 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Files:** `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `nil-website/src/lib/e2eWallet.ts`
     - **Pass gate:** In E2E mode, “Connect Wallet” works without the MetaMask extension and supports `eth_signTypedData_v4` for create-deal + update-content.
     - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(nil-website): deterministic E2E wallet` and push to both remotes.
 
 - [ ] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
     - **Files:** `nil-website/src/components/Dashboard.tsx`, `nil-website/src/components/DealDetail.tsx`, `nil-website/src/components/ConnectWallet.tsx`
     - **Pass gate:** Playwright tests use `data-testid` selectors (not brittle text matching); UX polish remains backlog.
     - **Test gate:** `cd nil-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(nil-website): add stable e2e selectors` and push to both remotes.
 
 - [ ] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
     - **Files:** (new) `nil-website/tests/deal-lifecycle.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
     - **Pass gate:** Test creates a deal, uploads a small file, commits content, and asserts the deal row shows a non-zero size + a manifest root.
     - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(nil-website): dashboard lifecycle smoke e2e` and push to both remotes.
 
 - [ ] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
     - **Files:** (new) `nil-website/tests/deal-explorer.spec.ts`, `nil-website/src/components/DealDetail.tsx`
     - **Pass gate:** Uploaded file appears in the NilFS file list and can be downloaded via `/gateway/fetch/...&file_path=...` (HTTP 200).
     - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(nil-website): deal explorer smoke e2e` and push to both remotes.
 
 - [ ] **11.4.5 One-command runner script (start stack → run tests → stop).**
     - **Files:** (new) `scripts/e2e_browser_smoke.sh`
     - **Pass gate:** Script is idempotent and leaves no running processes on success/failure.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
+    - **Commit gate:** After pass, commit `test(scripts): browser smoke runner` and push to both remotes.
 
 ### 11.4.6 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
