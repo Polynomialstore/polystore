@@ -46,6 +46,7 @@ export function useFetch() {
       const hEpoch = response.headers.get('X-Nil-Epoch')
       const hProvider = response.headers.get('X-Nil-Provider')
       const hBytes = response.headers.get('X-Nil-Bytes-Served')
+      const hProofJson = response.headers.get('X-Nil-Proof-JSON')
 
       const blob = await response.blob()
       
@@ -54,6 +55,19 @@ export function useFetch() {
           const nonceKey = `nilstore:receiptNonces:${address.toLowerCase()}`
           const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
           const nextNonce = currentNonce + 1
+          
+          let proofDetails = null
+          if (hProofJson) {
+              try {
+                  const jsonStr = atob(hProofJson)
+                  const json = JSON.parse(jsonStr)
+                  if (json.proof_details) {
+                      proofDetails = json.proof_details
+                  }
+              } catch (e) {
+                  console.warn("Failed to parse proof details", e)
+              }
+          }
           
           const intent: RetrievalReceiptIntent = {
               deal_id: Number(hDealId),
@@ -87,7 +101,7 @@ export function useFetch() {
                       bytes_served: intent.bytes_served,
                       nonce: intent.nonce,
                       user_signature: sigBase64,
-                      proof_details: null,
+                      proof_details: proofDetails,
                       expires_at: 0
                   }
 

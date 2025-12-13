@@ -30,6 +30,7 @@ message DealHeatState {
   uint64 bytes_served_total = 1;
   uint64 failed_challenges_total = 2;
   int64 last_update_height = 3;
+  uint64 successful_retrievals_total = 4;
 }
 
 // Provider represents a Storage Provider in the network.

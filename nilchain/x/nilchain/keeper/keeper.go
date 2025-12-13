@@ -196,6 +196,8 @@ func (k Keeper) IncrementHeat(ctx sdk.Context, dealID uint64, bytesServed uint64
 	state.BytesServedTotal += bytesServed
 	if failed {
 		state.FailedChallengesTotal += 1
+	} else {
+		state.SuccessfulRetrievalsTotal += 1
 	}
 	state.LastUpdateHeight = ctx.BlockHeight()
 

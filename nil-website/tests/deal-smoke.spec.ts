@@ -7,7 +7,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   page,
   request,
 }) => {
-  test.setTimeout(240_000)
+  test.setTimeout(300_000)
 
   await page.goto(path)
 
@@ -57,7 +57,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await expect(fileRow).toBeVisible({ timeout: 120_000 })
 
   // Trigger download via UI to exercise client-side signing
-  const downloadPromise = page.waitForEvent('download', { timeout: 120_000 })
+  const downloadPromise = page.waitForEvent('download', { timeout: 240_000 })
   await page.locator('[data-testid="deal-detail-download"][data-file-path="e2e.txt"]').click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe(filePath)
@@ -65,6 +65,12 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const stream = await download.createReadStream()
   const downloadedBytes = await streamToBuffer(stream)
   expect(downloadedBytes).toEqual(fileBytes)
+
+  // Verify Retrieval Count increment (Proof submission success)
+  await page.getByTestId('deal-detail-close').click()
+  // Retrievals column is the 5th column (index 4)
+  const retrievalsCell = page.getByTestId(`deal-row-${dealId}`).locator('td').nth(4)
+  await expect(retrievalsCell).toHaveText('1', { timeout: 60_000 })
 })
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {

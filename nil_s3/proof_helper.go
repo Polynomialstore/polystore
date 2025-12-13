@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
@@ -116,4 +117,63 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	}
 
 	return extractTxHash(outStr), nil
+}
+
+// generateProofJSON generates the RetrievalReceipt JSON (with proof details) using nilchaind.
+// It does NOT submit it.
+func generateProofJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if abs, err := filepath.Abs(mduPath); err == nil {
+		mduPath = abs
+	}
+	if abs, err := filepath.Abs(manifestPath); err == nil {
+		manifestPath = abs
+	}
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("resolveKeyAddress failed: %w", err)
+	}
+
+	dealIDStr := strconv.FormatUint(dealID, 10)
+	if epoch == 0 {
+		epoch = 1
+	}
+	epochStr := strconv.FormatUint(epoch, 10)
+	mduIndexStr := strconv.FormatUint(mduIndex, 10)
+
+	// 1. Compute KZG commitments/roots for the already-encoded MDU.
+	// Use a unique prefix to avoid collisions
+	prefix := fmt.Sprintf("%s-%d.proof", mduPath, time.Now().UnixNano())
+	
+	_, err = shardFile(ctx, mduPath, true, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode MDU for proof: %w", err)
+	}
+	encodedMduPath := fmt.Sprintf("%s.mdu.0.bin", prefix)
+	defer os.Remove(encodedMduPath)
+	defer os.Remove(prefix + ".json")
+
+	// 4. Sign Receipt (Generate JSON)
+	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
+	defer cancel()
+	signCmd := execNilchaind(
+		signCtx,
+		"tx", "nilchain", "sign-retrieval-receipt",
+		dealIDStr,
+		providerAddr,
+		epochStr,
+		encodedMduPath,
+		trustedSetup,
+		manifestPath,
+		mduIndexStr,
+		"--from", providerKeyName,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--offline",
+	)
+
+	return signCmd.Output()
 }

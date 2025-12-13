@@ -18,6 +18,7 @@ interface HeatState {
     bytes_served_total: string
     failed_challenges_total: string
     last_update_height: string
+    successful_retrievals_total?: string
 }
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
@@ -622,11 +623,17 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 </div>
                 
                 {heat ? (
-                    <div className="grid grid-cols-3 gap-4 text-xs">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                         <div className="bg-secondary/50 p-3 rounded border border-border">
                             <div className="text-muted-foreground uppercase text-[10px]">Total Traffic</div>
                             <div className="text-lg font-mono text-foreground">
                                 {(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB
+                            </div>
+                        </div>
+                        <div className="bg-secondary/50 p-3 rounded border border-border">
+                            <div className="text-muted-foreground uppercase text-[10px]">Total Retrievals</div>
+                            <div className="text-lg font-mono text-green-500 dark:text-green-400">
+                                {heat.successful_retrievals_total || '0'}
                             </div>
                         </div>
                         <div className="bg-secondary/50 p-3 rounded border border-border">

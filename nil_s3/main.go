@@ -1336,7 +1336,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Resolve file location.
-	_, _, fileLen, err := GetFileLocation(dealDir, filePath)
+	mduIdx, mduPath, fileLen, err := GetFileLocation(dealDir, filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
@@ -1359,6 +1359,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GatewayFetch: failed to resolve provider address: %v", err)
 	}
 
+    // Generate Proof
+    manifestPath := filepath.Join(dealDir, "manifest.bin")
+    var proofJson []byte
+    proofJson, err = generateProofJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
+    if err != nil {
+        log.Printf("GatewayFetch: generateProofJSON failed: %v", err)
+    }
+
 	content, _, err := ResolveFileByPath(dealDir, filePath)
 	if err != nil {
 		log.Printf("ResolveFileByPath failed: %v", err)
@@ -1372,6 +1380,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
 	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(fileLen, 10))
 	w.Header().Set("X-Nil-Provider", providerAddr)
+    if proofJson != nil {
+        w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofJson))
+    }
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -1838,7 +1849,7 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON")
 }
 
 func extractTxHash(out string) string {
