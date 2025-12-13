@@ -3,6 +3,8 @@ import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
+import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 
 interface DealDetailProps {
   deal: any
@@ -14,33 +16,6 @@ interface HeatState {
     bytes_served_total: string
     failed_challenges_total: string
     last_update_height: string
-}
-
-interface SlabSegment {
-  kind: 'mdu0' | 'witness' | 'user'
-  start_index: number
-  count: number
-  size_bytes: number
-}
-
-interface SlabLayoutData {
-  manifest_root: string
-  mdu_size_bytes: number
-  blob_size_bytes: number
-  total_mdus: number
-  witness_mdus: number
-  user_mdus: number
-  file_records: number
-  file_count: number
-  total_size_bytes: number
-  segments: SlabSegment[]
-}
-
-interface NilfsFileEntry {
-  path: string
-  size_bytes: number
-  start_offset: number
-  flags: number
 }
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
@@ -68,18 +43,12 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   async function fetchSlab(cid: string, dealId?: string, owner?: string) {
     setLoadingSlab(true)
     try {
-      let url = `${appConfig.gatewayBase}/gateway/slab/${encodeURIComponent(cid)}`
-      if (dealId && owner) {
-        const q = new URLSearchParams()
-        q.set('deal_id', String(dealId))
-        q.set('owner', owner)
-        url = `${url}?${q.toString()}`
-      }
-      const res = await fetch(url)
-      if (res.ok) {
-        const json = await res.json()
-        setSlab(json)
-      }
+      const json = await gatewayFetchSlabLayout(
+        appConfig.gatewayBase,
+        cid,
+        dealId && owner ? { dealId: String(dealId), owner } : undefined,
+      )
+      setSlab(json)
     } catch (e) {
       console.error('Failed to fetch slab layout', e)
     } finally {
@@ -91,20 +60,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
-      const url = `${appConfig.gatewayBase}/gateway/list-files/${encodeURIComponent(
-        cid,
-      )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(owner)}`
-      const res = await fetch(url)
-      if (!res.ok) {
-        setFiles([])
-        return
-      }
-      const json = await res.json()
-      if (Array.isArray(json.files)) {
-        setFiles(json.files as NilfsFileEntry[])
-      } else {
-        setFiles([])
-      }
+      const list = await gatewayListFiles(appConfig.gatewayBase, cid, { dealId, owner })
+      setFiles(list)
     } catch (e) {
       console.error('Failed to fetch NilFS file list', e)
       setFiles([])

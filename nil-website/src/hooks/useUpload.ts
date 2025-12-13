@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
 import { ethToNil } from '../lib/address'
-import { fetchWithTimeout } from '../lib/http'
+import { gatewayUpload } from '../api/gatewayClient'
 
 export interface UploadResult {
   cid: string
@@ -29,33 +29,12 @@ export function useUpload() {
     setLoading(true)
     try {
       const owner = address.startsWith('0x') ? ethToNil(address) : address
-      const form = new FormData()
-      form.append('file', file)
-      form.append('owner', owner)
-      if (opts?.dealId) {
-        form.append('deal_id', String(opts.dealId))
-      }
-      if (opts?.maxUserMdus) {
-        form.append('max_user_mdus', String(opts.maxUserMdus))
-      }
-
-      const res = await fetchWithTimeout(
-        `${appConfig.gatewayBase}/gateway/upload`,
-        { method: 'POST', body: form },
-        60_000,
-      )
-      if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(txt || 'Upload failed')
-      }
-      const json = await res.json()
-      return {
-        cid: json.cid as string,
-        sizeBytes: Number(json.size_bytes ?? json.sizeBytes ?? 0),
-        fileSizeBytes: Number(json.file_size_bytes ?? json.fileSizeBytes ?? json.size_bytes ?? 0),
-        allocatedLength: json.allocated_length !== undefined ? Number(json.allocated_length) : undefined,
-        filename: json.filename as string,
-      }
+      return await gatewayUpload(appConfig.gatewayBase, {
+        file,
+        owner,
+        dealId: opts?.dealId,
+        maxUserMdus: opts?.maxUserMdus,
+      })
     } finally {
       setLoading(false)
     }

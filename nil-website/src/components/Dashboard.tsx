@@ -16,20 +16,10 @@ import { BridgeActions } from './BridgeActions'
 import { FileSharder } from './FileSharder'
 import { injectedConnector } from '../context/Web3Provider'
 import { formatUnits } from 'viem'
-
-interface Deal {
-  id: string
-  cid: string
-  size: string
-  owner: string
-  escrow: string
-  end_block: string
-  start_block?: string
-  service_hint?: string
-  current_replication?: string
-  max_monthly_spend?: string
-  providers?: string[]
-}
+import { lcdFetchDeals } from '../api/lcdClient'
+import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
+import type { LcdDeal as Deal } from '../domain/lcd'
+import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 
 interface Provider {
   address: string
@@ -46,11 +36,6 @@ type StagedUpload = {
   fileSizeBytes: number
   allocatedLength?: number
   filename: string
-}
-
-type NilfsContentFile = {
-  path: string
-  sizeBytes: number
 }
 
 export function Dashboard() {
@@ -142,9 +127,12 @@ export function Dashboard() {
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
-  const [contentFiles, setContentFiles] = useState<NilfsContentFile[] | null>(null)
+  const [contentFiles, setContentFiles] = useState<NilfsFileEntry[] | null>(null)
   const [contentFilesLoading, setContentFilesLoading] = useState(false)
   const [contentFilesError, setContentFilesError] = useState<string | null>(null)
+  const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
+  const [contentSlabLoading, setContentSlabLoading] = useState(false)
+  const [contentSlabError, setContentSlabError] = useState<string | null>(null)
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
@@ -171,6 +159,9 @@ export function Dashboard() {
     setContentFiles(null)
     setContentFilesError(null)
     setContentFilesLoading(false)
+    setContentSlab(null)
+    setContentSlabError(null)
+    setContentSlabLoading(false)
   }, [targetDealId])
 
   useEffect(() => {
@@ -179,63 +170,59 @@ export function Dashboard() {
       setContentFiles(null)
       setContentFilesError(null)
       setContentFilesLoading(false)
+      setContentSlab(null)
+      setContentSlabError(null)
+      setContentSlabLoading(false)
       return
     }
 
     let cancelled = false
 
-    const isRecord = (v: unknown): v is Record<string, unknown> =>
-      typeof v === 'object' && v !== null
-
     const load = async () => {
       setContentFilesLoading(true)
       setContentFilesError(null)
+      setContentSlabLoading(true)
+      setContentSlabError(null)
       try {
-        const url = `${appConfig.gatewayBase}/gateway/list-files/${encodeURIComponent(
-          manifestRoot,
-        )}?deal_id=${encodeURIComponent(targetDealId)}&owner=${encodeURIComponent(nilAddress)}`
-        const res = await fetch(url)
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '')
-          throw new Error(txt || `Gateway returned ${res.status}`)
-        }
-        const payload: unknown = await res.json().catch(() => null)
-        const filesVal = isRecord(payload) ? payload['files'] : null
+        const [filesResult, slabResult] = await Promise.allSettled([
+          gatewayListFiles(appConfig.gatewayBase, manifestRoot, {
+            dealId: targetDealId,
+            owner: nilAddress,
+          }),
+          gatewayFetchSlabLayout(
+            appConfig.gatewayBase,
+            manifestRoot,
+            { dealId: targetDealId, owner: nilAddress },
+          ),
+        ])
 
-        const nextFiles: NilfsContentFile[] = []
-        if (Array.isArray(filesVal)) {
-          for (const item of filesVal) {
-            if (!isRecord(item)) continue
-            const pathVal = item['path']
-            const sizeVal = item['size_bytes']
-            const path = typeof pathVal === 'string' ? pathVal : ''
-            const sizeNum =
-              typeof sizeVal === 'number'
-                ? sizeVal
-                : typeof sizeVal === 'string'
-                  ? Number(sizeVal)
-                  : 0
-            if (path) {
-              nextFiles.push({
-                path,
-                sizeBytes: Number.isFinite(sizeNum) ? sizeNum : 0,
-              })
-            }
-          }
+        if (cancelled) return
+
+        if (filesResult.status === 'fulfilled') {
+          setContentFiles(filesResult.value)
+        } else {
+          setContentFiles([])
+          setContentFilesError(filesResult.reason instanceof Error ? filesResult.reason.message : 'Failed to load NilFS file table')
         }
 
-        if (!cancelled) {
-          setContentFiles(nextFiles)
+        if (slabResult.status === 'fulfilled') {
+          setContentSlab(slabResult.value)
+        } else {
+          setContentSlab(null)
+          setContentSlabError(slabResult.reason instanceof Error ? slabResult.reason.message : 'Failed to load slab layout')
         }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load NilFS file table'
+        const msg = e instanceof Error ? e.message : 'Failed to load deal content observables'
         if (!cancelled) {
           setContentFiles([])
+          setContentSlab(null)
           setContentFilesError(msg)
+          setContentSlabError(msg)
         }
       } finally {
         if (!cancelled) {
           setContentFilesLoading(false)
+          setContentSlabLoading(false)
         }
       }
     }
@@ -262,50 +249,13 @@ export function Dashboard() {
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
     try {
-        const response = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals`)
-        const data = await response.json()
-        if (data.deals) {
-            const all: Deal[] = data.deals.map((d: any) => {
-              // Helper to convert base64 to hex
-              const toHex = (str: string) => {
-                  if (!str) return ''
-                  if (str.startsWith('0x')) return str
-                  try {
-                      const binary = atob(str)
-                      const bytes = new Uint8Array(binary.length)
-                      for (let i = 0; i < binary.length; i++) {
-                          bytes[i] = binary.charCodeAt(i)
-                      }
-                      return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-                  } catch (e) {
-                      return str // Return original if not base64
-                  }
-              }
-
-              const manifestRootHex = d.manifest_root ? toHex(d.manifest_root) : ''
-              const cid = d.cid ? String(d.cid) : manifestRootHex
-
-              return {
-                id: String(d.id ?? ''),
-                cid: cid,
-                size: String(d.size ?? d.size_bytes ?? '0'),
-                owner: String(d.owner ?? ''),
-                escrow: String(d.escrow_balance ?? d.escrow ?? ''),
-                end_block: String(d.end_block ?? ''),
-                start_block: String(d.start_block ?? ''),
-                service_hint: d.service_hint,
-                current_replication: d.current_replication,
-                max_monthly_spend: d.max_monthly_spend,
-                providers: Array.isArray(d.providers) ? d.providers : [],
-              }
-            })
-            let filtered = owner ? all.filter((d) => d.owner === owner) : all
-            if (owner && filtered.length === 0 && all.length > 0) {
-              filtered = all
-            }
-            setDeals(filtered)
-            return filtered
+        const all = await lcdFetchDeals(appConfig.lcdBase)
+        let filtered = owner ? all.filter((d) => d.owner === owner) : all
+        if (owner && filtered.length === 0 && all.length > 0) {
+          filtered = all
         }
+        setDeals(filtered)
+        return filtered
     } catch (e) {
         console.error("Failed to fetch deals", e)
     } finally {
@@ -447,7 +397,6 @@ export function Dashboard() {
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
         if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
-        setStagedUpload(null)
     } catch (e) {
         setStatusTone('error')
         setStatusMsg('Content commit failed. Check gateway + chain logs.')
@@ -769,6 +718,89 @@ export function Dashboard() {
                           {targetDealId && contentManifestRoot && (
                             <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
                               <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                Slab Layout
+                              </div>
+                              {contentSlabLoading ? (
+                                <div className="text-xs text-muted-foreground">Loading slab layout…</div>
+                              ) : contentSlab ? (
+                                <>
+                                  <div className="grid grid-cols-2 gap-3 text-xs">
+                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
+                                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total MDUs</div>
+                                      <div className="font-mono text-foreground">{contentSlab.total_mdus}</div>
+                                      <div className="text-[10px] text-muted-foreground mt-1">
+                                        MDU #0 + {contentSlab.witness_mdus} witness + {contentSlab.user_mdus} user
+                                      </div>
+                                    </div>
+                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
+                                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Files</div>
+                                      <div className="font-mono text-foreground">{contentSlab.file_count}</div>
+                                      <div className="text-[10px] text-muted-foreground mt-1">
+                                        {contentSlab.total_size_bytes} bytes total
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {Array.isArray(contentSlab.segments) && contentSlab.segments.length > 0 && (
+                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
+                                      <div className="flex items-center justify-between">
+                                        <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                          MDU Segments
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                          {Math.round(contentSlab.mdu_size_bytes / (1024 * 1024))} MiB / MDU
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 flex h-2 w-full overflow-hidden rounded bg-muted">
+                                        {contentSlab.segments.map((seg) => (
+                                          <div
+                                            key={`${seg.kind}:${seg.start_index}`}
+                                            style={{ flexGrow: Math.max(1, seg.count) }}
+                                            className={
+                                              seg.kind === 'mdu0'
+                                                ? 'bg-blue-500/60'
+                                                : seg.kind === 'witness'
+                                                  ? 'bg-purple-500/60'
+                                                  : 'bg-emerald-500/60'
+                                            }
+                                            title={`${seg.kind} • start=${seg.start_index} • count=${seg.count}`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
+                                        <div>
+                                          <span className="text-blue-500 font-semibold">MDU #0</span>: Super-Manifest
+                                        </div>
+                                        <div>
+                                          <span className="text-purple-500 font-semibold">Witness</span>:{' '}
+                                          {contentSlab.witness_mdus > 0 ? `MDU #1..#${contentSlab.witness_mdus}` : 'none'}
+                                        </div>
+                                        <div>
+                                          <span className="text-emerald-500 font-semibold">User</span>:{' '}
+                                          {contentSlab.user_mdus > 0
+                                            ? `MDU #${1 + contentSlab.witness_mdus}..#${contentSlab.total_mdus - 1}`
+                                            : 'none'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="text-xs text-muted-foreground italic">
+                                  No slab layout found for this manifest.
+                                </div>
+                              )}
+                              {contentSlabError && (
+                                <div className="text-xs text-destructive truncate" title={contentSlabError}>
+                                  {contentSlabError}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {targetDealId && contentManifestRoot && (
+                            <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
+                              <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                 Files In Slab
                               </div>
                               {contentFilesLoading ? (
@@ -783,7 +815,7 @@ export function Dashboard() {
                                     )}&file_path=${encodeURIComponent(f.path)}`
                                     return (
                                       <div
-                                        key={f.path}
+                                        key={`${f.path}:${f.start_offset}`}
                                         className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
                                       >
                                         <div className="min-w-0">
@@ -791,7 +823,7 @@ export function Dashboard() {
                                             {f.path}
                                           </div>
                                           <div className="text-[10px] text-muted-foreground">
-                                            {f.sizeBytes} bytes
+                                            {f.size_bytes} bytes
                                           </div>
                                         </div>
                                         <button
