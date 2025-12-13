@@ -452,7 +452,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
 ### 11.0 Immediate Goals (Next)
-- Close NilFS “single source of truth”: remove CID/index fallback fetch paths (see **11.6.A3**).
+- Close NilFS “single source of truth”: remove CID/index fallback fetch paths (see **11.6.A3.1**).
 - Finish “dynamic sizing / no capacity tiers” cleanup end-to-end (see **11.2**).
 - Add a real browser smoke E2E suite (see **11.4**).
 - Backlog: the Dashboard MDU #0 inspector + commit-content flow is validated for the current demo; prioritize correctness over polish.
@@ -533,7 +533,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Pass gate:** Script is idempotent and leaves no running processes on success/failure.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
 
-### 11.4.1 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
+### 11.4.6 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
 
 - [x] Extract LCD/Gateway normalization into pure TS “domain” modules (`nil-website/src/domain/*`) with Node unit tests.
@@ -565,12 +565,26 @@ This section tracks the currently active TODOs for the AI agent working in this 
         3. both files fetch correctly by path.
     - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
 
-- [ ] **A3. Remove “CID-only” fallback paths once NilFS is canonical.**
-    - **Files:** `nil_s3/main.go` (GatewayFetch + index helpers), `nil_s3/resolve.go`, `nil_s3/main_test.go`, `nil_s3/fetch_test.go`, `nil_s3/nil-s3-spec.md`, `e2e_gateway_retrieval.sh`
-    - **Change:** Remove the `uploads/index.json` CID→path lookup and require NilFS resolution via `MDU #0` File Table + Roots for all fetch flows.
-    - **Pass gate:** `GatewayFetch(deal_id, owner, file_path=...)` works after restart (state derived from slab on disk), and the old “CID-only” fetch path returns a clear non-200 error (no hidden fallback).
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
-    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only fetch (no cid index)` and push.
+- [ ] **A3.1 GatewayFetch: make `file_path` mandatory (no CID/index fallback).**
+    - **Files:** `nil_s3/main.go` (`GatewayFetch`), `nil_s3/resolve.go`, `nil_s3/fetch_test.go`
+    - **Change:** Remove `uploads/index.json`-backed fallback branches; only resolve via NilFS (`MDU #0` File Table + slab roots).
+    - **Pass gate:** Fetch by `file_path` works after restart (state derived from slab on disk); requesting fetch without `file_path` returns a clear non-200 (no hidden legacy behavior).
+    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only fetch (require file_path)` and push.
+
+- [ ] **A3.2 GatewayProveRetrieval: stop looking up file paths in `uploads/index.json`.**
+    - **Files:** `nil_s3/main.go` (`GatewayProveRetrieval`), `nil_s3/resolve.go`, `e2e_gateway_retrieval.sh`
+    - **Change:** Accept/require `file_path` (and/or slab indices) and derive all proof inputs from the slab + chain state; remove `lookupFileInIndex` usage.
+    - **Pass gate:** Retrieval proof submission works using only `(deal_id, manifest_root, file_path)` and still succeeds after a gateway restart.
+    - **Test gate:** `cd nil_s3 && go test ./...` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
+    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only retrieval proof (no index)` and push.
+
+- [ ] **A3.3 Delete legacy `index.json` helpers (and deprecate `/gateway/manifest`).**
+    - **Files:** `nil_s3/main.go` (`lookupFileInIndex` + helpers, `GatewayManifest`), `nil_s3/nil-s3-spec.md`
+    - **Change:** Remove the index file format and any handlers that depend on it (or refactor them to serve slab-derived data only).
+    - **Pass gate:** A clean `nil_s3` data dir without `uploads/index.json` still supports upload → commit → fetch by `file_path`; legacy CID-only flows return a clear non-200 error.
+    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `refactor(nil_s3): delete index.json legacy flows` and push.
 
 - [x] **A4. Update Commit‑Content UI to be NilFS‑aware.**
     - **Change:** “Commit Content” tab shows a per‑deal file list from NilFS, supports multiple uploads into one deal, and uses returned `manifest_root` + `allocated_length` for `update-deal-content-evm`.
