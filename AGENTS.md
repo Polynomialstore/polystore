@@ -459,15 +459,24 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
     - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
     - **API changes (target end state):**
-        - `GET /gateway/fetch/{manifest_root}` **MUST** require `file_path` (+ `deal_id`, `owner`); when missing, return a clear `400` (no CID/index fallback).
-        - `POST /gateway/prove-retrieval` **MUST** accept/require `file_path` (and `deal_id`) and resolve all proof inputs from NilFS (`mdu_0.bin` + on-disk MDUs), not `uploads/index.json`.
-        - Any endpoint that still takes a `cid` string treats it as an alias for `manifest_root` (48-byte hex) only — **not** a file-level CID.
+        - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
+            - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
+            - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
+        - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
+            - Proof inputs are resolved only from NilFS: `uploads/<manifest_root>/mdu_0.bin` + `uploads/<manifest_root>/mdu_*.bin` (+ on-chain deal state).
+        - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
     - **Invariants:**
-        - `uploads/<manifest_root>/` is the canonical, restart-safe state: `mdu_0.bin` + `mdu_*.bin` are sufficient to resolve paths and generate proofs.
-        - NilFS `file_path` is the authoritative identifier for a file within a deal; no hidden dependency on `uploads/index.json`, original upload filename, or in-memory state.
+        - `uploads/<manifest_root>/` is the canonical, restart-safe state.
+            - Required on-disk artifacts: `mdu_0.bin` and `mdu_*.bin`.
+            - Sufficient for: list-files, fetch-by-path, and proof generation (given chain deal state).
+        - NilFS `file_path` is the authoritative identifier for a file within a deal.
+            - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
+            - “CID” is never treated as a file identifier (it is a deal-level commitment only).
     - **Migration / backwards-compat:**
-        - Break legacy CID-only fetch/prove flows explicitly (non-200 with a remediation message); if legacy support is needed for dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback).
-        - Stop writing `uploads/index.json` and treat existing copies as deprecated/ignored state.
+        - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
+        - If legacy support is needed for local dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback, no “best-effort” behavior).
+        - Stop writing `uploads/index.json`; treat existing copies as deprecated/ignored state.
+        - Deprecate `/gateway/manifest/{cid}` as a debug-only endpoint; it must not be on the critical path for fetch/prove.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
@@ -478,10 +487,12 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Deals are **thin-provisioned**: `CreateDeal*` writes `manifest_root = empty`, `size = 0` (and leaves any “capacity” fields unset/ignored) until `UpdateDealContent*`.
         - Tier fields (`DealSize` / `deal_size` / `size_tier`) are **non-normative**: ignored by chain logic and removed from all client payloads.
     - **EIP-712 breaking change (plan + mitigation):**
-        - Remove `size_tier` from the signed `CreateDeal(...)` typed-data definition (and bump domain/version or message name to prevent hash collisions).
-        - For a transition window, the chain can accept **both** the legacy and new typed-data hashes to avoid a flag-day across web/scripts.
+        - Remove `size_tier` from the signed `CreateDeal(...)` typed-data definition.
+        - Prevent hash collisions by bumping **either** the EIP-712 domain `version` **or** the message type name (recommended: `CreateDealV2`).
+        - Transition window: the chain may accept **both** the legacy and v2 typed-data hashes to avoid a flag-day across web/scripts.
     - **Risk hotspots:**
-        - Typed-data field order + domain/version drift between `viem`/MetaMask and the chain verifier; treat this as a high-risk, high-coordination change.
+        - Typed-data field order + domain/version drift between `viem`/MetaMask and the chain verifier; treat as high-risk/high-coordination.
+        - JSON intent encoding drift (string vs number for `uint64`, `0x` prefixing, address checksum); add explicit test vectors shared between web/scripts and chain.
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
     - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
 
@@ -491,8 +502,12 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Wallet strategy (recommended):**
         - Prefer an **injected EIP-1193 shim / deterministic test connector** (env-gated, e.g. `NIL_E2E=1`) over automating a real MetaMask extension in CI.
         - The E2E wallet MUST support `eth_signTypedData_v4` for CreateDeal + UpdateContent and send txs against the local EVM (chain id `31337`).
+        - Implementation sketch (recommended):
+            - In `NIL_E2E=1`, `Web3Provider` uses a custom Wagmi connector backed by a fixed dev private key (env: `NIL_E2E_PK`).
+            - For Playwright, inject `window.ethereum` early (or rely on the connector only) so app code never needs MetaMask.
     - **Risk hotspots:**
         - Wallet automation is inherently flaky; keep the suite as a true smoke test with stable selectors + bounded timeouts, and avoid brittle UI interactions.
+        - If we ever add “real MetaMask” automation, keep it opt-in (separate job/flag) and do not block the main CI signal on it.
     - **Pass gate:** A clean headless run can execute the happy-path flow end-to-end and exits 0.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
 

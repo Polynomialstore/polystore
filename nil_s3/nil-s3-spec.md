@@ -24,7 +24,8 @@ The service wraps two CLI tools to perform its duties:
     *   **MDU #0 (Super-Manifest):** Stores the File Allocation Table (FAT) and Merkle Roots for all other MDUs.
     *   **Witness MDUs:** Store the KZG Blobs required for Triple Proof verification (replicated metadata).
     *   **User Data MDUs:** Store the raw file content slices.
-    *   Files are committed to a `dealDir` (e.g., `uploads/<ManifestRoot>/`) containing `manifest.bin`, `mdu_0.bin`, and numbered `mdu_N.bin` files.
+    *   Files are committed to a `dealDir` (e.g., `uploads/<manifest_root>/`) containing `mdu_0.bin` and numbered `mdu_N.bin` slab files.
+        *   Any extra debug artifacts (e.g., shard JSON, `manifest_blob_hex`) are optional and must not be required for fetch/prove.
 *   **NilFS is the Source of Truth (Target End State):**
     *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/<manifest_root>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
 
@@ -35,7 +36,7 @@ The service wraps two CLI tools to perform its duties:
 ### 3.1 S3 Compatibility (Legacy)
 | Method | Path | Description |
 |:---|:---|:---|
-| `PUT` | `/api/v1/object/{key}` | Uploads a file, shards it, and stores it locally. Returns `CID`. |
+| `PUT` | `/api/v1/object/{key}` | Uploads a file, ingests it into NilFS, and stores it locally. Returns a deal `manifest_root` (legacy alias: `cid`). |
 | `GET` | `/api/v1/object/{key}` | Retrieves a file by its original key (filename). |
 
 ### 3.2 Gateway (Web Frontend Support)
@@ -46,7 +47,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Multipart form data (`file`, `owner`).
     *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal) and `max_user_mdus` (devnet sizing hint for witness region).
-    *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "filename": "..." }`.
+    *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "file_path": "dir/file.txt", "filename": "file.txt" }`.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 
@@ -62,13 +63,16 @@ These endpoints support the `nil-website` "Thin Client" flow.
 
 #### Data Retrieval & Proofs
 *   **`GET /gateway/fetch/{manifest_root}`**
-    *   **Query Params:** `deal_id`, `owner`.
+    *   **Query Params (target):** `deal_id`, `owner`, `file_path` (**required**).
     *   **Logic:**
         1.  Verifies `deal_id` exists on-chain and matches `owner`.
         2.  **Critical:** Calls `submitRetrievalProof` to generate and broadcast a `MsgProveLiveness` transaction on behalf of the provider (system/faucet key).
         3.  Streams the file content to the response.
     *   **Role:** Acts as a "Retrieval Proxy" that ensures on-chain proof generation ("Unified Liveness") occurs even for web downloads.
-    *   **NilFS Path Fetch (target end state):** `file_path` is **required**. The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. When `file_path` is missing, return a clear non-200 (no CID/index fallback). Proof submission may be async in devnet to keep downloads responsive.
+    *   **NilFS Path Fetch (target end state):**
+        *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
+        *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
+        *   The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.

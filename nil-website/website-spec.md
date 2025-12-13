@@ -154,7 +154,7 @@ interface StatusSummary {
 *   **Transport:** HTTP (configured via `appConfig.evmRpc`).
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.
-*   **E2E Mode (Target):** When `NIL_E2E=1`, use a deterministic test wallet connector / injected provider shim (no MetaMask extension) to make Playwright runs stable and CI-friendly.
+*   **E2E Mode (Target):** When `NIL_E2E=1`, use a deterministic test wallet connector / injected provider shim (no MetaMask extension) to make Playwright runs stable and CI-friendly (recommended env: `NIL_E2E_PK` for the dev private key).
 
 ### 3.2 ProofContext (`src/context/ProofContext.tsx`)
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
@@ -184,11 +184,11 @@ interface StatusSummary {
 This layer encapsulates business logic, specifically EIP-712 signing and Gateway interactions.
 
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
-*   **Purpose:** Orchestrates the capacity allocation transaction.
+*   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
 *   **EIP-712 Signature:**
     *   **Domain:** `NilStore` (Verifying Contract: `0x0...0`).
-    *   **Type (target):** `CreateDeal(address creator, uint64 duration, string service_hint, string initial_escrow, string max_monthly_spend, uint64 nonce)` (capacity tiers removed).
+    *   **Type (target):** `CreateDealV2(address creator, uint64 duration, string service_hint, string initial_escrow, string max_monthly_spend, uint64 nonce)` (capacity tiers removed; message name/version bumped to prevent hash collisions).
         *   **Migration:** During the transition, the chain may accept the legacy CreateDeal typed-data hash to avoid a flag-day across web/scripts.
     *   **Nonce Logic:** Manages local nonce counter in `localStorage` (`nilstore:evmNonces:<addr>`).
 *   **API:** POSTs `{ intent, evm_signature }` to `/gateway/create-deal-evm`.
@@ -206,7 +206,7 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
     2.  Constructs `FormData` with `file` and `owner`.
     3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
-*   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filename }`.
+*   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filePath, filename }`.
     *   **Compatibility:** Gateway responses may still use legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
 
 ### 4.4 `useFaucet` (`src/hooks/useFaucet.ts`)
@@ -345,7 +345,7 @@ The website depends on the following services (configured in `config.ts`):
 | **EVM JSON-RPC** | `evmRpc` | `http://localhost:8545` |
 
 ### Key Endpoints
-*   `POST /gateway/upload`: `FormData{file, owner}` -> `{cid, size_bytes, filename}`.
+*   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
 *   `POST /gateway/create-deal-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
@@ -398,7 +398,7 @@ The website depends on the following services (configured in `config.ts`):
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
 *   **Real Data Flow:** The actual data flow for a deal is:
-    1.  `useCreateDeal` -> Allocates storage on-chain.
+    1.  `useCreateDeal` -> Creates a thin-provisioned Deal on-chain.
     2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns `manifest_root`.
     3.  `useUpdateDealContent` -> Commits the `manifest_root` to the chain.
 
@@ -415,7 +415,7 @@ This sprint prioritizes a clean separation between:
 *   **Deal (LCD):** `GET /nilchain/nilchain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
-*   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,allocated_length}` used for immediate UX before LCD reflects the commit.
+*   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.
 
 ### 9.2 Tests
 *   **Node unit tests:** validate domain normalization and controller orchestration (no React/DOM required).

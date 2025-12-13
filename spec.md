@@ -18,7 +18,7 @@ It specifies:
 ---
 
 ## § 6 Product-Aligned Economics
-*(This section, particularly regarding Deal Sizing and economics, is formally defined and superseded by [RFC: Data Granularity & Economic Model](rfcs/rfc-data-granularity-and-economics.md).)*
+*(This section’s economic rationale is expanded in [RFC: Data Granularity & Economic Model](rfcs/rfc-data-granularity-and-economics.md). Legacy “capacity tiers / DealSize” language is deprecated; the normative semantics are **thin provisioning** with a per‑deal hard cap.)*
 
 ### 6.0 System-Defined Placement (Anti-Sybil & Hints)
 

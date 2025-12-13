@@ -51,7 +51,7 @@ path: [u8; 40],    // 40 bytes
 
 ### The Mental Model: "NILFS"
 The proposal effectively moves the filesystem logic into "User Space" (or rather, "Deal Space"). The "Disk" is the Deal (Slab). `MDU #0` acts as the **Superblock + Inode Table**.
-*   **Pros:** This is excellent for portability. The entire filesystem structure moves with the data. It allows "Lazy Filling" (Thin Provisioning), where users pay for the *reservation* (512GB) but only prove/store the *allocation*.
+*   **Pros:** This is excellent for portability. The entire filesystem structure moves with the data. It allows "Lazy Filling" (Thin Provisioning), where deals start at `size = 0` and only grow as content is committed, up to the 512 GiB hard cap.
 *   **Cons:** It inherits the rigidity of old-school filesystems (like FAT16/FAT32) regarding fixed table sizes.
 
 ### The "Witness MDU" Cache

@@ -1,9 +1,13 @@
-# Specification: Data Granularity & Economic Model (v1.0)
+# Specification: Data Granularity & Economic Model (v2.0)
 
-**Status:** Approved Normative
+**Status:** Approved Normative (Updated)
 **Scope:** Core Protocol / Economics
 **Depends on:** `spec.md`, `nil_core`
-**Supersedes:** `metaspec.md` (Deal Size definitions), `rfc_granularity_v1`
+**Supersedes:** `metaspec.md` (legacy deal sizing language), `rfc_granularity_v1`
+
+**Changelog (v2.0):**
+*   Removes capacity tiers (`DealSize` / `size_tier`).
+*   Clarifies **thin provisioning**: deals start at `size = 0` and grow only via content commits, up to a hard cap.
 
 ---
 
@@ -13,22 +17,25 @@ NilStore faces a fundamental architectural tension between Scalability and Perfo
 * **The Scalability Constraint:** To store Exabytes of data without halting the blockchain, the ledger must track large aggregations of data. If the chain tracks small chunks individually, the state database will explode ("State Bloat").
 * **The Performance Constraint:** To serve "Hot" data with sub-second latency, the system must allow users to retrieve specific, granular chunks instantly without waiting hours to "unseal" a large volume.
 
-**Decision:** We adopt a **Dual-Unit Architecture**. We separate the Financial Ledger Unit (`DEAL_SIZE`) from the Physical Retrieval Unit (`MDU_SIZE`).
+**Decision:** We adopt a **Dual-Unit Architecture**. We separate the Financial Ledger Unit (the **Deal** container, thin-provisioned up to `MAX_DEAL_BYTES`) from the Physical Retrieval Unit (`MDU_SIZE`).
 
 ---
 
-## 2. The Financial Container: DEAL_SIZE
-The Deal Size is the unit of accounting on the blockchain. It represents a commitment to store a specific volume of capacity.
+## 2. The Financial Container: Thin-Provisioned Deals (No Tiers)
+NilStore uses a **thin-provisioned** Deal container model:
+
+*   `MsgCreateDeal*` creates a Deal with `manifest_root = empty`, `size = 0` (and `total_mdus = 0` until first commit).
+*   `MsgUpdateDealContent*` commits content and advances the Deal’s `manifest_root`, `size`, and `total_mdus`.
+*   There is **no user-selected capacity tier** and no on-chain `DealSize` enum.
 
 ### 2.1 Governance Policy
-**Status:** GOVERNANCE PARAMETER (SET)
+**Status:** PROTOCOL / PARAMETER (SET)
 
-The network will not allow arbitrary deal sizes. To prevent database dust, users must purchase capacity in specific, governance-approved increments.
+To prevent state bloat and manage failure domains, the protocol enforces a hard maximum capacity per Deal ID.
 
-**Approved Tiers:**
-* **Tier 1: Developer Slab (4 GiB):** Entry-level capacity for testing. Priced at a premium.
-* **Tier 2: Standard Slab (32 GiB):** The baseline network unit. **Note:** This size is strictly aligned with Filecoin sectors to facilitate future bridging and interoperability.
-* **Tier 3: Wholesale Slab (512 GiB):** High-volume tier for Enterprise/Archive use cases.
+**Hard Cap (Normative):**
+* **`MAX_DEAL_BYTES = 512 GiB`** per Deal ID.
+* Large datasets should be split across multiple deals.
 
 ### 2.2 Scale Analysis
 Adopting this aggregation strategy keeps the state size manageable. At a network size of 3 Exabytes (EiB):
@@ -73,14 +80,14 @@ This model creates a native economic incentive for batching.
 | Request Type | Total Bytes | Gas Breakdown | Effective Cost/MB |
 | :--- | :--- | :--- | :--- |
 | **Single MDU** | 8 MiB | High % Orchestration | **High (Premium)** |
-| **Batch (Max Range)** | `DEAL_SIZE` | Low % Orchestration | **Low (Efficient)** |
+| **Batch (Max Range)** | `Deal.size` (≤ `MAX_DEAL_BYTES`) | Low % Orchestration | **Low (Efficient)** |
 
 ---
 
 ## 5. Batch Limit Policy
 **Decision:** **Option 1 (Natural Limit)**.
 
-The maximum batch size is implicitly `DEAL_SIZE`. Since we already cap the `DEAL_SIZE` via Governance (max 512 GiB), we rely on that mechanism as the safety valve.
+The maximum batch size is bounded by the Deal’s committed content (`Deal.size`) and the hard cap (`MAX_DEAL_BYTES`). We rely on that mechanism as the safety valve.
 
 > **Design Note: Rejection of Artificial Caps**
 > During the architectural review (v8), we considered implementing an artificial "Step Function" cap (e.g., forcing a new request every 64 GiB).
@@ -88,16 +95,19 @@ The maximum batch size is implicitly `DEAL_SIZE`. Since we already cap the `DEAL
 > This was **rejected** for the following reasons:
 > 1.  **Arbitrary Friction:** It introduces unnecessary latency for legitimate archive retrievals.
 > 2.  **Pricing Distortion:** Re-introducing $\text{Gas}_{Orch}$ fees every 64 GB creates a "step function" in pricing that penalizes large-scale enterprise users.
-> 3.  **Simplicity:** Relying on the `DEAL_SIZE` natural limit simplifies the state machine and reduces parameter complexity.
+> 3.  **Simplicity:** Relying on the `MAX_DEAL_BYTES` natural limit simplifies the state machine and reduces parameter complexity.
 
 ---
 
 ## 6. Implementation Directives
 1.  **Core Cryptography:** Hardcode `MDU_SIZE = 8,388,608` in `nil_core`.
-2.  **Chain Logic:** Implement `MsgCreateDeal` to accept a `DealSize` enum corresponding strictly to the approved tiers in Section 2.1.
-3.  **Client SDK:** Implement `GetRange()` as the primary retrieval method. The SDK should default to requesting the largest necessary range (up to the full `DEAL_SIZE`) to minimize $\text{Gas}_{Orch}$ costs for the user.
+2.  **Chain Logic (Thin Provisioning):**
+    *   `MsgCreateDeal*` initializes `size = 0`, `manifest_root = empty`, `total_mdus = 0` (until first content commit).
+    *   `MsgUpdateDealContent*` enforces `size ≤ MAX_DEAL_BYTES` and advances the committed state.
+    *   Remove `DealSize` / `size_tier` from request payloads and EIP-712 typed-data in all clients.
+3.  **Client SDK:** Implement `GetRange()` as the primary retrieval method. The SDK should default to requesting the largest necessary range (up to the remaining file span) to minimize $\text{Gas}_{Orch}$ costs for the user.
 
 ---
 
 ### Suggested Next Step
-Now that the Data Granularity Spec is finalized, would you like me to draft the **`nil_core` Rust struct definitions** for the `DealSize` enum and the `Gas` calculation logic to match this spec?
+Add shared, cross-language test vectors for EIP-712 message hashes (CreateDealV2 + UpdateContent) and range-cost calculations so web/scripts and the chain verifier cannot drift.
