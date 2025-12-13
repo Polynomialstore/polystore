@@ -21,7 +21,7 @@ if (!privKey) {
 }
 
 const evmChainId = Number(process.env.EVM_CHAIN_ID || 31337)
-const cosmosChainId = process.env.CHAIN_ID || 'test-1'
+const cosmosChainId = process.env.CHAIN_ID || '31337'
 const account = privateKeyToAccount(privKey)
 
 async function signTypedData(typedData: any) {

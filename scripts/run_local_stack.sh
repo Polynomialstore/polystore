@@ -333,6 +333,8 @@ start_web() {
     cd "$ROOT_DIR/nil-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_BRIDGE_ADDRESS="${BRIDGE_ADDRESS:-${VITE_BRIDGE_ADDRESS:-}}" \
+    VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
+    VITE_CHAIN_ID="$EVM_CHAIN_ID" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! > "$PID_DIR/website.pid"
   )

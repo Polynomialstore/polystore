@@ -8,7 +8,7 @@ import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { lcdFetchDeals } from '../api/lcdClient'
 
 const CHAIN_ID = 31337
-const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? 'test-1'
+const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? '31337'
 
 // viem's typed-data helpers require domain.chainId as bigint.
 function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {

@@ -1,7 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8081'
 const LCD_BASE = import.meta.env.VITE_LCD_BASE || 'http://localhost:1317'
 const GATEWAY_BASE = import.meta.env.VITE_GATEWAY_BASE || 'http://localhost:8080'
-const COSMOS_CHAIN_ID = import.meta.env.VITE_COSMOS_CHAIN_ID || 'test-1'
+const COSMOS_CHAIN_ID = import.meta.env.VITE_COSMOS_CHAIN_ID || '31337'
 const BRIDGE_ADDRESS = import.meta.env.VITE_BRIDGE_ADDRESS || '0x0000000000000000000000000000000000000000'
 
 export const appConfig = {

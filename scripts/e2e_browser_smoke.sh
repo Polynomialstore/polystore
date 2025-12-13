@@ -39,7 +39,7 @@ wait_for_http() {
 
 export VITE_E2E=1
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
-export CHAIN_ID="${CHAIN_ID:-test-1}"
+export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 
 echo "==> Starting local stack..."

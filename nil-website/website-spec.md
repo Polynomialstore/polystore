@@ -59,7 +59,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL. |
 | `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD (Light Client Daemon) URL. |
 | `VITE_GATEWAY_BASE` | `http://localhost:8080` | Storage Gateway URL for file uploads. |
-| `VITE_COSMOS_CHAIN_ID` | `test-1` | Chain ID for the Cosmos layer. |
+| `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
 | `VITE_EVM_RPC` | `http://localhost:8545` | JSON-RPC endpoint for the EVM layer. |
 | `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
 | `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
