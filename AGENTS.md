@@ -451,6 +451,13 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
+### 11.0 Immediate Goals (Next)
+- Close NilFS “single source of truth”: remove CID/index fallback fetch paths (see **11.6.A3**).
+- Finish “dynamic sizing / no capacity tiers” cleanup end-to-end (see **11.2**).
+- Add a real browser smoke E2E suite (see **11.4**).
+- Backlog: the Dashboard MDU #0 inspector + commit-content flow is validated for the current demo; prioritize correctness over polish.
+- Back burner: native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
+
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
 - [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
@@ -458,11 +465,31 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
 ### 11.2 Protocol Cleanup (Dynamic Sizing)
-- [ ] Remove `DealSize` enum and `deal_size` field from `nilchain/proto/nilchain/nilchain/v1/types.proto` and regenerate Go/Rust types.
-- [ ] Update `MsgCreateDeal` and `MsgCreateDealFromEvm` handlers to ignore any legacy tier/size_tier fields and treat deals as thin-provisioned (0 bytes until content is committed).
-- [ ] Update `nil_cli` (`create-deal`/gateway flows) to drop any `tier` argument and align with the thin-provisioning semantics.
-- [ ] Update `nil_s3` and `nil-website` so the dashboard, deal explorer, and gateway endpoints no longer reference tiers, and instead rely on `size_bytes`/`allocated_length` and MDUs.
-- [ ] Extend/adjust migrations and tests so dynamic sizing is covered end-to-end (genesis migration, keeper tests, CLI tests).
+- [x] **11.2.0 Remove capacity-tier proto fields (`DealSize` / `deal_size`).**
+    - **Files:** `nilchain/proto/nilchain/nilchain/v1/types.proto`, `nilchain/proto/nilchain/nilchain/v1/tx.proto`, generated `nilchain/x/nilchain/types/*.pb.go`
+    - **Pass gate:** `nilchaind` builds; LCD JSON has no `deal_size`/`DealSize` fields.
+    - **Test gate:** `cd nilchain && make proto-gen && go test ./...`
+
+- [ ] **11.2.1 Chain: ensure deals are thin-provisioned (no implicit tier sizing).**
+    - **Files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/msg_server_test.go`, `nilchain/x/nilchain/keeper/genesis_test.go`
+    - **Pass gate:** `CreateDeal` + `CreateDealFromEvm` create deals with `Deal.size == 0` + empty `Deal.manifest_root` until `UpdateDealContent*` is executed; any legacy tier fields are ignored for state.
+    - **Test gate:** `cd nilchain && go test ./x/nilchain/keeper -run CreateDeal`
+
+- [ ] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
+    - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
+    - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
+    - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
+    - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...`
+
+- [ ] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
+    - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
+    - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n \"size_tier|SIZE_TIER|DealSize|deal_size\" -S nil-website nilchain scripts tests`
+
+- [ ] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
+    - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
+    - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
+    - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
 
 ### 11.3 Gateway & File Lifecycle E2E
 - [x] Stabilize `/gateway/upload`, `/gateway/create-deal-evm`, and `/gateway/update-deal-content-evm` so that a full “allocate capacity → upload file → commit content → fetch file” flow works reliably via both curl and the web UI.
@@ -476,9 +503,35 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **E2E:** `scripts/e2e_lifecycle.sh` upload timeout reduced to `<=60s`.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
-- [ ] Introduce a lightweight browser e2e suite (Cypress or Playwright) under `nil-website` that runs against `./scripts/run_local_stack.sh start`.
-- [ ] Add a smoke test that: connects a wallet (using a test account), creates a deal via the dashboard, uploads a file, commits content, and asserts the deal row shows a non-zero size and a manifest root.
-- [ ] Add a smoke test for the deal explorer to confirm that an uploaded file appears and can be fetched via the gateway.
+- [x] **11.4.0 Playwright harness exists (baseline smoke).**
+    - **Files:** `nil-website/playwright.config.ts`, `nil-website/tests/smoke.spec.ts`, `nil-website/package.json`
+    - **Pass gate:** With the stack running, Playwright can load `/#/dashboard` and render the wallet prompt.
+    - **Test gate:** `./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+
+- [ ] **11.4.1 Add a deterministic E2E wallet (test account) for headless runs.**
+    - **Files:** `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `nil-website/src/lib/e2eWallet.ts`
+    - **Pass gate:** In E2E mode, “Connect Wallet” works without the MetaMask extension and supports `eth_signTypedData_v4` for create-deal + update-content.
+    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+
+- [ ] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
+    - **Files:** `nil-website/src/components/Dashboard.tsx`, `nil-website/src/components/DealDetail.tsx`, `nil-website/src/components/ConnectWallet.tsx`
+    - **Pass gate:** Playwright tests use `data-testid` selectors (not brittle text matching); UX polish remains backlog.
+    - **Test gate:** `cd nil-website && npm run test:e2e`
+
+- [ ] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
+    - **Files:** (new) `nil-website/tests/deal-lifecycle.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
+    - **Pass gate:** Test creates a deal, uploads a small file, commits content, and asserts the deal row shows a non-zero size + a manifest root.
+    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+
+- [ ] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
+    - **Files:** (new) `nil-website/tests/deal-explorer.spec.ts`, `nil-website/src/components/DealDetail.tsx`
+    - **Pass gate:** Uploaded file appears in the NilFS file list and can be downloaded via `/gateway/fetch/...&file_path=...` (HTTP 200).
+    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+
+- [ ] **11.4.5 One-command runner script (start stack → run tests → stop).**
+    - **Files:** (new) `scripts/e2e_browser_smoke.sh`
+    - **Pass gate:** Script is idempotent and leaves no running processes on success/failure.
+    - **Test gate:** `./scripts/e2e_browser_smoke.sh`
 
 ### 11.4.1 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
@@ -513,17 +566,20 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
 
 - [ ] **A3. Remove “CID-only” fallback paths once NilFS is canonical.**
-    - **Change:** Stop relying on the local filename→CID index for fetch/UX; always resolve through `MDU #0` File Table + Roots.
-    - **Pass gate:** `GatewayFetch(deal_id, path=...)` works after restart (state derived from slab only), and legacy CID fetch still works via path mapping for Mode 1.
-    - **Commit gate:** After pass, commit `refactor(nil_s3): fetch via NilFS tables` and push.
+    - **Files:** `nil_s3/main.go` (GatewayFetch + index helpers), `nil_s3/resolve.go`, `nil_s3/main_test.go`, `nil_s3/fetch_test.go`, `nil_s3/nil-s3-spec.md`, `e2e_gateway_retrieval.sh`
+    - **Change:** Remove the `uploads/index.json` CID→path lookup and require NilFS resolution via `MDU #0` File Table + Roots for all fetch flows.
+    - **Pass gate:** `GatewayFetch(deal_id, owner, file_path=...)` works after restart (state derived from slab on disk), and the old “CID-only” fetch path returns a clear non-200 error (no hidden fallback).
+    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
+    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only fetch (no cid index)` and push.
 
-- [ ] **A4. Update Commit‑Content UI to be NilFS‑aware.**
+- [x] **A4. Update Commit‑Content UI to be NilFS‑aware.**
     - **Change:** “Commit Content” tab shows a per‑deal file list from NilFS, supports multiple uploads into one deal, and uses returned `manifest_root` + `allocated_length` for `update-deal-content-evm`.
     - **Pass gate:** Manual happy‑path in browser:
         1. Create deal,
         2. Upload file → returns canonical ManifestRoot,
         3. Commit content → deal becomes Active with correct size,
         4. Fetch from Deal Explorer succeeds.
+    - **Backlog:** UX/UI polish (non-blocking) can iterate after the protocol + e2e work is finished.
     - **Commit gate:** After pass, commit `feat(nil-website): NilFS commit-content UX` and push.
 
 #### 11.6.B Thick‑Client WASM Stabilization (Parallel Track)
@@ -532,7 +588,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
     - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
 
-- [ ] **B2. Add native↔WASM parity tests for MDU expansion.**
+- [ ] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
     - **Change:** For a fixed fixture file, assert:
         1. WASM `expand_file` MDUs/roots/commitments equal `nil_cli shard` output,
         2. resulting ManifestRoot equals canonical gateway ingest ManifestRoot.
