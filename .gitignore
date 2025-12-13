@@ -17,3 +17,7 @@ libnil_core.dylib
 .nilchain_retrieval
 nil_s3/uploads/
 .gemini
+nil-website/test-results/
+nil-website/playwright-report/
+nil_bridge/broadcast/**/run-*.json
+nil_bridge/cache/**/run-*.json
