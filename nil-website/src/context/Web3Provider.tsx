@@ -4,6 +4,7 @@ import { defineChain } from 'viem'
 import { injected } from 'wagmi/connectors'
 import React from 'react'
 import { appConfig } from '../config'
+import { installE2eWallet } from '../lib/e2eWallet'
 
 // Define the local NilChain network
 export const nilChain = defineChain({
@@ -21,6 +22,8 @@ export const nilChain = defineChain({
     default: { name: 'NilExplorer', url: 'http://localhost:5173' },
   },
 })
+
+installE2eWallet()
 
 export const injectedConnector = injected()
 
