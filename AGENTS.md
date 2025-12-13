@@ -456,7 +456,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
 
-- [ ] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
+- [x] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
     - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
     - **API changes (target end state):**
@@ -524,7 +524,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
-- [ ] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
+- [x] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
     - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `nil-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
     - **Semantics (target end state):**
@@ -543,7 +543,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
     - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
 
-- [ ] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
+- [x] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
     - **Key files:** `nil-website/tests/*.spec.ts`, `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
     - **Wallet strategy (recommended):**
@@ -577,26 +577,26 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Pass gate:** `nilchaind` builds; LCD JSON has no `deal_size`/`DealSize` fields.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./...`
 
-- [ ] **11.2.1 Chain: ensure deals are thin-provisioned (no implicit tier sizing).**
+- [x] **11.2.1 Chain: ensure deals are thin-provisioned (no implicit tier sizing).**
     - **Files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/msg_server_test.go`, `nilchain/x/nilchain/keeper/genesis_test.go`
     - **Pass gate:** `CreateDeal` + `CreateDealFromEvm` create deals with `Deal.size == 0` + empty `Deal.manifest_root` until `UpdateDealContent*` is executed; any legacy tier fields are ignored for state.
     - **Test gate:** `cd nilchain && go test ./x/nilchain/keeper -run CreateDeal`
     - **Commit gate:** After pass, commit `fix(nilchain): thin-provision CreateDeal` and push to both remotes.
 
-- [ ] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
+- [x] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
     - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
     - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
     - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
     - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to both remotes.
 
-- [ ] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
+- [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
     - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
     - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to both remotes.
 
-- [ ] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
+- [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
     - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
     - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
@@ -619,31 +619,31 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Pass gate:** With the stack running, Playwright can load `/#/dashboard` and render the wallet prompt.
     - **Test gate:** `./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
 
-- [ ] **11.4.1 Add a deterministic E2E wallet (test account) for headless runs.**
+- [x] **11.4.1 Add a deterministic E2E wallet (test account) for headless runs.**
     - **Files:** `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `nil-website/src/lib/e2eWallet.ts`
     - **Pass gate:** In E2E mode, “Connect Wallet” works without the MetaMask extension and supports `eth_signTypedData_v4` for create-deal + update-content.
-    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
     - **Commit gate:** After pass, commit `test(nil-website): deterministic E2E wallet` and push to both remotes.
 
-- [ ] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
+- [x] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
     - **Files:** `nil-website/src/components/Dashboard.tsx`, `nil-website/src/components/DealDetail.tsx`, `nil-website/src/components/ConnectWallet.tsx`
     - **Pass gate:** Playwright tests use `data-testid` selectors (not brittle text matching); UX polish remains backlog.
     - **Test gate:** `cd nil-website && npm run test:e2e`
     - **Commit gate:** After pass, commit `test(nil-website): add stable e2e selectors` and push to both remotes.
 
-- [ ] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
-    - **Files:** (new) `nil-website/tests/deal-lifecycle.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
+- [x] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
+    - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
     - **Pass gate:** Test creates a deal, uploads a small file, commits content, and asserts the deal row shows a non-zero size + a manifest root.
-    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
     - **Commit gate:** After pass, commit `test(nil-website): dashboard lifecycle smoke e2e` and push to both remotes.
 
-- [ ] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
-    - **Files:** (new) `nil-website/tests/deal-explorer.spec.ts`, `nil-website/src/components/DealDetail.tsx`
+- [x] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
+    - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/components/DealDetail.tsx`
     - **Pass gate:** Uploaded file appears in the NilFS file list and can be downloaded via `/gateway/fetch/...&file_path=...` (HTTP 200).
-    - **Test gate:** `NIL_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
     - **Commit gate:** After pass, commit `test(nil-website): deal explorer smoke e2e` and push to both remotes.
 
-- [ ] **11.4.5 One-command runner script (start stack → run tests → stop).**
+- [x] **11.4.5 One-command runner script (start stack → run tests → stop).**
     - **Files:** (new) `scripts/e2e_browser_smoke.sh`
     - **Pass gate:** Script is idempotent and leaves no running processes on success/failure.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
@@ -681,28 +681,28 @@ This is the **canonical execution checklist** for the next development sprint. E
         3. both files fetch correctly by path.
     - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
 
-- [ ] **A3.0 Add “restart safety” coverage to E2E (prove NilFS is the source of truth).**
+- [x] **A3.0 Add “restart safety” coverage to E2E (prove NilFS is the source of truth).**
     - **Files:** `scripts/e2e_lifecycle.sh`, `scripts/run_local_stack.sh`
     - **Change:** Restart `nil_s3` (or the full stack) between upload/commit and fetch, asserting the gateway derives file state from the on-disk slab (MDU #0 + Witness/User MDUs).
     - **Pass gate:** E2E flow passes with a restart in the middle; no dependency on `uploads/index.json`.
     - **Test gate:** `./scripts/e2e_lifecycle.sh`
     - **Commit gate:** After pass, commit `test(scripts): restart coverage for NilFS SSoT` and push.
 
-- [ ] **A3.1 GatewayFetch: make `file_path` mandatory (no CID/index fallback).**
+- [x] **A3.1 GatewayFetch: make `file_path` mandatory (no CID/index fallback).**
     - **Files:** `nil_s3/main.go` (`GatewayFetch`), `nil_s3/resolve.go`, `nil_s3/fetch_test.go`
     - **Change:** Remove `uploads/index.json`-backed fallback branches; only resolve via NilFS (`MDU #0` File Table + slab roots).
     - **Pass gate:** Fetch by `file_path` works after restart (state derived from slab on disk); requesting fetch without `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh`
     - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only fetch (require file_path)` and push.
 
-- [ ] **A3.2 GatewayProveRetrieval: stop looking up file paths in `uploads/index.json`.**
+- [x] **A3.2 GatewayProveRetrieval: stop looking up file paths in `uploads/index.json`.**
     - **Files:** `nil_s3/main.go` (`GatewayProveRetrieval`), `nil_s3/resolve.go`, `e2e_gateway_retrieval.sh`
     - **Change:** Accept/require `file_path` (and/or slab indices) and derive all proof inputs from the slab + chain state; remove `lookupFileInIndex` usage.
     - **Pass gate:** Retrieval proof submission works using only `(deal_id, manifest_root, file_path)` and still succeeds after a gateway restart.
     - **Test gate:** `cd nil_s3 && go test ./...` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
     - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only retrieval proof (no index)` and push.
 
-- [ ] **A3.3 Delete legacy `index.json` helpers (and deprecate `/gateway/manifest`).**
+- [x] **A3.3 Delete legacy `index.json` helpers (and deprecate `/gateway/manifest`).**
     - **Files:** `nil_s3/main.go` (`lookupFileInIndex` + helpers, `GatewayManifest`), `nil_s3/nil-s3-spec.md`
     - **Change:** Remove the index file format and any handlers that depend on it (or refactor them to serve slab-derived data only).
     - **Pass gate:** A clean `nil_s3` data dir without `uploads/index.json` still supports upload → commit → fetch by `file_path`; legacy CID-only flows return a clear non-200 error.
