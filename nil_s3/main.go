@@ -65,13 +65,6 @@ func extractJSONBody(b []byte) []byte {
 	return b[start : end+1]
 }
 
-type fileIndexEntry struct {
-	CID      string `json:"cid"`
-	Path     string `json:"path"`
-	Filename string `json:"filename"`
-	Size     uint64 `json:"size"`
-}
-
 type NilCliOutput struct {
 	ManifestRootHex string    `json:"manifest_root_hex"`
 	ManifestBlobHex string    `json:"manifest_blob_hex"`
@@ -272,7 +265,6 @@ func main() {
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/manifest/{cid}", GatewayManifest).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
@@ -500,12 +492,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		size = fileSize
 	}
 
-	// Record this file in a simple local index so we can serve it back
-	// by Root CID in Mode 1 (FullReplica) fetch flows.
-	if err := recordFileInIndex(cid, path, header.Filename, size); err != nil {
-		log.Printf("GatewayUpload: failed to record file index: %v", err)
-	}
-
 	resp := map[string]any{
 		"cid":              cid,
 		"manifest_root":    cid,
@@ -549,9 +535,12 @@ type createDealRequest struct {
 }
 
 type proveRetrievalRequest struct {
-	Cid    string `json:"cid"`
-	DealID uint64 `json:"deal_id"`
-	Epoch  uint64 `json:"epoch_id,omitempty"`
+	DealID       *uint64 `json:"deal_id"`
+	ManifestRoot string  `json:"manifest_root,omitempty"`
+	Cid          string  `json:"cid,omitempty"`
+	FilePath     string  `json:"file_path,omitempty"`
+	Owner        string  `json:"owner,omitempty"`
+	Epoch        uint64  `json:"epoch_id,omitempty"`
 }
 
 // createDealFromEvmRequest is the payload expected by /gateway/create-deal-evm.
@@ -1101,11 +1090,38 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 
 	var req proveRetrievalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "")
 		return
 	}
-	if req.Cid == "" {
-		http.Error(w, "cid is required", http.StatusBadRequest)
+	if req.DealID == nil {
+		writeJSONError(w, http.StatusBadRequest, "deal_id is required", "")
+		return
+	}
+
+	rawManifestRoot := strings.TrimSpace(req.ManifestRoot)
+	if rawManifestRoot == "" {
+		rawManifestRoot = strings.TrimSpace(req.Cid)
+	}
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root is required", "")
+		return
+	}
+
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
+		return
+	}
+
+	dealID := *req.DealID
+	filePath, err := validateNilfsFilePath(req.FilePath)
+	if err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid file_path",
+			fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%d&owner=<deal_owner>", manifestRoot.Canonical, dealID),
+		)
 		return
 	}
 
@@ -1114,30 +1130,93 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		epoch = 1
 	}
 
-	// For the devnet, we use the faucet key as both the logical user and provider.
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
+	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 	if err != nil {
-		log.Printf("GatewayProveRetrieval: resolveKeyAddress failed: %v", err)
-		http.Error(w, "failed to resolve provider address", http.StatusInternalServerError)
+		if errors.Is(err, ErrDealNotFound) {
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
+		log.Printf("GatewayProveRetrieval: failed to fetch deal %d: %v", dealID, err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal", "")
+		return
+	}
+	if owner := strings.TrimSpace(req.Owner); owner != "" && dealOwner != owner {
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		return
+	}
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"deal has no committed manifest_root yet",
+			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+		)
+		return
+	}
+	chainRoot, err := parseManifestRoot(dealCID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+		return
+	}
+	if chainRoot.Canonical != manifestRoot.Canonical {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"stale manifest_root (does not match on-chain deal state)",
+			fmt.Sprintf("Query the deal and retry with manifest_root=%s", chainRoot.Canonical),
+		)
 		return
 	}
 
-	entry, err := lookupFileInIndex(req.Cid)
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {
-		log.Printf("GatewayProveRetrieval: index lookup failed: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if entry == nil {
-		http.Error(w, "file not found for cid", http.StatusNotFound)
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
 		return
 	}
 
-	txHash, err := submitRetrievalProofWithParams(r.Context(), req.DealID, epoch, providerKeyName, providerAddr, entry.Path)
+	mduIdx, mduPath, _, err := GetFileLocation(dealDir, filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(
+				w,
+				http.StatusNotFound,
+				"file not found in deal",
+				fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%d&owner=%s", manifestRoot.Canonical, dealID, dealOwner),
+			)
+			return
+		}
+		log.Printf("GatewayProveRetrieval: GetFileLocation failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file", "")
+		return
+	}
+
+	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	if _, err := os.Stat(manifestPath); err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(
+				w,
+				http.StatusConflict,
+				"manifest blob missing on disk",
+				"Re-upload or run the gateway in full ingest mode (not NIL_FAST_INGEST)",
+			)
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to read manifest blob", err.Error())
+		return
+	}
+
+	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
-		http.Error(w, "failed to submit retrieval proof (check nilchaind logs)", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", "check nilchaind logs")
 		return
 	}
 
@@ -1275,7 +1354,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	go func(id uint64, idx uint64, path string, manPath string) {
 		ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
 		defer cancel()
-		txHash, err := submitRetrievalProofNew(ctx, id, idx, path, manPath)
+		txHash, err := submitRetrievalProofNew(ctx, id, 1, idx, path, manPath)
 		if err != nil {
 			log.Printf("GatewayFetch: submitRetrievalProofNew failed: %v", err)
 			return
@@ -1672,42 +1751,6 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GatewayManifest serves the manifest (shard output JSON) for a given Root CID.
-func GatewayManifest(w http.ResponseWriter, r *http.Request) {
-	setCORS(w)
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid required", http.StatusBadRequest)
-		return
-	}
-
-	entry, err := lookupFileInIndex(cid)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if entry == nil {
-		http.Error(w, "manifest not found", http.StatusNotFound)
-		return
-	}
-
-	// The shard output is stored at <path>.json
-	manifestPath := entry.Path + ".json"
-	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		http.Error(w, "manifest file missing", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	http.ServeFile(w, r, manifestPath)
-}
-
 // shardFile runs nil-cli shard on the given path and extracts the full output.
 func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*NilCliOutput, error) {
 	if ctx == nil {
@@ -1828,70 +1871,6 @@ func envInt(key string, def int) int {
 		return def
 	}
 	return n
-}
-
-func indexPath() string {
-	return filepath.Join(uploadDir, "index.json")
-}
-
-func loadFileIndex() (map[string]fileIndexEntry, error) {
-	path := indexPath()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]fileIndexEntry{}, nil
-		}
-		return nil, err
-	}
-	var entries []fileIndexEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, err
-	}
-	index := make(map[string]fileIndexEntry, len(entries))
-	for _, e := range entries {
-		if e.CID == "" {
-			continue
-		}
-		index[e.CID] = e
-	}
-	return index, nil
-}
-
-func saveFileIndex(index map[string]fileIndexEntry) error {
-	entries := make([]fileIndexEntry, 0, len(index))
-	for _, e := range index {
-		entries = append(entries, e)
-	}
-	data, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(indexPath(), data, 0o644)
-}
-
-func recordFileInIndex(cid, path, filename string, size uint64) error {
-	idx, err := loadFileIndex()
-	if err != nil {
-		return err
-	}
-	idx[cid] = fileIndexEntry{
-		CID:      cid,
-		Path:     path,
-		Filename: filename,
-		Size:     size,
-	}
-	return saveFileIndex(idx)
-}
-
-func lookupFileInIndex(cid string) (*fileIndexEntry, error) {
-	idx, err := loadFileIndex()
-	if err != nil {
-		return nil, err
-	}
-	if e, ok := idx[cid]; ok {
-		return &e, nil
-	}
-	return nil, nil
 }
 
 // resolveKeyAddress returns the bech32 address for a key name in the local keyring.

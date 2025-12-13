@@ -11,9 +11,9 @@ import (
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
-// mduPath must point to the RAW MDU (or padded raw data).
 // mduIndex is the index in the Deal Slab (0=Manifest, 1..W=Witness, W+1..=Data).
-func submitRetrievalProofNew(ctx context.Context, dealID uint64, mduIndex uint64, mduPath string, manifestPath string) (string, error) {
+// mduPath must point to the encoded 8 MiB MDU bytes stored on disk.
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -30,12 +30,15 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, mduIndex uint64
 	}
 
 	dealIDStr := strconv.FormatUint(dealID, 10)
-	epochStr := "1" // Default
+	if epoch == 0 {
+		epoch = 1
+	}
+	epochStr := strconv.FormatUint(epoch, 10)
 	mduIndexStr := strconv.FormatUint(mduIndex, 10)
 
-	// 1. Encode Target MDU
+	// 1. Compute KZG commitments/roots for the already-encoded MDU.
 	prefix := mduPath + ".proof"
-	_, err = shardFile(ctx, mduPath, false, prefix)
+	_, err = shardFile(ctx, mduPath, true, prefix)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode MDU for proof: %w", err)
 	}
