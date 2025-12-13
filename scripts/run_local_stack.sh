@@ -21,13 +21,12 @@ NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
+BRIDGE_STATUS="not deployed"
 # Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
 export NIL_EVM_DEV_PRIVKEY
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
-# Consensus wiring for the EVM mempool is disabled in-app unless you opt in with
-# NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1.
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
 export NIL_DISABLE_EVM_MEMPOOL
 if [ ! -x "$GO_BIN" ]; then
@@ -223,9 +222,8 @@ PY
 
 start_chain() {
   banner "Starting nilchaind"
-  # Local devnet: disable custom EVM mempool/PrepareProposal wiring which can
-  # hang single-node consensus and CLI tx broadcasts.
-  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" "$NILCHAIND_BIN" start \
+  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" \
+    "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
@@ -282,35 +280,50 @@ start_bridge() {
   local mode="${NIL_DEPLOY_BRIDGE:-1}"
   if [ "$mode" = "0" ]; then
     echo "Skipping bridge deployment (NIL_DEPLOY_BRIDGE=0)"
+    BRIDGE_STATUS="skipped (NIL_DEPLOY_BRIDGE=0)"
     return
   fi
   if ! command -v forge >/dev/null 2>&1 || ! command -v cast >/dev/null 2>&1; then
     echo "Foundry tools not found; skipping NilBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
+    BRIDGE_STATUS="skipped (forge/cast not found)"
     return
   fi
+
+  # Avoid accidentally reusing a stale address from a previous chain reset.
+  rm -f "$BRIDGE_ADDR_FILE"
 
   banner "Waiting for EVM RPC (8545)..."
   local attempts=30
   local i
+  local ready=0
   for i in $(seq 1 "$attempts"); do
     if timeout 10s curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8545 --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
       echo "EVM RPC is ready."
+      ready=1
       break
     fi
     echo "EVM RPC not ready (attempt $i/$attempts); sleeping 1s..."
     sleep 1
   done
+  if [ "$ready" != "1" ]; then
+    echo "EVM RPC never became ready; skipping NilBridge deployment."
+    BRIDGE_STATUS="failed (EVM RPC not ready)"
+    return
+  fi
 
   banner "Deploying NilBridge to local EVM"
   if "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
     if [ -f "$BRIDGE_ADDR_FILE" ]; then
       BRIDGE_ADDRESS="$(cat "$BRIDGE_ADDR_FILE" | tr -d '\n' | tr -d '\r')"
       echo "NilBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
+      BRIDGE_STATUS="$BRIDGE_ADDRESS"
     else
       echo "Bridge deploy script completed but address file missing; check /tmp/bridge_deploy.log"
+      BRIDGE_STATUS="failed (missing address file; see /tmp/bridge_deploy.log)"
     fi
   else
     echo "Bridge deploy script failed; see /tmp/bridge_deploy.log. Continuing without bridge."
+    BRIDGE_STATUS="failed (see /tmp/bridge_deploy.log)"
   fi
 }
 
@@ -344,7 +357,7 @@ EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31
 Faucet:      http://localhost:8081/faucet
 Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard
-Bridge:      ${BRIDGE_ADDRESS:-not deployed (set NIL_DEPLOY_BRIDGE=1 + install forge/cast)}
+Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
 Home:        $CHAIN_HOME
 To stop:     ./scripts/run_local_stack.sh stop
 EOF

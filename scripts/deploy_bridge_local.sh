@@ -71,6 +71,21 @@ if [ -z "$BRIDGE_ADDR" ]; then
   exit 1
 fi
 
+echo ">>> Verifying NilBridge code at $BRIDGE_ADDR ..."
+VERIFY_TIMEOUT_SECS="${VERIFY_TIMEOUT_SECS:-60}"
+VERIFY_DEADLINE=$(( $(date +%s) + VERIFY_TIMEOUT_SECS ))
+while true; do
+  CODE=$(cast code --rpc-url "$RPC_URL" "$BRIDGE_ADDR" 2>/dev/null || true)
+  if [ -n "$CODE" ] && [ "$CODE" != "0x" ]; then
+    break
+  fi
+  if [ "$(date +%s)" -ge "$VERIFY_DEADLINE" ]; then
+    echo "✖ NilBridge not deployed (eth_getCode returned 0x after ${VERIFY_TIMEOUT_SECS}s)." >&2
+    exit 1
+  fi
+  sleep 2
+done
+
 mkdir -p "$REPO_ROOT/_artifacts"
 echo "$BRIDGE_ADDR" > "$REPO_ROOT/_artifacts/bridge_address.txt"
 echo ">>> NilBridge deployed at $BRIDGE_ADDR"
