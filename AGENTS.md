@@ -455,7 +455,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - Close NilFS “single source of truth”: remove CID/index fallback fetch paths (see **11.6.A3.1**).
 - Finish “dynamic sizing / no capacity tiers” cleanup end-to-end (see **11.2**).
 - Add a real browser smoke E2E suite (see **11.4**).
-- Backlog: the Dashboard MDU #0 inspector + commit-content flow is validated for the current demo; prioritize correctness over polish.
+- Backlog: the Dashboard MDU #0 inspector + commit-content flow is **good enough for this demo**; further polish is non-blocking.
 - Back burner: native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
@@ -479,12 +479,12 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
     - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
-    - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...`
+    - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
 
 - [ ] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n \"size_tier|SIZE_TIER|DealSize|deal_size\" -S nil-website nilchain scripts tests`
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
 
 - [ ] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
     - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
@@ -564,6 +564,13 @@ This section tracks the currently active TODOs for the AI agent working in this 
         2. `FileTableHeader.record_count` increases,
         3. both files fetch correctly by path.
     - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
+
+- [ ] **A3.0 Add “restart safety” coverage to E2E (prove NilFS is the source of truth).**
+    - **Files:** `scripts/e2e_lifecycle.sh`, `scripts/run_local_stack.sh`
+    - **Change:** Restart `nil_s3` (or the full stack) between upload/commit and fetch, asserting the gateway derives file state from the on-disk slab (MDU #0 + Witness/User MDUs).
+    - **Pass gate:** E2E flow passes with a restart in the middle; no dependency on `uploads/index.json`.
+    - **Test gate:** `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `test(scripts): restart coverage for NilFS SSoT` and push.
 
 - [ ] **A3.1 GatewayFetch: make `file_path` mandatory (no CID/index fallback).**
     - **Files:** `nil_s3/main.go` (`GatewayFetch`), `nil_s3/resolve.go`, `nil_s3/fetch_test.go`
