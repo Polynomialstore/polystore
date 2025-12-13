@@ -270,6 +270,7 @@ func main() {
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest/{cid}", GatewayManifest).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 
@@ -1282,6 +1283,26 @@ type nilfsFileEntry struct {
 	Flags       uint8  `json:"flags"`
 }
 
+type slabSegment struct {
+	Kind       string `json:"kind"` // mdu0 | witness | user
+	StartIndex uint64 `json:"start_index"`
+	Count      uint64 `json:"count"`
+	SizeBytes  uint64 `json:"size_bytes"`
+}
+
+type slabLayoutResponse struct {
+	ManifestRoot   string        `json:"manifest_root"`
+	MduSizeBytes   uint64        `json:"mdu_size_bytes"`
+	BlobSizeBytes  uint64        `json:"blob_size_bytes"`
+	TotalMdus      uint64        `json:"total_mdus"`
+	WitnessMdus    uint64        `json:"witness_mdus"`
+	UserMdus       uint64        `json:"user_mdus"`
+	FileRecords    uint32        `json:"file_records"`
+	FileCount      uint32        `json:"file_count"`
+	TotalSizeBytes uint64        `json:"total_size_bytes"`
+	Segments       []slabSegment `json:"segments"`
+}
+
 // GatewayListFiles returns the NilFS V1 file table for a manifest root.
 // Optional query params:
 // - deal_id + owner: best-effort authz against on-chain deal owner (cid match enforced if the deal is already committed).
@@ -1376,6 +1397,173 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("GatewayListFiles encode error: %v", err)
+	}
+}
+
+// GatewaySlab returns the slab layout summary for a manifest root.
+// Optional query params:
+// - deal_id + owner: best-effort authz against on-chain deal owner (cid match enforced if the deal is already committed).
+func GatewaySlab(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	cid := strings.TrimSpace(vars["cid"])
+	if cid == "" {
+		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	if dealIDStr != "" || owner != "" {
+		if dealIDStr == "" || owner == "" {
+			http.Error(w, "deal_id and owner must be provided together", http.StatusBadRequest)
+			return
+		}
+		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid deal_id", http.StatusBadRequest)
+			return
+		}
+
+		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+		if err != nil {
+			log.Printf("GatewaySlab: failed to fetch deal %d: %v", dealID, err)
+			http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
+			return
+		}
+		if dealOwner == "" || dealOwner != owner {
+			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+			return
+		}
+		if dealCID != "" && dealCID != cid {
+			http.Error(w, "cid does not match deal", http.StatusBadRequest)
+			return
+		}
+	}
+
+	dealDir := filepath.Join(uploadDir, cid)
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+	mdu0Data, err := os.ReadFile(mdu0Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "slab not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("GatewaySlab: failed to read MDU #0: %v", err)
+		http.Error(w, "failed to read slab", http.StatusInternalServerError)
+		return
+	}
+
+	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	if err != nil {
+		log.Printf("GatewaySlab: failed to parse MDU #0: %v", err)
+		http.Error(w, "failed to parse slab", http.StatusInternalServerError)
+		return
+	}
+
+	var fileCount uint32
+	var totalSize uint64
+	var maxEnd uint64
+	for i := uint32(0); i < b.Header.RecordCount; i++ {
+		rec := b.GetFileRecord(i)
+		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		end := rec.StartOffset + length
+		if end > maxEnd {
+			maxEnd = end
+		}
+		// Path[0]==0 marks a tombstone in NilFS V1.
+		if rec.Path[0] == 0 {
+			continue
+		}
+		fileCount++
+		totalSize += length
+	}
+
+	userMdus := uint64(0)
+	if maxEnd > 0 {
+		userMdus = (maxEnd + builder.MduSize - 1) / builder.MduSize
+	}
+
+	entries, err := os.ReadDir(dealDir)
+	if err != nil {
+		log.Printf("GatewaySlab: failed to read slab dir: %v", err)
+		http.Error(w, "failed to read slab", http.StatusInternalServerError)
+		return
+	}
+
+	idxSet := map[uint64]struct{}{}
+	var maxIdx uint64
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "mdu_") || !strings.HasSuffix(name, ".bin") {
+			continue
+		}
+		idxStr := strings.TrimSuffix(strings.TrimPrefix(name, "mdu_"), ".bin")
+		idx, err := strconv.ParseUint(idxStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		idxSet[idx] = struct{}{}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+
+	if len(idxSet) == 0 {
+		http.Error(w, "slab not found", http.StatusNotFound)
+		return
+	}
+	if _, ok := idxSet[0]; !ok {
+		http.Error(w, "invalid slab layout: mdu_0.bin missing", http.StatusInternalServerError)
+		return
+	}
+
+	totalMdus := maxIdx + 1
+	if uint64(len(idxSet)) != totalMdus {
+		http.Error(w, "invalid slab layout: non-contiguous mdu files", http.StatusInternalServerError)
+		return
+	}
+	if totalMdus < 1 {
+		http.Error(w, "invalid slab layout", http.StatusInternalServerError)
+		return
+	}
+	if totalMdus-1 < userMdus {
+		http.Error(w, "invalid slab layout: file table exceeds user mdus", http.StatusInternalServerError)
+		return
+	}
+	witnessMdus := (totalMdus - 1) - userMdus
+
+	segments := []slabSegment{
+		{Kind: "mdu0", StartIndex: 0, Count: 1, SizeBytes: builder.MduSize},
+	}
+	if witnessMdus > 0 {
+		segments = append(segments, slabSegment{Kind: "witness", StartIndex: 1, Count: witnessMdus, SizeBytes: builder.MduSize})
+	}
+	if userMdus > 0 {
+		segments = append(segments, slabSegment{Kind: "user", StartIndex: 1 + witnessMdus, Count: userMdus, SizeBytes: builder.MduSize})
+	}
+
+	resp := slabLayoutResponse{
+		ManifestRoot:   cid,
+		MduSizeBytes:   builder.MduSize,
+		BlobSizeBytes:  builder.BlobSize,
+		TotalMdus:      totalMdus,
+		WitnessMdus:    witnessMdus,
+		UserMdus:       userMdus,
+		FileRecords:    b.Header.RecordCount,
+		FileCount:      fileCount,
+		TotalSizeBytes: totalSize,
+		Segments:       segments,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("GatewaySlab encode error: %v", err)
 	}
 }
 

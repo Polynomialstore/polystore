@@ -73,6 +73,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
     *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
 
+*   **`GET /gateway/slab/{cid}`**
+    *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
+    *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
+        * total MDUs, witness MDUs, user MDUs, and segment ranges (MDU #0 / Witness / User).
+    *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the file-level shard JSON).
+
 *   **`GET /gateway/manifest/{cid}`**
     *   **Logic:** Returns the JSON manifest produced by `nil_cli shard`.
     *   **Role:** Allows the frontend deal inspector to visualize *file-level* sharding output. This is not the slab layout (MDU #0 / Witness / User) and may be misleading for multi-file deals.

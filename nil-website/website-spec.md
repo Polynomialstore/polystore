@@ -239,11 +239,12 @@ The central hub for deal management.
 *   **Props:** `deal: Deal`, `onClose: () => void`.
 *   **Tabs:**
     1.  **Overview:** Metadata (ID, Owner, Size, Economics), Provider List, Download Button.
-    2.  **Manifest:** Visualizes the *uploaded-file* `nil_cli shard` JSON (MDUs/Blobs).
+    2.  **Manifest:** Visualizes the Deal *slab layout* (MDU #0 + Witness + User) for the committed `manifest_root`.
     3.  **Heat:** Traffic stats and `DealLivenessHeatmap`.
 *   **APIs:**
+    *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
-    *   **Shard JSON manifest:** `GET /gateway/manifest/{cid}` (file-level; served via the gateway index and may not reflect multi-file slab layout).
+    *   **Shard JSON manifest (debug):** `GET /gateway/manifest/{cid}` (file-level; served via the gateway index and may not reflect slab layout).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.

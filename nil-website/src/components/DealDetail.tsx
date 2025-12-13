@@ -16,14 +16,24 @@ interface HeatState {
     last_update_height: string
 }
 
-interface ManifestData {
+interface SlabSegment {
+  kind: 'mdu0' | 'witness' | 'user'
+  start_index: number
+  count: number
+  size_bytes: number
+}
+
+interface SlabLayoutData {
+  manifest_root: string
+  mdu_size_bytes: number
+  blob_size_bytes: number
   total_mdus: number
-  manifest_root_hex: string
-  mdus: {
-    index: number
-    root_hex: string
-    blobs: string[] // List of 64 hex strings
-  }[]
+  witness_mdus: number
+  user_mdus: number
+  file_records: number
+  file_count: number
+  total_size_bytes: number
+  segments: SlabSegment[]
 }
 
 interface NilfsFileEntry {
@@ -34,9 +44,9 @@ interface NilfsFileEntry {
 }
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
-  const [manifest, setManifest] = useState<ManifestData | null>(null)
+  const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [heat, setHeat] = useState<HeatState | null>(null)
-  const [loadingManifest, setLoadingManifest] = useState(false)
+  const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
@@ -47,7 +57,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
-      fetchManifest(deal.cid)
+      fetchSlab(deal.cid, deal.id, nilAddress)
       fetchFiles(deal.cid, deal.id, nilAddress)
     } else {
       setFiles(null)
@@ -55,18 +65,25 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     fetchHeat(deal.id)
   }, [deal.cid, deal.id, nilAddress])
 
-  async function fetchManifest(cid: string) {
-    setLoadingManifest(true)
+  async function fetchSlab(cid: string, dealId?: string, owner?: string) {
+    setLoadingSlab(true)
     try {
-      const res = await fetch(`${appConfig.gatewayBase}/gateway/manifest/${cid}`)
+      let url = `${appConfig.gatewayBase}/gateway/slab/${encodeURIComponent(cid)}`
+      if (dealId && owner) {
+        const q = new URLSearchParams()
+        q.set('deal_id', String(dealId))
+        q.set('owner', owner)
+        url = `${url}?${q.toString()}`
+      }
+      const res = await fetch(url)
       if (res.ok) {
         const json = await res.json()
-        setManifest(json)
+        setSlab(json)
       }
     } catch (e) {
-      console.error('Failed to fetch manifest', e)
+      console.error('Failed to fetch slab layout', e)
     } finally {
-      setLoadingManifest(false)
+      setLoadingSlab(false)
     }
   }
 
@@ -255,51 +272,77 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
 
         {activeTab === 'manifest' && (
             <div className="space-y-4">
-                {loadingManifest ? (
-                    <div className="text-center py-8 text-muted-foreground text-xs">Loading manifest structure...</div>
-                ) : manifest ? (
+                {loadingSlab ? (
+                    <div className="text-center py-8 text-muted-foreground text-xs">Loading slab layout...</div>
+                ) : slab ? (
                     <>
                         <div className="grid grid-cols-2 gap-4 text-xs">
                             <div className="bg-secondary/50 p-3 rounded border border-border">
-                                <div className="text-muted-foreground uppercase text-[10px]">Total MDUs</div>
-                                <div className="text-lg font-mono text-foreground">{manifest.total_mdus}</div>
+                                <div className="text-muted-foreground uppercase text-[10px]">Slab MDUs</div>
+                                <div className="text-lg font-mono text-foreground">{slab.total_mdus}</div>
+                                <div className="text-[10px] text-muted-foreground mt-1">
+                                    MDU #0 + {slab.witness_mdus} witness + {slab.user_mdus} user
+                                </div>
                             </div>
                             <div className="bg-secondary/50 p-3 rounded border border-border">
                                 <div className="text-muted-foreground uppercase text-[10px]">Manifest Root</div>
-                                <div className="font-mono text-primary text-[10px] truncate" title={manifest.manifest_root_hex}>
-                                    {manifest.manifest_root_hex.slice(0, 16)}...
+                                <div className="font-mono text-primary text-[10px] truncate" title={slab.manifest_root}>
+                                    {slab.manifest_root.slice(0, 16)}...
                                 </div>
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <div className="text-xs text-muted-foreground uppercase font-semibold">MDU Layout</div>
-                            {manifest.mdus.map((mdu) => (
-                                <div key={mdu.index} className="bg-secondary/50 border border-border rounded p-3 text-xs">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="font-medium text-foreground">MDU #{mdu.index}</span>
-                                        <span className="font-mono text-muted-foreground text-[10px]">{mdu.root_hex.slice(0, 12)}...</span>
-                                    </div>
-                                    <div className="h-2 bg-secondary rounded-full overflow-hidden flex border border-border/50">
-                                        {/* Visualize blobs as segments */}
-                                        {Array.from({ length: 64 }).map((_, i) => (
-                                            <div 
-                                                key={i} 
-                                                className={`h-full flex-1 border-r border-border/20 ${i < mdu.blobs.length ? 'bg-primary/50' : 'bg-transparent'}`}
-                                                title={`Blob ${i}`}
-                                            />
-                                        ))}
-                                    </div>
-                                    <div className="mt-1 text-[10px] text-muted-foreground flex justify-between">
-                                        <span>64 Blobs</span>
-                                        <span>8 MiB</span>
-                                    </div>
+
+                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="text-xs text-muted-foreground uppercase font-semibold">Layout</div>
+                                <div className="text-[10px] text-muted-foreground">
+                                    {Math.round(slab.mdu_size_bytes / 1024 / 1024)} MiB / MDU • {Math.round(slab.blob_size_bytes / 1024)} KiB / Blob
                                 </div>
-                            ))}
+                            </div>
+                            <div className="h-2 bg-secondary rounded-full overflow-hidden flex border border-border/50">
+                                {slab.segments.map((seg) => (
+                                    <div
+                                        key={`${seg.kind}:${seg.start_index}`}
+                                        style={{ flexGrow: Math.max(1, seg.count) }}
+                                        className={
+                                            seg.kind === 'mdu0'
+                                                ? 'bg-blue-500/60'
+                                                : seg.kind === 'witness'
+                                                    ? 'bg-purple-500/60'
+                                                    : 'bg-emerald-500/60'
+                                        }
+                                        title={`${seg.kind} • start=${seg.start_index} • count=${seg.count}`}
+                                    />
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
+                                <div>
+                                    <span className="text-blue-500 font-semibold">MDU #0</span>: Super-Manifest (File Table + Root Table)
+                                </div>
+                                <div>
+                                    <span className="text-purple-500 font-semibold">Witness</span>:{' '}
+                                    {slab.witness_mdus > 0 ? `MDU #1..#${slab.witness_mdus}` : 'none'}
+                                </div>
+                                <div>
+                                    <span className="text-emerald-500 font-semibold">User</span>:{' '}
+                                    {slab.user_mdus > 0 ? `MDU #${1 + slab.witness_mdus}..#${slab.total_mdus - 1}` : 'none'}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs">
+                            <div className="text-muted-foreground uppercase text-[10px]">NilFS</div>
+                            <div className="mt-1 text-[11px] text-foreground">
+                                {slab.file_count} files • {slab.total_size_bytes} bytes
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                                File records: {slab.file_records}
+                            </div>
                         </div>
                     </>
                 ) : (
                     <div className="text-center py-8 text-muted-foreground text-xs">
-                        No manifest available. (This deal might be capacity-only or the gateway index is missing).
+                        No slab layout available. (This deal might be capacity-only or local slab data is missing).
                     </div>
                 )}
             </div>
