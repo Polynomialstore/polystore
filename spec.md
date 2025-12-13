@@ -135,7 +135,14 @@ To support this model, the "Map" must be fully replicated:
 
 NilStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and NilFS path addressing.
 
-**Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs, `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below), and retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks). For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST (a) require `deal_id` + `owner` for access control and (b) reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`). `file_path` is **mandatory** (no “single-file deal” inference); missing/invalid `file_path` must return a JSON error with a remediation hint (e.g., call `/gateway/list-files/{manifest_root}` to discover valid paths). Non-200 responses MUST be JSON `{ "error": "...", "hint": "..." }`.
+**Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs:
+
+*   `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below).
+*   Retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
+*   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
+*   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).
+*   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST (a) require `deal_id` + `owner` for access control and (b) reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`).
+*   Non-200 responses MUST be JSON `{ "error": "...", "hint": "..." }` (even if the success path is a byte stream). Missing/invalid `file_path` returns `400` with a remediation hint (call `/gateway/list-files/{manifest_root}` to discover valid paths).
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.

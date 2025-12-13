@@ -51,6 +51,8 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
         *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
+        *   **Uniqueness (target):** `file_path` MUST be unique within a deal. If `deal_id` is provided and the target `file_path` already exists, the gateway MUST overwrite deterministically (update-in-place or tombstone + replace) so later fetch/prove cannot return stale bytes.
+        *   **Encoding note:** Go’s query parser treats `+` as space. Clients should encode spaces as `%20` (JS `encodeURIComponent`) and servers should treat decoded strings as canonical.
     *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "file_path": "dir/file.txt", "filename": "file.txt" }`.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
@@ -79,6 +81,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, and `\\` separators).
         *   Unknown `file_path` (or tombstone record) returns `404`.
+        *   Duplicate/ambiguous `file_path` entries in the on-disk File Table should fail fast with a clear non-200 (prefer `409`) rather than serving potentially stale bytes.
         *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
         *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
@@ -98,7 +101,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
 
 *   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
+    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the NilFS File Table, and returns a deduplicated list of active files (latest non-tombstone record per `file_path`) plus computed total size.
     *   **Response (target):** `{ "manifest_root": "0x...", "total_size_bytes": 123, "files": [{ "path": "dir/file.txt", "size_bytes": 123, "start_offset": 0, "flags": 0 }] }`.
     *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
     *   **Errors (target):** Missing/invalid params return `400`; owner mismatch returns a clear non-200 (prefer `403`); stale `manifest_root` should return a clear non-200 (prefer `409`).

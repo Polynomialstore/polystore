@@ -209,6 +209,7 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
     3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
 *   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filePath, filename }`.
     *   **Compatibility:** Gateway responses may still use legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
+    *   **NilFS invariant (target):** `filePath` is the authoritative identifier for later fetch/prove and MUST be treated as unique within a deal. Re-uploading to the same `filePath` is an overwrite (the gateway must not allow ambiguous duplicates).
 
 ### 4.4 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
@@ -256,7 +257,7 @@ The central hub for deal management.
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
     *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
-        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root`; refetch Deal from LCD and retry with the latest root).
+        *   `file_path` must be encoded as a query value (`encodeURIComponent` → spaces become `%20`, not `+`). Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root` *or* inconsistent NilFS state like ambiguous duplicate paths; refetch Deal from LCD and retry with the latest root).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
     *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
@@ -351,8 +352,8 @@ The website depends on the following services (configured in `config.ts`):
 *   `POST /gateway/create-deal-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `POST /gateway/update-deal-content-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
-*   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }`.
-*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path`; non-200 is JSON `{error,hint}` with remediation).
+*   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path` with `encodeURIComponent` so spaces are `%20`; non-200 is JSON `{error,hint}` with remediation).
 *   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; errors are JSON `{error,hint}`; `file_path` is a plain string, not URL-encoded).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).

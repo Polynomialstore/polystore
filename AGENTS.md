@@ -490,8 +490,11 @@ This is the **canonical execution checklist** for the next development sprint. E
         - NilFS `file_path` is the authoritative identifier for a file within a deal.
             - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
             - “CID” is never treated as a file identifier (it is a deal-level commitment only).
+            - `file_path` MUST be unique within a deal. If a new upload targets an existing `file_path`, the gateway must overwrite deterministically (update-in-place or tombstone + replace) so fetch/prove cannot return stale data.
+                - `GET /gateway/list-files/...` should return a *deduplicated* view (latest non-tombstone record per `file_path`). If the on-disk File Table contains ambiguous duplicates, fail fast with a clear non-200 (prefer `409`) until repaired.
         - `file_path` is a URL value and MUST be handled deterministically:
             - Decode at most once (URL query params are decoded by the HTTP stack; JSON bodies must be treated as already-decoded strings). Never double-unescape.
+            - Beware `+` vs `%20`: Go’s query parser treats `+` as space. Clients MUST use `%20` for spaces (JS `encodeURIComponent`) and servers should treat decoded strings as canonical.
             - Reject empty/whitespace-only, traversal (`..`), absolute paths (`/` prefix), `\\` separators, NUL bytes, and control characters.
             - Treat it as case-sensitive bytes for matching against the NilFS File Table entries.
         - Error contract must be stable and actionable:
@@ -508,10 +511,12 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Risk hotspots:**
         - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
+        - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).
         - Root normalization: accepting both `0x` + mixed-case inputs but writing a single canonical directory key can surface duplicate-directory bugs; enforce canonicalization + explicit conflict errors.
         - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
     - **Expected test coverage:**
         - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
+        - Unit: duplicate `file_path` handling is deterministic (prefer last-write-wins) or rejected with a clear `409` until repaired.
         - Unit: `manifest_root` parsing (length/hex/`0x`/invalid compressed G1) and `manifest_root_key` canonicalization are strict and deterministic.
         - Unit: missing/invalid `deal_id` returns `400`; unknown deal returns `404`; owner mismatch returns `403`; stale root returns `409`.
         - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
