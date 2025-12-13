@@ -195,9 +195,10 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
 *   **Purpose:** Commits a file Manifest to an existing Deal.
-*   **Input:** `UpdateDealContentInput` (dealId, cid, sizeBytes).
+*   **Input:** `UpdateDealContentInput` (dealId, manifestRoot, sizeBytes).
 *   **EIP-712 Signature:**
-    *   **Type:** `UpdateContent(address creator, uint64 deal_id, string cid, uint64 size, uint64 nonce)`.
+*   **Type (target):** `UpdateContent(address creator, uint64 deal_id, string manifest_root, uint64 size, uint64 nonce)`.
+    *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
 *   **API:** POSTs `{ intent, evm_signature }` to `/gateway/update-deal-content-evm`.
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
@@ -248,7 +249,7 @@ The central hub for deal management.
     *   **MDU Root:** 32-byte Blake2s Merkle root of the 64 **Blob Commitments** for a single 8 MiB MDU.
     *   **Blob Commitment:** 48-byte KZG commitment for one 128 KiB blob (64 blobs per MDU).
 *   **Viewer Panels (Manifest Tab):**
-    *   **Manifest Root Explainer:** Displays `manifest_root`, `manifest_blob_hex`, and the ordered root vector; optionally builds a debug Merkle tree over MDU roots behind a button (for intuition only; not the on-chain commitment).
+*   **Manifest Root Explainer:** Displays `manifest_root` and (if available) `manifest_blob_hex` plus the ordered root vector; optionally builds a debug Merkle tree over MDU roots behind a button (for intuition only; not the on-chain commitment).
     *   **Root Table (MDU #0):** Lists root-table entries (witness + user roots) and maps each entry to its `mdu_index`.
     *   **MDU Inspector:** For a selected MDU, fetches and displays the 64 blob commitments and the derived MDU root.
 *   **APIs:**

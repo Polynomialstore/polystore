@@ -472,11 +472,19 @@ This is the **canonical execution checklist** for the next development sprint. E
         - NilFS `file_path` is the authoritative identifier for a file within a deal.
             - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
             - “CID” is never treated as a file identifier (it is a deal-level commitment only).
+        - `file_path` is a URL value and MUST be handled deterministically:
+            - Decode once, reject empty/whitespace-only, and reject traversal (`..`), absolute paths (`/` prefix), or `\` separators.
+            - Treat it as case-sensitive bytes for matching against the NilFS File Table entries.
     - **Migration / backwards-compat:**
         - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
         - If legacy support is needed for local dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback, no “best-effort” behavior).
         - Stop writing `uploads/index.json`; treat existing copies as deprecated/ignored state.
         - Deprecate `/gateway/manifest/{cid}` as a debug-only endpoint; it must not be on the critical path for fetch/prove.
+        - Remediation message should instruct clients to call `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` to discover valid `file_path` values.
+    - **Risk hotspots:**
+        - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
+        - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`) can cause silent mismatches; add unit tests for tricky paths.
+        - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 

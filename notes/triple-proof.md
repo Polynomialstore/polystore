@@ -8,6 +8,7 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
 
 *   **`manifest_root` is deal-level:** A 48-byte KZG commitment anchoring the entire slab (MDU #0 + Witness + User MDUs). Some codepaths may still label this as `cid` as a legacy alias.
 *   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, manifest_root, file_path)` and resolved from NilFS (`mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
+*   **`file_path` must be canonical:** Treat it as a relative, slash-separated path (no leading `/`, no `..` traversal). Gateways should URL-decode once and match case-sensitively against NilFS File Table entries.
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"
 

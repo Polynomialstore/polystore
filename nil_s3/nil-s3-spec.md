@@ -36,8 +36,8 @@ The service wraps two CLI tools to perform its duties:
 ### 3.1 S3 Compatibility (Legacy)
 | Method | Path | Description |
 |:---|:---|:---|
-| `PUT` | `/api/v1/object/{key}` | Uploads a file, ingests it into NilFS, and stores it locally. Returns a deal `manifest_root` (legacy alias: `cid`). |
-| `GET` | `/api/v1/object/{key}` | Retrieves a file by its original key (filename). |
+| `PUT` | `/api/v1/object/{key}` | **Legacy:** saves a raw object to disk for quick demos (not deal-backed). **Target:** treats `{key}` as a NilFS `file_path` within a Deal and ingests it into NilFS, returning `manifest_root` (legacy alias: `cid`). |
+| `GET` | `/api/v1/object/{key}` | **Legacy:** serves a raw object by filename. **Target:** resolves and streams from NilFS by `file_path` (no `uploads/index.json` dependency). |
 
 ### 3.2 Gateway (Web Frontend Support)
 These endpoints support the `nil-website` "Thin Client" flow.
@@ -107,7 +107,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_s3` takes
 
 2.  **Triple Proof Generation:**
     *   The `submitRetrievalProof` logic uses `nilchaind sign-retrieval-receipt --offline` to generate cryptographic proofs.
-    *   It relies on the local presence of the uploaded file (or a zero-filled 8 MiB buffer) and the generated `manifest_blob_hex` to construct valid Triple Proofs.
+    *   **Target (NilFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
     *   **Gap:** In a production "Thick Client", the browser would generate these proofs locally or verify them from a remote SP. Here, the Gateway generates *and* submits them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**
