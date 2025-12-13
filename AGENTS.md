@@ -458,18 +458,41 @@ This is the **canonical execution checklist** for the next development sprint. E
 - [ ] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
     - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
+    - **API changes (target end state):**
+        - `GET /gateway/fetch/{manifest_root}` **MUST** require `file_path` (+ `deal_id`, `owner`); when missing, return a clear `400` (no CID/index fallback).
+        - `POST /gateway/prove-retrieval` **MUST** accept/require `file_path` (and `deal_id`) and resolve all proof inputs from NilFS (`mdu_0.bin` + on-disk MDUs), not `uploads/index.json`.
+        - Any endpoint that still takes a `cid` string treats it as an alias for `manifest_root` (48-byte hex) only — **not** a file-level CID.
+    - **Invariants:**
+        - `uploads/<manifest_root>/` is the canonical, restart-safe state: `mdu_0.bin` + `mdu_*.bin` are sufficient to resolve paths and generate proofs.
+        - NilFS `file_path` is the authoritative identifier for a file within a deal; no hidden dependency on `uploads/index.json`, original upload filename, or in-memory state.
+    - **Migration / backwards-compat:**
+        - Break legacy CID-only fetch/prove flows explicitly (non-200 with a remediation message); if legacy support is needed for dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback).
+        - Stop writing `uploads/index.json` and treat existing copies as deprecated/ignored state.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
 - [ ] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
     - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `nil-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
+    - **Semantics (target end state):**
+        - Deals are **thin-provisioned**: `CreateDeal*` writes `manifest_root = empty`, `size = 0` (and leaves any “capacity” fields unset/ignored) until `UpdateDealContent*`.
+        - Tier fields (`DealSize` / `deal_size` / `size_tier`) are **non-normative**: ignored by chain logic and removed from all client payloads.
+    - **EIP-712 breaking change (plan + mitigation):**
+        - Remove `size_tier` from the signed `CreateDeal(...)` typed-data definition (and bump domain/version or message name to prevent hash collisions).
+        - For a transition window, the chain can accept **both** the legacy and new typed-data hashes to avoid a flag-day across web/scripts.
+    - **Risk hotspots:**
+        - Typed-data field order + domain/version drift between `viem`/MetaMask and the chain verifier; treat this as a high-risk, high-coordination change.
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
     - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
 
 - [ ] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
     - **Key files:** `nil-website/tests/*.spec.ts`, `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
+    - **Wallet strategy (recommended):**
+        - Prefer an **injected EIP-1193 shim / deterministic test connector** (env-gated, e.g. `NIL_E2E=1`) over automating a real MetaMask extension in CI.
+        - The E2E wallet MUST support `eth_signTypedData_v4` for CreateDeal + UpdateContent and send txs against the local EVM (chain id `31337`).
+    - **Risk hotspots:**
+        - Wallet automation is inherently flaky; keep the suite as a true smoke test with stable selectors + bounded timeouts, and avoid brittle UI interactions.
     - **Pass gate:** A clean headless run can execute the happy-path flow end-to-end and exits 0.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
 

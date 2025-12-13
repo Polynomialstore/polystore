@@ -6,7 +6,10 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"
 
-We treat the Deal as an **Elastic Volume** (Slab) with a structured layout: **Super-Manifest (MDU #0)**, followed by **Witness MDUs**, and then **User Data MDUs**. The on-chain Deal tracks the current high-water mark as `total_mdus`; capacity reservation (if any) is an off-chain policy/parameter in the current devnet.
+We treat the Deal as an **Elastic Volume** (Slab) with a structured layout: **Super-Manifest (MDU #0)**, followed by **Witness MDUs**, and then **User Data MDUs**.
+
+*   **Thin provisioning (no tiers):** Deals are created with `manifest_root = empty`, `size = 0`, `total_mdus = 0` until the first `MsgUpdateDealContent*` commits the initial slab root. Any sizing inputs (e.g., `max_user_mdus` used to size the Witness region) are devnet policy parameters, not user-selected tiers.
+*   **High-water mark:** Once enforced, `Deal.total_mdus` is the on-chain upper bound for valid `(mdu_index, ...)` challenges/receipts. Some gateway APIs may surface this as `allocated_length` / `total_mdus` in responses.
 
 #### A. On-Chain State (`Deal`)
 
@@ -132,9 +135,11 @@ These are the MDUs that store the actual file content (raw bytes).
 ### 3. Lifecycle & Filesystem Logic
 
 #### 3.1 Initialization (Lazy Fill)
-*   **Action:** Initialize a slab as `MDU #0 + W Witness MDUs` (all zero-filled/empty).
-*   **State:** MDU #0 (empty FAT, roots for MDU #1..W filled with zeros) and Witness MDUs (all zeros).
-*   **Chain:** Commit `Deal.manifest_root` and set `Deal.total_mdus = 1 + W`. Challenges for User Data MDUs are invalid until `total_mdus` grows.
+*   **CreateDeal (thin):** `manifest_root = empty`, `size = 0`, `total_mdus = 0`. No content challenges are meaningful until a root is committed.
+*   **First Commit (gateway/provider):**
+    1. Initialize a slab as `MDU #0 + W Witness MDUs` (all zero-filled/empty) plus any required User Data MDUs.
+    2. Compute the new `manifest_root`.
+*   **Chain:** User signs `MsgUpdateDealContent*` to set `Deal.manifest_root`, `Deal.size`, and advance `Deal.total_mdus` to reflect the committed slab. Challenges for newly added MDUs become valid when `mdu_index < total_mdus`.
 
 #### 3.2 Sequential Write (Expansion)
 *   **Scenario:** User uploads 1GB file.

@@ -20,12 +20,13 @@ The service wraps two CLI tools to perform its duties:
 
 ### 2.1 Storage Model
 *   **Local Buffer:** Files are uploaded to a local `uploads/` directory.
-*   **Indexing (Legacy/Debug):** A simple `index.json` maps `manifest_root` -> `{ local_file_path, filename }`. This is used to serve the *file-level* `nil_cli shard` JSON via `/gateway/manifest/{cid}` and to support legacy CID-based flows.
 *   **Slab Architecture:**
     *   **MDU #0 (Super-Manifest):** Stores the File Allocation Table (FAT) and Merkle Roots for all other MDUs.
     *   **Witness MDUs:** Store the KZG Blobs required for Triple Proof verification (replicated metadata).
     *   **User Data MDUs:** Store the raw file content slices.
     *   Files are committed to a `dealDir` (e.g., `uploads/<ManifestRoot>/`) containing `manifest.bin`, `mdu_0.bin`, and numbered `mdu_N.bin` files.
+*   **NilFS is the Source of Truth (Target End State):**
+    *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/<manifest_root>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
 
 ---
 
@@ -45,7 +46,8 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Multipart form data (`file`, `owner`).
     *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal) and `max_user_mdus` (devnet sizing hint for witness region).
-    *   **Output:** JSON `{ "cid": "0x...", "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "allocated_length": 3, "filename": "..." }`.
+    *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "filename": "..." }`.
+        *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 
 #### Deal Management (EVM Bridge)
@@ -56,32 +58,38 @@ These endpoints support the `nil-website` "Thin Client" flow.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
     *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
-    *   **Role:** Commits the CID (returned from upload) to the on-chain deal.
+    *   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal.
 
 #### Data Retrieval & Proofs
-*   **`GET /gateway/fetch/{cid}`**
+*   **`GET /gateway/fetch/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner`.
     *   **Logic:**
         1.  Verifies `deal_id` exists on-chain and matches `owner`.
         2.  **Critical:** Calls `submitRetrievalProof` to generate and broadcast a `MsgProveLiveness` transaction on behalf of the provider (system/faucet key).
         3.  Streams the file content to the response.
     *   **Role:** Acts as a "Retrieval Proxy" that ensures on-chain proof generation ("Unified Liveness") occurs even for web downloads.
-    *   **NilFS Path Fetch:** If `file_path` is provided, the gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested file bytes. Proof submission is done asynchronously to keep downloads responsive in devnet.
+    *   **NilFS Path Fetch (target end state):** `file_path` is **required**. The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. When `file_path` is missing, return a clear non-200 (no CID/index fallback). Proof submission may be async in devnet to keep downloads responsive.
 
-*   **`GET /gateway/list-files/{cid}`**
+*   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
+    *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
+    *   **Logic (target):**
+        1. Resolve the file from NilFS (`mdu_0.bin` + on-disk slab) using `file_path`.
+        2. Generate and submit `MsgProveLiveness` using the gateway/provider key.
+    *   **Compatibility:** Legacy request bodies that only include `cid` are deprecated; do not rely on `uploads/index.json` lookups.
+
+*   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
     *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
     *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
 
-*   **`GET /gateway/slab/{cid}`**
+*   **`GET /gateway/slab/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
     *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
         * total MDUs, witness MDUs, user MDUs, and segment ranges (MDU #0 / Witness / User).
     *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the file-level shard JSON).
 
-*   **`GET /gateway/manifest/{cid}`**
-    *   **Logic:** Returns the JSON manifest produced by `nil_cli shard`.
-    *   **Role:** Allows the frontend deal inspector to visualize *file-level* sharding output. This is not the slab layout (MDU #0 / Witness / User) and may be misleading for multi-file deals.
+*   **`GET /gateway/manifest/{cid}`** *(Deprecated)*
+    *   **Role:** Legacy debug endpoint for file-level `nil_cli shard` output. It MUST NOT be required for fetch/prove flows and is expected to be removed once NilFS-only flows are fully enforced.
 
 ---
 

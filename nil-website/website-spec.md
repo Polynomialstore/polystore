@@ -99,7 +99,6 @@ interface Deal {
   current_replication?: string; // Number of active providers
   max_monthly_spend?: string;   // Cost cap
   providers?: string[];    // List of assigned SP addresses
-  deal_size?: number;      // Legacy/Reserved (capacity tiers removed); avoid relying on this
 }
 ```
 
@@ -155,6 +154,7 @@ interface StatusSummary {
 *   **Transport:** HTTP (configured via `appConfig.evmRpc`).
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.
+*   **E2E Mode (Target):** When `NIL_E2E=1`, use a deterministic test wallet connector / injected provider shim (no MetaMask extension) to make Playwright runs stable and CI-friendly.
 
 ### 3.2 ProofContext (`src/context/ProofContext.tsx`)
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
@@ -188,7 +188,8 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
 *   **EIP-712 Signature:**
     *   **Domain:** `NilStore` (Verifying Contract: `0x0...0`).
-    *   **Type:** `CreateDeal(address creator, uint32 size_tier, uint64 duration, string service_hint, uint256 initial_escrow, uint256 max_monthly_spend, uint64 nonce)` (size_tier fixed to `0` for legacy compatibility).
+    *   **Type (target):** `CreateDeal(address creator, uint64 duration, string service_hint, string initial_escrow, string max_monthly_spend, uint64 nonce)` (capacity tiers removed).
+        *   **Migration:** During the transition, the chain may accept the legacy CreateDeal typed-data hash to avoid a flag-day across web/scripts.
     *   **Nonce Logic:** Manages local nonce counter in `localStorage` (`nilstore:evmNonces:<addr>`).
 *   **API:** POSTs `{ intent, evm_signature }` to `/gateway/create-deal-evm`.
 
@@ -205,7 +206,8 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
     2.  Constructs `FormData` with `file` and `owner`.
     3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
-*   **Returns:** `{ cid, sizeBytes, fileSizeBytes, allocatedLength?, filename }` (where `cid` is the new `manifest_root`).
+*   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filename }`.
+    *   **Compatibility:** Gateway responses may still use legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
 
 ### 4.4 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
@@ -252,9 +254,10 @@ The central hub for deal management.
 *   **APIs:**
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
+    *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
-    *   **Shard JSON manifest (debug):** `GET /gateway/manifest/{cid}` (file-level; served via the gateway index and may not reflect slab layout).
+    *   **Shard JSON manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (file-level; not NilFS; expected to be removed as NilFS-only flows harden).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.
@@ -384,20 +387,20 @@ The website depends on the following services (configured in `config.ts`):
 
 ### 8.1 Data Ingestion (Upload)
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
-*   **Actual:** Client uploads **raw `FormData`** to the **Storage Gateway** (`POST /gateway/upload`). The *Gateway* performs the sharding, KZG commitment generation (Trusted Setup binding), and MDU packing. It returns the `CID` and `size_bytes` to the client.
+*   **Actual:** Client uploads **raw `FormData`** to the **Storage Gateway** (`POST /gateway/upload`). The *Gateway* performs the sharding, KZG commitment generation (Trusted Setup binding), and MDU packing. It returns the Deal `manifest_root` (legacy alias: `cid`) and `size_bytes` to the client.
 *   **Implication:** The client currently trusts the Gateway to generate the correct canonical representation of the data.
 
 ### 8.2 Data Retrieval (Download)
 *   **Spec:** Client fetches chunks from SPs, verifies the KZG Triple Proof (Manifest->MDU->Blob->Data) locally, and signs a receipt.
-*   **Actual:** Client requests data via **Gateway Proxy** (`GET /gateway/fetch/...`). The Gateway performs the retrieval and verification from the NilChain network and streams the reconstructed file to the user.
+*   **Actual:** Client requests data via **Gateway Proxy** (`GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`). The Gateway resolves `file_path` from NilFS (`mdu_0.bin`), performs retrieval/proof generation in devnet, and streams the file bytes to the user.
 *   **Implication:** Browser-side KZG verification is not yet implemented.
 
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
 *   **Real Data Flow:** The actual data flow for a deal is:
     1.  `useCreateDeal` -> Allocates storage on-chain.
-    2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns CID.
-    3.  `useUpdateDealContent` -> Commits Gateway-provided CID to the chain.
+    2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns `manifest_root`.
+    3.  `useUpdateDealContent` -> Commits the `manifest_root` to the chain.
 
 ---
 
@@ -423,3 +426,6 @@ This sprint prioritizes a clean separation between:
     3. Commit content (EIP-712 → `/gateway/update-deal-content-evm`)
     4. Verify LCD deal state + gateway slab/files
     *   Command: `NIL_E2E=1 npm run test:unit` (requires `./scripts/run_local_stack.sh start` running)
+*   **Browser smoke e2e (Playwright, target):**
+    *   Runs headless against `./scripts/run_local_stack.sh start`.
+    *   Uses a deterministic injected wallet shim when `NIL_E2E=1` (no MetaMask extension automation).
