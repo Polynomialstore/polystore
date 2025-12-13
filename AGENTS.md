@@ -452,11 +452,30 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
 ### 11.0 Immediate Goals (Next)
-- Close NilFS “single source of truth”: remove CID/index fallback fetch paths (see **11.6.A3.1**).
-- Finish “dynamic sizing / no capacity tiers” cleanup end-to-end (see **11.2**).
-- Add a real browser smoke E2E suite (see **11.4**).
-- Backlog: the Dashboard MDU #0 inspector + commit-content flow is **good enough for this demo**; further polish is non-blocking.
-- Back burner: native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
+
+- [ ] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
+    - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
+    - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
+    - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
+    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
+
+- [ ] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
+    - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
+    - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `nil-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
+    - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
+    - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
+
+- [ ] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
+    - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
+    - **Key files:** `nil-website/tests/*.spec.ts`, `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
+    - **Pass gate:** A clean headless run can execute the happy-path flow end-to-end and exits 0.
+    - **Test gate:** `./scripts/e2e_browser_smoke.sh`
+
+**Backlog (demo-ready, non-blocking):**
+- The Dashboard MDU #0 inspector + commit-content flow is **good enough for this demo**; further polish can iterate later.
+
+**Deprioritized:**
+- Native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
