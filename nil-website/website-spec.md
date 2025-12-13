@@ -205,7 +205,7 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
 *   **Purpose:** Handles file upload to the Storage Gateway.
 *   **Logic:**
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
-    2.  Constructs `FormData` with `file` and `owner`.
+    2.  Constructs `FormData` with `file`, `owner`, and optional upload controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
 *   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filePath, filename }`.
     *   **Compatibility:** Gateway responses may still use legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
@@ -258,7 +258,7 @@ The central hub for deal management.
     *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
-    *   **Shard JSON manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (file-level; not NilFS; expected to be removed as NilFS-only flows harden).
+    *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.

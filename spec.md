@@ -40,7 +40,7 @@ NilStore utilizes **Dynamic Thin Provisioning** for all storage deals.
 
 *   **No Tiers:** Users do not pre-select a capacity tier.
 *   **Dynamic Expansion:** Deals start with minimal state and automatically expand as content is added via `MsgUpdateDealContent`.
-*   **Thin-Provision Semantics:** `MsgCreateDeal*` creates a deal with `manifest_root = empty` and `size = 0` until the first `MsgUpdateDealContent*` commits content.
+*   **Thin-Provision Semantics:** `MsgCreateDeal*` creates a deal with `manifest_root = empty`, `size = 0`, and `total_mdus = 0` until the first `MsgUpdateDealContent*` commits content.
 *   **Hard Cap:** The protocol enforces a maximum capacity of **512 GiB** per Deal ID to prevent state bloat and ensure manageable failure domains. Large datasets should be split across multiple Deals.
 
 The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,388,608 bytes (8 MiB)**.

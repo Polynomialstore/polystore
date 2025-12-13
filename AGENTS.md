@@ -430,8 +430,9 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 1.  **`TestFullDealLifecycle_E2E`**:
     *   **Phase 1: Setup:** Start local `nilchaind` and `nil_s3`.
-    *   **Phase 2: Create Deal:** Use `GatewayCreateDealFromEvm` (with `max_user_mdus` to imply max capacity) to establish a base deal.
-        *   **Assertion:** Verify `allocated_length` on-chain equals `1 + W` (MDU #0 + Witness MDUs).
+    *   **Phase 2: Create Deal:** Use `GatewayCreateDealFromEvm` to establish a **thin‑provisioned** container Deal (`manifest_root` empty, `size = 0`).
+        *   **Assertion:** Verify on-chain `manifest_root` is empty and `total_mdus`/`allocated_length` is `0` until the first `GatewayUpdateDealContent*` commit (no implicit “metadata preallocation” during `CreateDeal*`).
+        *   **Note:** `max_user_mdus` is a devnet sizing hint used by the gateway for local slab/Witness layout; it MUST NOT change `Deal.total_mdus` before a content commit.
     *   **Phase 3: Upload File 1 (Expansion):**
         *   Call `GatewayUpload` for "first.txt" (e.g., 100KB).
         *   Capture the returned `manifest_root` and `new_allocated_length`.
@@ -462,9 +463,11 @@ This is the **canonical execution checklist** for the next development sprint. E
         - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
             - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
             - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
+            - The gateway MUST canonicalize the on‑disk deal directory key (recommended: lowercase hex **without** `0x`) to avoid duplicate directories and “same root, different path” bugs.
         - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
             - Proof inputs are resolved only from NilFS: `uploads/<manifest_root>/mdu_0.bin` + `uploads/<manifest_root>/mdu_*.bin` (+ on-chain deal state).
         - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
+        - `POST /gateway/upload` SHOULD accept optional `file_path` (default: sanitized `filename`) and MUST return the resolved `file_path` so clients can later fetch/prove deterministically.
     - **Invariants:**
         - `uploads/<manifest_root>/` is the canonical, restart-safe state.
             - Required on-disk artifacts: `mdu_0.bin` and `mdu_*.bin`.
@@ -473,7 +476,7 @@ This is the **canonical execution checklist** for the next development sprint. E
             - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
             - “CID” is never treated as a file identifier (it is a deal-level commitment only).
         - `file_path` is a URL value and MUST be handled deterministically:
-            - Decode once, reject empty/whitespace-only, and reject traversal (`..`), absolute paths (`/` prefix), or `\` separators.
+            - Decode once (no double-unescape), reject empty/whitespace-only, and reject traversal (`..`), absolute paths (`/` prefix), or `\` separators.
             - Treat it as case-sensitive bytes for matching against the NilFS File Table entries.
     - **Migration / backwards-compat:**
         - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
@@ -483,7 +486,7 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Remediation message should instruct clients to call `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` to discover valid `file_path` values.
     - **Risk hotspots:**
         - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
-        - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`) can cause silent mismatches; add unit tests for tricky paths.
+        - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`

@@ -42,11 +42,14 @@ The service wraps two CLI tools to perform its duties:
 ### 3.2 Gateway (Web Frontend Support)
 These endpoints support the `nil-website` "Thin Client" flow.
 
+**Naming note:** Some handlers and routes still name the path parameter `{cid}`. In all gateway APIs, `cid` is a **legacy alias** for the deal-level `manifest_root` (48-byte KZG commitment) — it is never a file identifier and must not be used as a lookup key into `uploads/index.json`.
+
 #### Data Ingestion
 *   **`POST /gateway/upload`**
-    *   **Input:** Multipart form data (`file`, `owner`).
+    *   **Input:** Multipart form data (`file`, `owner`, optional `file_path`).
     *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
-    *   **Options:** Supports `deal_id` (append into an existing deal) and `max_user_mdus` (devnet sizing hint for witness region).
+    *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
+        *   **NilFS path rules (target):** URL-decode once; reject empty, leading `/`, `..` traversal, and `\\` separators. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-decode).
     *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "file_path": "dir/file.txt", "filename": "file.txt" }`.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
@@ -72,6 +75,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **NilFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
+        *   The gateway SHOULD canonicalize `manifest_root` consistently (e.g., lowercase, strip `0x`) for filesystem paths and logs to avoid duplicate deal directories.
         *   The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
@@ -90,10 +94,23 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
     *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
         * total MDUs, witness MDUs, user MDUs, and segment ranges (MDU #0 / Witness / User).
-    *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the file-level shard JSON).
+    *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the legacy shard JSON debug output).
+
+*   **`GET /gateway/manifest-info/{manifest_root}`**
+    *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
+    *   **Logic:** Returns *debug* manifest details needed for visualization:
+        * the ordered vector of per‑MDU roots committed by `manifest_root`,
+        * and (optionally) the manifest polynomial blob/openings if persisted by the gateway.
+    *   **Role:** Educational/visualization endpoint; **not** required for fetch/prove.
+
+*   **`GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`**
+    *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
+    *   **Logic:** Returns the 64 blob commitments for the specified MDU index (derived from Witness MDUs) and the derived MDU root.
+    *   **Role:** Educational/visualization endpoint; **not** required for fetch/prove.
 
 *   **`GET /gateway/manifest/{cid}`** *(Deprecated)*
-    *   **Role:** Legacy debug endpoint for file-level `nil_cli shard` output. It MUST NOT be required for fetch/prove flows and is expected to be removed once NilFS-only flows are fully enforced.
+    *   **Role:** Legacy debug endpoint for per-upload artifacts. It MUST NOT be required for fetch/prove flows and is expected to be removed once NilFS-only flows are fully enforced.
+    *   **Compatibility:** If still present, `{cid}` MUST be treated as an alias for `manifest_root` only; callers should migrate to `/gateway/slab/{manifest_root}` and `/gateway/list-files/{manifest_root}`.
 
 ---
 
