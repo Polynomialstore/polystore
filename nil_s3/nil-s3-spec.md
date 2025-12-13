@@ -24,10 +24,11 @@ The service wraps two CLI tools to perform its duties:
     *   **MDU #0 (Super-Manifest):** Stores the File Allocation Table (FAT) and Merkle Roots for all other MDUs.
     *   **Witness MDUs:** Store the KZG Blobs required for Triple Proof verification (replicated metadata).
     *   **User Data MDUs:** Store the raw file content slices.
-    *   Files are committed to a `dealDir` (e.g., `uploads/<manifest_root>/`) containing `mdu_0.bin` and numbered `mdu_N.bin` slab files.
+    *   Files are committed to a `dealDir` (e.g., `uploads/<manifest_root_key>/`) containing `mdu_0.bin` and numbered `mdu_N.bin` slab files.
+        *   **Directory key normalization (target):** `manifest_root_key` is the canonical on-disk directory name: lowercase hex **without** `0x` (96 chars), derived by decoding the 48-byte `manifest_root` then re-encoding (not by string trimming alone).
         *   Any extra debug artifacts (e.g., shard JSON, `manifest_blob_hex`) are optional and must not be required for fetch/prove.
 *   **NilFS is the Source of Truth (Target End State):**
-    *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/<manifest_root>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
+    *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/<manifest_root_key>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
 
 ---
 
@@ -80,9 +81,9 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   Unknown `file_path` (or tombstone record) returns `404`.
         *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
-        *   The gateway SHOULD canonicalize `manifest_root` consistently (e.g., lowercase, strip `0x`) for filesystem paths and logs to avoid duplicate deal directories.
-        *   The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
-        *   Non-200 responses SHOULD be JSON with a short remediation hint (even though the success path is a byte stream).
+        *   The gateway MUST canonicalize `manifest_root` consistently (decode → re-encode) for filesystem paths and logs to avoid duplicate deal directories.
+        *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
+        *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream).
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
@@ -95,12 +96,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
 
 *   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
+    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
     *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
 
 *   **`GET /gateway/slab/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<manifest_root>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
+    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
         * total MDUs, witness MDUs, user MDUs, and segment ranges (MDU #0 / Witness / User).
     *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the legacy shard JSON debug output).
 
@@ -132,7 +133,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_s3` takes
 
 2.  **Triple Proof Generation:**
     *   The `submitRetrievalProof` logic uses `nilchaind sign-retrieval-receipt --offline` to generate cryptographic proofs.
-    *   **Target (NilFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
+    *   **Target (NilFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
     *   **Gap:** In a production "Thick Client", the browser would generate these proofs locally or verify them from a remote SP. Here, the Gateway generates *and* submits them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**

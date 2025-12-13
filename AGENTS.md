@@ -459,24 +459,28 @@ This is the **canonical execution checklist** for the next development sprint. E
 - [ ] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
     - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
-    - **API changes (target end state):**
-        - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
-            - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
-            - Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\` separators, and whitespace-only).
-            - Unknown `file_path` (or tombstone record) returns `404`.
-            - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
-            - If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
-            - The gateway MUST canonicalize the on‑disk deal directory key (recommended: lowercase hex **without** `0x`) to avoid duplicate directories and “same root, different path” bugs.
-        - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
-            - Proof inputs are resolved only from NilFS: `uploads/<manifest_root>/mdu_0.bin` + `uploads/<manifest_root>/mdu_*.bin` (+ on-chain deal state).
-            - Missing/invalid params return `400`; unknown `file_path` returns `404`.
-        - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
-        - `POST /gateway/upload` SHOULD accept optional `file_path` (default: sanitized `filename`) and MUST return the resolved `file_path` so clients can later fetch/prove deterministically.
-    - **Invariants:**
-        - `uploads/<manifest_root>/` is the canonical, restart-safe state.
-            - Required on-disk artifacts: `mdu_0.bin` and `mdu_*.bin`.
-            - Sufficient for: list-files, fetch-by-path, and proof generation (given chain deal state).
-        - NilFS `file_path` is the authoritative identifier for a file within a deal.
+	    - **API changes (target end state):**
+	        - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
+	            - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
+	            - Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\` separators, and whitespace-only).
+	            - Unknown `file_path` (or tombstone record) returns `404`.
+	            - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
+	            - `manifest_root` normalization:
+	                - Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
+	                - Canonical on-disk directory key `manifest_root_key`: lowercase hex **without** `0x` (96 chars), derived by decoding then re-encoding (not by string trimming alone).
+	            - If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
+	            - The gateway MUST canonicalize the on‑disk deal directory key (`manifest_root_key`) to avoid duplicate directories and “same root, different path” bugs.
+	            - Error responses MUST be JSON (even though the success path is a byte stream): `{ "error": "...", "hint": "..." }`.
+	        - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
+	            - Proof inputs are resolved only from NilFS: `uploads/<manifest_root_key>/mdu_0.bin` + `uploads/<manifest_root_key>/mdu_*.bin` (+ on-chain deal state).
+	            - Missing/invalid params return `400`; unknown `file_path` returns `404`.
+	        - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
+	        - `POST /gateway/upload` SHOULD accept optional `file_path` (default: sanitized `filename`) and MUST return the resolved `file_path` so clients can later fetch/prove deterministically.
+	    - **Invariants:**
+	        - `uploads/<manifest_root_key>/` is the canonical, restart-safe state.
+	            - Required on-disk artifacts: `mdu_0.bin` and `mdu_*.bin`.
+	            - Sufficient for: list-files, fetch-by-path, and proof generation (given chain deal state).
+	        - NilFS `file_path` is the authoritative identifier for a file within a deal.
             - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
             - “CID” is never treated as a file identifier (it is a deal-level commitment only).
         - `file_path` is a URL value and MUST be handled deterministically:
@@ -485,21 +489,26 @@ This is the **canonical execution checklist** for the next development sprint. E
             - Treat it as case-sensitive bytes for matching against the NilFS File Table entries.
         - Error contract must be stable and actionable:
             - Return JSON errors (with a short remediation hint) for non-200 responses from these endpoints (even if success path is a byte stream).
-    - **Migration / backwards-compat:**
-        - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
-        - If legacy support is needed for local dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback, no “best-effort” behavior).
-        - Stop writing `uploads/index.json`; treat existing copies as deprecated/ignored state.
-        - Deprecate `/gateway/manifest/{cid}` as a debug-only endpoint; it must not be on the critical path for fetch/prove.
-        - Remediation message should instruct clients to call `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` to discover valid `file_path` values.
-    - **Risk hotspots:**
-        - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
-        - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
-        - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
-    - **Expected test coverage:**
-        - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
-        - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
-    - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
+	    - **Migration / backwards-compat:**
+	        - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
+	        - If legacy support is needed for local dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback, no “best-effort” behavior).
+	        - Stop writing `uploads/index.json`; treat existing copies as deprecated/ignored state.
+	        - Deprecate `/gateway/manifest/{cid}` as a debug-only endpoint; it must not be on the critical path for fetch/prove.
+	        - Canonicalize existing on-disk deal directories:
+	            - If `uploads/<manifest_root_key>/` does not exist but a legacy `uploads/<raw_manifest_root>/` does (e.g., `0x` prefix or mixed case), rename it to the canonical key on first access/startup.
+	            - If both exist, return a clear non-200 and require manual cleanup (avoid serving from the wrong directory).
+	        - Remediation message should instruct clients to call `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` to discover valid `file_path` values.
+	    - **Risk hotspots:**
+	        - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
+	        - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
+	        - Root normalization: accepting both `0x` + mixed-case inputs but writing a single canonical directory key can surface duplicate-directory bugs; enforce canonicalization + explicit conflict errors.
+	        - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
+	    - **Expected test coverage:**
+	        - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
+	        - Unit: `manifest_root` parsing (length/hex/`0x`/invalid compressed G1) and `manifest_root_key` canonicalization are strict and deterministic.
+	        - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
+	    - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
+	    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
 - [ ] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
@@ -650,7 +659,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Commit gate:** After pass, commit `feat(nil_s3): default to canonical ingest` and push to both remotes.
 
 - [x] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
-    - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
+    - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root_key>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
     - **Pass gate:** New e2e scenario uploads 2 files into the same deal (no new deal created) and:
         1. `allocated_length` only grows if new User MDUs are needed,
         2. `FileTableHeader.record_count` increases,

@@ -6,10 +6,12 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
 
 ### 0. Naming & API Implications (NilFS SSoT)
 
-*   **`manifest_root` is deal-level:** A 48-byte KZG commitment anchoring the entire slab (MDU #0 + Witness + User MDUs). Some codepaths may still label this as `cid` as a legacy alias. For REST APIs, it is encoded as **96 hex chars** (optional `0x` prefix) representing the 48-byte compressed G1 value; gateways should normalize consistently (e.g., lowercase, strip `0x` for on-disk directory keys).
-*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, manifest_root, file_path)` and resolved from NilFS (`mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
+*   **`manifest_root` is deal-level:** A 48-byte KZG commitment anchoring the entire slab (MDU #0 + Witness + User MDUs). Some codepaths may still label this as `cid` as a legacy alias. For REST APIs, it is encoded as **96 hex chars** (optional `0x` prefix) representing the 48-byte compressed G1 value. Gateways MUST normalize consistently:
+    *   Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
+    *   Canonical on-disk directory key `manifest_root_key`: lowercase hex **without** `0x` (96 chars), derived by decoding then re-encoding (not by string trimming alone).
+*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, manifest_root, file_path)` and resolved from NilFS (`uploads/<manifest_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
 *   **`file_path` must be canonical:** Treat it as a relative, slash-separated path (no leading `/`, no `..` traversal). Gateways must decode **at most once** (URL query params are decoded by the HTTP stack; JSON bodies are already-decoded strings) and match case-sensitively against NilFS File Table entries.
-*   **Gateway error contract (target):** Missing/empty/unsafe `file_path` is a hard `400` with a remediation hint; tombstone/not-found is `404`; stale `manifest_root` (doesn’t match chain deal state) should be a clear non-200 (prefer `409`). Errors should be JSON even when the success path is a byte stream.
+*   **Gateway error contract (target):** Missing/empty/unsafe `file_path` is a hard `400` with a remediation hint; tombstone/not-found is `404`; stale `manifest_root` (doesn’t match chain deal state) should be a clear non-200 (prefer `409`). Errors MUST be JSON even when the success path is a byte stream.
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"
 
