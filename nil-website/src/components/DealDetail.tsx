@@ -3,8 +3,9 @@ import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
-import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
-import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
+import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
+import { buildBlake2sMerkleLayers } from '../lib/merkle'
 
 interface DealDetailProps {
   deal: any
@@ -24,6 +25,15 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [manifestInfo, setManifestInfo] = useState<ManifestInfoData | null>(null)
+  const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
+  const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
+  const [selectedMdu, setSelectedMdu] = useState<number>(0)
+  const [mduKzg, setMduKzg] = useState<MduKzgData | null>(null)
+  const [loadingMduKzg, setLoadingMduKzg] = useState(false)
+  const [mduKzgError, setMduKzgError] = useState<string | null>(null)
+  const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
+  const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
 
@@ -34,8 +44,10 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     if (deal.cid && deal.cid !== '') {
       fetchSlab(deal.cid, deal.id, nilAddress)
       fetchFiles(deal.cid, deal.id, nilAddress)
+      fetchManifestInfo(deal.cid, deal.id, nilAddress)
     } else {
       setFiles(null)
+      setManifestInfo(null)
     }
     fetchHeat(deal.id)
   }, [deal.cid, deal.id, nilAddress])
@@ -68,6 +80,53 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
+  }
+
+  async function fetchManifestInfo(cid: string, dealId?: string, owner?: string) {
+    setLoadingManifestInfo(true)
+    setManifestInfoError(null)
+    setMduRootMerkle(null)
+    setMerkleError(null)
+    try {
+      const json = await gatewayFetchManifestInfo(
+        appConfig.gatewayBase,
+        cid,
+        dealId && owner ? { dealId: String(dealId), owner } : undefined,
+      )
+      setManifestInfo(json)
+    } catch (e) {
+      console.error('Failed to fetch manifest info', e)
+      setManifestInfo(null)
+      setManifestInfoError(e instanceof Error ? e.message : 'Failed to fetch manifest info')
+    } finally {
+      setLoadingManifestInfo(false)
+    }
+  }
+
+  async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
+    setLoadingMduKzg(true)
+    setMduKzgError(null)
+    try {
+      const json = await gatewayFetchMduKzg(
+        appConfig.gatewayBase,
+        cid,
+        mduIndex,
+        dealId && owner ? { dealId: String(dealId), owner } : undefined,
+      )
+      setMduKzg(json)
+    } catch (e) {
+      console.error('Failed to fetch MDU KZG', e)
+      setMduKzg(null)
+      setMduKzgError(e instanceof Error ? e.message : 'Failed to fetch MDU commitments')
+    } finally {
+      setLoadingMduKzg(false)
+    }
+  }
+
+  function shortHex(hex: string, head = 10, tail = 6) {
+    if (!hex) return '—'
+    if (hex.length <= 2 + head + tail) return hex
+    return `${hex.slice(0, 2 + head)}…${hex.slice(-tail)}`
   }
 
   async function fetchHeat(dealId: string) {
@@ -295,6 +354,231 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                             <div className="text-[10px] text-muted-foreground mt-1">
                                 File records: {slab.file_records}
                             </div>
+                        </div>
+
+                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="text-xs text-muted-foreground uppercase font-semibold">Manifest Commitment</div>
+                                <div className="text-[10px] text-muted-foreground">KZG commitment over MDU roots</div>
+                            </div>
+
+                            {loadingManifestInfo ? (
+                              <div className="text-[11px] text-muted-foreground">Loading manifest details…</div>
+                            ) : manifestInfo ? (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="bg-background/50 border border-border rounded p-2">
+                                    <div className="text-[10px] text-muted-foreground uppercase">Manifest Root</div>
+                                    <div className="font-mono text-[10px] text-foreground break-all">{manifestInfo.manifest_root}</div>
+                                  </div>
+                                  <div className="bg-background/50 border border-border rounded p-2">
+                                    <div className="text-[10px] text-muted-foreground uppercase">Manifest Blob</div>
+                                    <div className="font-mono text-[10px] text-foreground break-all" title={manifestInfo.manifest_blob_hex}>
+                                      {shortHex(manifestInfo.manifest_blob_hex, 24, 12)}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground mt-1">
+                                      Encodes the ordered root vector for KZG commitment
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="bg-background/50 border border-border rounded p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-[10px] text-muted-foreground uppercase">Ordered MDU Roots</div>
+                                    <button
+                                      onClick={() => {
+                                        try {
+                                          setMerkleError(null)
+                                          const roots = manifestInfo.roots.map(r => r.root_hex).filter(Boolean)
+                                          setMduRootMerkle(buildBlake2sMerkleLayers(roots))
+                                        } catch (err) {
+                                          setMduRootMerkle(null)
+                                          setMerkleError(err instanceof Error ? err.message : 'Failed to build Merkle tree')
+                                        }
+                                      }}
+                                      className="text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                    >
+                                      Build Merkle Tree (Debug)
+                                    </button>
+                                  </div>
+                                  <div className="mt-2 space-y-1 max-h-52 overflow-auto pr-1">
+                                    {manifestInfo.roots.map((r) => (
+                                      <div key={`${r.kind}:${r.mdu_index}`} className="flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <div className="text-[10px] text-muted-foreground">
+                                            MDU #{r.mdu_index} • {r.kind}
+                                          </div>
+                                          <div className="font-mono text-[10px] text-foreground truncate" title={r.root_hex}>
+                                            {shortHex(r.root_hex, 16, 10)}
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            setSelectedMdu(r.mdu_index)
+                                            fetchMduKzg(manifestInfo.manifest_root, r.mdu_index, deal.id, nilAddress)
+                                          }}
+                                          className="shrink-0 text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                        >
+                                          Inspect
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {merkleError && <div className="mt-2 text-[10px] text-red-500">{merkleError}</div>}
+
+                                  {mduRootMerkle && mduRootMerkle.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      <div className="text-[10px] text-muted-foreground">
+                                        Debug Merkle tree over the root vector (Blake2s, duplicate-last on odd levels).
+                                      </div>
+                                      <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                                        {mduRootMerkle.map((layer, idx) => (
+                                          <div key={idx} className="bg-background/50 border border-border rounded p-2">
+                                            <div className="text-[10px] text-muted-foreground uppercase">
+                                              Level {idx} • {layer.length} nodes
+                                            </div>
+                                            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                              {layer.map((h, j) => (
+                                                <div
+                                                  key={`${idx}:${j}`}
+                                                  className="font-mono text-[10px] text-foreground truncate"
+                                                  title={h}
+                                                >
+                                                  {shortHex(h, 16, 10)}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-[11px] text-muted-foreground">
+                                {manifestInfoError ?? 'No manifest details available yet.'}
+                              </div>
+                            )}
+                        </div>
+
+                        {manifestInfo?.roots?.length ? (
+                          <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-muted-foreground uppercase font-semibold">Root Table (MDU #0)</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {slab.witness_mdus + slab.user_mdus} entries
+                              </div>
+                            </div>
+                            <div className="space-y-1 max-h-56 overflow-auto pr-1">
+                              {manifestInfo.roots
+                                .filter(r => r.root_table_index !== undefined)
+                                .map((r) => (
+                                  <div key={`rt:${r.mdu_index}`} className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="text-[10px] text-muted-foreground">
+                                        Root[{r.root_table_index}] → MDU #{r.mdu_index} • {r.kind}
+                                      </div>
+                                      <div className="font-mono text-[10px] text-foreground truncate" title={r.root_hex}>
+                                        {shortHex(r.root_hex, 16, 10)}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedMdu(r.mdu_index)
+                                        fetchMduKzg(manifestInfo.manifest_root, r.mdu_index, deal.id, nilAddress)
+                                      }}
+                                      className="shrink-0 text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                    >
+                                      Inspect
+                                    </button>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                              <div className="text-xs text-muted-foreground uppercase font-semibold">MDU Inspector</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                Loads blob commitments (KZG) for a specific MDU
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={selectedMdu}
+                                onChange={(e) => {
+                                  const next = Number(e.target.value)
+                                  setSelectedMdu(next)
+                                  setMduKzg(null)
+                                  setMduKzgError(null)
+                                }}
+                                className="text-[10px] bg-background border border-border rounded px-2 py-1 text-foreground"
+                              >
+                                {Array.from({ length: slab.total_mdus }).map((_, idx) => {
+                                  const kind =
+                                    idx === 0 ? 'mdu0' : idx <= slab.witness_mdus ? 'witness' : 'user'
+                                  return (
+                                    <option key={idx} value={idx}>
+                                      MDU #{idx} • {kind}
+                                    </option>
+                                  )
+                                })}
+                              </select>
+                              <button
+                                onClick={() => fetchMduKzg(slab.manifest_root, selectedMdu, deal.id, nilAddress)}
+                                className="text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                              >
+                                {loadingMduKzg ? 'Loading…' : 'Load Commitments'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {mduKzgError && <div className="text-[10px] text-red-500">{mduKzgError}</div>}
+
+                          {mduKzg && mduKzg.mdu_index === selectedMdu ? (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-background/50 border border-border rounded p-2">
+                                  <div className="text-[10px] text-muted-foreground uppercase">MDU Root</div>
+                                  <div className="font-mono text-[10px] text-foreground break-all">
+                                    {shortHex(mduKzg.root_hex, 24, 12)}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    Blake2s Merkle root over 64 blob commitments
+                                  </div>
+                                </div>
+                                <div className="bg-background/50 border border-border rounded p-2">
+                                  <div className="text-[10px] text-muted-foreground uppercase">Blob Commitments</div>
+                                  <div className="text-[11px] text-foreground font-mono">{mduKzg.blobs.length}</div>
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    128 KiB each • {Math.round(slab.mdu_size_bytes / 1024 / 1024)} MiB total
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="bg-background/50 border border-border rounded p-2">
+                                <div className="text-[10px] text-muted-foreground uppercase">Commitments</div>
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-64 overflow-auto pr-1">
+                                  {mduKzg.blobs.map((c, idx) => (
+                                    <div key={idx} className="flex items-center justify-between gap-2">
+                                      <div className="text-[10px] text-muted-foreground">#{idx}</div>
+                                      <div className="font-mono text-[10px] text-foreground truncate" title={c}>
+                                        {shortHex(c, 18, 10)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-muted-foreground">
+                              Select an MDU and load its commitments to inspect the 64 blob commitments.
+                            </div>
+                          )}
                         </div>
                     </>
                 ) : (

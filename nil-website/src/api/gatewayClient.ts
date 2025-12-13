@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from '../lib/http'
-import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -101,3 +101,55 @@ export async function gatewayListFiles(
   return files.filter((f): f is NilfsFileEntry => isRecord(f) && typeof f['path'] === 'string') as NilfsFileEntry[]
 }
 
+export async function gatewayFetchManifestInfo(
+  gatewayBase: string,
+  manifestRoot: string,
+  params?: { dealId?: string; owner?: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<ManifestInfoData> {
+  let url = `${gatewayBase}/gateway/manifest-info/${encodeURIComponent(manifestRoot)}`
+  if (params?.dealId && params?.owner) {
+    const q = new URLSearchParams()
+    q.set('deal_id', String(params.dealId))
+    q.set('owner', params.owner)
+    url = `${url}?${q.toString()}`
+  }
+
+  const res = await fetchFn(url)
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Gateway manifest-info returned ${res.status}`)
+  }
+
+  const json = (await res.json().catch(() => null)) as ManifestInfoData | null
+  if (!json) throw new Error('Invalid manifest-info JSON')
+  return json
+}
+
+export async function gatewayFetchMduKzg(
+  gatewayBase: string,
+  manifestRoot: string,
+  mduIndex: number,
+  params?: { dealId?: string; owner?: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<MduKzgData> {
+  let url = `${gatewayBase}/gateway/mdu-kzg/${encodeURIComponent(manifestRoot)}/${encodeURIComponent(
+    String(mduIndex),
+  )}`
+  if (params?.dealId && params?.owner) {
+    const q = new URLSearchParams()
+    q.set('deal_id', String(params.dealId))
+    q.set('owner', params.owner)
+    url = `${url}?${q.toString()}`
+  }
+
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 60_000, fetchFn)
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Gateway mdu-kzg returned ${res.status}`)
+  }
+
+  const json = (await res.json().catch(() => null)) as MduKzgData | null
+  if (!json) throw new Error('Invalid mdu-kzg JSON')
+  return json
+}

@@ -25,3 +25,26 @@ export interface SlabLayoutData {
   segments: SlabSegment[]
 }
 
+export interface MduRootRecord {
+  mdu_index: number
+  kind: 'mdu0' | 'witness' | 'user'
+  root_hex: string
+  root_table_index?: number
+}
+
+export interface ManifestInfoData {
+  manifest_root: string
+  manifest_blob_hex: string
+  total_mdus: number
+  witness_mdus: number
+  user_mdus: number
+  roots: MduRootRecord[]
+}
+
+export interface MduKzgData {
+  manifest_root: string
+  mdu_index: number
+  kind: 'mdu0' | 'witness' | 'user'
+  root_hex: string
+  blobs: string[]
+}
