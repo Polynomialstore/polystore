@@ -18,12 +18,7 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
-func parseChainIDToBig(chainID string) *big.Int {
-	if id, ok := new(big.Int).SetString(chainID, 10); ok {
-		return id
-	}
-	return big.NewInt(1)
-}
+var eip712DevChainID = big.NewInt(31337)
 
 func makeManifestRootHex(fill byte) string {
 	return "0x" + hex.EncodeToString(bytes.Repeat([]byte{fill}, 48))
@@ -31,10 +26,9 @@ func makeManifestRootHex(fill byte) string {
 
 func signCreateIntentEIP712(t *testing.T, intent *types.EvmCreateDealIntent, privKey *ecdsa.PrivateKey) []byte {
 	t.Helper()
-	chainID := parseChainIDToBig(intent.ChainId)
 	structHash, err := types.HashCreateDeal(intent)
 	require.NoError(t, err)
-	domainSep := types.HashDomainSeparator(chainID)
+	domainSep := types.HashDomainSeparator(eip712DevChainID)
 	digest := types.ComputeEIP712Digest(domainSep, structHash)
 	sig, err := gethCrypto.Sign(digest, privKey)
 	require.NoError(t, err)
@@ -43,10 +37,9 @@ func signCreateIntentEIP712(t *testing.T, intent *types.EvmCreateDealIntent, pri
 
 func signUpdateIntentEIP712(t *testing.T, intent *types.EvmUpdateContentIntent, privKey *ecdsa.PrivateKey) []byte {
 	t.Helper()
-	chainID := parseChainIDToBig(intent.ChainId)
 	structHash, err := types.HashUpdateContent(intent)
 	require.NoError(t, err)
-	domainSep := types.HashDomainSeparator(chainID)
+	domainSep := types.HashDomainSeparator(eip712DevChainID)
 	digest := types.ComputeEIP712Digest(domainSep, structHash)
 	sig, err := gethCrypto.Sign(digest, privKey)
 	require.NoError(t, err)
@@ -81,7 +74,6 @@ func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   initialEscrow,
@@ -148,7 +140,6 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 	// 1. Create Deal (capacity only)
 	createIntent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		SizeTier:        1, // 4 GiB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   initialEscrow,
@@ -231,7 +222,6 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 	// 1. Alice creates Deal
 	createIntent := &types.EvmCreateDealIntent{
 		CreatorEvm:      aliceEvmAddr.Hex(),
-		SizeTier:        1, // 4 GiB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),
@@ -291,10 +281,9 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 	senderBz := []byte("relayer_cap_______")
 	sender, _ := f.addressCodec.BytesToString(senderBz)
 
-	// 1. Create a Deal (tier field is ignored by dynamic sizing)
+	// 1. Create a Deal (thin-provisioned container).
 	createIntent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		SizeTier:        1, // 4 GiB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),
@@ -357,7 +346,6 @@ func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),
@@ -407,7 +395,6 @@ func TestCreateDealFromEvm_ReplayNonce(t *testing.T) {
 	makeMsg := func(nonce uint64) *types.MsgCreateDealFromEvm {
 		intent := &types.EvmCreateDealIntent{
 			CreatorEvm:      evmAddr.Hex(),
-			SizeTier:        1, // DEAL_SIZE_4GIB
 			DurationBlocks:  100,
 			ServiceHint:     "General",
 			InitialEscrow:   math.NewInt(1000000),
@@ -458,7 +445,6 @@ func TestCreateDealFromEvm_WrongChainID(t *testing.T) {
 
 	intent := &types.EvmCreateDealIntent{
 		CreatorEvm:      evmAddr.Hex(),
-		SizeTier:        1, // DEAL_SIZE_4GIB
 		DurationBlocks:  100,
 		ServiceHint:     "General",
 		InitialEscrow:   math.NewInt(1000000),

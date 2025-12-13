@@ -96,7 +96,7 @@ message MsgCreateDeal {
   string service_hint = 5; // "Hot" or "Cold"
   string max_monthly_spend = 6 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
   string initial_escrow_amount = 7 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Initial $STOR amount
-  // Field 8 (deal_size / DealSize) reserved; static capacity tiers removed in favor of thin provisioning.
+  // Field 8 reserved; static capacity tiers removed in favor of thin provisioning.
 }
 
 // MsgCreateDealResponse defines the response structure for creating a deal.
@@ -138,7 +138,7 @@ message EvmCreateDealIntent {
   ]; // Monthly spend cap (stake)
   uint64 nonce = 8;             // Per-EVM-address bridge nonce (strictly increasing)
   string chain_id = 9;          // nilchaind chain-id (e.g. "test-1")
-  uint32 size_tier = 10;        // Deprecated: retained only for EIP-712 compatibility (ignored by chain logic).
+  reserved 10;
 }
 
 // EvmUpdateContentIntent captures fields for updating deal content via EVM.

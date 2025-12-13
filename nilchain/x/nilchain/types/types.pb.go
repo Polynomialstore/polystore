@@ -39,7 +39,7 @@ type Deal struct {
 	CurrentReplication uint64                `protobuf:"varint,10,opt,name=current_replication,json=currentReplication,proto3" json:"current_replication,omitempty"`
 	ServiceHint        string                `protobuf:"bytes,11,opt,name=service_hint,json=serviceHint,proto3" json:"service_hint,omitempty"`
 	MaxMonthlySpend    cosmossdk_io_math.Int `protobuf:"bytes,12,opt,name=max_monthly_spend,json=maxMonthlySpend,proto3,customtype=cosmossdk.io/math.Int" json:"max_monthly_spend"`
-	// Field 13 (deal_size / DealSize) reserved for removed capacity tiers.
+	// Field 13 reserved for removed capacity tiers.
 	TotalMdus uint64 `protobuf:"varint,14,opt,name=total_mdus,json=totalMdus,proto3" json:"total_mdus,omitempty"`
 }
 

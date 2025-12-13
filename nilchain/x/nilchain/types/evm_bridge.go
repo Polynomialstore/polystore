@@ -22,7 +22,7 @@ const (
 // (MetaMask) and the on-chain keeper must use this exact encoding.
 //
 // The format is:
-//   "NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<size_tier>|<duration_blocks>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
+//   "NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_blocks>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
 //
 // All numeric values are encoded in base-10. creator_evm is lowercased and
 // normalised to a 0x-prefixed hexadecimal address.
@@ -37,14 +37,12 @@ func BuildEvmCreateDealMessage(intent *EvmCreateDealIntent) (string, error) {
 		creator = "0x" + creator
 	}
 
-	tierStr := strconv.FormatUint(uint64(intent.SizeTier), 10)
 	durationStr := strconv.FormatUint(intent.DurationBlocks, 10)
 	nonceStr := strconv.FormatUint(intent.Nonce, 10)
 
 	parts := []string{
 		EvmCreateDealDomainSeparator,
 		creator,
-		tierStr,
 		durationStr,
 		strings.TrimSpace(intent.ServiceHint),
 		intent.InitialEscrow.String(),
@@ -88,4 +86,3 @@ func BuildEvmUpdateContentMessage(intent *EvmUpdateContentIntent) (string, error
 
 	return strings.Join(parts, "|"), nil
 }
-

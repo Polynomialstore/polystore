@@ -154,22 +154,29 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 
                 )
 
-        // Temporarily assume signature is valid and derive evmAddr directly.
+	creator := strings.ToLower(strings.TrimSpace(intent.CreatorEvm))
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator_evm is required")
+	}
+	if !strings.HasPrefix(creator, "0x") {
+		creator = "0x" + creator
+	}
+	if strings.ToLower(evmAddr.Hex()) != creator {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("signature does not match creator_evm")
+	}
 
-        // evmAddr := gethCommon.HexToAddress(intent.CreatorEvm)
-
-	// // Replay protection: enforce strictly increasing nonce per EVM address. -- TEMPORARILY DISABLED
-	// evmKey := strings.ToLower(evmAddr.Hex())
-	// lastNonce, err := k.EvmNonces.Get(ctx, evmKey)
-	// if err != nil && !errors.Is(err, collections.ErrNotFound) {
-	// 	return nil, fmt.Errorf("failed to load bridge nonce: %w", err)
-	// }
-	// if intent.Nonce <= lastNonce {
-	// 	return nil, sdkerrors.ErrUnauthorized.Wrap("bridge nonce must be strictly increasing")
-	// }
-	// if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
-	// 	return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
-	// }
+	// Replay protection: enforce strictly increasing nonce per EVM address.
+	evmKey := strings.ToLower(evmAddr.Hex())
+	lastNonce, err := k.EvmNonces.Get(ctx, evmKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("failed to load bridge nonce: %w", err)
+	}
+	if intent.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("bridge nonce must be strictly increasing")
+	}
+	if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
+	}
 
 
 	// Map EVM address -> Cosmos bech32 (same bytes, different prefix).
@@ -556,6 +563,30 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		"Recovered", evmAddr.Hex(),
 		"Expected", intent.CreatorEvm,
 	)
+
+	creator := strings.ToLower(strings.TrimSpace(intent.CreatorEvm))
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator_evm is required")
+	}
+	if !strings.HasPrefix(creator, "0x") {
+		creator = "0x" + creator
+	}
+	if strings.ToLower(evmAddr.Hex()) != creator {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("signature does not match creator_evm")
+	}
+
+	// Replay protection: enforce strictly increasing nonce per EVM address.
+	evmKey := strings.ToLower(evmAddr.Hex())
+	lastNonce, err := k.EvmNonces.Get(ctx, evmKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("failed to load bridge nonce: %w", err)
+	}
+	if intent.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("bridge nonce must be strictly increasing")
+	}
+	if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
+	}
 
 	// Map to Cosmos Address
 	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
