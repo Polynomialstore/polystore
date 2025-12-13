@@ -144,24 +144,16 @@ fi
 # 3. Create Deal (EVM)
 echo "==> Creating Deal (EVM-signed)..."
 
-# Get current account sequence for the NIL_ADDRESS
-CURRENT_NIL_SEQUENCE=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
-if [ "$CURRENT_NIL_SEQUENCE" == "" ]; then
-    echo "ERROR: Could not get current NIL_ADDRESS sequence"
-    exit 1
-fi
-echo "    Current account sequence for NIL_ADDRESS: $CURRENT_NIL_SEQUENCE"
+EVM_NONCE=1
 
 CREATE_RESP=""
 for i in $(seq 1 5); do
-  initial_nonce=$((CURRENT_NIL_SEQUENCE + i - 1))
   CREATE_PAYLOAD=$(
-    NONCE="$initial_nonce" \
+    NONCE="$EVM_NONCE" \
     DURATION_BLOCKS=100 \
     SERVICE_HINT="General" \
     INITIAL_ESCROW="1000000" \
     MAX_MONTHLY_SPEND="500000" \
-    SIZE_TIER=0 \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
   )
   CREATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
@@ -169,13 +161,17 @@ for i in $(seq 1 5); do
     -d "$CREATE_PAYLOAD")
 
   if echo "$CREATE_RESP" | grep -q "account sequence mismatch"; then
-    echo "    Account sequence mismatch, retrying with incremented nonce (attempt $i/5)..."
-    # Re-fetch sequence to be safe, though simple increment should also work most times
-    CURRENT_NIL_SEQUENCE=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
+    echo "    Account sequence mismatch, retrying (attempt $i/5)..."
     sleep 1 # Give chain a moment
-  else
-    break
+    continue
   fi
+  if echo "$CREATE_RESP" | grep -q "bridge nonce must be strictly increasing"; then
+    echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
+    EVM_NONCE=$((EVM_NONCE + 1))
+    sleep 1 # Give chain a moment
+    continue
+  fi
+  break
 done
 
 echo "    Response: $CREATE_RESP"
@@ -187,23 +183,15 @@ if [ -z "$DEAL_ID" ]; then
     exit 1
 fi
 echo "    Deal ID: $DEAL_ID"
+EVM_NONCE=$((EVM_NONCE + 1))
 
 # 4. Update Deal Content (EVM)
 echo "==> Updating Deal Content (Commit Manifest)..."
-# Get current account sequence for the NIL_ADDRESS
-# This should be the previous sequence + 1, but we fetch it to be robust
-CURRENT_NIL_SEQUENCE_FOR_UPDATE=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
-if [ "$CURRENT_NIL_SEQUENCE_FOR_UPDATE" == "" ]; then
-    echo "ERROR: Could not get current NIL_ADDRESS sequence for update"
-    exit 1
-fi
-echo "    Current account sequence for NIL_ADDRESS for update: $CURRENT_NIL_SEQUENCE_FOR_UPDATE"
 
 UPDATE_RESP=""
 for i in $(seq 1 5); do
-  update_nonce=$((CURRENT_NIL_SEQUENCE_FOR_UPDATE + i - 1))
   UPDATE_PAYLOAD=$(
-    NONCE="$update_nonce" \
+    NONCE="$EVM_NONCE" \
     DEAL_ID="$DEAL_ID" \
     CID="$MANIFEST_ROOT" \
     SIZE_BYTES="$SIZE_BYTES" \
@@ -214,12 +202,17 @@ for i in $(seq 1 5); do
     -d "$UPDATE_PAYLOAD")
 
   if echo "$UPDATE_RESP" | grep -q "account sequence mismatch"; then
-    echo "    Account sequence mismatch, retrying with incremented nonce (attempt $i/5)..."
-    CURRENT_NIL_SEQUENCE_FOR_UPDATE=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
+    echo "    Account sequence mismatch, retrying (attempt $i/5)..."
     sleep 1 # Give chain a moment
-  else
-    break
+    continue
   fi
+  if echo "$UPDATE_RESP" | grep -q "bridge nonce must be strictly increasing"; then
+    echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
+    EVM_NONCE=$((EVM_NONCE + 1))
+    sleep 1 # Give chain a moment
+    continue
+  fi
+  break
 done
 
 echo "    Response: $UPDATE_RESP"
@@ -229,6 +222,7 @@ if [ "$STATUS" != "success" ]; then
     echo "ERROR: Update content failed"
     exit 1
 fi
+EVM_NONCE=$((EVM_NONCE + 1))
 
 # 5. Verify on LCD
 echo "==> Verifying Deal on LCD..."
@@ -314,18 +308,11 @@ fi
 
 # 8. Update Deal Content again (EVM)
 echo "==> Updating Deal Content again (Commit New Manifest)..."
-CURRENT_NIL_SEQUENCE_FOR_UPDATE2=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
-if [ "$CURRENT_NIL_SEQUENCE_FOR_UPDATE2" == "" ]; then
-    echo "ERROR: Could not get current NIL_ADDRESS sequence for second update"
-    exit 1
-fi
-echo "    Current account sequence for NIL_ADDRESS for second update: $CURRENT_NIL_SEQUENCE_FOR_UPDATE2"
 
 UPDATE2_RESP=""
 for i in $(seq 1 5); do
-  update_nonce2=$((CURRENT_NIL_SEQUENCE_FOR_UPDATE2 + i - 1))
   UPDATE2_PAYLOAD=$(
-    NONCE="$update_nonce2" \
+    NONCE="$EVM_NONCE" \
     DEAL_ID="$DEAL_ID" \
     CID="$MANIFEST_ROOT_2" \
     SIZE_BYTES="$SIZE_BYTES_2" \
@@ -336,12 +323,17 @@ for i in $(seq 1 5); do
     -d "$UPDATE2_PAYLOAD")
 
   if echo "$UPDATE2_RESP" | grep -q "account sequence mismatch"; then
-    echo "    Account sequence mismatch, retrying with incremented nonce (attempt $i/5)..."
-    CURRENT_NIL_SEQUENCE_FOR_UPDATE2=$(get_account_sequence "$NIL_ADDRESS" "$LCD_BASE")
+    echo "    Account sequence mismatch, retrying (attempt $i/5)..."
     sleep 1
-  else
-    break
+    continue
   fi
+  if echo "$UPDATE2_RESP" | grep -q "bridge nonce must be strictly increasing"; then
+    echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
+    EVM_NONCE=$((EVM_NONCE + 1))
+    sleep 1
+    continue
+  fi
+  break
 done
 
 echo "    Response: $UPDATE2_RESP"
@@ -351,6 +343,7 @@ if [ "$STATUS2" != "success" ]; then
     echo "ERROR: Second update content failed"
     exit 1
 fi
+EVM_NONCE=$((EVM_NONCE + 1))
 
 # 9. Verify on LCD (new manifest root)
 echo "==> Verifying Deal on LCD after append..."

@@ -94,7 +94,6 @@ PAYLOAD=$(
   SERVICE_HINT="General" \
   INITIAL_ESCROW="1000000" \
   MAX_MONTHLY_SPEND="500000" \
-  SIZE_TIER=0 \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
 )
 

@@ -12,7 +12,8 @@ from eth_account.messages import encode_typed_data
 GATEWAY_URL = "http://localhost:8080"
 LCD_URL = "http://localhost:1317"
 FAUCET_URL = "http://localhost:8081"
-CHAIN_ID = 31337
+EVM_CHAIN_ID = 31337
+COSMOS_CHAIN_ID = "test-1"
 VERIFYING_CONTRACT = "0x0000000000000000000000000000000000000000"
 
 # Generate a random wallet
@@ -51,7 +52,6 @@ def request_funds(eth_address):
 # --- 1. Create Deal ---
 def create_deal():
     nonce = 1 # Simple nonce handling
-    size_tier = 0 # Legacy field retained for signatures; ignored by chain logic
     duration = 100
     initial_escrow = 1000000
     max_monthly_spend = 5000000
@@ -61,29 +61,27 @@ def create_deal():
     domain_data = {
         "name": "NilStore",
         "version": "1",
-        "chainId": CHAIN_ID,
+        "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
     }
 
     message_types = {
         "CreateDeal": [
             {"name": "creator", "type": "address"},
-            {"name": "size_tier", "type": "uint32"},
             {"name": "duration", "type": "uint64"},
             {"name": "service_hint", "type": "string"},
-            {"name": "initial_escrow", "type": "uint256"},
-            {"name": "max_monthly_spend", "type": "uint256"},
+            {"name": "initial_escrow", "type": "string"},
+            {"name": "max_monthly_spend", "type": "string"},
             {"name": "nonce", "type": "uint64"},
         ]
     }
 
     message_data = {
         "creator": account.address,
-        "size_tier": size_tier,
         "duration": duration,
         "service_hint": service_hint,
-        "initial_escrow": initial_escrow,
-        "max_monthly_spend": max_monthly_spend,
+        "initial_escrow": str(initial_escrow),
+        "max_monthly_spend": str(max_monthly_spend),
         "nonce": nonce,
     }
 
@@ -95,13 +93,12 @@ def create_deal():
     # Construct Intent
     intent = {
         "creator_evm": account.address,
-        "size_tier": size_tier,
         "duration_blocks": duration,
         "service_hint": service_hint,
         "initial_escrow": str(initial_escrow),
         "max_monthly_spend": str(max_monthly_spend),
         "nonce": nonce,
-        "chain_id": str(CHAIN_ID),
+        "chain_id": COSMOS_CHAIN_ID,
     }
 
     print("Submitting CreateDeal...")
@@ -129,8 +126,6 @@ def verify_deal(deal_id):
                 if 'deal' in data:
                     deal = data['deal']
                     print(f"Deal found: {deal}")
-                    if 'deal_size' in deal and deal.get('deal_size'):
-                        print(f"WARNING: deal_size should be empty/removed, got {deal.get('deal_size')}")
                     return deal
         except Exception as e:
             print(f"Polling error: {e}")
@@ -162,7 +157,7 @@ def update_content(deal_id, cid, size_bytes):
     domain_data = {
         "name": "NilStore",
         "version": "1",
-        "chainId": CHAIN_ID,
+        "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
     }
 
@@ -195,7 +190,7 @@ def update_content(deal_id, cid, size_bytes):
         "cid": cid,
         "size_bytes": int(size_bytes),
         "nonce": nonce,
-        "chain_id": str(CHAIN_ID),
+        "chain_id": COSMOS_CHAIN_ID,
     }
 
     print("Submitting UpdateContent...")
@@ -250,14 +245,14 @@ def verify_final(deal_id, cid, size_bytes):
                     deal_cid_hex = deal_cid_raw
 
             # Check Size
-            deal_size_bytes = int(deal.get('size') or deal.get('size_bytes') or 0)
+            deal_content_size_bytes = int(deal.get('size') or deal.get('size_bytes') or 0)
             
             # Compare (Gateway CID has 0x prefix)
-            if deal_cid_hex == cid and deal_size_bytes == size_bytes:
+            if deal_cid_hex == cid and deal_content_size_bytes == size_bytes:
                 print("Final Verification PASSED!")
                 return
             
-            print(f"Waiting for update... CID: {deal_cid_hex} (want {cid}), Size: {deal_size_bytes} (want {size_bytes})")
+            print(f"Waiting for update... CID: {deal_cid_hex} (want {cid}), Size: {deal_content_size_bytes} (want {size_bytes})")
         except Exception as e:
             print(f"Polling error: {e}")
             import traceback

@@ -63,7 +63,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Logic:** Forwards the intent to `nilchaind tx nilchain create-deal-from-evm`.
     *   **Role:** Relays user-signed intents to the Cosmos chain.
     *   **Semantics (target):** Creates a **thin-provisioned** deal (`manifest_root = empty`, `size = 0`, `total_mdus = 0`) until the first `update-deal-content-evm` commit.
-        *   **No tiers:** Capacity-tier fields (e.g., `size_tier`) are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
+        *   **No tiers:** Capacity-tier fields are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
     *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
