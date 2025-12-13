@@ -125,6 +125,11 @@ func ProvideClientContext(
 	basicManager module.BasicManager,
 ) client.Context {
 	basicManager.RegisterInterfaces(interfaceRegistry)
+	// app.AppConfig currently wires the core Cosmos modules, while EVM/feemarket are
+	// registered manually in app.New(). Explicitly register their interfaces here
+	// so the JSON-RPC server can decode MsgEthereumTx and extension options.
+	evmtypes.RegisterInterfaces(interfaceRegistry)
+	feemarkettypes.RegisterInterfaces(interfaceRegistry)
 	basicManager.RegisterLegacyAminoCodec(legacyAmino)
 	legacyAmino.RegisterConcrete(&authtypes.AccountRetriever{}, "cosmos-sdk/AccountRetriever", nil)
 

@@ -12,9 +12,6 @@ import (
 	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 	"cosmossdk.io/x/tx/signing"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
-	gogoproto "github.com/cosmos/gogoproto/proto"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	dbm "github.com/cosmos/cosmos-db"
@@ -518,10 +515,5 @@ func BlockedAddresses() map[string]bool {
 // ProvideCustomGetSigner returns a custom signer for MsgEthereumTx
 // to bypass the runtime panic checks during initialization.
 func ProvideCustomGetSigner() signing.CustomGetSigner {
-	return signing.CustomGetSigner{
-		MsgType: protoreflect.FullName(gogoproto.MessageName(&evmtypes.MsgEthereumTx{})),
-		Fn: func(msg proto.Message) ([][]byte, error) {
-			return nil, nil
-		},
-	}
+	return evmtypes.MsgEthereumTxCustomGetSigner
 }

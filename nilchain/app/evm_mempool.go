@@ -8,6 +8,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkmempool "github.com/cosmos/cosmos-sdk/types/mempool"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
@@ -70,34 +71,26 @@ func (app *App) initEVMMempool() error {
 	checkTxHandler := evmmempool.NewCheckTxHandler(evmMempool)
 	app.SetCheckTxHandler(checkTxHandler)
 
-	// For localhost we keep the EVM mempool for JSON-RPC pending txs, but avoid
-	// wiring it into consensus by default. The upstream EVM mempool consensus hooks
-	// (SelectBy + EventBus notifications) have been observed to stall single-node
-	// chains. Set NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1 to opt in.
-	if os.Getenv("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS") == "1" {
-		app.SetMempool(evmMempool)
-		logger.Info("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS=1; wiring EVM mempool into BaseApp")
+	// Accept EthereumTx-wrapped Cosmos transactions in the default app-side mempool by
+	// extracting the sender from ExtensionOptionsEthereumTx + MsgEthereumTx.From.
+	//
+	// Without this, eth_sendRawTransaction (Foundry/MetaMask) fails with
+	// "tx must have at least one signer" because EthereumTx-wrapped Cosmos txs
+	// have no outer Cosmos signatures.
+	ethSignerExtractor := evmmempool.NewEthSignerExtractionAdapter(
+		sdkmempool.NewDefaultSignerExtractionAdapter(),
+	)
 
-		// The upstream ExperimentalEVMMempool PrepareProposal handler can stall
-		// single-node consensus on localhost. Even when opting into consensus wiring,
-		// we default to a no-op PrepareProposal so CometBFT proposes its FIFO tx list.
-		// Set NIL_DISABLE_EVM_PREPARE_PROPOSAL=0 to opt back into EVM selection.
-		if os.Getenv("NIL_DISABLE_EVM_PREPARE_PROPOSAL") == "0" {
-			proposalHandler := baseapp.NewDefaultProposalHandler(evmMempool, app.App)
-			proposalHandler.SetSignerExtractionAdapter(
-				evmmempool.NewEthSignerExtractionAdapter(
-					sdkmempool.NewDefaultSignerExtractionAdapter(),
-				),
-			)
-			app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
-			logger.Info("using EVM mempool PrepareProposal handler")
-		} else {
-			app.SetPrepareProposal(baseapp.NoOpPrepareProposal())
-			logger.Info("NIL_DISABLE_EVM_PREPARE_PROPOSAL!=0; using NoOp PrepareProposal")
-		}
-	} else {
-		logger.Info("NIL_USE_EVM_MEMPOOL_FOR_CONSENSUS!=1; EVM mempool enabled only for JSON-RPC")
-	}
+	cfg := sdkmempool.DefaultPriorityNonceMempoolConfig()
+	cfg.SignerExtractor = ethSignerExtractor
+	cosmosMempool := sdkmempool.NewPriorityMempool(cfg)
+	app.SetMempool(cosmosMempool)
+
+	// Recreate the default proposal handler so it uses the updated mempool and signer extractor.
+	proposalHandler := baseapp.NewDefaultProposalHandler(cosmosMempool, app.App)
+	proposalHandler.SetSignerExtractionAdapter(ethSignerExtractor)
+	app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
+	app.SetProcessProposal(proposalHandler.ProcessProposalHandler())
 
 	logger.Info("configured EVM mempool successfully")
 
@@ -123,12 +116,29 @@ func (app *App) GetAnteHandler() sdk.AnteHandler {
 func broadcastEVMTransactions(clientCtx client.Context, txConfig client.TxConfig, ethTxs []*ethtypes.Transaction) error {
 	for _, ethTx := range ethTxs {
 		msg := &evmtypes.MsgEthereumTx{}
-		msg.FromEthereumTx(ethTx)
+		// IMPORTANT: MsgEthereumTx.GetSigners() returns nil unless msg.From is populated.
+		// When broadcasting raw Ethereum txs from JSON-RPC, we must recover and set
+		// the sender so the Cosmos SDK mempool can extract a signer.
+		signer := ethtypes.LatestSignerForChainID(ethTx.ChainId())
+		if err := msg.FromSignedEthereumTx(ethTx, signer); err != nil {
+			return fmt.Errorf("failed to derive sender for tx %s: %w", ethTx.Hash().Hex(), err)
+		}
 
 		txBuilder := txConfig.NewTxBuilder()
 		if err := txBuilder.SetMsgs(msg); err != nil {
 			return fmt.Errorf("failed to set msg in tx builder: %w", err)
 		}
+		// Mark this as an Ethereum transaction so signer extraction can use MsgEthereumTx.From
+		// rather than Cosmos signatures.
+		extAny, err := codectypes.NewAnyWithValue(&evmtypes.ExtensionOptionsEthereumTx{})
+		if err != nil {
+			return fmt.Errorf("failed to pack ExtensionOptionsEthereumTx: %w", err)
+		}
+		extBuilder, ok := txBuilder.(client.ExtendedTxBuilder)
+		if !ok {
+			return fmt.Errorf("tx builder does not support extension options (need ExtensionOptionsEthereumTx for JSON-RPC broadcasts)")
+		}
+		extBuilder.SetExtensionOptions(extAny)
 
 		txBytes, err := txConfig.TxEncoder()(txBuilder.GetTx())
 		if err != nil {
