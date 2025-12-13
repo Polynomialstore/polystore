@@ -9,7 +9,7 @@
     "prebuild": "npm run wasm:build",
     "dev": "vite",
     "build": "tsc && vite build",
-    "ci:build": "export RUST_DIR=$PWD/.cache/rust && mkdir -p $RUST_DIR && export RUSTUP_HOME=$RUST_DIR && export CARGO_HOME=$RUST_DIR && if [ ! -f $RUST_DIR/bin/cargo ]; then echo 'Rust not found. Installing...' && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path; else echo 'Rust found in cache! Skipping download.'; fi && export PATH=$RUST_DIR/bin:$PATH && npm run build",
+    "ci:build": "export RUST_DIR=$PWD/.cache/rust && mkdir -p $RUST_DIR && export RUSTUP_HOME=$RUST_DIR && export CARGO_HOME=$RUST_DIR && export PATH=$RUST_DIR/bin:$PATH && if [ ! -f $RUST_DIR/bin/cargo ]; then echo 'Rust not found. Installing...' && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable && rustup target add wasm32-unknown-unknown; else echo 'Rust found in cache!'; fi && npm run build",
     "test:unit": "tsx --test src/lib/eip712.test.ts src/lib/http.test.ts",
     "test:e2e": "playwright test",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
