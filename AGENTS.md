@@ -483,12 +483,12 @@ This section tracks the currently active TODOs for the AI agent working in this 
 ### 11.4.1 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
 
-- [ ] Extract LCD/Gateway normalization into pure TS “domain” modules (`nil-website/src/domain/*`) with Node unit tests.
-- [ ] Introduce a centralized “deal content observables” controller/hook used by both `Dashboard.tsx` and `DealDetail.tsx` to fetch:
+- [x] Extract LCD/Gateway normalization into pure TS “domain” modules (`nil-website/src/domain/*`) with Node unit tests.
+- [x] Introduce a centralized “deal content observables” controller/hook used by both `Dashboard.tsx` and `DealDetail.tsx` to fetch:
   - `GET /gateway/slab/{manifest_root}` (MDU #0 + Witness + User segment ranges)
   - `GET /gateway/list-files/{manifest_root}` (NilFS file table)
-- [ ] Keep per-deal “last upload” stats visible after commit (avoid the “Allocated MDUs disappears” UX regression).
-- [ ] Add an opt-in Node e2e test that runs the lifecycle against a running local stack and asserts LCD + gateway observables match.
+- [x] Keep per-deal “last upload” stats visible after commit (avoid the “Allocated MDUs disappears” UX regression).
+- [x] Add an opt-in Node e2e test that runs the lifecycle against a running local stack and asserts LCD + gateway observables match.
 
 ### 11.5 Core & WASM Health
 - [ ] Keep `nil_core` and `nil_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
