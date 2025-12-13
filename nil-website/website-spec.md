@@ -68,6 +68,7 @@ The application uses Vite for building and handling environment variables. Confi
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
 *   **TypeScript (`tsconfig.json`):** Strict mode enabled, Target ES2020.
 *   **Tailwind (`tailwind.config.js`):** Configured for CSS variable-based theming (HSL values) with `darkMode: 'class'`.
+*   **WASM (`nil_core`):** `npm run dev` and `npm run build` run `wasm-pack build` via `predev`/`prebuild`, outputting artifacts to `public/wasm/`. This requires `wasm-pack` + a Rust toolchain on the machine/CI runner.
 
 ### 1.3 Key Dependencies
 *   **Web3:** `wagmi`, `viem`
@@ -88,8 +89,8 @@ Represents a storage contract between a user and the network.
 ```typescript
 interface Deal {
   id: string;              // Unique identifier (uint64 as string)
-  cid: string;             // Root hash of the data (empty if not committed)
-  size: string;            // Allocated size in bytes
+  cid: string;             // Deal.manifest_root (48-byte KZG commitment, hex; empty if not committed)
+  size: string;            // Current committed content size in bytes
   owner: string;           // Bech32 address of the creator
   escrow: string;          // Token amount locked
   end_block: string;       // Expiration block height
@@ -98,7 +99,7 @@ interface Deal {
   current_replication?: string; // Number of active providers
   max_monthly_spend?: string;   // Cost cap
   providers?: string[];    // List of assigned SP addresses
-  deal_size?: number;      // (Optional) Parsed number for UI
+  deal_size?: number;      // Legacy/Reserved (capacity tiers removed); avoid relying on this
 }
 ```
 
@@ -203,8 +204,8 @@ This layer encapsulates business logic, specifically EIP-712 signing and Gateway
 *   **Logic:**
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
     2.  Constructs `FormData` with `file` and `owner`.
-    3.  POSTs to `/gateway/upload`.
-*   **Returns:** `{ cid, sizeBytes, filename }`.
+    3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
+*   **Returns:** `{ cid, sizeBytes, fileSizeBytes, allocatedLength?, filename }` (where `cid` is the new `manifest_root`).
 
 ### 4.4 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
@@ -238,9 +239,11 @@ The central hub for deal management.
 *   **Props:** `deal: Deal`, `onClose: () => void`.
 *   **Tabs:**
     1.  **Overview:** Metadata (ID, Owner, Size, Economics), Provider List, Download Button.
-    2.  **Manifest:** Fetches/Displays manifest structure (MDUs, Blobs) from Gateway.
+    2.  **Manifest:** Visualizes the *uploaded-file* `nil_cli shard` JSON (MDUs/Blobs).
     3.  **Heat:** Traffic stats and `DealLivenessHeatmap`.
-*   **API:** `GET /gateway/manifest/{cid}`.
+*   **APIs:**
+    *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
+    *   **Shard JSON manifest:** `GET /gateway/manifest/{cid}` (file-level; served via the gateway index and may not reflect multi-file slab layout).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.

@@ -70,7 +70,7 @@ The `VerifyChainedProof` algorithm needs precise definition regarding the role o
     *   **Hop 2 (Molecule):** `User_MDU_Root` -> verifies -> `Blob_Commitment`.
     *   **Hop 3 (Atom):** `Blob_Commitment` -> verifies -> `Data_Byte`.
 *   **Observation:** The **Witness MDU** itself is *not* strictly in the cryptographic verification chain for the data. It is a storage mechanism for the *Prover* to efficiently find the `Blob_Commitment` needed for Hop 2.
-    *   *Correction Check:* Unless the `User_MDU_Root` is actually a root of the *Witness MDU*? No, the spec says `RootTable[i]` stores the Merkle Root of `MDU #(i)`.
+	    *   *Correction Check:* Unless the `User_MDU_Root` is actually a root of the *Witness MDU*? No, the spec says `RootTable[i]` stores the per‑MDU root of `MDU #(i+1)` in slab order.
     *   **Conclusion:** The Witness MDUs are purely an "Acceleration Structure". The Chain verifies `Proof.blob_commitment` against `Proof.mdu_root`. It does not care *where* the Prover got the commitment from, as long as the Merkle Path is valid.
 
 ---

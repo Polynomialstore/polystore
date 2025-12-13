@@ -470,11 +470,10 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] Expand shell-based e2e scripts (`scripts/e2e_lifecycle.sh`) to cover: deal creation (EVM), upload, update-deal-content, LCD verification of `manifest_root` and size, and fetch verification.
     - *Status:* **COMPLETED**.
     - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
-- [ ] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
-    - Root cause is KZG commitment performance in `nil_core` (currently ~60s per 8 MiB MDU on a dev laptop due to naive per-scalar multiplication in `nil_core/src/kzg.rs`), plus multiple MDUs per upload (User + Witness + MDU #0).
-    - Add gateway cancellation/timeout propagation (use `r.Context()` + a sane per-request deadline) so aborted HTTP requests stop expensive `nil_cli` work.
-    - Add tests that fail on hangs: Go unit tests for `nil_s3` (mock `nil_cli` and assert timeout/cancel behavior) + JS unit tests in `nil-website` (fetch-with-timeout/AbortController).
-    - After perf fix, reduce `scripts/e2e_lifecycle.sh` upload timeout from `600s` to `<=60s`.
+- [x] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
+    - **Fixed:** Speed up KZG commitments in `nil_core` and ensure gateway ingest propagates cancellation/timeouts into `nil_cli` subprocesses.
+    - **Tests:** Go unit tests for `nil_s3` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `nil-website` (AbortController timeout).
+    - **E2E:** `scripts/e2e_lifecycle.sh` upload timeout reduced to `<=60s`.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
 - [ ] Introduce a lightweight browser e2e suite (Cypress or Playwright) under `nil-website` that runs against `./scripts/run_local_stack.sh start`.
