@@ -268,6 +268,8 @@ func main() {
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -1333,8 +1335,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Resolve file location for proof submission.
-	mduIdx, mduPath, fileLen, err := GetFileLocation(dealDir, filePath)
+	// 2. Resolve file location.
+	_, _, fileLen, err := GetFileLocation(dealDir, filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
@@ -1350,17 +1352,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
-	go func(id uint64, idx uint64, path string, manPath string) {
-		ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
-		defer cancel()
-		txHash, err := submitRetrievalProofNew(ctx, id, 1, idx, path, manPath)
-		if err != nil {
-			log.Printf("GatewayFetch: submitRetrievalProofNew failed: %v", err)
-			return
-		}
-		log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
-	}(dealID, mduIdx, mduPath, manifestPath)
+	// Resolve Provider Address for the Header (for Client-Side Signing)
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
+	if err != nil {
+		log.Printf("GatewayFetch: failed to resolve provider address: %v", err)
+	}
 
 	content, _, err := ResolveFileByPath(dealDir, filePath)
 	if err != nil {
@@ -1369,6 +1366,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer content.Close()
+
+	// Add Retrieval Headers for Client Signing (Interactive Protocol)
+	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
+	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
+	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(fileLen, 10))
+	w.Header().Set("X-Nil-Provider", providerAddr)
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -1835,6 +1838,7 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider")
 }
 
 func extractTxHash(out string) string {
@@ -2229,4 +2233,90 @@ func fromHexChar(c byte) (byte, bool) {
 		return c - 'A' + 10, true
 	}
 	return 0, false
+}
+
+// RetrievalReceipt represents the JSON payload signed by the client.
+type RetrievalReceipt struct {
+	DealId        uint64          `json:"deal_id"`
+	EpochId       uint64          `json:"epoch_id"`
+	Provider      string          `json:"provider"`
+	BytesServed   uint64          `json:"bytes_served"`
+	ProofDetails  json.RawMessage `json:"proof_details"`
+	UserSignature []byte          `json:"user_signature"`
+	Nonce         uint64          `json:"nonce"`
+	ExpiresAt     uint64          `json:"expires_at"`
+}
+
+// GatewaySubmitReceipt is the User Daemon endpoint.
+// It accepts a signed receipt from the browser and forwards it to the Provider.
+func GatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
+	// In a real distributed system, this would HTTP POST to the Provider.
+	// In this combined binary, we just call the Provider logic directly.
+	SpSubmitReceipt(w, r)
+}
+
+// SpSubmitReceipt is the Storage Provider endpoint.
+// It accepts a signed receipt, validates it, and submits it to the chain.
+func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var receipt RetrievalReceipt
+	if err := json.Unmarshal(body, &receipt); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", err.Error())
+		return
+	}
+
+	// Save to temp file for CLI submission
+	tmpFile, err := os.CreateTemp(uploadDir, "signed-receipt-*.json")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create temp file", err.Error())
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(body); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
+		return
+	}
+	tmpFile.Close()
+
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+
+	// Submit Proof via CLI
+	submitOut, err := runTxWithRetry(
+		r.Context(),
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpFile.Name(),
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas-prices", gasPrices,
+	)
+
+	outStr := string(submitOut)
+	if err != nil {
+		log.Printf("SpSubmitReceipt: submit failed: %v output: %s", err, outStr)
+		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", outStr)
+		return
+	}
+
+	txHash := extractTxHash(outStr)
+	log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"tx_hash": txHash,
+	})
 }

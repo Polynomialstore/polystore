@@ -452,7 +452,40 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
-### 11.0 Immediate Goals (Next)
+### 11.0 Immediate Goals (Retrieval Separation & NilGateway)
+
+This is the **canonical execution checklist** for the "NilGateway Refactor" sprint. The goal is to separate the "User Daemon" (Gateway) from the "Storage Provider" (SP) logic, enabling true client-side signing of retrieval receipts.
+
+- [x] **Goal 1: Define Architecture & Specs (Phase 1).**
+    - **Steps:** Create `nil_s3/gateway-provider-split.md`; update `AGENTS.md`.
+    - **Deliverable:** Clear separation of roles (`nil_gateway` vs `nil_provider`) and the Interactive Retrieval Protocol flow.
+
+- [x] **Goal 2: Implement Storage Provider Receipt Logic (`nil_provider`).**
+    - **Steps:**
+        1.  Add `POST /sp/receipt` endpoint to `nil_s3` (acting as SP).
+        2.  Implement validation logic: Verify `user_signature` matches on-chain Deal Owner.
+        3.  Implement submission logic: Batch or direct submit `MsgProveLiveness` using Provider Key.
+    - **Pass gate:** `curl POST /sp/receipt` with a valid signed payload results in a successful on-chain transaction.
+    - **Test gate:** Unit tests in `nil_s3` + Manual curl test.
+
+- [x] **Goal 3: Refactor Gateway Fetch for Interactive Flow (`nil_gateway`).**
+    - **Steps:**
+        1.  Update `GatewayFetch` to **stop** calling `submitRetrievalProof`.
+        2.  Update `GatewayFetch` to set response headers: `X-Nil-Deal-ID`, `X-Nil-Epoch`, `X-Nil-Provider`, `X-Nil-Bytes-Served`.
+    - **Pass gate:** `curl -I /gateway/fetch/...` returns the correct headers; no new `MsgProveLiveness` tx is seen on chain.
+    - **Test gate:** Integration test ensuring headers are present.
+
+- [x] **Goal 4: Implement Client-Side Signing (Frontend & Chain).**
+    - **Steps:**
+        1.  **Chain:** Update `nilchain` EIP-712 types to include `RetrievalReceipt` (excluding complex proof details from the signature).
+        2.  **Chain:** Update `MsgProveLiveness` to verify EIP-712 signatures.
+        3.  **Frontend:** Update `useFetch` (or download logic) to inspect headers.
+        4.  **Frontend:** Trigger EIP-712 signature request (MetaMask) for `RetrievalReceipt`.
+        5.  **Frontend:** POST the signed receipt to `/gateway/receipt` (which proxies to `/sp/receipt`).
+    - **Pass gate:** "Download" button triggers wallet signature -> File downloads -> Receipt is submitted on-chain.
+    - **Test gate:** Browser E2E smoke test (`scripts/e2e_browser_smoke.sh` updated).
+
+### 11.0.1 Completed Goals (Previous Sprint)
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
 

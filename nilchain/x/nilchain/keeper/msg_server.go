@@ -827,20 +827,46 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
         buf = append(buf, sdk.Uint64ToBigEndian(receipt.Nonce)...)
         buf = append(buf, sdk.Uint64ToBigEndian(receipt.ExpiresAt)...)
 
-        ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
-        if err != nil {
-             return nil, fmt.Errorf("invalid owner address: %w", err)
+        // Verification Logic
+        isValid := false
+
+        // Attempt EIP-712 Recovery (if signature is 65 bytes)
+        if len(receipt.UserSignature) == 65 {
+             // For devnet, assume ChainID 31337 for EIP-712 domain
+             eip712ChainID := big.NewInt(31337)
+             domainSep := types.HashDomainSeparator(eip712ChainID)
+             structHash, errHash := types.HashRetrievalReceipt(receipt)
+             if errHash == nil {
+                 digest := types.ComputeEIP712Digest(domainSep, structHash)
+                 evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature)
+                 if errRec == nil {
+                     // Verify against Deal Owner
+                     signerAcc := sdk.AccAddress(evmAddr.Bytes())
+                     if signerAcc.String() == deal.Owner {
+                         isValid = true
+                     }
+                 }
+             }
         }
-        
-        ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
-        if ownerAccount == nil {
-            return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found for retrieval receipt verification", deal.Owner)
+
+        if !isValid {
+            // Fallback to Cosmos Signature Verification
+            ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
+            if err != nil {
+                 return nil, fmt.Errorf("invalid owner address: %w", err)
+            }
+            
+            ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
+            if ownerAccount == nil {
+                return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found", deal.Owner)
+            }
+            pubKey := ownerAccount.GetPubKey()
+            if pubKey != nil && pubKey.VerifySignature(buf, receipt.UserSignature) {
+                isValid = true
+            }
         }
-        pubKey := ownerAccount.GetPubKey()
-        if pubKey == nil {
-            return nil, sdkerrors.ErrUnauthorized.Wrap("deal owner has no public key; cannot verify retrieval receipt")
-        }
-        if !pubKey.VerifySignature(buf, receipt.UserSignature) {
+
+        if !isValid {
             return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
         }
 

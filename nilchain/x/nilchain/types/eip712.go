@@ -29,6 +29,9 @@ var (
 
 	// keccak256("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)")
 	UpdateContentTypeHash = crypto.Keccak256([]byte("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)"))
+
+	// keccak256("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce)")
+	RetrievalReceiptTypeHash = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce)"))
 )
 
 // HashDomainSeparator computes the domain separator for a specific chain ID.
@@ -71,6 +74,18 @@ func HashUpdateContent(intent *EvmUpdateContentIntent) (common.Hash, error) {
         keccak256String(intent.Cid),
         math.PaddedBigBytes(big.NewInt(int64(intent.SizeBytes)), 32),
         math.PaddedBigBytes(big.NewInt(int64(intent.Nonce)), 32),
+    ), nil
+}
+
+// HashRetrievalReceipt computes the struct hash for a RetrievalReceipt.
+func HashRetrievalReceipt(receipt *RetrievalReceipt) (common.Hash, error) {
+    return crypto.Keccak256Hash(
+        RetrievalReceiptTypeHash,
+        math.PaddedBigBytes(big.NewInt(int64(receipt.DealId)), 32),
+        math.PaddedBigBytes(big.NewInt(int64(receipt.EpochId)), 32),
+        keccak256String(receipt.Provider),
+        math.PaddedBigBytes(big.NewInt(int64(receipt.BytesServed)), 32),
+        math.PaddedBigBytes(big.NewInt(int64(receipt.Nonce)), 32),
     ), nil
 }
 

@@ -4,13 +4,15 @@ import type { Hex } from 'viem'
 import {
   buildCreateDealTypedData,
   buildUpdateContentTypedData,
+  buildRetrievalReceiptTypedData,
   CreateDealIntent,
   UpdateContentIntent,
+  RetrievalReceiptIntent,
 } from '../src/lib/eip712'
 
 const mode = process.argv[2]
-if (!mode || (mode !== 'create-deal' && mode !== 'update-content')) {
-  console.error('usage: sign_intent.ts <create-deal|update-content>')
+if (!mode || (mode !== 'create-deal' && mode !== 'update-content' && mode !== 'sign-receipt')) {
+  console.error('usage: sign_intent.ts <create-deal|update-content|sign-receipt>')
   process.exit(1)
 }
 
@@ -51,6 +53,33 @@ async function main() {
       JSON.stringify({
         intent: { ...intent, chain_id: cosmosChainId },
         evm_signature: sig,
+      }),
+    )
+    return
+  }
+
+  if (mode === 'sign-receipt') {
+    const intent: RetrievalReceiptIntent = {
+      deal_id: Number(process.env.DEAL_ID || 0),
+      epoch_id: Number(process.env.EPOCH_ID || 0),
+      provider: process.env.PROVIDER || '',
+      bytes_served: Number(process.env.BYTES_SERVED || 0),
+      nonce: Number(process.env.NONCE || 1),
+    }
+
+    const typedData = buildRetrievalReceiptTypedData(intent, evmChainId)
+    const sig = await signTypedData(typedData)
+
+    process.stdout.write(
+      JSON.stringify({
+        deal_id: intent.deal_id,
+        epoch_id: intent.epoch_id,
+        provider: intent.provider,
+        bytes_served: intent.bytes_served,
+        proof_details: null,
+        user_signature: Buffer.from(sig.slice(2), 'hex').toString('base64'),
+        nonce: intent.nonce,
+        expires_at: 0,
       }),
     )
     return

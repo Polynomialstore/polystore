@@ -401,9 +401,14 @@ The website depends on the following services (configured in `config.ts`):
 *   **Implication:** The client currently trusts the Gateway to generate the correct canonical representation of the data.
 
 ### 8.2 Data Retrieval (Download)
-*   **Spec:** Client fetches chunks from SPs, verifies the KZG Triple Proof (Manifest->MDU->Blob->Data) locally, and signs a receipt.
-*   **Actual:** Client requests data via **Gateway Proxy** (`GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`). The Gateway resolves `file_path` from NilFS (`mdu_0.bin`), performs retrieval/proof generation in devnet, and streams the file bytes to the user.
-*   **Implication:** Browser-side KZG verification is not yet implemented.
+*   **Spec:** Client fetches chunks from SPs (or Gateway acting as SP Proxy), verifies the KZG Triple Proof, and **signs a receipt** (EIP-712).
+*   **Actual (Target v2.6):**
+    1.  Client requests data via `GET /gateway/fetch/...`.
+    2.  Gateway streams bytes + returns `X-Nil-Receipt-*` headers.
+    3.  **Client Signs:** Browser triggers MetaMask to sign `RetrievalReceipt` (using headers).
+    4.  **Client Submits:** Browser POSTs signed receipt to `/gateway/receipt`.
+    5.  Gateway/SP submits proof to chain.
+*   **Implication:** Browser now holds the **Liveness Authority** (signing), even if KZG verification is still delegated/simulated in the short term.
 
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.

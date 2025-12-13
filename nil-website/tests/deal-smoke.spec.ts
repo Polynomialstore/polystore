@@ -56,13 +56,22 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const fileRow = page.locator('[data-testid="deal-detail-file-row"][data-file-path="e2e.txt"]')
   await expect(fileRow).toBeVisible({ timeout: 120_000 })
 
-  const owner = (await page.getByTestId('cosmos-identity').textContent())?.trim() || ''
-  const fetchUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(
-    manifestRoot,
-  )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(owner)}&file_path=${encodeURIComponent(filePath)}`
+  // Trigger download via UI to exercise client-side signing
+  const downloadPromise = page.waitForEvent('download', { timeout: 120_000 })
+  await page.locator('[data-testid="deal-detail-download"][data-file-path="e2e.txt"]').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe(filePath)
 
-  const res = await request.get(fetchUrl, { timeout: 120_000 })
-  expect(res.ok()).toBeTruthy()
-  expect(await res.body()).toEqual(fileBytes)
+  const stream = await download.createReadStream()
+  const downloadedBytes = await streamToBuffer(stream)
+  expect(downloadedBytes).toEqual(fileBytes)
 })
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
+}
 

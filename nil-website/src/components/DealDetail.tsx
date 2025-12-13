@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
+import { useFetch } from '../hooks/useFetch'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
@@ -36,6 +37,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
+  const { fetchFile, loading: downloading } = useFetch()
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -254,11 +256,6 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                       ) : files && files.length > 0 ? (
                         <div className="space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => {
-                            const downloadUrl = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
-                              deal.cid,
-                            )}?deal_id=${encodeURIComponent(deal.id)}&owner=${encodeURIComponent(
-                              nilAddress,
-                            )}&file_path=${encodeURIComponent(f.path)}`
                             return (
                               <div
                                 key={`${f.path}:${f.start_offset}`}
@@ -275,13 +272,29 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                   </div>
                                 </div>
                                 <button
-                                  onClick={() => window.open(downloadUrl, '_blank')}
+                                  onClick={async () => {
+                                    const url = await fetchFile({
+                                      dealId: String(deal.id),
+                                      manifestRoot: deal.cid,
+                                      owner: nilAddress,
+                                      filePath: f.path,
+                                    })
+                                    if (url) {
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = f.path.split('/').pop() || 'download'
+                                      a.click()
+                                      // Revoke after delay to allow download to start
+                                      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                                    }
+                                  }}
+                                  disabled={downloading}
                                   data-testid="deal-detail-download"
                                   data-file-path={f.path}
-                                  className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
+                                  className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                 >
                                   <ArrowDownRight className="w-4 h-4" />
-                                  Download
+                                  {downloading ? 'Signing...' : 'Download'}
                                 </button>
                               </div>
                             )

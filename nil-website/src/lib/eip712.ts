@@ -95,3 +95,42 @@ export function buildUpdateContentTypedData(intent: UpdateContentIntent, chainId
     },
   }
 }
+
+export const RetrievalReceiptTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  RetrievalReceipt: [
+    { name: 'deal_id', type: 'uint64' },
+    { name: 'epoch_id', type: 'uint64' },
+    { name: 'provider', type: 'string' },
+    { name: 'bytes_served', type: 'uint64' },
+    { name: 'nonce', type: 'uint64' },
+  ],
+} as const
+
+export interface RetrievalReceiptIntent {
+  deal_id: number
+  epoch_id: number
+  provider: string
+  bytes_served: number
+  nonce: number
+}
+
+export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, chainId: number) {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: RetrievalReceiptTypes,
+    primaryType: 'RetrievalReceipt' as const,
+    message: {
+      deal_id: Number(intent.deal_id),
+      epoch_id: Number(intent.epoch_id),
+      provider: intent.provider,
+      bytes_served: Number(intent.bytes_served),
+      nonce: Number(intent.nonce),
+    },
+  }
+}
