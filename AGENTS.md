@@ -462,10 +462,14 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **API changes (target end state):**
         - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
             - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
+            - Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\` separators, and whitespace-only).
+            - Unknown `file_path` (or tombstone record) returns `404`.
             - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
+            - If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
             - The gateway MUST canonicalize the on‑disk deal directory key (recommended: lowercase hex **without** `0x`) to avoid duplicate directories and “same root, different path” bugs.
         - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
             - Proof inputs are resolved only from NilFS: `uploads/<manifest_root>/mdu_0.bin` + `uploads/<manifest_root>/mdu_*.bin` (+ on-chain deal state).
+            - Missing/invalid params return `400`; unknown `file_path` returns `404`.
         - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
         - `POST /gateway/upload` SHOULD accept optional `file_path` (default: sanitized `filename`) and MUST return the resolved `file_path` so clients can later fetch/prove deterministically.
     - **Invariants:**
@@ -476,8 +480,11 @@ This is the **canonical execution checklist** for the next development sprint. E
             - No hidden dependency on `uploads/index.json`, the original upload filename, or in-memory state.
             - “CID” is never treated as a file identifier (it is a deal-level commitment only).
         - `file_path` is a URL value and MUST be handled deterministically:
-            - Decode once (no double-unescape), reject empty/whitespace-only, and reject traversal (`..`), absolute paths (`/` prefix), or `\` separators.
+            - Decode at most once (URL query params are decoded by the HTTP stack; JSON bodies must be treated as already-decoded strings). Never double-unescape.
+            - Reject empty/whitespace-only, traversal (`..`), absolute paths (`/` prefix), or `\` separators.
             - Treat it as case-sensitive bytes for matching against the NilFS File Table entries.
+        - Error contract must be stable and actionable:
+            - Return JSON errors (with a short remediation hint) for non-200 responses from these endpoints (even if success path is a byte stream).
     - **Migration / backwards-compat:**
         - Break legacy CID-only fetch/prove flows explicitly (non-200 with remediation).
         - If legacy support is needed for local dev, keep it behind an explicit opt-in flag or dedicated endpoint (no silent fallback, no “best-effort” behavior).
@@ -488,6 +495,9 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Security: reject traversal/absolute paths to avoid accidentally serving data outside the slab directory.
+    - **Expected test coverage:**
+        - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
+        - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
@@ -504,6 +514,9 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Risk hotspots:**
         - Typed-data field order + domain/version drift between `viem`/MetaMask and the chain verifier; treat as high-risk/high-coordination.
         - JSON intent encoding drift (string vs number for `uint64`, `0x` prefixing, address checksum); add explicit test vectors shared between web/scripts and chain.
+    - **Expected test coverage:**
+        - Unit: shared EIP-712 golden vectors (CreateDealV2 + UpdateContent) match between the chain verifier and the web signer.
+        - Integration: `create-deal-from-evm` succeeds with an intent that omits `size_tier` (and legacy intent support is explicit if kept during transition).
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
     - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
 

@@ -256,6 +256,7 @@ The central hub for deal management.
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
     *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
+        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON: `400` (missing/unsafe), `404` (not found/tombstone), `409` (stale `manifest_root`).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
     *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
@@ -348,6 +349,11 @@ The website depends on the following services (configured in `config.ts`):
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
 *   `POST /gateway/create-deal-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
+*   `POST /gateway/update-deal-content-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
+*   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
+*   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: Returns NilFS file table entries (paths + offsets + sizes).
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path` as a query value; non-200 is JSON with remediation).
+*   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; file_path is a plain string, not URL-encoded).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
 *   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).

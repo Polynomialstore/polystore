@@ -177,7 +177,7 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
         *   `commitment = "deal:<id>/epoch:<epoch>/tier:<tier>"`.
     *   `Proof` entries are exposed via `Query/ListProofs` (LCD: `/nilchain/nilchain/v1/proofs`) for dashboards and analytics.
 
-In the current devnet, the CLI (`sign-retrieval-receipt` and `submit-retrieval-proof`) drives receipt creation and submission. Web flows may fetch data over HTTP without yet emitting on‑chain receipts; this is considered **non‑normative** and will be aligned with this section as the EVM→Cosmos bridge and user‑signed deals mature.
+In the current devnet, the CLI (`sign-retrieval-receipt` / `submit-retrieval-proof`) and the Web Gateway (`/gateway/fetch`, `/gateway/prove-retrieval`) MAY drive receipt/proof submission as a convenience “meta‑transaction” layer. Web downloads that do not trigger on‑chain receipts are **non‑normative** and expected to be phased out; the intended end state is that retrievals always produce verifiable on‑chain liveness evidence derived from NilFS (MDU #0 + on-disk slab) and the Deal’s on‑chain commitments.
 
 ### 7.3 Data Commitment Binding (Normative: The Triple Proof)
 

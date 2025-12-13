@@ -49,7 +49,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Multipart form data (`file`, `owner`, optional `file_path`).
     *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
-        *   **NilFS path rules (target):** URL-decode once; reject empty, leading `/`, `..` traversal, and `\\` separators. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-decode).
+        *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty, leading `/`, `..` traversal, and `\\` separators. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
     *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "file_path": "dir/file.txt", "filename": "file.txt" }`.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
@@ -59,6 +59,8 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
     *   **Logic:** Forwards the intent to `nilchaind tx nilchain create-deal-from-evm`.
     *   **Role:** Relays user-signed intents to the Cosmos chain.
+    *   **Semantics (target):** Creates a **thin-provisioned** deal (`manifest_root = empty`, `size = 0`, `total_mdus = 0`) until the first `update-deal-content-evm` commit.
+        *   **No tiers:** Capacity-tier fields (e.g., `size_tier`) are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
     *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
@@ -74,16 +76,22 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Role:** Acts as a "Retrieval Proxy" that ensures on-chain proof generation ("Unified Liveness") occurs even for web downloads.
     *   **NilFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
+        *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, and `\\` separators).
+        *   Unknown `file_path` (or tombstone record) returns `404`.
         *   `manifest_root` is a 48-byte commitment (96 hex chars; optional `0x` prefix). Invalid roots return `400`.
+        *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway SHOULD canonicalize `manifest_root` consistently (e.g., lowercase, strip `0x`) for filesystem paths and logs to avoid duplicate deal directories.
         *   The gateway resolves the file from `uploads/<manifest_root>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
+        *   Non-200 responses SHOULD be JSON with a short remediation hint (even though the success path is a byte stream).
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
     *   **Logic (target):**
         1. Resolve the file from NilFS (`mdu_0.bin` + on-disk slab) using `file_path`.
         2. Generate and submit `MsgProveLiveness` using the gateway/provider key.
+    *   **Notes (target):** `file_path` in JSON is already an unescaped string; gateways must not URL-decode it again (no double-unescape).
     *   **Compatibility:** Legacy request bodies that only include `cid` are deprecated; do not rely on `uploads/index.json` lookups.
+        *   Missing/invalid params return `400`; tombstone/not-found returns `404`; stale `manifest_root` (doesn’t match chain deal state) should be a clear non-200 (prefer `409`).
 
 *   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
