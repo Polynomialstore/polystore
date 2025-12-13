@@ -10,7 +10,8 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
     *   Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
     *   Canonical on-disk directory key `manifest_root_key`: lowercase hex **without** `0x` (96 chars), derived by decoding then re-encoding (not by string trimming alone).
 *   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, manifest_root, file_path)` and resolved from NilFS (`uploads/<manifest_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
-*   **`file_path` must be canonical:** Treat it as a relative, slash-separated path (no leading `/`, no `..` traversal). Gateways must decode **at most once** (URL query params are decoded by the HTTP stack; JSON bodies are already-decoded strings) and match case-sensitively against NilFS File Table entries.
+*   **`owner` is access control (gateway):** Gateway REST APIs SHOULD require the deal owner (`owner`, NilChain bech32) alongside `deal_id` and verify `(deal_id, owner)` against chain state. Owner mismatches should return a clear non-200 (prefer `403`) as JSON.
+*   **`file_path` must be canonical:** Treat it as a relative, slash-separated path (no leading `/`, no `..` traversal, no `\\` separators, reject empty/whitespace-only). Gateways must decode **at most once** (URL query params are decoded by the HTTP stack; JSON bodies are already-decoded strings) and match case-sensitively against NilFS File Table entries.
 *   **Gateway error contract (target):** Missing/empty/unsafe `file_path` is a hard `400` with a remediation hint; tombstone/not-found is `404`; stale `manifest_root` (doesn’t match chain deal state) should be a clear non-200 (prefer `409`). Errors MUST be JSON even when the success path is a byte stream.
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"

@@ -256,7 +256,7 @@ The central hub for deal management.
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
     *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
-        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON: `400` (missing/unsafe), `404` (not found/tombstone), `409` (stale `manifest_root`; refetch Deal from LCD and retry with the latest root).
+        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root`; refetch Deal from LCD and retry with the latest root).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
     *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).

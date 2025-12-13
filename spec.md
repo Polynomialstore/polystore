@@ -135,7 +135,7 @@ To support this model, the "Map" must be fully replicated:
 
 NilStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and NilFS path addressing.
 
-**Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs, `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below), and retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
+**Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs, `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below), and retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks). For devnet convenience endpoints (e.g., `/gateway/fetch`, `/gateway/prove-retrieval`), `file_path` is **mandatory** (no “single-file deal” inference); missing/invalid `file_path` should return a JSON error with a remediation hint (e.g., call `/gateway/list-files/{manifest_root}` to discover valid paths).
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
