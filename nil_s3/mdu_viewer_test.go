@@ -17,8 +17,8 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	mockExecCommandContext(t)
 
-	cid := "cid123"
-	dealDir := filepath.Join(uploadDir, cid)
+	cid := mustTestManifestRoot(t, "manifest-info-basic")
+	dealDir := filepath.Join(uploadDir, cid.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 	}
 
 	r := testRouter()
-	req := httptest.NewRequest("GET", "/gateway/manifest-info/"+cid, nil)
+	req := httptest.NewRequest("GET", "/gateway/manifest-info/"+cid.Canonical, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -79,8 +79,8 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if resp.ManifestRoot != cid {
-		t.Fatalf("expected manifest_root %q, got %q", cid, resp.ManifestRoot)
+	if resp.ManifestRoot != cid.Canonical {
+		t.Fatalf("expected manifest_root %q, got %q", cid.Canonical, resp.ManifestRoot)
 	}
 	if resp.ManifestBlobHex != "0x0102" {
 		t.Fatalf("expected manifest_blob_hex 0x0102, got %q", resp.ManifestBlobHex)
@@ -117,8 +117,8 @@ func TestGatewayMduKzg_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	mockExecCommandContext(t)
 
-	cid := "cid123"
-	dealDir := filepath.Join(uploadDir, cid)
+	cid := mustTestManifestRoot(t, "mdu-kzg-basic")
+	dealDir := filepath.Join(uploadDir, cid.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestGatewayMduKzg_Basic(t *testing.T) {
 	}
 
 	r := testRouter()
-	req := httptest.NewRequest("GET", "/gateway/mdu-kzg/"+cid+"/2", nil)
+	req := httptest.NewRequest("GET", "/gateway/mdu-kzg/"+cid.Canonical+"/2", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -164,8 +164,8 @@ func TestGatewayMduKzg_Basic(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.ManifestRoot != cid {
-		t.Fatalf("expected manifest_root %q, got %q", cid, resp.ManifestRoot)
+	if resp.ManifestRoot != cid.Canonical {
+		t.Fatalf("expected manifest_root %q, got %q", cid.Canonical, resp.ManifestRoot)
 	}
 	if resp.MduIndex != 2 {
 		t.Fatalf("expected mdu_index 2, got %d", resp.MduIndex)

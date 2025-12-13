@@ -17,8 +17,8 @@ import (
 func TestGatewayListFiles_Basic(t *testing.T) {
 	useTempUploadDir(t)
 
-	manifestRoot := "fake_manifest_root_list"
-	dealDir := filepath.Join(uploadDir, manifestRoot)
+	manifestRoot := mustTestManifestRoot(t, "list-files-basic")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
@@ -43,8 +43,14 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
+	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
 	r := testRouter()
-	req := httptest.NewRequest("GET", fmt.Sprintf("/gateway/list-files/%s", manifestRoot), nil)
+	req := httptest.NewRequest("GET", fmt.Sprintf("/gateway/list-files/%s?deal_id=1&owner=nil1owner", manifestRoot.Canonical), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -63,7 +69,7 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload.ManifestRoot != manifestRoot {
+	if payload.ManifestRoot != manifestRoot.Canonical {
 		t.Fatalf("unexpected manifest_root: %q", payload.ManifestRoot)
 	}
 	if payload.TotalSizeBytes != 5 {
@@ -80,8 +86,8 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
 	useTempUploadDir(t)
 
-	manifestRoot := "fake_manifest_root_authz"
-	dealDir := filepath.Join(uploadDir, manifestRoot)
+	manifestRoot := mustTestManifestRoot(t, "list-files-authz")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
@@ -95,7 +101,7 @@ func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	srv := mockDealServer("nil1owner", manifestRoot)
+	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -106,7 +112,7 @@ func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
 	q.Set("owner", "nil1owner")
 
 	r := testRouter()
-	req := httptest.NewRequest("GET", fmt.Sprintf("/gateway/list-files/%s?%s", manifestRoot, q.Encode()), nil)
+	req := httptest.NewRequest("GET", fmt.Sprintf("/gateway/list-files/%s?%s", manifestRoot.Canonical, q.Encode()), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

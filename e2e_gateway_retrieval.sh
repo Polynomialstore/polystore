@@ -144,7 +144,7 @@ print(urllib.parse.quote(sys.argv[1]))
 PY
 )"
 
-FETCH_URL="$GATEWAY_BASE/gateway/fetch/${ENCODED_CID}?deal_id=${DEAL_ID}&owner=${OWNER_ADDR}"
+FETCH_URL="$GATEWAY_BASE/gateway/fetch/${ENCODED_CID}?deal_id=${DEAL_ID}&owner=${OWNER_ADDR}&file_path=test_data.bin"
 
 HTTP_CODE="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' "$FETCH_URL")"
 echo "GatewayFetch HTTP status: $HTTP_CODE"

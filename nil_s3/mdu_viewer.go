@@ -51,8 +51,7 @@ type slabMeta struct {
 	userMdus    uint64
 }
 
-func loadSlabMeta(cid string) (*slabMeta, error) {
-	dealDir := filepath.Join(uploadDir, cid)
+func loadSlabMeta(dealDir string) (*slabMeta, error) {
 	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
 	if err != nil {
@@ -76,7 +75,7 @@ func loadSlabMeta(cid string) (*slabMeta, error) {
 
 	userMdus := uint64(0)
 	if maxEnd > 0 {
-		userMdus = (maxEnd + builder.MduSize - 1) / builder.MduSize
+		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
 	}
 
 	entries, err := os.ReadDir(dealDir)
@@ -141,7 +140,7 @@ func shardFileCached(ctx context.Context, path string, raw bool) (*NilCliOutput,
 	return shardFile(ctx, path, raw, "")
 }
 
-func validateDealOwnerCidQuery(r *http.Request, cid string) (uint64, string, int, error) {
+func validateDealOwnerCidQuery(r *http.Request, manifestRoot ManifestRoot) (uint64, string, int, error) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
@@ -158,13 +157,23 @@ func validateDealOwnerCidQuery(r *http.Request, cid string) (uint64, string, int
 
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			return 0, "", http.StatusNotFound, fmt.Errorf("deal not found")
+		}
 		return 0, "", http.StatusInternalServerError, fmt.Errorf("failed to validate deal owner")
 	}
 	if dealOwner == "" || dealOwner != owner {
 		return 0, "", http.StatusForbidden, fmt.Errorf("forbidden: owner does not match deal")
 	}
-	if dealCID != "" && dealCID != cid {
-		return 0, "", http.StatusBadRequest, fmt.Errorf("cid does not match deal")
+	if strings.TrimSpace(dealCID) == "" {
+		return 0, "", http.StatusConflict, fmt.Errorf("deal has no committed manifest_root yet")
+	}
+	chainRoot, err := parseManifestRoot(dealCID)
+	if err != nil {
+		return 0, "", http.StatusInternalServerError, fmt.Errorf("invalid on-chain manifest_root")
+	}
+	if chainRoot.Canonical != manifestRoot.Canonical {
+		return 0, "", http.StatusConflict, fmt.Errorf("stale manifest_root (does not match on-chain deal state)")
 	}
 
 	return dealID, owner, 0, nil
@@ -179,25 +188,44 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid required", http.StatusBadRequest)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
 		return
 	}
 
-	if _, _, status, err := validateDealOwnerCidQuery(r, cid); err != nil {
-		http.Error(w, err.Error(), status)
+	if _, _, status, err := validateDealOwnerCidQuery(r, manifestRoot); err != nil {
+		writeJSONError(w, status, err.Error(), "")
 		return
 	}
 
-	meta, err := loadSlabMeta(cid)
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "slab not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	meta, err := loadSlabMeta(dealDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found", "")
 			return
 		}
 		log.Printf("GatewayManifestInfo: load slab meta error: %v", err)
-		http.Error(w, "failed to load slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
 		return
 	}
 
@@ -205,11 +233,11 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	manifestBlob, err := os.ReadFile(manifestBlobPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "manifest not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "manifest not found", "")
 			return
 		}
 		log.Printf("GatewayManifestInfo: read manifest error: %v", err)
-		http.Error(w, "failed to read manifest", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to read manifest", "")
 		return
 	}
 
@@ -218,11 +246,11 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	mdu0Shard, err := shardFileCached(r.Context(), mdu0Path, true)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, err.Error(), http.StatusRequestTimeout)
+			writeJSONError(w, http.StatusRequestTimeout, err.Error(), "")
 			return
 		}
 		log.Printf("GatewayManifestInfo: shard mdu0 error: %v", err)
-		http.Error(w, "failed to compute MDU #0 root", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to compute MDU #0 root", "")
 		return
 	}
 	mdu0Root := ""
@@ -255,7 +283,7 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := manifestInfoResponse{
-		ManifestRoot:    cid,
+		ManifestRoot:    manifestRoot.Canonical,
 		ManifestBlobHex: "0x" + hex.EncodeToString(manifestBlob),
 		TotalMdus:       meta.totalMdus,
 		WitnessMdus:     meta.witnessMdus,
@@ -277,65 +305,84 @@ func GatewayMduKzg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid required", http.StatusBadRequest)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
 		return
 	}
 	indexStr := strings.TrimSpace(vars["index"])
 	if indexStr == "" {
-		http.Error(w, "index required", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "index is required", "")
 		return
 	}
 	mduIndex, err := strconv.ParseUint(indexStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid index", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid index", "")
 		return
 	}
 
-	if _, _, status, err := validateDealOwnerCidQuery(r, cid); err != nil {
-		http.Error(w, err.Error(), status)
+	if _, _, status, err := validateDealOwnerCidQuery(r, manifestRoot); err != nil {
+		writeJSONError(w, status, err.Error(), "")
 		return
 	}
 
-	meta, err := loadSlabMeta(cid)
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "slab not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	meta, err := loadSlabMeta(dealDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found", "")
 			return
 		}
 		log.Printf("GatewayMduKzg: load slab meta error: %v", err)
-		http.Error(w, "failed to load slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
 		return
 	}
 	if mduIndex >= meta.totalMdus {
-		http.Error(w, "mdu index out of range", http.StatusNotFound)
+		writeJSONError(w, http.StatusNotFound, "mdu index out of range", "")
 		return
 	}
 
 	mduPath := filepath.Join(meta.dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
 	if _, err := os.Stat(mduPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "mdu not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "mdu not found", "")
 			return
 		}
 		log.Printf("GatewayMduKzg: stat mdu error: %v", err)
-		http.Error(w, "failed to read mdu", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to read mdu", "")
 		return
 	}
 
 	out, err := shardFileCached(r.Context(), mduPath, true)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, err.Error(), http.StatusRequestTimeout)
+			writeJSONError(w, http.StatusRequestTimeout, err.Error(), "")
 			return
 		}
 		log.Printf("GatewayMduKzg: shard error: %v", err)
-		http.Error(w, "failed to compute mdu commitments", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to compute mdu commitments", "")
 		return
 	}
 	if len(out.Mdus) == 0 {
-		http.Error(w, "invalid shard output", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "invalid shard output", "")
 		return
 	}
 
@@ -347,7 +394,7 @@ func GatewayMduKzg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := mduKzgResponse{
-		ManifestRoot: cid,
+		ManifestRoot: manifestRoot.Canonical,
 		MduIndex:     mduIndex,
 		Kind:         kind,
 		RootHex:      out.Mdus[0].RootHex,

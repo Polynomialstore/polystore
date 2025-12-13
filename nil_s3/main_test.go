@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +23,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+
+	"nil_s3/pkg/builder"
 )
 
 func useTempUploadDir(t *testing.T) string {
@@ -44,6 +51,46 @@ func mockExecCommandContext(t *testing.T) {
 	t.Cleanup(func() { execCommandContext = old })
 }
 
+func deterministicManifestRootHex(tag string) string {
+	sum := sha256.Sum256([]byte(tag))
+	scalar := new(big.Int).SetBytes(sum[:])
+	scalar.Add(scalar, big.NewInt(1))
+	var p gnarkBls12381.G1Affine
+	p.ScalarMultiplicationBase(scalar)
+	b := p.Bytes()
+	return "0x" + hex.EncodeToString(b[:])
+}
+
+func mustTestManifestRoot(t *testing.T, tag string) ManifestRoot {
+	t.Helper()
+	rootHex := deterministicManifestRootHex(tag)
+	root, err := parseManifestRoot(rootHex)
+	if err != nil {
+		t.Fatalf("parseManifestRoot(%s) failed: %v", tag, err)
+	}
+	return root
+}
+
+func encodeRawToMdu(raw []byte) []byte {
+	if len(raw) > RawMduCapacity {
+		raw = raw[:RawMduCapacity]
+	}
+	encoded := make([]byte, builder.MduSize)
+	scalarIdx := 0
+	for i := 0; i < len(raw) && scalarIdx < nilfsScalarsPerMdu; i += nilfsScalarPayloadBytes {
+		end := i + nilfsScalarPayloadBytes
+		if end > len(raw) {
+			end = len(raw)
+		}
+		chunk := raw[i:end]
+		pad := nilfsScalarBytes - len(chunk)
+		offset := scalarIdx*nilfsScalarBytes + pad
+		copy(encoded[offset:offset+len(chunk)], chunk)
+		scalarIdx++
+	}
+	return encoded
+}
+
 // helper to build a router with only the GatewayFetch endpoint wired.
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
@@ -59,7 +106,8 @@ func testRouter() *mux.Router {
 func TestGatewayFetch_MissingParams(t *testing.T) {
 	r := testRouter()
 
-	req := httptest.NewRequest("GET", "/gateway/fetch/testcid", nil)
+	root := mustTestManifestRoot(t, "missing-params")
+	req := httptest.NewRequest("GET", "/gateway/fetch/"+root.Canonical, nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -93,7 +141,8 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	r := testRouter()
 
 	// Stub LCD so fetchDealOwnerAndCID returns a specific owner/cid.
-	srv := mockDealServer("nil1realowner", "cid123")
+	root := mustTestManifestRoot(t, "owner-mismatch")
+	srv := mockDealServer("nil1realowner", root.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -102,7 +151,8 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	q := url.Values{}
 	q.Set("deal_id", "1")
 	q.Set("owner", "nil1otherowner")
-	req := httptest.NewRequest("GET", "/gateway/fetch/cid123?"+q.Encode(), nil)
+	q.Set("file_path", "video.mp4")
+	req := httptest.NewRequest("GET", "/gateway/fetch/"+root.Canonical+"?"+q.Encode(), nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -116,7 +166,9 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	r := testRouter()
 
 	// Stub LCD: owner matches, cid does not.
-	srv := mockDealServer("nil1owner", "cid-on-chain")
+	rootReq := mustTestManifestRoot(t, "cid-mismatch-req")
+	rootChain := mustTestManifestRoot(t, "cid-mismatch-chain")
+	srv := mockDealServer("nil1owner", rootChain.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -125,17 +177,14 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	q := url.Values{}
 	q.Set("deal_id", "2")
 	q.Set("owner", "nil1owner")
-	req := httptest.NewRequest("GET", "/gateway/fetch/request-cid?"+q.Encode(), nil)
+	q.Set("file_path", "video.mp4")
+	req := httptest.NewRequest("GET", "/gateway/fetch/"+rootReq.Canonical+"?"+q.Encode(), nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for cid mismatch, got %d", w.Code)
-	}
-	body, _ := io.ReadAll(w.Body)
-	if !strings.Contains(string(body), "cid does not match deal") {
-		t.Fatalf("expected cid mismatch message, got: %s", string(body))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for cid mismatch, got %d", w.Code)
 	}
 }
 
@@ -230,7 +279,7 @@ func TestHelperProcess(t *testing.T) {
 		}
 
 		output := NilCliOutput{
-			ManifestRootHex: "0xuserroot",
+			ManifestRootHex: deterministicManifestRootHex("user-root"),
 			ManifestBlobHex: "0xdeadbeef",
 			FileSize:        100,
 			Mdus: []MduData{
@@ -239,9 +288,9 @@ func TestHelperProcess(t *testing.T) {
 		}
 		switch {
 		case strings.Contains(inputBase, "witness"):
-			output.ManifestRootHex = "0xwitnessroot"
+			output.ManifestRootHex = deterministicManifestRootHex("witness-root")
 		case strings.Contains(inputBase, "mdu0"):
-			output.ManifestRootHex = "0xmdu0root"
+			output.ManifestRootHex = deterministicManifestRootHex("mdu0-root")
 		}
 
 		data, _ := json.Marshal(output)
@@ -263,7 +312,7 @@ func TestHelperProcess(t *testing.T) {
 			os.Exit(1)
 		}
 		res := NilCliAggregateOutput{
-			ManifestRootHex: "0xmanifestroot",
+			ManifestRootHex: deterministicManifestRootHex("aggregate-root"),
 			ManifestBlobHex: "0xfeedface",
 		}
 		data, _ := json.Marshal(res)
@@ -386,10 +435,11 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestNewDeal failed: %v", err)
 	}
-	if manifestRoot != "0xmanifestroot" {
-		t.Fatalf("unexpected manifest root %q", manifestRoot)
+	parsed, err := parseManifestRoot(manifestRoot)
+	if err != nil {
+		t.Fatalf("parseManifestRoot failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(uploadDir, manifestRoot)); err != nil {
+	if _, err := os.Stat(filepath.Join(uploadDir, parsed.Key)); err != nil {
 		t.Fatalf("expected deal dir to exist: %v", err)
 	}
 }

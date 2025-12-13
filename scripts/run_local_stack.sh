@@ -262,7 +262,7 @@ start_gateway() {
   ensure_nil_cli
   (
     cd "$ROOT_DIR/nil_s3"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" \
       "$GO_BIN" run . \
       >"$LOG_DIR/gateway.log" 2>&1 &
     echo $! > "$PID_DIR/gateway.pid"
@@ -339,8 +339,38 @@ start_web() {
   echo "web pid $(cat "$PID_DIR/website.pid"), logs: $LOG_DIR/website.log"
 }
 
+restart_gateway() {
+  banner "Restarting gateway service"
+  pid_file="$PID_DIR/gateway.pid"
+  if [ -f "$pid_file" ]; then
+    pid=$(cat "$pid_file")
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+      echo "Stopped gateway (pid $pid)"
+    fi
+    rm -f "$pid_file"
+  fi
+  # go run can spawn a child process that survives killing the parent. Ensure
+  # the port is truly free before restarting.
+  gw_pids=$(lsof -ti :8080 2>/dev/null || true)
+  if [ -n "$gw_pids" ]; then
+    kill $gw_pids 2>/dev/null || true
+    sleep 0.5
+    gw_pids2=$(lsof -ti :8080 2>/dev/null || true)
+    if [ -n "$gw_pids2" ]; then
+      kill -9 $gw_pids2 2>/dev/null || true
+    fi
+  fi
+  start_gateway
+}
+
 start_all() {
   stop_all
+  rm -rf "$LOG_DIR/uploads"
   ensure_nilchaind
   init_chain
   start_chain
@@ -398,8 +428,9 @@ cmd="${1:-start}"
 case "$cmd" in
   start) start_all ;;
   stop) stop_all ;;
+  restart-gateway) restart_gateway ;;
   *)
-    echo "Usage: $0 [start|stop]"
+    echo "Usage: $0 [start|stop|restart-gateway]"
     exit 1
     ;;
 esac

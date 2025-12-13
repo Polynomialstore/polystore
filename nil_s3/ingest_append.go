@@ -27,7 +27,14 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, err
 	}
 
-	oldDir := filepath.Join(uploadDir, existingManifestRoot)
+	parsedExisting, err := parseManifestRoot(existingManifestRoot)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	oldDir, err := resolveDealDir(parsedExisting, existingManifestRoot)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("failed to resolve existing slab dir: %w", err)
+	}
 	mdu0Path := filepath.Join(oldDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
 	if err != nil {
@@ -40,7 +47,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, fmt.Errorf("failed to parse existing MDU #0: %w", err)
 	}
 
-	// Determine current high-water mark for User Data (in encoded 8 MiB MDUs).
+	// Determine current high-water mark for User Data (in raw NilFS bytes).
 	var maxEnd uint64
 	for i := uint32(0); i < b.Header.RecordCount; i++ {
 		rec := b.GetFileRecord(i)
@@ -52,7 +59,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 	oldUserCount := uint64(0)
 	if maxEnd > 0 {
-		oldUserCount = (maxEnd + builder.MduSize - 1) / builder.MduSize
+		oldUserCount = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
 	}
 
 	// Shard new file to produce new User Data MDUs.
@@ -64,7 +71,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 
 	// Append a new file record starting at next MDU boundary.
 	rec := layout.FileRecordV1{
-		StartOffset:    oldUserCount * builder.MduSize,
+		StartOffset:    oldUserCount * RawMduCapacity,
 		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
 		Timestamp:      0,
 	}
@@ -160,8 +167,13 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
 
+	parsedNewRoot, err := parseManifestRoot(manifestRoot)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
 	// Commit new slab to storage under uploads/<manifestRoot>.
-	newDir := filepath.Join(uploadDir, manifestRoot)
+	newDir := filepath.Join(uploadDir, parsedNewRoot.Key)
 	if err := os.MkdirAll(newDir, 0o755); err != nil {
 		return nil, "", 0, err
 	}
@@ -206,7 +218,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	allocatedLength := uint64(len(allRoots))
-	return b, manifestRoot, allocatedLength, nil
+	return b, parsedNewRoot.Canonical, allocatedLength, nil
 }
 
 // computeUserRootsAndWitnessData recomputes User MDU roots and the concatenated

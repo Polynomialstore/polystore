@@ -175,8 +175,13 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
 
+	parsedRoot, err := parseManifestRoot(manifestRoot)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
 	// 10. Commit to Storage
-	dealDir := filepath.Join(uploadDir, manifestRoot)
+	dealDir := filepath.Join(uploadDir, parsedRoot.Key)
 	if err := os.MkdirAll(dealDir, 0755); err != nil {
 		return nil, "", 0, err
 	}
@@ -206,5 +211,5 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 	}
 
 	allocatedLength := uint64(len(allRoots))
-	return b, manifestRoot, allocatedLength, nil
+	return b, parsedRoot.Canonical, allocatedLength, nil
 }

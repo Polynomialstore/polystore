@@ -272,10 +272,15 @@ if [ "$CHAIN_CID" != "$MANIFEST_ROOT" ]; then
 fi
 echo "    Success: Deal $DEAL_ID has correct CID $CHAIN_CID"
 
+# 5.5 Restart gateway to prove NilFS is restart-safe source of truth.
+echo "==> Restarting gateway (restart-safety check)..."
+"$STACK_SCRIPT" restart-gateway
+wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
+
 # 6. Fetch File (Gateway)
 echo "==> Fetching file from Gateway..."
 # For gateway fetch, we need deal_id and owner
-FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS"
+FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
 timeout 10s curl -sS -o fetched_README.md "$FETCH_URL"
 
 # Compare

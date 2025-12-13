@@ -16,8 +16,8 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	useTempUploadDir(t)
 
 	// Setup Fake Deal
-	manifestRoot := "fake_manifest_root"
-	dealDir := filepath.Join(uploadDir, manifestRoot)
+	manifestRoot := mustTestManifestRoot(t, "fetch-by-path")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	os.MkdirAll(dealDir, 0755)
 	defer os.RemoveAll(dealDir)
 
@@ -44,10 +44,10 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 		os.WriteFile(filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", i)), []byte{0}, 0644)
 	}
 	mdu25Path := filepath.Join(dealDir, "mdu_25.bin")
-	os.WriteFile(mdu25Path, fileContent, 0644) // Doesn't need to be full 8MB for read test if we only read len bytes
+	os.WriteFile(mdu25Path, encodeRawToMdu(fileContent), 0644)
 
 	// Mock LCD for owner check
-	srv := mockDealServer("nil1owner", manifestRoot)
+	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -56,7 +56,7 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	r := testRouter()
 
 	// Request
-	u := fmt.Sprintf("/gateway/fetch/%s?deal_id=1&owner=nil1owner&file_path=video.mp4", manifestRoot)
+	u := fmt.Sprintf("/gateway/fetch/%s?deal_id=1&owner=nil1owner&file_path=video.mp4", manifestRoot.Canonical)
 	req := httptest.NewRequest("GET", u, nil)
 	w := httptest.NewRecorder()
 

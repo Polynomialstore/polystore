@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1165,117 +1166,136 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
 		return
 	}
 
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
+	filePath, err := validateNilfsFilePath(q.Get("file_path"))
 	if dealIDStr == "" || owner == "" {
-		http.Error(w, "deal_id and owner query parameters are required", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
+		return
+	}
+	if err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid file_path",
+			fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%s&owner=%s", manifestRoot.Canonical, dealIDStr, owner),
+		)
 		return
 	}
 
 	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid deal_id", http.StatusBadRequest)
-		return
-	}
-
-	filePath := q.Get("file_path")
-	if filePath != "" {
-		// New Logic: Resolve from Slab
-		// 1. Get Location for Proof
-		mduIdx, mduPath, size, err := GetFileLocation(cid, filePath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				http.Error(w, "file not found in deal", http.StatusNotFound)
-			} else {
-				log.Printf("GetFileLocation failed: %v", err)
-				http.Error(w, "internal error", http.StatusInternalServerError)
-			}
-			return
-		}
-
-		// 2. Submit Proof in the background so downloads don't hang on CLI/KZG latency.
-		// We use mduPath (User Data MDU) and mduIdx (Slab Index) plus the encoded manifest blob.
-		manifestPath := filepath.Join(uploadDir, cid, "manifest.bin")
-		go func(id uint64, idx uint64, path string, manPath string) {
-			ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
-			defer cancel()
-			txHash, err := submitRetrievalProofNew(ctx, id, idx, path, manPath)
-			if err != nil {
-				log.Printf("GatewayFetch: submitRetrievalProofNew failed: %v", err)
-				return
-			}
-			log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
-		}(dealID, mduIdx, mduPath, manifestPath)
-
-		// 3. Stream Content
-		// Re-open readers via ResolveFileByPath (or optimize to reuse)
-		content, _, err := ResolveFileByPath(cid, filePath)
-		if err != nil {
-			http.Error(w, "failed to open stream", http.StatusInternalServerError)
-			return
-		}
-		defer content.Close()
-
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Length", strconv.FormatUint(size, 10))
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
-		io.Copy(w, content)
+		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
 		return
 	}
 
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
 		log.Printf("GatewayFetch: failed to fetch deal %d: %v", dealID, err)
-		http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
 		return
 	}
 	if dealOwner == "" || dealOwner != owner {
-		http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
 		return
 	}
-	if dealCID != "" && dealCID != cid {
-		http.Error(w, "cid does not match deal", http.StatusBadRequest)
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"deal has no committed manifest_root yet",
+			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+		)
 		return
 	}
-
-	entry, err := lookupFileInIndex(cid)
+	dealRoot, err := parseManifestRoot(dealCID)
 	if err != nil {
-		log.Printf("GatewayFetch: lookup failed for cid %s: %v", cid, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
 		return
 	}
-	if entry == nil {
-		http.Error(w, "file not found for cid", http.StatusNotFound)
+	if dealRoot.Canonical != manifestRoot.Canonical {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"stale manifest_root (does not match on-chain deal state)",
+			fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+		)
 		return
 	}
 
-	// 2) Submit the retrieval proof in the background so downloads don't hang on
-	// chain/CLI latency in local/devnet flows.
-	go func(path string, id uint64) {
-		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	// 2. Resolve file location for proof submission.
+	mduIdx, mduPath, fileLen, err := GetFileLocation(dealDir, filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(
+				w,
+				http.StatusNotFound,
+				"file not found in deal",
+				fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%d&owner=%s", manifestRoot.Canonical, dealID, owner),
+			)
+			return
+		}
+		log.Printf("GetFileLocation failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file", "")
+		return
+	}
+
+	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	go func(id uint64, idx uint64, path string, manPath string) {
+		ctx, cancel := context.WithTimeout(context.Background(), shardTimeout)
 		defer cancel()
-		txHash, err := submitRetrievalProof(ctx, id, path)
+		txHash, err := submitRetrievalProofNew(ctx, id, idx, path, manPath)
 		if err != nil {
-			log.Printf("GatewayFetch: submitRetrievalProof failed: %v", err)
+			log.Printf("GatewayFetch: submitRetrievalProofNew failed: %v", err)
 			return
 		}
 		log.Printf("GatewayFetch: proof submitted txhash=%s", txHash)
-	}(entry.Path, dealID)
+	}(dealID, mduIdx, mduPath, manifestPath)
+
+	content, _, err := ResolveFileByPath(dealDir, filePath)
+	if err != nil {
+		log.Printf("ResolveFileByPath failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to open stream", "")
+		return
+	}
+	defer content.Close()
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
-	if entry.Filename != "" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", entry.Filename))
-	}
-	http.ServeFile(w, r, entry.Path)
+	w.Header().Set("Content-Length", strconv.FormatUint(fileLen, 10))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
+	_, _ = io.Copy(w, content)
 }
 
 type nilfsFileEntry struct {
@@ -1306,8 +1326,6 @@ type slabLayoutResponse struct {
 }
 
 // GatewayListFiles returns the NilFS V1 file table for a manifest root.
-// Optional query params:
-// - deal_id + owner: best-effort authz against on-chain deal owner (cid match enforced if the deal is already committed).
 func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -1316,64 +1334,102 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
 		return
 	}
 
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	if dealIDStr != "" || owner != "" {
-		if dealIDStr == "" || owner == "" {
-			http.Error(w, "deal_id and owner must be provided together", http.StatusBadRequest)
-			return
-		}
-		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid deal_id", http.StatusBadRequest)
-			return
-		}
-
-		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
-		if err != nil {
-			log.Printf("GatewayListFiles: failed to fetch deal %d: %v", dealID, err)
-			http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
-			return
-		}
-		if dealOwner == "" || dealOwner != owner {
-			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
-			return
-		}
-		if dealCID != "" && dealCID != cid {
-			http.Error(w, "cid does not match deal", http.StatusBadRequest)
-			return
-		}
+	if dealIDStr == "" || owner == "" {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
+		return
+	}
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
+		return
 	}
 
-	dealDir := filepath.Join(uploadDir, cid)
+	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
+		log.Printf("GatewayListFiles: failed to fetch deal %d: %v", dealID, err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
+		return
+	}
+	if dealOwner == "" || dealOwner != owner {
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		return
+	}
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"deal has no committed manifest_root yet",
+			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+		)
+		return
+	}
+	dealRoot, err := parseManifestRoot(dealCID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+		return
+	}
+	if dealRoot.Canonical != manifestRoot.Canonical {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"stale manifest_root (does not match on-chain deal state)",
+			fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+		)
+		return
+	}
+
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
 	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "slab not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "slab not found", "")
 			return
 		}
 		log.Printf("GatewayListFiles: failed to read MDU #0: %v", err)
-		http.Error(w, "failed to read slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to read slab", "")
 		return
 	}
 
 	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		log.Printf("GatewayListFiles: failed to parse MDU #0: %v", err)
-		http.Error(w, "failed to parse slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to parse slab", "")
 		return
 	}
 
-	files := make([]nilfsFileEntry, 0, b.Header.RecordCount)
-	var total uint64
+	latest := make(map[string]nilfsFileEntry, b.Header.RecordCount)
 	for i := uint32(0); i < b.Header.RecordCount; i++ {
 		rec := b.GetFileRecord(i)
 		// Tombstone slot.
@@ -1382,17 +1438,24 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
 		length, flags := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
-		total += length
-		files = append(files, nilfsFileEntry{
+		latest[name] = nilfsFileEntry{
 			Path:        name,
 			SizeBytes:   length,
 			StartOffset: rec.StartOffset,
 			Flags:       flags,
-		})
+		}
 	}
 
+	files := make([]nilfsFileEntry, 0, len(latest))
+	var total uint64
+	for _, entry := range latest {
+		files = append(files, entry)
+		total += entry.SizeBytes
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+
 	resp := map[string]any{
-		"manifest_root":    cid,
+		"manifest_root":    manifestRoot.Canonical,
 		"total_size_bytes": total,
 		"files":            files,
 	}
@@ -1413,9 +1476,14 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	cid := strings.TrimSpace(vars["cid"])
-	if cid == "" {
-		http.Error(w, "cid path parameter is required", http.StatusBadRequest)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
 		return
 	}
 
@@ -1424,48 +1492,83 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	owner := strings.TrimSpace(q.Get("owner"))
 	if dealIDStr != "" || owner != "" {
 		if dealIDStr == "" || owner == "" {
-			http.Error(w, "deal_id and owner must be provided together", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "deal_id and owner must be provided together", "")
 			return
 		}
 		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid deal_id", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
 			return
 		}
 
 		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 		if err != nil {
+			if errors.Is(err, ErrDealNotFound) {
+				writeJSONError(w, http.StatusNotFound, "deal not found", "")
+				return
+			}
 			log.Printf("GatewaySlab: failed to fetch deal %d: %v", dealID, err)
-			http.Error(w, "failed to validate deal owner", http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
 			return
 		}
 		if dealOwner == "" || dealOwner != owner {
-			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
+			writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
 			return
 		}
-		if dealCID != "" && dealCID != cid {
-			http.Error(w, "cid does not match deal", http.StatusBadRequest)
+		if strings.TrimSpace(dealCID) == "" {
+			writeJSONError(
+				w,
+				http.StatusConflict,
+				"deal has no committed manifest_root yet",
+				"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+			)
+			return
+		}
+		dealRoot, err := parseManifestRoot(dealCID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+			return
+		}
+		if dealRoot.Canonical != manifestRoot.Canonical {
+			writeJSONError(
+				w,
+				http.StatusConflict,
+				"stale manifest_root (does not match on-chain deal state)",
+				fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+			)
 			return
 		}
 	}
 
-	dealDir := filepath.Join(uploadDir, cid)
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
 	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "slab not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "slab not found", "")
 			return
 		}
 		log.Printf("GatewaySlab: failed to read MDU #0: %v", err)
-		http.Error(w, "failed to read slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to read slab", "")
 		return
 	}
 
 	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		log.Printf("GatewaySlab: failed to parse MDU #0: %v", err)
-		http.Error(w, "failed to parse slab", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to parse slab", "")
 		return
 	}
 
@@ -1489,7 +1592,7 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 
 	userMdus := uint64(0)
 	if maxEnd > 0 {
-		userMdus = (maxEnd + builder.MduSize - 1) / builder.MduSize
+		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
 	}
 
 	entries, err := os.ReadDir(dealDir)
@@ -1552,7 +1655,7 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := slabLayoutResponse{
-		ManifestRoot:   cid,
+		ManifestRoot:   manifestRoot.Canonical,
 		MduSizeBytes:   builder.MduSize,
 		BlobSizeBytes:  builder.BlobSize,
 		TotalMdus:      totalMdus,
@@ -1976,6 +2079,9 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return "", "", ErrDealNotFound
+		}
 		body, _ := io.ReadAll(resp.Body)
 		return "", "", fmt.Errorf("LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -2014,6 +2120,15 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 			cid = strings.TrimSpace(v)
 		}
 	}
+
+	if strings.TrimSpace(cid) == "" {
+		return owner, "", nil
+	}
+	parsed, err := parseManifestRoot(cid)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse deal manifest_root: %w", err)
+	}
+	cid = parsed.Canonical
 	return owner, cid, nil
 }
 

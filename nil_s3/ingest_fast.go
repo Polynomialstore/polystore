@@ -101,8 +101,13 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64)
 	// This is consistent enough for a single-file view.
 	manifestRoot := mdu0Out.ManifestRootHex
 
+	parsedRoot, err := parseManifestRoot(manifestRoot)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
 	// 6. Commit to Storage (Minimal)
-	dealDir := filepath.Join(uploadDir, manifestRoot)
+	dealDir := filepath.Join(uploadDir, parsedRoot.Key)
 	if err := os.MkdirAll(dealDir, 0755); err != nil {
 		return nil, "", 0, err
 	}
@@ -124,5 +129,5 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64)
 	}
 
 	allocatedLength := uint64(len(mdu0Out.Mdus)) // Dummy length
-	return b, manifestRoot, allocatedLength, nil
+	return b, parsedRoot.Canonical, allocatedLength, nil
 }
