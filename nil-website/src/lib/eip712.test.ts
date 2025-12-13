@@ -21,7 +21,6 @@ function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T
 test('CreateDeal typed data hashes to chain digest', async () => {
   const intent = {
     creator_evm: TEST_ACCOUNT.address,
-    size_tier: 0,
     duration_blocks: 100,
     service_hint: 'General:replicas=1',
     initial_escrow: '1000000',
@@ -34,7 +33,7 @@ test('CreateDeal typed data hashes to chain digest', async () => {
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0xddbe7fe68280cae2deaf1cbab16fdce310ed6c3bb239b1d4a0752a77ab556300',
+    '0x1a772cbd59c41ff8e25d84b45ed2d9ff2c301b8274aec1083ddde8934d70a6d2',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)

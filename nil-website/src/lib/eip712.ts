@@ -18,7 +18,6 @@ export const CreateDealTypes = {
   EIP712Domain: EIP712DomainTypes,
   CreateDeal: [
     { name: 'creator', type: 'address' },
-    { name: 'size_tier', type: 'uint32' },
     { name: 'duration', type: 'uint64' },
     { name: 'service_hint', type: 'string' },
     // Amount fields are signed as strings for chain compatibility.
@@ -41,7 +40,6 @@ export const UpdateContentTypes = {
 
 export interface CreateDealIntent {
   creator_evm: string
-  size_tier?: number
   duration_blocks: number
   service_hint: string
   initial_escrow: string
@@ -58,7 +56,6 @@ export interface UpdateContentIntent {
 }
 
 export function buildCreateDealTypedData(intent: CreateDealIntent, chainId: number) {
-  const sizeTier = Number.isFinite(intent.size_tier) ? Number(intent.size_tier) : 0
   return {
     domain: {
       name: EIP712_DOMAIN_NAME,
@@ -70,7 +67,6 @@ export function buildCreateDealTypedData(intent: CreateDealIntent, chainId: numb
     primaryType: 'CreateDeal' as const,
     message: {
       creator: intent.creator_evm,
-      size_tier: sizeTier,
       duration: Number(intent.duration_blocks),
       service_hint: intent.service_hint,
       initial_escrow: intent.initial_escrow,
@@ -99,4 +95,3 @@ export function buildUpdateContentTypedData(intent: UpdateContentIntent, chainId
     },
   }
 }
-

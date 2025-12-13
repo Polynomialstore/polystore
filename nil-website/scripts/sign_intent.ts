@@ -37,7 +37,6 @@ async function main() {
   if (mode === 'create-deal') {
     const intent: CreateDealIntent = {
       creator_evm: account.address,
-      size_tier: Number(process.env.SIZE_TIER || 0),
       duration_blocks: Number(process.env.DURATION_BLOCKS || 100),
       service_hint: process.env.SERVICE_HINT || 'General',
       initial_escrow: process.env.INITIAL_ESCROW || '1000000',
@@ -86,4 +85,3 @@ main().catch((err) => {
   console.error(err)
   process.exit(1)
 })
-

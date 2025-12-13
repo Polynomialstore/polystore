@@ -31,11 +31,9 @@ export function useCreateDeal() {
       const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
       const nextNonce = currentNonce + 1
       window.localStorage.setItem(nonceKey, String(nextNonce))
-      const sizeTier = 0 // Legacy field retained for signature compatibility; ignored by chain logic.
 
       const intent: CreateDealIntent = {
         creator_evm: evmAddress,
-        size_tier: sizeTier,
         duration_blocks: input.duration,
         service_hint: serviceHint,
         initial_escrow: input.initialEscrow,
@@ -57,7 +55,7 @@ export function useCreateDeal() {
 
       // Construct the Intent object for the Gateway (must match protobuf/backend expectation)
       // Backend expects chain_id as string in the intent JSON.
-      const gatewayIntent = { ...intent, chain_id: String(appConfig.chainId) }
+      const gatewayIntent = { ...intent, chain_id: appConfig.cosmosChainId }
 
       const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal-evm`, {
         method: 'POST',

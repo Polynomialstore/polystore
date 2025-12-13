@@ -14,11 +14,10 @@ const domain = {
 const types = {
   CreateDeal: [
     { name: 'creator', type: 'address' },
-    { name: 'size_tier', type: 'uint32' },
     { name: 'duration', type: 'uint64' },
     { name: 'service_hint', type: 'string' },
-    { name: 'initial_escrow', type: 'uint256' },
-    { name: 'max_monthly_spend', type: 'uint256' },
+    { name: 'initial_escrow', type: 'string' },
+    { name: 'max_monthly_spend', type: 'string' },
     { name: 'nonce', type: 'uint64' },
   ],
 }
@@ -26,11 +25,10 @@ const types = {
 // VALUES FROM LOG
 const message = {
   creator: '0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2',
-  size_tier: 1,
   duration: 100n,
   service_hint: 'General:replicas=1',
-  initial_escrow: 1000000n,
-  max_monthly_spend: 5000000n,
+  initial_escrow: '1000000',
+  max_monthly_spend: '5000000',
   nonce: 13n, // Updated from log
 }
 
@@ -59,21 +57,20 @@ const domainSep = keccak256(encodeAbiParameters(
 ))
 console.log('DomainSep:     ', domainSep)
 
-// CreateDeal: Unsorted
-const createDealTypeStr = "CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce)"
+// CreateDeal: Current
+const createDealTypeStr = "CreateDeal(address creator,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)"
 const createDealTypeHash = keccak256(toBytes(createDealTypeStr))
 console.log('TypeHash:      ', createDealTypeHash)
 
 const structHash = keccak256(encodeAbiParameters(
-    parseAbiParameters('bytes32, address, uint256, uint64, bytes32, uint256, uint256, uint64'), 
+    parseAbiParameters('bytes32, address, uint64, bytes32, bytes32, bytes32, uint64'), 
     [
         createDealTypeHash,
         message.creator,
-        BigInt(message.size_tier), 
         message.duration,
         keccak256(toBytes(message.service_hint)),
-        message.initial_escrow,
-        message.max_monthly_spend,
+        keccak256(toBytes(message.initial_escrow)),
+        keccak256(toBytes(message.max_monthly_spend)),
         message.nonce
     ]
 ))

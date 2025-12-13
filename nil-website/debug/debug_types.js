@@ -12,11 +12,10 @@ const version = '1'
 
 const message = {
   creator: '0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2',
-  size_tier: 1n,
   duration: 100n,
   service_hint: 'General:replicas=1',
-  initial_escrow: 1000000n,
-  max_monthly_spend: 5000000n,
+  initial_escrow: '1000000',
+  max_monthly_spend: '5000000',
   nonce: 13n,
 }
 
@@ -48,8 +47,8 @@ function getDomainSep(typeStr) {
 
 // STRUCT OPTIONS
 const structTypes = {
-    sorted: "CreateDeal(address creator,uint64 duration,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce,string service_hint,uint32 size_tier)",
-    unsorted: "CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce)"
+    sorted: "CreateDeal(address creator,uint64 duration,string initial_escrow,string max_monthly_spend,uint64 nonce,string service_hint)",
+    unsorted: "CreateDeal(address creator,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)"
 }
 
 function getStructHash(typeStr) {
@@ -58,13 +57,13 @@ function getStructHash(typeStr) {
     let values
     let schema
     if (typeStr === structTypes.sorted) {
-        // creator, duration, initial_escrow, max_monthly_spend, nonce, service_hint, size_tier
-        values = [message.creator, message.duration, message.initial_escrow, message.max_monthly_spend, message.nonce, keccak256(toBytes(message.service_hint)), message.size_tier]
-        schema = 'bytes32, address, uint64, uint256, uint256, uint64, bytes32, uint256'
+        // creator, duration, initial_escrow, max_monthly_spend, nonce, service_hint
+        values = [message.creator, message.duration, keccak256(toBytes(message.initial_escrow)), keccak256(toBytes(message.max_monthly_spend)), message.nonce, keccak256(toBytes(message.service_hint))]
+        schema = 'bytes32, address, uint64, bytes32, bytes32, uint64, bytes32'
     } else {
-        // creator, size_tier, duration, service_hint, initial_escrow, max_monthly_spend, nonce
-        values = [message.creator, message.size_tier, message.duration, keccak256(toBytes(message.service_hint)), message.initial_escrow, message.max_monthly_spend, message.nonce]
-        schema = 'bytes32, address, uint256, uint64, bytes32, uint256, uint256, uint64'
+        // creator, duration, service_hint, initial_escrow, max_monthly_spend, nonce
+        values = [message.creator, message.duration, keccak256(toBytes(message.service_hint)), keccak256(toBytes(message.initial_escrow)), keccak256(toBytes(message.max_monthly_spend)), message.nonce]
+        schema = 'bytes32, address, uint64, bytes32, bytes32, bytes32, uint64'
     }
     
     return keccak256(encodeAbiParameters(parseAbiParameters(schema), [typeHash, ...values]))

@@ -8,6 +8,7 @@ import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { lcdFetchDeals } from '../api/lcdClient'
 
 const CHAIN_ID = 31337
+const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? 'test-1'
 
 // viem's typed-data helpers require domain.chainId as bigint.
 function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {
@@ -33,7 +34,6 @@ test(
     // 1) Create Deal
     const dealIntent = {
       creator_evm: account.address,
-      size_tier: 0,
       duration_blocks: 100,
       service_hint: 'General:replicas=1',
       initial_escrow: '1000000',
@@ -47,7 +47,7 @@ test(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        intent: { ...dealIntent, chain_id: String(CHAIN_ID) },
+        intent: { ...dealIntent, chain_id: COSMOS_CHAIN_ID },
         evm_signature: dealSig,
       }),
     })
@@ -92,7 +92,7 @@ test(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        intent: { ...updateIntent, chain_id: String(CHAIN_ID) },
+        intent: { ...updateIntent, chain_id: COSMOS_CHAIN_ID },
         evm_signature: updateSig,
       }),
     })

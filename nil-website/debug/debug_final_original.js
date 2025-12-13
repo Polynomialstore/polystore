@@ -8,11 +8,10 @@ function hexToBytes(hex) {
 // BUT using the ORIGINAL hint (before debug append)
 const message = {
   creator: '0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2',
-  size_tier: 1n,
   duration: 100n,
   service_hint: 'General:replicas=1', // ORIGINAL HINT
-  initial_escrow: 1000000n,
-  max_monthly_spend: 5000000n,
+  initial_escrow: '1000000',
+  max_monthly_spend: '5000000',
   nonce: 15n,
 }
 
@@ -32,11 +31,11 @@ const domainSepUnsorted = keccak256(encodeAbiParameters(
     [domainTypeHashUnsorted, keccak256(toBytes(name)), keccak256(toBytes(version)), chainId, verifyingContract]
 ))
 
-const createDealTypeStrUnsorted = "CreateDeal(address creator,uint32 size_tier,uint64 duration,string service_hint,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce)"
+const createDealTypeStrUnsorted = "CreateDeal(address creator,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)"
 const createDealTypeHashUnsorted = keccak256(toBytes(createDealTypeStrUnsorted))
 const structHashUnsorted = keccak256(encodeAbiParameters(
-    parseAbiParameters('bytes32, address, uint256, uint64, bytes32, uint256, uint256, uint64'),
-    [createDealTypeHashUnsorted, message.creator, message.size_tier, message.duration, keccak256(toBytes(message.service_hint)), message.initial_escrow, message.max_monthly_spend, message.nonce]
+    parseAbiParameters('bytes32, address, uint64, bytes32, bytes32, bytes32, uint64'),
+    [createDealTypeHashUnsorted, message.creator, message.duration, keccak256(toBytes(message.service_hint)), keccak256(toBytes(message.initial_escrow)), keccak256(toBytes(message.max_monthly_spend)), message.nonce]
 ))
 
 const digestUnsorted = keccak256(concat([toBytes('0x1901'), hexToBytes(domainSepUnsorted), hexToBytes(structHashUnsorted)]))
@@ -50,11 +49,11 @@ const domainSepSorted = keccak256(encodeAbiParameters(
     [domainTypeHashSorted, chainId, keccak256(toBytes(name)), verifyingContract, keccak256(toBytes(version))]
 ))
 
-const createDealTypeStrSorted = "CreateDeal(address creator,uint64 duration,uint256 initial_escrow,uint256 max_monthly_spend,uint64 nonce,string service_hint,uint32 size_tier)"
+const createDealTypeStrSorted = "CreateDeal(address creator,uint64 duration,string initial_escrow,string max_monthly_spend,uint64 nonce,string service_hint)"
 const createDealTypeHashSorted = keccak256(toBytes(createDealTypeStrSorted))
 const structHashSorted = keccak256(encodeAbiParameters(
-    parseAbiParameters('bytes32, address, uint64, uint256, uint256, uint64, bytes32, uint256'),
-    [createDealTypeHashSorted, message.creator, message.duration, message.initial_escrow, message.max_monthly_spend, message.nonce, keccak256(toBytes(message.service_hint)), message.size_tier]
+    parseAbiParameters('bytes32, address, uint64, bytes32, bytes32, uint64, bytes32'),
+    [createDealTypeHashSorted, message.creator, message.duration, keccak256(toBytes(message.initial_escrow)), keccak256(toBytes(message.max_monthly_spend)), message.nonce, keccak256(toBytes(message.service_hint))]
 ))
 
 const digestSorted = keccak256(concat([toBytes('0x1901'), hexToBytes(domainSepSorted), hexToBytes(structHashSorted)]))
