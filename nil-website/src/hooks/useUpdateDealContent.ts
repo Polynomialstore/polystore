@@ -50,7 +50,7 @@ export function useUpdateDealContent() {
       })
 
       // Construct intent for backend
-      const gatewayIntent = { ...intent, chain_id: String(appConfig.chainId) }
+      const gatewayIntent = { ...intent, chain_id: appConfig.cosmosChainId }
 
       const response = await fetch(`${appConfig.gatewayBase}/gateway/update-deal-content-evm`, {
         method: 'POST',
