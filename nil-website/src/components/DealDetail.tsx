@@ -144,7 +144,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm">
+    <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
       <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
         <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-2 rounded-lg">
@@ -157,6 +157,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
         </div>
         <button
           onClick={onClose}
+          data-testid="deal-detail-close"
           className="text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-md hover:bg-secondary transition-colors"
         >
           Close
@@ -166,18 +167,21 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       <div className="flex border-b border-border">
           <button 
             onClick={() => setActiveTab('info')}
+            data-testid="deal-detail-tab-info"
             className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           >
               Overview
           </button>
           <button 
             onClick={() => setActiveTab('manifest')}
+            data-testid="deal-detail-tab-manifest"
             className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'manifest' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           >
               Manifest &amp; MDUs
           </button>
           <button 
             onClick={() => setActiveTab('heat')}
+            data-testid="deal-detail-tab-heat"
             className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           >
               Heat &amp; Liveness
@@ -189,7 +193,10 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
             <div className="grid sm:grid-cols-2 gap-4 text-xs text-muted-foreground">
                 <div className="space-y-1">
                   <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
-                  <div className="font-mono break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all">
+                  <div
+                    className="font-mono break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
+                    data-testid="deal-detail-cid"
+                  >
                     {deal.cid || 'Empty Container'}
                   </div>
                 </div>
@@ -245,7 +252,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => {
                             const downloadUrl = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
                               deal.cid,
@@ -255,6 +262,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                             return (
                               <div
                                 key={`${f.path}:${f.start_offset}`}
+                                data-testid="deal-detail-file-row"
+                                data-file-path={f.path}
                                 className="flex items-center justify-between gap-3 bg-secondary/50 border border-border rounded px-3 py-2"
                               >
                                 <div className="min-w-0">
@@ -267,6 +276,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                 </div>
                                 <button
                                   onClick={() => window.open(downloadUrl, '_blank')}
+                                  data-testid="deal-detail-download"
+                                  data-file-path={f.path}
                                   className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
                                 >
                                   <ArrowDownRight className="w-4 h-4" />

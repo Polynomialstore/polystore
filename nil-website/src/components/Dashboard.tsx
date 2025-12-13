@@ -495,6 +495,7 @@ export function Dashboard() {
                 <button 
                     onClick={handleRequestFunds}
                     disabled={faucetLoading}
+                    data-testid="faucet-request"
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
                 >
                     {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
@@ -511,7 +512,7 @@ export function Dashboard() {
                 )}
                 <div className="text-right">
                     <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
-                    <div className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10">
+                    <div className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10" data-testid="cosmos-identity">
                         {nilAddress}
                     </div>
                 </div>
@@ -555,7 +556,7 @@ export function Dashboard() {
               </div>
               <div className="bg-secondary/50 border border-border rounded p-2">
                 <div className="text-muted-foreground uppercase tracking-wide">Cosmos stake</div>
-                <div className="font-mono text-blue-600 dark:text-blue-400">
+                <div className="font-mono text-blue-600 dark:text-blue-400" data-testid="cosmos-stake-balance">
                   {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
                 </div>
               </div>
@@ -583,6 +584,7 @@ export function Dashboard() {
           <div className="flex border-b border-border">
               <button 
                 onClick={() => setActiveTab('alloc')}
+                data-testid="tab-alloc"
                 className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'alloc' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
               >
                   <HardDrive className="w-4 h-4" />
@@ -590,6 +592,7 @@ export function Dashboard() {
               </button>
               <button 
                 onClick={() => setActiveTab('content')}
+                data-testid="tab-content"
                 className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'content' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
               >
                   <Database className="w-4 h-4" />
@@ -597,6 +600,7 @@ export function Dashboard() {
               </button>
               <button 
                 onClick={() => setActiveTab('mdu')}
+                data-testid="tab-mdu"
                 className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'mdu' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
               >
                   <Cpu className="w-4 h-4" />
@@ -611,15 +615,30 @@ export function Dashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
-                            <input value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
+                            <input
+                              value={duration}
+                              onChange={(e) => setDuration(e.target.value)}
+                              data-testid="alloc-duration"
+                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                            />
                         </label>
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
-                            <input value={initialEscrow} onChange={e => setInitialEscrow(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
+                            <input
+                              value={initialEscrow}
+                              onChange={(e) => setInitialEscrow(e.target.value)}
+                              data-testid="alloc-initial-escrow"
+                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                            />
                         </label>
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
-                            <input value={maxMonthlySpend} onChange={e => setMaxMonthlySpend(e.target.value)} className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary" />
+                            <input
+                              value={maxMonthlySpend}
+                              onChange={(e) => setMaxMonthlySpend(e.target.value)}
+                              data-testid="alloc-max-monthly-spend"
+                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                            />
                         </label>
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
@@ -629,6 +648,7 @@ export function Dashboard() {
                                 max={12}
                                 value={replication}
                                 onChange={e => setReplication(e.target.value)}
+                                data-testid="alloc-replication"
                                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
                         </label>
@@ -640,6 +660,7 @@ export function Dashboard() {
                         <button
                             onClick={handleCreateDeal}
                             disabled={dealLoading}
+                            data-testid="alloc-submit"
                             className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
                             {dealLoading ? 'Allocating...' : 'Allocate'}
@@ -655,6 +676,7 @@ export function Dashboard() {
                               <select 
                                   value={targetDealId} 
                                   onChange={e => setTargetDealId(e.target.value)}
+                                  data-testid="content-deal-select"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                               >
                                   <option value="">Select a Deal...</option>
@@ -685,19 +707,26 @@ export function Dashboard() {
                                   type="file"
                                   onChange={handleFileChange}
                                   disabled={uploadLoading || !targetDealId}
+                                  data-testid="content-file-input"
                                   className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
                               />
                           </label>
                           <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Manifest Root</span>
-                                  <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                  <div
+                                    className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center"
+                                    data-testid="staged-manifest-root"
+                                  >
                                     {stagedUpload?.cid ? stagedUpload.cid : <span className="text-muted-foreground">Upload a file to populate</span>}
                                   </div>
                               </div>
                               <div className="space-y-1">
                                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Total Size (bytes)</span>
-                                  <div className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center">
+                                  <div
+                                    className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center"
+                                    data-testid="staged-total-size"
+                                  >
                                     {stagedUpload?.sizeBytes ? String(stagedUpload.sizeBytes) : <span className="text-muted-foreground">Upload a file</span>}
                                   </div>
                               </div>
@@ -857,6 +886,7 @@ export function Dashboard() {
                           <button
                               onClick={() => stagedUpload && handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)}
                               disabled={updateLoading || !stagedUpload || !targetDealId}
+                              data-testid="content-commit"
                               className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                           >
                               {updateLoading ? 'Committing...' : 'Commit uploaded content'}
@@ -894,7 +924,7 @@ export function Dashboard() {
       ) : (
         <>
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <table className="min-w-full divide-y divide-border">
+              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
                   <thead className="bg-muted/50">
                       <tr>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
@@ -909,6 +939,7 @@ export function Dashboard() {
                       {deals.map((deal) => (
                       <tr
                         key={deal.id}
+                        data-testid={`deal-row-${deal.id}`}
                         className="hover:bg-muted/50 transition-colors cursor-pointer"
                         onClick={() => setSelectedDeal(deal)}
                       >
@@ -916,10 +947,11 @@ export function Dashboard() {
                               <td
                                 className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
                                 title={deal.cid}
+                                data-testid={`deal-manifest-${deal.id}`}
                               >
                                 {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
                                 {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '—'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">

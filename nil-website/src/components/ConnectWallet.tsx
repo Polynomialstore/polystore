@@ -62,6 +62,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
         <button
           onClick={handleConnect}
           disabled={isConnecting}
+          data-testid="connect-wallet"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 hover:bg-secondary border border-transparent hover:border-border text-foreground text-sm font-semibold transition-colors disabled:opacity-60"
         >
           {isConnecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
@@ -70,7 +71,9 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
       ) : (
         <>
           <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-secondary/40 border border-border/40">
-            <span className="font-mono text-xs text-foreground">{shortAddress}</span>
+            <span className="font-mono text-xs text-foreground" data-testid="wallet-address">
+              {shortAddress}
+            </span>
             <span className={`text-xs ${isWrongNetwork ? 'text-yellow-600 dark:text-yellow-300' : 'text-muted-foreground'}`}>
               {isWrongNetwork ? `Wrong chain (${chainId})` : shortBalance}
             </span>
