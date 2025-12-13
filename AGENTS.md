@@ -464,20 +464,23 @@ This is the **canonical execution checklist** for the next development sprint. E
             - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
             - Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, and whitespace-only).
             - Unknown `file_path` (or tombstone record) returns `404`.
+            - Missing/invalid `deal_id` returns `400`; unknown `deal_id` returns `404`.
             - `owner` must be the deal owner’s NilChain bech32 address; mismatch returns a clear non-200 (prefer `403`).
-            - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix.
+            - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix (reject invalid compressed points / invalid subgroup encodings).
             - `manifest_root` normalization:
                 - Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
                 - Canonical on-disk directory key `manifest_root_key`: lowercase hex **without** `0x` (96 chars), derived by decoding then re-encoding (not by string trimming alone).
             - If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
+                - Includes the thin-provisioned case where the chain `Deal.manifest_root` is empty (not yet committed): return `409` with a hint to `update-deal-content`.
             - The gateway MUST canonicalize the on-disk deal directory key (`manifest_root_key`) to avoid duplicate directories and “same root, different path” bugs.
-            - Error responses MUST be JSON (even though the success path is a byte stream): `{ "error": "...", "hint": "..." }`.
+            - Error responses MUST be JSON (even though the success path is a byte stream) and set `Content-Type: application/json`: `{ "error": "...", "hint": "..." }`.
         - `GET /gateway/list-files/{manifest_root}` **MUST** require query params: `deal_id`, `owner`.
             - Returns NilFS file table entries parsed from `uploads/<manifest_root_key>/mdu_0.bin` (authoritative; no index fallback).
+            - Response shape (target): `{ "manifest_root": "0x...", "total_size_bytes": 123, "files": [{ "path": "dir/file.txt", "size_bytes": 123, "start_offset": 0, "flags": 0 }] }`.
             - Missing/invalid params return `400`; owner mismatch returns `403`; stale `manifest_root` should return a clear non-200 (prefer `409`).
         - `POST /gateway/prove-retrieval` **MUST** require: `deal_id`, `manifest_root`, `file_path` (and any proof-specific knobs like `epoch_id`).
             - Proof inputs are resolved only from NilFS: `uploads/<manifest_root_key>/mdu_0.bin` + `uploads/<manifest_root_key>/mdu_*.bin` (+ on-chain deal state).
-            - Missing/invalid params return `400`; unknown `file_path` returns `404`.
+            - Missing/invalid params return `400`; owner mismatch (if enforced) returns `403`; unknown `file_path` returns `404`; stale `manifest_root` returns a clear non-200 (prefer `409`).
         - Any endpoint that still accepts a `cid` string treats it as an alias for `manifest_root` only — **not** a file-level CID and never a lookup key into `uploads/index.json`.
         - `POST /gateway/upload` SHOULD accept optional `file_path` (default: sanitized `filename`) and MUST return the resolved `file_path` so clients can later fetch/prove deterministically.
     - **Invariants:**
@@ -510,6 +513,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Expected test coverage:**
         - Unit: missing/invalid `file_path` returns `400` + remediation; tombstone/not-found returns `404`; stale `manifest_root` returns non-200.
         - Unit: `manifest_root` parsing (length/hex/`0x`/invalid compressed G1) and `manifest_root_key` canonicalization are strict and deterministic.
+        - Unit: missing/invalid `deal_id` returns `400`; unknown deal returns `404`; owner mismatch returns `403`; stale root returns `409`.
         - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
     - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`

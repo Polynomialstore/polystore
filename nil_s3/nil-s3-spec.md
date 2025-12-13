@@ -84,7 +84,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway MUST canonicalize `manifest_root` consistently (decode → re-encode) for filesystem paths and logs to avoid duplicate deal directories.
         *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
-        *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream), e.g. `{ "error": "...", "hint": "..." }`.
+        *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream) and set `Content-Type: application/json`, e.g. `{ "error": "...", "hint": "..." }`.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
@@ -94,10 +94,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Notes (target):** `file_path` in JSON is already an unescaped string; gateways must not URL-decode it again (no double-unescape).
     *   **Compatibility:** Legacy request bodies that only include `cid` are deprecated; do not rely on `uploads/index.json` lookups.
         *   Missing/invalid params return `400`; tombstone/not-found returns `404`; stale `manifest_root` (doesn’t match chain deal state) should be a clear non-200 (prefer `409`).
+        *   Non-200 responses should follow the same JSON error contract: `{ "error": "...", "hint": "..." }`.
 
 *   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
     *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the NilFS File Table, and returns file entries and computed total size.
+    *   **Response (target):** `{ "manifest_root": "0x...", "total_size_bytes": 123, "files": [{ "path": "dir/file.txt", "size_bytes": 123, "start_offset": 0, "flags": 0 }] }`.
     *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
     *   **Errors (target):** Missing/invalid params return `400`; owner mismatch returns a clear non-200 (prefer `403`); stale `manifest_root` should return a clear non-200 (prefer `409`).
 

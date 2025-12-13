@@ -89,7 +89,7 @@ Represents a storage contract between a user and the network.
 ```typescript
 interface Deal {
   id: string;              // Unique identifier (uint64 as string)
-  cid: string;             // Deal.manifest_root (48-byte KZG commitment, hex; empty if not committed). Legacy alias only; not a file identifier.
+  cid: string;             // Deal.manifest_root (48-byte compressed G1; canonical string is `0x` + 96 lowercase hex; empty if not committed). Legacy alias only; not a file identifier.
   size: string;            // Current committed content size in bytes
   owner: string;           // Bech32 address of the creator
   escrow: string;          // Token amount locked
@@ -256,7 +256,7 @@ The central hub for deal management.
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
     *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
-        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root`; refetch Deal from LCD and retry with the latest root).
+        *   `file_path` must be encoded as a query value (`encodeURIComponent`). Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root`; refetch Deal from LCD and retry with the latest root).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
     *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
@@ -351,9 +351,9 @@ The website depends on the following services (configured in `config.ts`):
 *   `POST /gateway/create-deal-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `POST /gateway/update-deal-content-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
-*   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: Returns NilFS file table entries (paths + offsets + sizes).
-*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path` as a query value; non-200 is JSON with remediation).
-*   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; file_path is a plain string, not URL-encoded).
+*   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }`.
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path`; non-200 is JSON `{error,hint}` with remediation).
+*   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; errors are JSON `{error,hint}`; `file_path` is a plain string, not URL-encoded).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
 *   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).
