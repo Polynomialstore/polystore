@@ -480,6 +480,16 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [ ] Add a smoke test that: connects a wallet (using a test account), creates a deal via the dashboard, uploads a file, commits content, and asserts the deal row shows a non-zero size and a manifest root.
 - [ ] Add a smoke test for the deal explorer to confirm that an uploaded file appears and can be fetched via the gateway.
 
+### 11.4.1 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
+**Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
+
+- [ ] Extract LCD/Gateway normalization into pure TS “domain” modules (`nil-website/src/domain/*`) with Node unit tests.
+- [ ] Introduce a centralized “deal content observables” controller/hook used by both `Dashboard.tsx` and `DealDetail.tsx` to fetch:
+  - `GET /gateway/slab/{manifest_root}` (MDU #0 + Witness + User segment ranges)
+  - `GET /gateway/list-files/{manifest_root}` (NilFS file table)
+- [ ] Keep per-deal “last upload” stats visible after commit (avoid the “Allocated MDUs disappears” UX regression).
+- [ ] Add an opt-in Node e2e test that runs the lifecycle against a running local stack and asserts LCD + gateway observables match.
+
 ### 11.5 Core & WASM Health
 - [ ] Keep `nil_core` and `nil_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
 - [ ] Ensure the WASM Mode 2 path (`expand_mdu` / `expand_file`) is exercised by tests (Rust integration tests and, where feasible, frontend tests) so “Invalid scalar”/encoding issues are caught automatically.

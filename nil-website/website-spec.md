@@ -386,3 +386,28 @@ The website depends on the following services (configured in `config.ts`):
     1.  `useCreateDeal` -> Allocates storage on-chain.
     2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns CID.
     3.  `useUpdateDealContent` -> Commits Gateway-provided CID to the chain.
+
+---
+
+## 9. Deal Observables & TDD Refinement
+
+This sprint prioritizes a clean separation between:
+- **Model/domain logic (Node-testable):** parsing/normalizing LCD + Gateway responses into stable “observables”.
+- **Controller logic (Node-testable):** orchestrating reads across LCD + Gateway (slab layout + file list).
+- **Visualization (React):** rendering panels using the centralized observables.
+
+### 9.1 Primary Observables (Authoritative Sources)
+*   **Deal (LCD):** `GET /nilchain/nilchain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
+*   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
+*   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
+*   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,allocated_length}` used for immediate UX before LCD reflects the commit.
+
+### 9.2 Tests
+*   **Node unit tests:** validate domain normalization and controller orchestration (no React/DOM required).
+    *   Command: `npm run test:unit`
+*   **Opt-in local-stack e2e (Node):** uses the same TypeScript clients to run:
+    1. Create deal (EIP-712 → `/gateway/create-deal-evm`)
+    2. Upload file (→ `/gateway/upload`)
+    3. Commit content (EIP-712 → `/gateway/update-deal-content-evm`)
+    4. Verify LCD deal state + gateway slab/files
+    *   Command: `NIL_E2E=1 npm run test:unit` (requires `./scripts/run_local_stack.sh start` running)
