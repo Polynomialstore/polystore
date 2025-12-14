@@ -164,6 +164,40 @@ To support this model, the "Map" must be fully replicated:
 
 **MDU index convention (Mode 2):** NilFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
 
+### 8.4 Deal Generations & Repair Mode (Planned, Forward-Compatible)
+
+Mode 2 requires the chain to represent “where the deal is in time” so repairs, reads, and writes can safely overlap.
+
+#### 8.4.1 Deal generation fields (conceptual)
+A Mode 2 Deal is associated with a monotonic **generation**:
+* `Deal.current_gen` (monotonic counter)
+* `Deal.manifest_root` and `Deal.total_mdus` are interpreted as the **current generation**’s committed state.
+
+Any on-chain update that changes `Deal.manifest_root` MUST increment `Deal.current_gen`.
+
+#### 8.4.2 Repair mode (maintenance)
+The chain MAY mark one or more provider slots as being in repair:
+* `slot_status[slot] ∈ { ACTIVE, REPAIRING }`
+
+While `slot_status[slot] = REPAIRING`:
+* **Reads** remain valid and SHOULD route around the repairing slot (fetch any `K` healthy slots per SP‑MDU).
+* **Synthetic challenges** MUST NOT target repairing slots; per-slot accountability applies only to ACTIVE slots.
+* A liveness proof submitted by a REPAIRING slot MUST be rejected for reward/health accounting (but the underlying proof format remains valid against `Deal.manifest_root`).
+
+When the replacement provider has reconstructed and stored its shard Blobs up to the current generation, the chain transitions the slot back to ACTIVE.
+
+#### 8.4.3 Append-only writes during repair (near-term rule)
+To avoid write/repair races while keeping the system usable, Mode 2 supports **append-only** deal updates even while one or more slots are REPAIRING.
+
+An update is append-only iff:
+* `new_total_mdus >= old_total_mdus`, and
+* for all `mdu_index < old_total_mdus`, the committed MDU roots for those indices are unchanged (only new MDU indices are added).
+
+Append-only updates advance `Deal.current_gen` and `Deal.manifest_root`. Repairing slots simply catch up by reconstructing the newly appended shard Blobs before rejoining ACTIVE.
+
+#### 8.4.4 Future: full versioned writes
+In future versions, non-append mutations (rewrite, delete/GC, compaction) SHOULD be represented as a new “pending generation” promoted to current only once placement conditions are met. This generalizes the append-only rule without changing the read/repair model.
+
 ## Appendix A: Core Cryptographic Primitives
 
 ### A.3 File Manifest & Crypto Policy (Normative)

@@ -138,6 +138,8 @@ This section defines the normative flow for a file "Life Cycle" in Mode 2.
 4.  **Reconstruct:** $SP_{New}$ runs RS-Decode to rebuild `Blob #5`.
 5.  **Save:** $SP_{New}$ stores the recovered shard.
 
+**Availability note:** Reads remain available during repair by routing around the missing slot (fetch any `K` slots). Near-term, writes should be restricted to append-only updates (new MDU indices only) so the repairing slot can catch up deterministically to the latest committed generation.
+
 -----
 
 ## 6. Protocol Constants & Layout
