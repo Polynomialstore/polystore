@@ -18,6 +18,8 @@ type fetchSession struct {
 	RangeLen    uint64
 	BytesServed uint64
 	ProofHash   string
+	ReqNonce    uint64
+	ReqExpires  uint64
 	ExpiresAt   time.Time
 }
 
@@ -43,7 +45,8 @@ func storeFetchSession(s fetchSession) (string, error) {
 	return id, nil
 }
 
-func loadFetchSession(id string) (fetchSession, bool) {
+// peekFetchSession loads a session without consuming it.
+func peekFetchSession(id string) (fetchSession, bool) {
 	if id == "" {
 		return fetchSession{}, false
 	}
@@ -59,11 +62,20 @@ func loadFetchSession(id string) (fetchSession, bool) {
 	return s, true
 }
 
-func deleteFetchSession(id string) {
+// takeFetchSession atomically consumes a session so it can only be used once.
+func takeFetchSession(id string) (fetchSession, bool) {
 	if id == "" {
-		return
+		return fetchSession{}, false
 	}
-	fetchSessionCache.Delete(id)
+	any, ok := fetchSessionCache.LoadAndDelete(id)
+	if !ok {
+		return fetchSession{}, false
+	}
+	s := any.(fetchSession)
+	if !s.ExpiresAt.IsZero() && time.Now().After(s.ExpiresAt) {
+		return fetchSession{}, false
+	}
+	return s, true
 }
 
 type requestReplayKey struct {
