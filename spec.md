@@ -69,7 +69,7 @@ Scaling is not free. It is strictly constrained by the User's budget.
 NilStore supports two redundancy modes at the policy level:
 
 *   **Mode 1 – FullReplica (Alpha, Implemented):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`. This is the current implementation and the default for the devnet.
-*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is split into **Stripes** (RS(12,8) across shard indices). Scaling operates at the stripe layer. This mode uses the **Blob-Aligned Striping** model defined in **§ 8**.
+*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
 
 For v2.4, **Mode 1** is normative and **Mode 2** is specified as a forward-compatible extension.
 
@@ -104,48 +104,63 @@ To enable **Shared-Nothing Verification** (where a provider can verify their own
 #### 8.1.1 Constants
 *   **Blob (Atom):** 128 KiB ($2^{12}$ field elements).
 *   **MDU (Retrieval Unit):** 8 MiB (64 Blobs).
-*   **Erasure Configuration:** RS(12, 8). 8 Data Shards, 4 Parity Shards.
+*   **Erasure Configuration (Mode 2):** RS(K, K+M) with default `K=8`, `M=4`, and constraint `K | 64`.
 
 #### 8.1.2 The "Card Dealing" Algorithm
-An 8 MiB MDU consists of 64 Blobs ($B_0 \dots B_{63}$). These are distributed to 8 Data Providers ($SP_0 \dots SP_7$) by dealing complete blobs rather than splitting them:
+An 8 MiB SP‑MDU consists of 64 **data Blobs**. Conceptually, these are a deck of cards (`data_blob_id ∈ [0..63]`) and Mode 2 “deals” them into `K` data slots in *rows* so striping aligns with the Blob‑level KZG atom.
 
-*   **$SP_0$ receives:** $B_0, B_8, B_{16}, \dots, B_{56}$ (Total 8 Blobs = 1 MiB).
-*   **$SP_1$ receives:** $B_1, B_9, B_{17}, \dots, B_{57}$ (Total 8 Blobs = 1 MiB).
-*   ...
-*   **$SP_7$ receives:** $B_7, B_{15}, B_{23}, \dots, B_{63}$ (Total 8 Blobs = 1 MiB).
+Let:
+* `K` = data slots, `M` = parity slots, `N = K+M`
+* `rows = 64 / K` (requires `K | 64`)
 
-**Benefit:** Since each provider holds complete 128 KiB Blobs, they can verify each one individually using standard KZG.
+Define a conceptual matrix of data Blobs `D[row][col]` with:
+* `row ∈ [0..rows-1]`, `col ∈ [0..K-1]`
+* `data_blob_id = row*K + col`
 
-#### 8.1.3 Locked: Slot-major `blob_index` ordering
+For each `row`, apply RS(K, K+M) across slots to produce `N` shard Blobs `S[slot][row]`:
+* Data slots: `slot ∈ [0..K-1]` correspond to the original `D[row][col]` blobs.
+* Parity slots: `slot ∈ [K..N-1]` are parity Blobs derived from the row.
+
+**Benefit:** Each provider stores complete 128 KiB Blobs (its `rows` shards per SP‑MDU), so it can verify and prove each Blob individually using standard KZG.
+
+#### 8.1.3 Locked: Slot-major `leaf_index` ordering
 
 To prioritize the hot-path (serving/proving), Mode 2 uses a **slot-major** canonical leaf ordering for the per-SP‑MDU Merkle tree.
 
+Index spaces:
+* `data_blob_id ∈ [0..63]` refers to the 64 logical data Blobs inside the unencoded SP‑MDU (conceptual packing only).
+* `leaf_index ∈ [0..L-1]` refers to the Merkle leaf index for the encoded per‑slot shard Blobs.
+* In **Mode 2**, `ChainedProof.blob_index` MUST be interpreted as `leaf_index`.
+
 Definitions:
-*   `K` = data shards
-*   `M` = parity shards
+*   `K` = data slots
+*   `M` = parity slots
 *   `N = K+M` = total slots/providers
-*   Constraint: `K | 64` (so rows are integral)
+*   Constraint: `K | 64` (so `rows` are integral)
 *   `rows = 64 / K`
+*   `L = N * rows` (Merkle leaves per SP‑MDU in Mode 2)
 
 Leaf mapping (canonical):
-*   `blob_index = slot * rows + row`
-*   `slot = blob_index / rows`
-*   `row  = blob_index % rows`
+*   `leaf_index = slot * rows + row`
+*   `slot = leaf_index / rows`
+*   `row  = leaf_index % rows`
 
 In this ordering, each provider slot owns a contiguous range of leaf indices for each SP‑MDU, which simplifies witness lookup and on-chain enforcement.
 
 ### 8.2 Parity & Homomorphism
-To generate the 4 Parity Shards ($P_0 \dots P_3$):
-*   Parity is calculated across the "row" of blobs ($B_0 \dots B_7 \rightarrow P_0$).
+To generate the `M` parity Blobs for each `row`:
+*   Parity is calculated across the row’s `K` data Blobs (`D[row][0..K-1]`).
 *   Due to the homomorphic property of KZG, the Parity Shards are also composed of valid 128 KiB KZG polynomials.
 *   Parity Nodes are indistinguishable from Data Nodes in terms of verification logic.
 
 ### 8.3 Replicated Metadata Policy
 To support this model, the "Map" must be fully replicated:
-*   **User Data MDUs:** **Striped** (1 Shard per Provider).
-*   **Metadata MDUs (MDU #0 + Witness):** **Fully Replicated** (Copy on All 12 Providers).
+*   **User Data MDUs:** **Striped** (1 slot shard per Provider).
+*   **Metadata MDUs (MDU #0 + Witness):** **Fully Replicated** (Copy on All `N = K+M` Providers).
 
-**Witness Expansion:** The Witness MDU MUST contain KZG commitments for **ALL 96 Blobs** (64 Data + 32 Parity) for every User MDU. This allows any provider (Data or Parity) to prove their holding against the global root.
+**Witness Expansion:** For each data‑bearing SP‑MDU, the Witness MDUs MUST contain KZG commitments for **ALL `L = (K+M) * (64/K)` shard Blobs** (data + parity). This allows any provider (data or parity) to prove its holding against the global root. (Default `K=8`, `M=4` gives `L=96`.)
+
+**MDU index convention (Mode 2):** NilFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
 
 ## Appendix A: Core Cryptographic Primitives
 
@@ -181,13 +196,20 @@ This section norms the retrieval path for **Mode 1 – FullReplica** in the cu
 
 In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 will extend this to true parallel, stripe‑aware fetching.
 
+#### 7.1.1 Mode 2 (Planned): Stripe-aware retrieval & challenges
+
+For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → provider` of length `N = K+M`.
+
+* **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (typically the fastest responders), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
+* **Synthetic challenges (accountability):** the protocol derives challenges keyed by `(deal_id, slot)` so every slot is independently accountable. In a Mode 2 proof, the chain enforces that the submitting provider matches the challenged `slot` (see §7.4).
+
 ### 7.2 Control Plane: Retrieval Receipts & On‑Chain State
 
 NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Liveness** handler:
 
 1.  **Receipt Construction (Client):**
     *   After verifying the KZG proof for a served chunk, the Data Owner constructs a `RetrievalReceipt`:
-        *   `{deal_id, epoch_id, provider, bytes_served, nonce, expires_at, proof_details (KzgProof), user_signature}`.
+        *   `{deal_id, epoch_id, provider, bytes_served, nonce, expires_at, proof_details (ChainedProof), user_signature}`.
     *   The signed message MUST cover `(deal_id, epoch_id, provider, bytes_served, nonce, expires_at)` so SPs cannot forge or replay receipts.
     *   `nonce` is a strictly increasing 64‑bit sequence number scoped to the Deal Owner (or payer). `expires_at` is a block height or timestamp after which the receipt is invalid.
 2.  **On‑Chain Submission (Provider):**
@@ -230,6 +252,9 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 1.  **Input Sanity Check:**
       * Ensure `Proof.mdu_index` matches the MDU index derived from `Challenge`.
       * Ensure `Proof.mdu_index < Deal.total_mdus`.
+      * Ensure `Proof.blob_index` is in range for the Deal’s redundancy mode:
+          * **Mode 1:** require `Proof.blob_index < 64`.
+          * **Mode 2:** compute `rows = 64 / K`, `L = (K+M) * rows`, require `Proof.blob_index < L`, and for striped user‑data MDUs require `slot(Proof.blob_index) == slot(msg.creator)` using `slot(i) = i / rows`.
 
 2.  **Hop 1: Verify Identity (The Map) [KZG]**
       * *Goal:* Prove that the SP isn't lying about the Merkle Root of the target MDU.
@@ -237,19 +262,19 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 
 3.  **Hop 2: Verify Structure (The MDU) [Merkle]**
       * *Goal:* Prove that the specific 128KB Blob is actually part of that MDU.
-      * *Check:* `VerifyMerkle(Proof.mdu_root_fr, Proof.challenged_kzg_commitment, Proof.merkle_path)` MUST return TRUE.
+      * *Check:* `VerifyMerkle(Proof.mdu_root_fr, Proof.blob_commitment, Proof.merkle_path)` MUST return TRUE.
       * *Note:* `Proof.mdu_root_fr` is a scalar; it must be converted or hashed to match the Merkle root format.
 
 4.  **Hop 3: Verify Data (The Blob) [KZG]**
       * *Goal:* Prove that the SP possesses the data inside that Blob.
-      * *Check:* `VerifyKZG(Proof.challenged_kzg_commitment, Proof.z_value, Proof.y_value, Proof.kzg_opening_proof)` MUST return TRUE.
+      * *Check:* `VerifyKZG(Proof.blob_commitment, Proof.z_value, Proof.y_value, Proof.kzg_opening_proof)` MUST return TRUE.
 
 5.  **Result:**
       * If all 3 hops pass, the proof is valid. The SP has proven possession of the specific byte requested by the protocol.
 
 ### 7.5 Evidence Types & Fraud Proofs
 
-NilStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)`.
+NilStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
 
 1.  **Synthetic Storage Proofs (System‑Initiated):**
     *   For each epoch `e` and assignment `(deal_id, provider_id)`, the protocol derives a finite challenge set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from `R_e`.
