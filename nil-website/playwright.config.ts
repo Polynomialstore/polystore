@@ -5,6 +5,7 @@ const baseURL = process.env.E2E_BASE_URL || 'http://localhost:5173'
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
+  workers: 1,
   use: {
     baseURL,
     headless: true,

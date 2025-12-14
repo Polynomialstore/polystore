@@ -40,6 +40,13 @@ int nil_compute_manifest_proof(
     unsigned char* out_proof,
     unsigned char* out_y
 );
+int nil_compute_blob_proof(
+    const unsigned char* blob_bytes,
+    size_t blob_bytes_len,
+    const unsigned char* z_bytes,
+    unsigned char* out_proof,
+    unsigned char* out_y
+);
 int nil_verify_chained_proof(
     const unsigned char* manifest_commitment,
     unsigned long long mdu_index,
@@ -58,7 +65,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
-    "os"
+	"os"
 	"unsafe"
 
 	"nilchain/x/nilchain/types" // Import types for MDU_SIZE
@@ -66,7 +73,7 @@ import (
 
 // Init loads the trusted setup from the given path.
 func Init(path string) error {
-    fmt.Fprintf(os.Stderr, "Initializing KZG with path: %s\n", path)
+	fmt.Fprintf(os.Stderr, "Initializing KZG with path: %s\n", path)
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
 	res := C.nil_init(cPath)
@@ -84,7 +91,7 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 	}
 
 	outRoot := make([]byte, 32) // Merkle root is 32 bytes
-	
+
 	cMduBytes := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
 	cOutRoot := (*C.uchar)(unsafe.Pointer(&outRoot[0]))
 
@@ -95,31 +102,62 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 
 	return outRoot, nil
 }
+
 // ComputeManifestProof computes a KZG proof for a specific MDU inclusion in the Manifest.
 func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte, y []byte, err error) {
-    if len(manifest_blob) != types.BLOB_SIZE { // Assuming types.BLOB_SIZE is 128KB (131072)
-         return nil, nil, fmt.Errorf("invalid manifest_blob length: expected %d, got %d", types.BLOB_SIZE, len(manifest_blob))
-    }
+	if len(manifest_blob) != types.BLOB_SIZE { // Assuming types.BLOB_SIZE is 128KB (131072)
+		return nil, nil, fmt.Errorf("invalid manifest_blob length: expected %d, got %d", types.BLOB_SIZE, len(manifest_blob))
+	}
 
-    proof = make([]byte, 48)
-    y = make([]byte, 32)
-    
-    cManifestBlob := (*C.uchar)(unsafe.Pointer(&manifest_blob[0]))
-    cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
-    cY := (*C.uchar)(unsafe.Pointer(&y[0]))
+	proof = make([]byte, 48)
+	y = make([]byte, 32)
 
-    res := C.nil_compute_manifest_proof(
-        cManifestBlob,
-        C.ulonglong(mdu_index),
-        cProof,
-        cY,
-    )
+	cManifestBlob := (*C.uchar)(unsafe.Pointer(&manifest_blob[0]))
+	cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
+	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
 
-    if res != 0 {
-        return nil, nil, fmt.Errorf("nil_compute_manifest_proof failed with code: %d", res)
-    }
+	res := C.nil_compute_manifest_proof(
+		cManifestBlob,
+		C.ulonglong(mdu_index),
+		cProof,
+		cY,
+	)
 
-    return proof, y, nil
+	if res != 0 {
+		return nil, nil, fmt.Errorf("nil_compute_manifest_proof failed with code: %d", res)
+	}
+
+	return proof, y, nil
+}
+
+// ComputeBlobProof computes a KZG opening proof for a single encoded 128 KiB blob.
+func ComputeBlobProof(blob_bytes []byte, z_bytes []byte) (proof []byte, y []byte, err error) {
+	if len(blob_bytes) != types.BLOB_SIZE {
+		return nil, nil, fmt.Errorf("invalid blob_bytes length: expected %d, got %d", types.BLOB_SIZE, len(blob_bytes))
+	}
+	if len(z_bytes) != 32 {
+		return nil, nil, fmt.Errorf("invalid z_bytes length: expected 32, got %d", len(z_bytes))
+	}
+
+	proof = make([]byte, 48)
+	y = make([]byte, 32)
+
+	cBlob := (*C.uchar)(unsafe.Pointer(&blob_bytes[0]))
+	cZ := (*C.uchar)(unsafe.Pointer(&z_bytes[0]))
+	cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
+	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
+
+	res := C.nil_compute_blob_proof(
+		cBlob,
+		C.size_t(len(blob_bytes)),
+		cZ,
+		cProof,
+		cY,
+	)
+	if res != 0 {
+		return nil, nil, fmt.Errorf("nil_compute_blob_proof failed with code: %d", res)
+	}
+	return proof, y, nil
 }
 
 // VerifyMduProof verifies a KZG proof for a single 128 KiB blob within an MDU,
@@ -135,7 +173,7 @@ func VerifyMduProof(
 ) (bool, error) {
 	// Input validation for lengths based on Rust FFI expectations
 	if len(mdu_merkle_root) != 32 || len(challenged_kzg_commitment) != 48 ||
-	   len(z_value) != 32 || len(y_value) != 32 || len(kzg_opening_proof) != 48 {
+		len(z_value) != 32 || len(y_value) != 32 || len(kzg_opening_proof) != 48 {
 		return false, errors.New("invalid input lengths for MDU proof components")
 	}
 
@@ -223,48 +261,48 @@ func VerifyChainedProof(
 // ComputeMduProofTest is a helper for integration testing.
 // It computes all components required for a valid MsgProveLiveness proof.
 func ComputeMduProofTest(mdu_bytes []byte, chunk_index uint32) (
-    commitment []byte,
-    merkle_proof []byte,
-    z []byte,
-    y []byte,
-    kzg_proof []byte,
-    err error,
+	commitment []byte,
+	merkle_proof []byte,
+	z []byte,
+	y []byte,
+	kzg_proof []byte,
+	err error,
 ) {
-    if len(mdu_bytes) != types.MDU_SIZE {
-        return nil, nil, nil, nil, nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mdu_bytes))
-    }
+	if len(mdu_bytes) != types.MDU_SIZE {
+		return nil, nil, nil, nil, nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mdu_bytes))
+	}
 
-    // Allocate output buffers
-    commitment = make([]byte, 48)
-    merkle_proof_buf := make([]byte, 32 * 10) // Sufficient for depth 6 tree (64 leaves)
-    var merkle_proof_len C.size_t = C.size_t(len(merkle_proof_buf))
-    z = make([]byte, 32)
-    y = make([]byte, 32)
-    kzg_proof = make([]byte, 48)
+	// Allocate output buffers
+	commitment = make([]byte, 48)
+	merkle_proof_buf := make([]byte, 32*10) // Sufficient for depth 6 tree (64 leaves)
+	var merkle_proof_len C.size_t = C.size_t(len(merkle_proof_buf))
+	z = make([]byte, 32)
+	y = make([]byte, 32)
+	kzg_proof = make([]byte, 48)
 
-    cMduBytes := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
-    cCommitment := (*C.uchar)(unsafe.Pointer(&commitment[0]))
-    cMerkleProof := (*C.uchar)(unsafe.Pointer(&merkle_proof_buf[0]))
-    cZ := (*C.uchar)(unsafe.Pointer(&z[0]))
-    cY := (*C.uchar)(unsafe.Pointer(&y[0]))
-    cKzgProof := (*C.uchar)(unsafe.Pointer(&kzg_proof[0]))
+	cMduBytes := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
+	cCommitment := (*C.uchar)(unsafe.Pointer(&commitment[0]))
+	cMerkleProof := (*C.uchar)(unsafe.Pointer(&merkle_proof_buf[0]))
+	cZ := (*C.uchar)(unsafe.Pointer(&z[0]))
+	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
+	cKzgProof := (*C.uchar)(unsafe.Pointer(&kzg_proof[0]))
 
-    res := C.nil_compute_mdu_proof_test(
-        cMduBytes,
-        C.size_t(len(mdu_bytes)),
-        C.uint(chunk_index),
-        cCommitment,
-        cMerkleProof,
-        &merkle_proof_len,
-        cZ,
-        cY,
-        cKzgProof,
-    )
+	res := C.nil_compute_mdu_proof_test(
+		cMduBytes,
+		C.size_t(len(mdu_bytes)),
+		C.uint(chunk_index),
+		cCommitment,
+		cMerkleProof,
+		&merkle_proof_len,
+		cZ,
+		cY,
+		cKzgProof,
+	)
 
-    if res != 0 {
-        return nil, nil, nil, nil, nil, fmt.Errorf("nil_compute_mdu_proof_test failed with code: %d", res)
-    }
+	if res != 0 {
+		return nil, nil, nil, nil, nil, fmt.Errorf("nil_compute_mdu_proof_test failed with code: %d", res)
+	}
 
-    merkle_proof = merkle_proof_buf[:merkle_proof_len]
-    return commitment, merkle_proof, z, y, kzg_proof, nil
+	merkle_proof = merkle_proof_buf[:merkle_proof_len]
+	return commitment, merkle_proof, z, y, kzg_proof, nil
 }

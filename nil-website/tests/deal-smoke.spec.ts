@@ -14,18 +14,21 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('connect-wallet').click()
   await expect(page.getByTestId('wallet-address')).toBeVisible()
   await expect(page.getByTestId('cosmos-identity')).toContainText('nil1')
+  const owner = (await page.getByTestId('cosmos-identity').textContent())?.trim() || ''
+  expect(owner).toMatch(/^nil1/i)
 
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
   await page.getByTestId('alloc-submit').click()
+  await page.getByTestId('tab-content').click()
 
   const dealSelect = page.getByTestId('content-deal-select')
   await expect(dealSelect).not.toHaveValue('', { timeout: 60_000 })
   const dealId = await dealSelect.inputValue()
 
   const filePath = 'e2e.txt'
-  const fileBytes = Buffer.alloc(256 * 1024, 'A')
+  const fileBytes = Buffer.alloc(1024 * 1024, 'A')
 
   await page.getByTestId('content-file-input').setInputFiles({
     name: filePath,
@@ -49,6 +52,24 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   const dealSizeMb = Number.parseFloat((await dealSizeCell.textContent()) || '0')
   expect(dealSizeMb).toBeGreaterThan(0)
+
+  // Directly hit the gateway to measure /gateway/fetch performance.
+  // Hard timeout: 20s; target proof generation < 1s.
+  const fetchUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
+    dealId,
+  )}&owner=${encodeURIComponent(owner)}&file_path=${encodeURIComponent(filePath)}`
+  const perfStart = Date.now()
+  const perfResp = await request.get(fetchUrl, { timeout: 20_000 })
+  const perfElapsedMs = Date.now() - perfStart
+  expect(perfResp.status()).toBe(200)
+  expect(perfElapsedMs).toBeLessThan(20_000)
+  const proofMsRaw = perfResp.headers()['x-nil-gateway-proof-ms']
+  expect(proofMsRaw).toBeTruthy()
+  const proofMs = Number(proofMsRaw)
+  expect(Number.isFinite(proofMs)).toBeTruthy()
+  expect(proofMs).toBeLessThan(1_000)
+  const perfBody = await perfResp.body()
+  expect(Buffer.from(perfBody)).toEqual(fileBytes)
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible()
@@ -80,4 +101,3 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   }
   return Buffer.concat(chunks)
 }
-

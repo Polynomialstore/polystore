@@ -57,6 +57,8 @@ var (
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
 
+var lcdHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
 // extractJSONBody attempts to locate the first JSON object in a mixed CLI output.
 func extractJSONBody(b []byte) []byte {
 	start := bytes.IndexByte(b, '{')
@@ -258,6 +260,11 @@ func main() {
 	if err := crypto_ffi.Init(trustedSetup); err != nil {
 		log.Fatalf("Failed to initialize KZG: %v. Check path.", err)
 	}
+
+	// Best-effort warmups to keep the first browser fetch fast.
+	go func() {
+		_ = cachedProviderAddress(context.Background())
+	}()
 
 	r := mux.NewRouter()
 	// Legacy S3-style interface
@@ -1254,6 +1261,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startTotal := time.Now()
+
 	vars := mux.Vars(r)
 	rawManifestRoot := strings.TrimSpace(vars["cid"])
 	if rawManifestRoot == "" {
@@ -1343,8 +1352,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Resolve file location.
-	mduIdx, mduPath, fileLen, err := GetFileLocation(dealDir, filePath)
+	// 2. Resolve NilFS file.
+	content, mduIdx, mduPath, fileLen, err := resolveNilfsFileForFetch(dealDir, filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
@@ -1355,42 +1364,37 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		log.Printf("GetFileLocation failed: %v", err)
+		log.Printf("resolveNilfsFileForFetch failed: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file", "")
 		return
 	}
+	defer content.Close()
 
 	// Resolve Provider Address for the Header (for Client-Side Signing)
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
-	if err != nil {
-		log.Printf("GatewayFetch: failed to resolve provider address: %v", err)
-	}
+	providerAddr := cachedProviderAddress(r.Context())
 
-    // Generate Proof
-    manifestPath := filepath.Join(dealDir, "manifest.bin")
-    var proofJson []byte
-    proofJson, err = generateProofJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
-    if err != nil {
-        log.Printf("GatewayFetch: generateProofJSON failed: %v", err)
-    }
-
-	content, _, err := ResolveFileByPath(dealDir, filePath)
+	// Generate Proof Details payload (for receipt submission).
+	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	var proofPayload []byte
+	var proofMs int64
+	proofStart := time.Now()
+	proofPayload, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
+	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
-		log.Printf("ResolveFileByPath failed: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to open stream", "")
-		return
+		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
+		proofPayload = nil
 	}
-	defer content.Close()
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
 	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
 	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
 	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(fileLen, 10))
 	w.Header().Set("X-Nil-Provider", providerAddr)
-    if proofJson != nil {
-        w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofJson))
-    }
+	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
+	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
+	if proofPayload != nil {
+		w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
+	}
 
 	// Serve as attachment so browsers will download instead of inline JSON.
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -1857,7 +1861,7 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
 func extractTxHash(out string) string {
@@ -2073,8 +2077,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 // fetchDealOwnerAndCID calls the LCD to retrieve the deal owner and CID for a given deal ID.
 func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := lcdHTTPClient.Get(url)
 	if err != nil {
 		return "", "", fmt.Errorf("LCD request failed: %w", err)
 	}

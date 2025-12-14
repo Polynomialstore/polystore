@@ -363,6 +363,57 @@ pub extern "C" fn nil_compute_manifest_proof(
     }
 }
 
+/// Computes a KZG opening proof for a single 128 KiB blob.
+///
+/// Inputs:
+/// - blob_ptr: Pointer to 128 KiB blob bytes (encoded).
+/// - blob_len: Must equal BLOB_SIZE (131072).
+/// - z_ptr: Pointer to 32-byte evaluation point.
+///
+/// Outputs:
+/// - out_proof: Buffer for 48-byte KZG proof.
+/// - out_y: Buffer for 32-byte evaluation.
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_compute_blob_proof(
+    blob_ptr: *const u8,
+    blob_len: usize,
+    z_ptr: *const u8,
+    out_proof: *mut u8,
+    out_y: *mut u8,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1, // Not initialized
+    };
+
+    if blob_ptr.is_null() || z_ptr.is_null() || out_proof.is_null() || out_y.is_null() {
+        return -2;
+    }
+    if blob_len != crate::kzg::BLOB_SIZE {
+        return -4;
+    }
+
+    let blob = unsafe { std::slice::from_raw_parts(blob_ptr, blob_len) };
+    let z_slice = unsafe { std::slice::from_raw_parts(z_ptr, 32) };
+    let mut z_bytes = [0u8; 32];
+    z_bytes.copy_from_slice(z_slice);
+
+    match ctx.compute_proof(blob, &z_bytes) {
+        Ok((proof, y)) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(proof.as_slice().as_ptr(), out_proof, 48);
+                std::ptr::copy_nonoverlapping(y.as_slice().as_ptr(), out_y, 32);
+            }
+            0
+        }
+        Err(_e) => {
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: Failed to compute blob proof");
+            -3
+        }
+    }
+}
+
 /// Verifies a "Triple Proof" (Chained Verification).
 ///
 /// Hop 1: Verify MDU Root is in Manifest (KZG).

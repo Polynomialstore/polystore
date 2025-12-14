@@ -3,10 +3,15 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
+
+	"nil_s3/pkg/builder"
+	"nil_s3/pkg/layout"
 )
 
 func TestBenchmarkProofGen(t *testing.T) {
@@ -20,27 +25,50 @@ func TestBenchmarkProofGen(t *testing.T) {
 		t.Fatalf("Init failed: %v", err)
 	}
 
-	// Create dummy files
-	mduPath := "test_mdu.bin"
-	manifestPath := "test_manifest.bin"
-	defer os.Remove(mduPath)
-	defer os.Remove(manifestPath)
+	tmpDir := t.TempDir()
 
-	mduData := make([]byte, 8388608)
-	if err := os.WriteFile(mduPath, mduData, 0644); err != nil {
+	// Create a minimal slab layout:
+	// - mdu_0.bin (valid NilFS header + one file record so userCount=1)
+	// - mdu_1.bin (witness, zero-filled)
+	// - mdu_2.bin (user, zero-filled)
+	b, err := builder.NewMdu0Builder(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pathBuf [40]byte
+	copy(pathBuf[:], []byte("bench.bin"))
+	rec := layout.FileRecordV1{
+		StartOffset:    0,
+		LengthAndFlags: layout.PackLengthAndFlags(1, 0),
+		Path:           pathBuf,
+	}
+	if err := b.AppendFileRecord(rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	manifestData := make([]byte, 131072)
-	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+	zeroMdu := make([]byte, builder.MduSize)
+	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_1.bin"), zeroMdu, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_2.bin"), zeroMdu, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestPath := filepath.Join(tmpDir, "manifest.bin")
+	manifestData := make([]byte, types.BLOB_SIZE)
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mduPath := filepath.Join(tmpDir, "mdu_2.bin")
 
 	start := time.Now()
-	_, err := generateProofJSON(context.Background(), 1, 1, 0, mduPath, manifestPath)
+	_, err = generateProofHeaderJSON(context.Background(), 1, 1, 2, mduPath, manifestPath)
 	if err != nil {
-		t.Fatalf("generateProofJSON failed: %v", err)
+		t.Fatalf("generateProofHeaderJSON failed: %v", err)
 	}
 	elapsed := time.Since(start)
-	t.Logf("generateProofJSON took %s", elapsed)
+	t.Logf("generateProofHeaderJSON took %s", elapsed)
 }
