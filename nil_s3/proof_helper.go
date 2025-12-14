@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"time"
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
