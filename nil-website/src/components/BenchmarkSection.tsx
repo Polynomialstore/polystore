@@ -8,31 +8,31 @@ export const BenchmarkSection = () => {
         <div className="mb-16 text-center">
           <h2 className="text-3xl font-bold mb-4">Performance Benchmarks</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            We rigorously tested our core cryptographic primitives. The results validate our "Proof of Useful Data" approach: lightweight verification for the network, heavy sealing cost for storage providers.
+            We benchmarked our core verification primitives. NilStore is designed to be unsealed: verification is cheap, and incentives come from serving speed (the Performance Market).
           </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-8">
-            <BenchmarkCard
-              title="Verification Speed"
-              value="< 1 ms"
-              subtitle="Per Proof (1KB chunk)"
-              description="Verifying a KZG commitment proof is computationally trivial, allowing low-power devices to participate in consensus."
-              icon={<ZapIcon className="w-6 h-6 text-yellow-500" />}
-              barColor="bg-green-500"
-              percentage={5} // Visual representation
-            />
-            <BenchmarkCard
-              title="Sealing Cost (Argon2id)"
-              value="~191 ms"
-              subtitle="Per 1KB Block"
-              description="High computational cost (Memory-hard) prevents on-demand generation attacks. A 1GB file takes ~53 hours to seal on a single core."
-              icon={<Clock className="w-6 h-6 text-blue-500" />}
-              barColor="bg-blue-600"
-              percentage={95}
-            />
-          </div>
+	            <BenchmarkCard
+	              title="Verification Speed"
+	              value="< 1 ms"
+	              subtitle="Per Proof (Blob)"
+	              description="Verifying a KZG/Merkle proof is computationally trivial, allowing low-power devices to participate in consensus."
+	              icon={<ZapIcon className="w-6 h-6 text-yellow-500" />}
+	              barColor="bg-green-500"
+	              percentage={5} // Visual representation
+	            />
+	            <BenchmarkCard
+	              title="Sealing Latency"
+	              value="0s"
+	              subtitle="(No Sealing)"
+	              description="Providers don't precompute. They store bytes and compete to serve them quickly; slower adapters earn less in the Performance Market."
+	              icon={<Clock className="w-6 h-6 text-blue-500" />}
+	              barColor="bg-blue-600"
+	              percentage={0}
+	            />
+	          </div>
 
           <div className="bg-card p-8 rounded-3xl border shadow-lg">
             <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">

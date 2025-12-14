@@ -2,9 +2,9 @@ import { motion } from "framer-motion";
 import { Clock, ShieldAlert, Cpu, HeartCrack } from "lucide-react";
 
 export const ArgonDeepDive = () => {
-  const podeWorkMs = 1000; // PoDE is tuned to 1 second
-  const networkLatencyMs = 200; // Typical network latency to fetch data
-  const deadlineMs = podeWorkMs + 100; // Deadline is 100ms after compute
+  const podeWorkMs = 1000; // Example: PoDE prototype tuned to ~1s
+  const networkLatencyMs = 200; // Example: typical WAN latency
+  const deadlineMs = podeWorkMs + 100; // Example: deadline margin after compute
   
   // Attacker needs to fetch + compute
   const attackerTotalMs = networkLatencyMs + podeWorkMs;
@@ -25,11 +25,11 @@ export const ArgonDeepDive = () => {
           <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20 shrink-0">
             <HeartCrack className="w-8 h-8 text-red-500" />
           </div>
-          <h2 className="text-3xl font-bold text-foreground">Proof-of-Delayed-Encode (PoDE)</h2>
+          <h2 className="text-3xl font-bold text-foreground">Archived: Proof-of-Delayed-Encode (PoDE)</h2>
         </div>
 
         <p className="text-xl text-muted-foreground mb-12 leading-relaxed">
-          PoDE is NilStore's critical anti-laziness mechanism, ensuring Storage Providers (SPs) have data locally. It prevents "on-demand generation" or "outsourcing to S3" attacks.
+          PoDE was an early timing-based anti-laziness mechanism. NilStore has since evolved to an <strong>unsealed</strong> design using the <strong>Performance Market</strong> and <strong>Unified Liveness</strong> (retrievals as proofs). This page is kept for historical context.
         </p>
 
         {/* Section 1: The Concept & Mechanism */}
@@ -38,7 +38,7 @@ export const ArgonDeepDive = () => {
             <Cpu className="w-5 h-5 text-red-500" /> Memory-Hard Computation
           </h3>
           <p className="text-muted-foreground mb-6">
-            When challenged, SPs must perform a memory-hard computation (<strong>Argon2id</strong>) on a chunk of data. This calculation is deliberately slow, tuned to take precisely {podeWorkMs/1000} second on a reference CPU.
+            In the PoDE model, when challenged, SPs perform a memory-hard computation (<strong>Argon2id</strong>) on a chunk of data. The work was tuned (example) to take about {podeWorkMs/1000} second on a reference CPU.
           </p>
           
           <div className="bg-card border border-border p-8 rounded-2xl shadow-sm flex flex-col items-center">
@@ -68,7 +68,7 @@ export const ArgonDeepDive = () => {
             <Clock className="w-5 h-5 text-blue-500" /> The Timing Defense
           </h3>
           <p className="text-muted-foreground mb-6">
-            The network imposes a strict submission deadline. This critical "timing gap" makes it economically unfeasible to retrieve data from a remote source when challenged.
+            PoDE relied on a strict submission deadline: if a node tried to fetch missing data from a remote source on demand, it would miss the deadline and be penalized. In practice, strict deadlines can be brittle, which is why NilStore now uses the Performance Market instead.
           </p>
           <div className="bg-card border border-border p-8 rounded-2xl shadow-sm">
             <div className="grid md:grid-cols-2 gap-8">
@@ -113,9 +113,9 @@ export const ArgonDeepDive = () => {
             <div className="mt-8 p-4 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-800 flex gap-3 items-start">
               <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <p className="text-red-300">
-                <strong>Security Guarantee:</strong> A remote fetch + computation will always exceed the network's strict deadline of <strong>{deadlineMs}ms</strong>. 
+                <strong>PoDE Intuition (Archived):</strong> Under these example parameters, remote fetch + compute exceeds a strict deadline of <strong>{deadlineMs}ms</strong>. 
                 <br/>
-                Therefore, the SP <em>must</em> store the data locally to respond in time.
+                This is the core intuition PoDE attempted to encode; the current protocol achieves similar goals via incentives rather than a hard cutoff.
               </p>
             </div>
           </div>

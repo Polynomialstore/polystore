@@ -4,13 +4,13 @@ import { File, Lock, CheckCircle, Server, ChevronDown, ChevronUp } from "lucide-
 import { cn } from "../lib/utils";
 import { ShardingDeepDive } from "../pages/ShardingDeepDive";
 import { KZGDeepDive } from "../pages/KZGDeepDive";
-import { ArgonDeepDive } from "../pages/ArgonDeepDive";
+import { PerformanceDeepDive } from "../pages/PerformanceDeepDive";
 
 const steps = [
   {
     id: 1,
-    title: "Sharding & Encoding",
-    description: "The user's file is split into 1KB chunks. Each chunk is mapped to a field element (Fr) using SHA256.",
+    title: "Packing & Striping",
+    description: "The file is packed into 8 MiB MDUs and split into 128 KiB blobs (the verification atom). In Mode 2, blobs are striped across providers with RS(K, K+M).",
     icon: <File className="w-6 h-6" />,
     DeepDiveComponent: ShardingDeepDive,
     visual: (
@@ -24,7 +24,7 @@ const steps = [
             key={i}
             className="w-12 h-12 bg-blue-500/20 border border-blue-500 rounded flex items-center justify-center text-xs"
           >
-            1KB
+            128KiB
           </motion.div>
         ))}
       </div>
@@ -46,10 +46,10 @@ const steps = [
   },
   {
     id: 3,
-    title: "Argon2id Sealing",
-    description: "Storage nodes must 'seal' the data using a memory-hard function (Argon2id). This takes time (~191ms/KB), proving they aren't generating it on the fly.",
+    title: "Performance Market",
+    description: "No sealing. Providers are rewarded by response time and availability. Retrieval receipts and synthetic checks make performance observable and enforceable.",
     icon: <Server className="w-6 h-6" />,
-    DeepDiveComponent: ArgonDeepDive,
+    DeepDiveComponent: PerformanceDeepDive,
     visual: (
       <div className="flex gap-4 items-center">
         <div className="w-24 h-24 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">Data</div>
@@ -58,14 +58,14 @@ const steps = [
           transition={{ repeat: Infinity, duration: 1.5 }}
           className="text-2xl text-muted-foreground"
         >→</motion.div>
-        <div className="w-24 h-24 bg-red-500 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-red-500/20">Sealed</div>
+        <div className="w-24 h-24 bg-green-500 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-green-500/20">Served</div>
       </div>
     )
   },
   {
     id: 4,
-    title: "Proof Verification",
-    description: "The network challenges a node. The node provides a proof for a random chunk. Verifiers check this in < 1ms.",
+    title: "Triple Proof Verification",
+    description: "A provider proves a challenged byte is part of the Deal commitment via a chained proof (Deal → MDU → Blob → Byte). Verifiers check this in < 1ms.",
     icon: <CheckCircle className="w-6 h-6" />,
     visual: (
       <div className="flex flex-col gap-4 items-center">

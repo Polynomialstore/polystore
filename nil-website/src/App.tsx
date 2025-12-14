@@ -46,6 +46,7 @@ function App() {
                 <Route index element={<Technology />} />
                 <Route path="sharding" element={<ShardingDeepDive />} />
                 <Route path="kzg" element={<KZGDeepDive />} />
+                <Route path="pode" element={<ArgonDeepDive />} />
                 <Route path="sealing" element={<ArgonDeepDive />} />
               </Route>
             </Route>

@@ -15,7 +15,7 @@ export const Hero = () => {
               The Future of Decentralized Storage
             </h1>
             <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              NilStore leverages <strong>KZG Commitments</strong> and <strong>Argon2id Proof-of-Seal</strong> to deliver verifiable, secure, and efficient decentralized data storage.
+              NilStore leverages <strong>KZG Commitments</strong> and a <strong>Performance Market</strong> (no sealing) to deliver verifiable, secure, and low-latency decentralized storage.
             </p>
           </motion.div>
 
@@ -42,14 +42,14 @@ export const Hero = () => {
             />
             <FeatureCard
               icon={<Database className="w-8 h-8 text-purple-500" />}
-              title="Proof of Useful Data"
-              description="Novel consensus mechanism ensuring nodes actually store your data, not just hashes."
+              title="Unsealed + Incentivized"
+              description="Providers earn by serving fast. Retrieval receipts and synthetic checks make performance observable without sealing latency."
               delay={0.4}
             />
             <FeatureCard
               icon={<Zap className="w-8 h-8 text-yellow-500" />}
               title="Lightning Fast Verify"
-              description="Verifying a 1GB file proof takes < 1ms on standard hardware."
+              description="Verifying a proof is sub-millisecond on standard hardware."
               delay={0.5}
             />
           </div>
