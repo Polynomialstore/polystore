@@ -84,8 +84,10 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
         *   `deal_id`: from header.
         *   `epoch_id`: from header.
         *   `provider`: from header.
+        *   `file_path`: from request context.
+        *   `range_start`, `range_len`: from request context (range binding).
         *   `bytes_served`: from header.
-        *   `nonce`: fetched from chain (recommended): `nonce = last_nonce + 1`.
+        *   `nonce`: fetched from chain (recommended): `nonce = last_nonce + 1` scoped to `(deal_id, file_path)`.
         *   `expires_at`: optional; `0` allowed.
         *   `proof_hash`: from header (must match the submitted `proof_details`).
 
@@ -122,6 +124,20 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 *   **`POST /gateway/receipt`** (New)
     *   **Input:** JSON `RetrievalReceipt` (Signed).
     *   **Logic:** Forwards to configured Provider URL (`POST /sp/receipt`).
+
+---
+
+## 8. Bundled Session Receipts (Phase 2, Planned)
+
+To reduce MetaMask popups and on-chain TX count, the preferred UX is to sign a **single** “download session receipt” after the bytes are received:
+
+1. Browser opens a *download session* with a signed retrieval request (one signature).
+2. Browser fetches chunk ranges using the session (no additional signatures).
+3. Gateway returns per-chunk `proof_hash` values; the browser computes a `chunk_leaf_root`.
+4. Browser signs `DownloadSessionReceipt{deal_id, epoch_id, provider, file_path, total_bytes, chunk_count, chunk_leaf_root, nonce, expires_at}` (one signature).
+5. Provider submits a single on-chain message containing the session receipt + all chunk proofs and Merkle membership paths.
+
+This preserves “fair exchange” while reducing signatures from `O(chunks)` → `O(1)` per download completion.
 
 ---
 
@@ -170,4 +186,3 @@ When `MsgProveLiveness.proof_type = user_receipt`, the chain MUST enforce:
 4. `proof_details` verifies against on-chain `deal.manifest_root` (no bypass)
 5. `user_signature` verifies to `deal.owner` using v2 EIP-712 hash that includes `proof_hash`
 6. `nonce` strictly increases per `deal.owner`
-

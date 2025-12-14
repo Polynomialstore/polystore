@@ -358,19 +358,24 @@ Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed 
 NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Liveness** handler:
 
 1.  **Receipt Construction (Client):**
-    *   After verifying the KZG proof for a served chunk, the Data Owner constructs a `RetrievalReceipt`:
-        *   `{deal_id, epoch_id, provider, bytes_served, nonce, expires_at, proof_details (ChainedProof), user_signature}`.
-    *   The signed message MUST cover `(deal_id, epoch_id, provider, bytes_served, nonce, expires_at)` so SPs cannot forge or replay receipts.
-    *   `nonce` is a strictly increasing 64‑bit sequence number scoped to the Deal Owner (or payer). `expires_at` is a block height or timestamp after which the receipt is invalid.
+    *   After verifying the Triple Proof for a served byte-range, the Data Owner constructs a `RetrievalReceipt`:
+        *   `{deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_details (ChainedProof), user_signature}`.
+    *   The signed message MUST be bound to the exact `proof_details` via `proof_hash = keccak256(encode(ChainedProof))` and MUST cover `(deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_hash)` so SPs cannot forge, inflate, or replay receipts.
+    *   `nonce` is a strictly increasing 64‑bit sequence number scoped to `(deal_id, file_path)` for the Deal Owner (or payer), enabling parallel downloads of different files within the same deal. `expires_at` is a block height or timestamp after which the receipt is invalid.
 2.  **On‑Chain Submission (Provider):**
     *   The Provider wraps the receipt in `MsgProveLiveness{ ProofType = UserReceipt }` and submits it to the chain.
     *   The module verifies:
         *   Provider is assigned in `Deal.providers[]`.
+        *   Receipt envelope consistency:
+            *   `receipt.deal_id == msg.deal_id`
+            *   `receipt.epoch_id == msg.epoch_id`
+            *   `receipt.provider == msg.creator`
+            *   `receipt.bytes_served == receipt.range_len` (range binding for accounting)
         *   `expires_at` has not passed.
-        *   `nonce` is strictly greater than the last accepted nonce for this Deal Owner (or payer).
+        *   `nonce` is strictly greater than the last accepted nonce for `(deal_id, file_path)` (payer-scoped).
         *   KZG proof is valid for the challenged MDU chunk.
         *   `user_signature` matches the Deal Owner’s on‑chain key.
-    *   The module MUST maintain persistent state `LastReceiptNonce[owner_address]` (or equivalent) and reject any receipt with `nonce ≤ LastReceiptNonce[owner_address]` as a replay.
+    *   The module MUST maintain persistent state `LastReceiptNonce[(deal_id, file_path)]` (or equivalent) and reject any receipt with `nonce ≤ LastReceiptNonce[(deal_id, file_path)]` as a replay.
 3.  **Book‑Keeping & Rewards:**
     *   The keeper computes the latency tier from inclusion height (Platinum/Gold/Silver/Fail) and updates `ProviderRewards`.
     *   It debits `Deal.EscrowBalance` for the bandwidth component and records a lightweight `Proof` summary:
@@ -378,6 +383,22 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
     *   `Proof` entries are exposed via `Query/ListProofs` (LCD: `/nilchain/nilchain/v1/proofs`) for dashboards and analytics.
 
 In the current devnet, the CLI (`sign-retrieval-receipt` / `submit-retrieval-proof`) and the Web Gateway (`/gateway/fetch`, `/gateway/prove-retrieval`) MAY drive receipt/proof submission as a convenience “meta‑transaction” layer. Web downloads that do not trigger on‑chain receipts are **non‑normative** and expected to be phased out; the intended end state is that retrievals always produce verifiable on‑chain liveness evidence derived from NilFS (MDU #0 + on-disk slab) and the Deal’s on‑chain commitments.
+
+#### 7.2.1 Bundled session receipts (Planned, UX + throughput)
+
+To reduce wallet prompts and on-chain TX count, NilStore supports a session-level receipt that commits to many served chunks at once.
+
+* **Per-chunk leaf commitment (normative):**
+  * `proof_hash := keccak256(encode(ChainedProof))`
+  * `leaf_hash := keccak256(uint64_be(range_start) || uint64_be(range_len) || proof_hash)`
+* **Chunk root:** `chunk_leaf_root` is the Merkle root over `leaf_hash[i]` ordered by increasing `(range_start, range_len)` using duplicate-last padding and `keccak256(left||right)` internal nodes.
+* **Session receipt:** the client signs a `DownloadSessionReceipt` committing to:
+  * `{deal_id, epoch_id, provider, file_path, total_bytes, chunk_count, chunk_leaf_root, nonce, expires_at}`
+* **On-chain submission:** a provider MAY submit a single on-chain message that carries:
+  * the signed `DownloadSessionReceipt`, and
+  * the `chunk_count` per-chunk `ChainedProof` objects plus Merkle membership paths showing each chunk’s `leaf_hash` is included in `chunk_leaf_root`.
+
+This preserves fair exchange (the user signs only after receiving bytes) while reducing signature prompts from `O(chunks)` to ~1 per download completion.
 
 ### 7.3 Data Commitment Binding (Normative: The Triple Proof)
 

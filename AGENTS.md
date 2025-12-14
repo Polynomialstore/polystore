@@ -486,6 +486,43 @@ This is the **canonical execution checklist** for the "NilGateway Refactor" spri
     - **Pass gate:** "Download" button triggers wallet signature -> File downloads -> Receipt is submitted on-chain.
     - **Test gate:** Browser E2E smoke test (`scripts/e2e_browser_smoke.sh` updated).
 
+### 11.1 Sprint 2 (Bundled Receipts, Batching, Nonce Scoping)
+
+This is the **canonical execution checklist** for the next sprint, focused on reducing wallet prompts, improving auditability, and improving throughput.
+
+- [ ] **Goal 1: Bundle receipts into a Download Session.**
+    - **Design:** Sign one `DownloadSessionReceipt` committing to `{deal_id, file_path, total_bytes, chunk_count, chunk_leaf_root, nonce, expires_at}` and submit all chunk proofs under that root in a single on-chain message.
+    - **Key file:** `notes/retrieval-session-receipts.md`
+    - **Pass gate:** Download of a multi-blob file triggers ~2 wallet signatures (open session + finalize receipt) and results in exactly 1 on-chain submission for the download.
+
+- [ ] **Goal 2: Server-side proof batching.**
+    - **Change:** Add Provider endpoint to accept an array of receipts and submit a single on-chain message carrying multiple receipts/proofs.
+    - **Pass gate:** `curl POST /sp/receipts` with N valid receipts results in 1 successful tx and N heat increments.
+
+- [ ] **Goal 3: Receipt nonce redesign (parallel downloads).**
+    - **Change:** Move from “global per-owner strictly increasing” to per `(deal_id, file_path)` nonce tracking on-chain.
+    - **Pass gate:** Two concurrent downloads of different files in the same deal do not nonce-collide.
+
+- [ ] **Goal 4: On-chain range binding.**
+    - **Change:** Extend retrieval receipts (and/or session leaf commitment) to bind `(range_start, range_len)` and enforce `bytes_served == range_len`.
+    - **Pass gate:** Attempts to submit a receipt with mismatched `bytes_served` and `range_len` must fail.
+
+- [ ] **Goal 5: UI controls and progress.**
+    - **Change:** Add “Download range (start/len)”, chunk progress, “receipts submitted N/M”, and prominently show `bytes_served_total` + escrow remaining.
+    - **Pass gate:** Deal Explorer clearly shows download progress and the post-download heat/escrow changes.
+
+- [ ] **Goal 6: Chain ID correctness (keep 31337 default).**
+    - **Change:** Remove hardcoded `31337` assumptions in chain-side EIP-712 verification; bind to a chain/module parameter with default `31337` for localhost MetaMask.
+    - **Pass gate:** Local dev continues to work with chain id `31337`; non-dev networks can set a different value and verification still works.
+
+- [ ] **Goal 7: Gateway session durability.**
+    - **Change:** Persist `fetch_session` state + replay cache to disk (BoltDB or sqlite) so restarts do not break receipt submission and replays remain prevented.
+    - **Pass gate:** Restart gateway mid-download and still successfully finalize + submit the receipt (no replay bypass).
+
+- [ ] **Goal 8: Provider separation hardening.**
+    - **Change:** Make `/gateway/receipt` a real forwarder to `/sp/receipt` with authn, and add negative tests (wrong provider, wrong proof hash, replayed session).
+    - **Pass gate:** Direct calls to `/sp/receipt` without gateway auth fail; forwarded calls succeed; negative tests pass.
+
 ### 11.0.1 Completed Goals (Previous Sprint)
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
