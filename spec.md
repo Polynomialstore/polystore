@@ -361,6 +361,7 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
     *   After verifying the Triple Proof for a served byte-range, the Data Owner constructs a `RetrievalReceipt`:
         *   `{deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_details (ChainedProof), user_signature}`.
     *   The signed message MUST be bound to the exact `proof_details` via `proof_hash = keccak256(encode(ChainedProof))` and MUST cover `(deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_hash)` so SPs cannot forge, inflate, or replay receipts.
+    *   `user_signature` is an EIP-712 typed-data signature under domain `{name: "NilStore", version: "1", chainId: Params.eip712_chain_id, verifyingContract: 0x0000000000000000000000000000000000000000}`. Devnet default is `eip712_chain_id = 31337`.
     *   `nonce` is a strictly increasing 64‑bit sequence number scoped to `(deal_id, file_path)` for the Deal Owner (or payer), enabling parallel downloads of different files within the same deal. `expires_at` is a block height or timestamp after which the receipt is invalid.
 2.  **On‑Chain Submission (Provider):**
     *   The Provider wraps the receipt in `MsgProveLiveness{ ProofType = UserReceipt }` and submits it to the chain.
@@ -384,14 +385,14 @@ NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Li
 
 In the current devnet, the CLI (`sign-retrieval-receipt` / `submit-retrieval-proof`) and the Web Gateway (`/gateway/fetch`, `/gateway/prove-retrieval`) MAY drive receipt/proof submission as a convenience “meta‑transaction” layer. Web downloads that do not trigger on‑chain receipts are **non‑normative** and expected to be phased out; the intended end state is that retrievals always produce verifiable on‑chain liveness evidence derived from NilFS (MDU #0 + on-disk slab) and the Deal’s on‑chain commitments.
 
-#### 7.2.1 Bundled session receipts (Planned, UX + throughput)
+#### 7.2.1 Bundled session receipts (Implemented, UX + throughput)
 
 To reduce wallet prompts and on-chain TX count, NilStore supports a session-level receipt that commits to many served chunks at once.
 
 * **Per-chunk leaf commitment (normative):**
   * `proof_hash := keccak256(encode(ChainedProof))`
   * `leaf_hash := keccak256(uint64_be(range_start) || uint64_be(range_len) || proof_hash)`
-* **Chunk root:** `chunk_leaf_root` is the Merkle root over `leaf_hash[i]` ordered by increasing `(range_start, range_len)` using duplicate-last padding and `keccak256(left||right)` internal nodes.
+* **Chunk root:** `chunk_leaf_root` is the Merkle root over `leaf_hash[i]` ordered by increasing `(range_start, range_len)` using duplicate-last padding (including the 1-leaf case) and `keccak256(left||right)` internal nodes.
 * **Session receipt:** the client signs a `DownloadSessionReceipt` committing to:
   * `{deal_id, epoch_id, provider, file_path, total_bytes, chunk_count, chunk_leaf_root, nonce, expires_at}`
 * **On-chain submission:** a provider MAY submit a single on-chain message that carries:

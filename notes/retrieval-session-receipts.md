@@ -1,6 +1,6 @@
 # Retrieval Sessions & Bundled Receipts (Sprint 2)
 
-**Status:** Draft / In Progress  
+**Status:** Implemented (Devnet)  
 **Goal:** Reduce wallet prompts and on-chain TX count by moving from “sign per chunk” to “sign once per download session”, while improving auditability (range binding) and operability (batch submission, durable sessions).
 
 ---
@@ -13,7 +13,7 @@
 - Browser signs **a RetrievalReceipt** per chunk.
 - Provider submits **one MsgProveLiveness per chunk**.
 
-### Sprint 2 target (session-receipt + batch)
+### Now (session-receipt + batch)
 - Browser signs **one RetrievalRequest** to open a *download session* for `{deal_id, file_path, total_range_start, total_range_len}`.
 - Browser fetches many chunks **without additional wallet signatures** using the session.
 - Browser signs **one DownloadSessionReceipt** at the end, committing to:
@@ -118,4 +118,3 @@ Hardcoded `31337` is replaced with a module parameter `eip712_chain_id`:
   - wrong provider,
   - wrong proof hash / mismatched session,
   - replayed/consumed session.
-
