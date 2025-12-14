@@ -371,3 +371,19 @@ Normative intent:
 * **Anti-griefing:** retrieval requests and receipts MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
 
 Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.4 and should be specified in a dedicated RFC.
+
+---
+
+## Appendix B: Intentionally Underspecified (v2.4) / RFC Targets
+
+This specification defines normative *interfaces* and verification rules but intentionally leaves several “policy” and “parameterization” areas underspecified for v2.4. The following items SHOULD be captured as dedicated RFCs before mainnet hardening:
+
+1. **System Placement Algorithm:** deterministic provider selection/weighting, hint scoring, anti-correlation rules, and upgrade strategy without reshuffling failure domains unexpectedly.
+2. **Mode 2 On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization.
+3. **Challenge Derivation Function:** exact mapping from `(deal_id, epoch_e, provider/slot)` to a finite challenge set with anti-grind properties and coverage guarantees.
+4. **Penalty & Eviction Curve:** concrete slashing parameters, reputation decay, jail/unjail, and eviction thresholds; distinguish invalid-proof slashing vs quota non-compliance.
+5. **Pricing & Escrow Accounting:** bandwidth pricing model, debit schedule, tier reward curves, and how user-funded elasticity is bounded/enforced.
+6. **Write Semantics Beyond Append-Only:** pending-generation promotion rules, rewrite/compaction/delete behavior, and any on-chain finalization criteria.
+7. **Deputy/Proxy Mechanics:** discovery, routing, compensation/delegation (if any), and additional griefing defenses beyond nonce/expiry and rate limits.
+8. **Encryption & Key Management Details:** exact encryption constructions, key derivation/rotation, metadata leakage model, padding strategy, and client recovery UX.
+9. **Transport/Wire Protocol:** concrete fetch/prove message formats, range/chunking rules, retry/backoff, and gateway/SP interoperability requirements.
