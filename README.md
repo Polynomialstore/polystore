@@ -44,7 +44,7 @@ We provide an automated script to spin up a local chain, register providers, and
 ## 📦 Components
 
 *   **`nilchain` (L1):** The consensus layer (Cosmos SDK). Handles deals, proofs (KZG), and economics.
-*   **`nil_core` (Rust):** Cryptographic primitives (KZG, Argon2id) exposed via C-FFI and WASM.
+*   **`nil_core` (Rust):** Cryptographic primitives (KZG, Merkle, Reed-Solomon) exposed via C-FFI and WASM.
 *   **`nil_cli`:** Client tool for sharding files and generating commitments.
 *   **`nil_s3`:** S3-compatible gateway for Web2 apps.
 *   **`nil_faucet`:** Token faucet service for testnet users.

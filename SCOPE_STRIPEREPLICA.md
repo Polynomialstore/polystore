@@ -6,7 +6,6 @@
 **Note:** The canonical Mode 2 protocol definition lives in `spec.md` (§8) and `rfcs/rfc-blob-alignment-and-striping.md`. This file is an implementation-scope snapshot and may lag the canonical spec.
 
 ## 1. Objective
-Enable the browser to act as a full "Thick Client" capable of client-side encryption, erasure coding (Reed-Solomon), and KZG commitment generation. This unlocks the "Mode 2" (StripeReplica) architecture where files are striped across 12 providers.
 Enable the browser to act as a full "Thick Client" capable of client-side encryption, erasure coding (Reed‑Solomon), and KZG commitment generation. This unlocks "Mode 2" (StripeReplica) where each 8 MiB SP‑MDU is encoded under RS(K, K+M) across `N = K+M` provider slots (default `K=8`, `M=4`, `N=12`).
 
 ## 2. Technical Scope
