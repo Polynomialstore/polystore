@@ -1,6 +1,6 @@
-# RFC: Decentralized Placement & Knapsack Solver
+# RFC: Decentralized Placement & Knapsack Solver (Archived Draft)
 
-**Status:** Draft / Proposed Normative
+**Status:** Archived (superseded by `rfcs/rfc-decentralized-placement-knapsack.md`)
 **Scope:** Off‑chain / committee‑driven placement optimization
 **Depends on:** `spec.md` (Mode 1), `spec.md` §7.0 + §7.9, `rfcs/rfc-heat-and-dynamic-placement.md`
 
