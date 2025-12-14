@@ -38,8 +38,9 @@ wait_for_http() {
   echo "==> Waiting for $name at $url ..."
   for attempt in $(seq 1 "$max_attempts"); do
     local code
-    code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo "000")
-    if [ "$code" != "000" ]; then
+    # curl prints "000" when it cannot connect; don't treat that as reachable.
+    code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || true)
+    if [ -n "$code" ] && [ "$code" != "000" ]; then
       echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
       return 0
     fi
@@ -273,9 +274,31 @@ wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
 
 # 6. Fetch File (Gateway)
 echo "==> Fetching file from Gateway..."
-# For gateway fetch, we need deal_id and owner
+# For gateway fetch, we need deal_id + owner + file_path AND a signed RetrievalRequest.
+REQ_NONCE=1
+REQ_EXPIRES_AT=$(( $(date +%s) + 120 ))
+REQ_SIG_JSON=$(
+  NONCE="$REQ_NONCE" \
+  DEAL_ID="$DEAL_ID" \
+  FILE_PATH="README.md" \
+  RANGE_START="0" \
+  RANGE_LEN="0" \
+  EXPIRES_AT="$REQ_EXPIRES_AT" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+)
+REQ_SIG=$(echo "$REQ_SIG_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
+if [ -z "$REQ_SIG" ]; then
+  echo "ERROR: failed to sign retrieval request"
+  exit 1
+fi
+
 FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
-timeout 10s curl -sS -o fetched_README.md "$FETCH_URL"
+timeout 10s curl -sS -o fetched_README.md "$FETCH_URL" \
+  -H "X-Nil-Req-Sig: $REQ_SIG" \
+  -H "X-Nil-Req-Nonce: $REQ_NONCE" \
+  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
+  -H "X-Nil-Req-Range-Start: 0" \
+  -H "X-Nil-Req-Range-Len: 0"
 
 # Compare
 if cmp -s "$ROOT_DIR/README.md" fetched_README.md; then
@@ -384,11 +407,48 @@ echo "    Success: Deal $DEAL_ID updated to CID $CHAIN_CID_2"
 
 # 10. Fetch Both Files by Path from New Slab (verify sizes)
 echo "==> Fetching both files by path from new slab..."
+REQ_NONCE_1=2
+REQ_EXPIRES_AT_1=$(( $(date +%s) + 120 ))
+REQ_SIG_JSON_1=$(
+  NONCE="$REQ_NONCE_1" \
+  DEAL_ID="$DEAL_ID" \
+  FILE_PATH="README.md" \
+  RANGE_START="0" \
+  RANGE_LEN="0" \
+  EXPIRES_AT="$REQ_EXPIRES_AT_1" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+)
+REQ_SIG_1=$(echo "$REQ_SIG_JSON_1" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
+
+REQ_NONCE_2=3
+REQ_EXPIRES_AT_2=$(( $(date +%s) + 120 ))
+REQ_SIG_JSON_2=$(
+  NONCE="$REQ_NONCE_2" \
+  DEAL_ID="$DEAL_ID" \
+  FILE_PATH="ECONOMY.md" \
+  RANGE_START="0" \
+  RANGE_LEN="0" \
+  EXPIRES_AT="$REQ_EXPIRES_AT_2" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+)
+REQ_SIG_2=$(echo "$REQ_SIG_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
+
 FETCH_URL_1="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
 FETCH_URL_2="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
 
-timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1"
-timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2"
+timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1" \
+  -H "X-Nil-Req-Sig: $REQ_SIG_1" \
+  -H "X-Nil-Req-Nonce: $REQ_NONCE_1" \
+  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_1" \
+  -H "X-Nil-Req-Range-Start: 0" \
+  -H "X-Nil-Req-Range-Len: 0"
+
+timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
+  -H "X-Nil-Req-Sig: $REQ_SIG_2" \
+  -H "X-Nil-Req-Nonce: $REQ_NONCE_2" \
+  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_2" \
+  -H "X-Nil-Req-Range-Start: 0" \
+  -H "X-Nil-Req-Range-Len: 0"
 
 ORIG1_SIZE=$(wc -c < "$ROOT_DIR/README.md" | tr -d ' ')
 ORIG2_SIZE=$(wc -c < "$ROOT_DIR/ECONOMY.md" | tr -d ' ')

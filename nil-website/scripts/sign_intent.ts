@@ -3,16 +3,18 @@ import type { Hex } from 'viem'
 
 import {
   buildCreateDealTypedData,
+  buildRetrievalRequestTypedData,
   buildUpdateContentTypedData,
   buildRetrievalReceiptTypedData,
   CreateDealIntent,
+  RetrievalRequestIntent,
   UpdateContentIntent,
   RetrievalReceiptIntent,
 } from '../src/lib/eip712'
 
 const mode = process.argv[2]
-if (!mode || (mode !== 'create-deal' && mode !== 'update-content' && mode !== 'sign-receipt')) {
-  console.error('usage: sign_intent.ts <create-deal|update-content|sign-receipt>')
+if (!mode || (mode !== 'create-deal' && mode !== 'update-content' && mode !== 'sign-receipt' && mode !== 'sign-fetch-request')) {
+  console.error('usage: sign_intent.ts <create-deal|update-content|sign-receipt|sign-fetch-request>')
   process.exit(1)
 }
 
@@ -80,6 +82,38 @@ async function main() {
         user_signature: Buffer.from(sig.slice(2), 'hex').toString('base64'),
         nonce: intent.nonce,
         expires_at: 0,
+      }),
+    )
+    return
+  }
+
+  if (mode === 'sign-fetch-request') {
+    const expiresAt = Number(process.env.EXPIRES_AT || 0)
+    const dealIdRaw = process.env.DEAL_ID
+    const filePathRaw = process.env.FILE_PATH
+    if (!dealIdRaw || !filePathRaw) {
+      console.error('DEAL_ID and FILE_PATH env vars required for sign-fetch-request')
+      process.exit(1)
+    }
+    const intent: RetrievalRequestIntent = {
+      deal_id: Number(dealIdRaw),
+      file_path: filePathRaw,
+      range_start: Number(process.env.RANGE_START || 0),
+      range_len: Number(process.env.RANGE_LEN || 0),
+      nonce: Number(process.env.NONCE || 1),
+      expires_at: expiresAt,
+    }
+    if (!Number.isFinite(intent.deal_id) || intent.deal_id < 0) {
+      console.error('DEAL_ID must be a uint64')
+      process.exit(1)
+    }
+
+    const typedData = buildRetrievalRequestTypedData(intent, evmChainId)
+    const sig = await signTypedData(typedData)
+    process.stdout.write(
+      JSON.stringify({
+        ...intent,
+        evm_signature: sig,
       }),
     )
     return
