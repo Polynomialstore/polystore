@@ -3,7 +3,7 @@
 **Status:** Approved Normative (Updated)
 **Scope:** Core Protocol / Economics
 **Depends on:** `spec.md`, `nil_core`
-**Supersedes:** `metaspec.md` (legacy deal sizing language), `rfc_granularity_v1`
+**Supersedes:** legacy capacity tier / deal sizing language, `rfc_granularity_v1`
 
 **Changelog (v2.0):**
 *   Removes capacity tiers (`DealSize` / `size_tier`).

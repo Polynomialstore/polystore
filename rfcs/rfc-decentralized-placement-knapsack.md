@@ -2,7 +2,7 @@
 
 **Status:** Draft / Non‑normative  
 **Scope:** Off‑chain / committee‑driven placement optimization (Macro-Optimizer)  
-**Depends on:** `spec.md` (Mode 1), `metaspec.md` §7, `rfcs/rfc-heat-and-dynamic-placement.md`
+**Depends on:** `spec.md` (Mode 1), `spec.md` §7.0 + §7.9, `rfcs/rfc-heat-and-dynamic-placement.md`
 
 ---
 

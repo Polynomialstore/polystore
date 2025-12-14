@@ -17,6 +17,88 @@ It specifies:
 
 ---
 
+## § 1 Overview (Meta-Specification)
+
+NilStore’s protocol design is guided by a small set of architectural tenets:
+
+1.  **Retrieval IS Storage:** user retrieval receipts count as valid storage proofs.
+2.  **The System is the User of Last Resort:** cold data is maintained via synthetic challenges when organic demand is low.
+3.  **Optimization via Hints:** clients express intent (`Hot`/`Cold`) while the chain enforces system-defined placement and diversity.
+4.  **Elasticity is User-Funded:** bandwidth and replication are increased only when the user’s escrow/budget can pay for it.
+
+---
+
+## § 2 The Deal Object (Conceptual)
+
+The `Deal` is the central on-chain state object. This spec describes its semantics without requiring an exact protobuf layout.
+
+Key fields:
+*   **Identity:** `deal_id` (uint64), `owner` (address).
+*   **Commitment Root:** `manifest_root` (48‑byte KZG commitment, BLS12‑381 G1 compressed). This is the protocol’s anchor for all proofs (§7.3).
+*   **Provisioning:** thin-provisioned container with `total_mdus` (count) and `allocated_length` (bytes), expanded only via content commits (§6.0.3).
+*   **Placement:** `providers[]` is the assigned provider set.
+    *   **Mode 1:** unordered replica set; any single provider can satisfy retrievals.
+    *   **Mode 2:** ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3).
+*   **Service Hint:** `Hot | Cold` informs placement/elasticity policy (§6.0.2).
+*   **Economics:** `escrow` (combined storage + bandwidth), plus `max_monthly_spend` for user-funded elasticity (§6.1.2).
+*   **Redundancy Mode:** Mode 1 (FullReplica) or Mode 2 (StripeReplica / RS(K,K+M)) (§6.2, §8).
+
+Constants:
+*   `MDU_SIZE = 8,388,608` bytes (8 MiB) is an immutable protocol constant.
+*   `BLOB_SIZE = 128 KiB` is the cryptographic atom for KZG verification (§8.1.1).
+
+---
+
+## § 3 System-Defined Placement (Conceptual)
+
+At a high level, provider selection is deterministic and anti-sybil:
+
+**Function (conceptual):** `AssignProviders(deal_id, epoch_seed, active_set, hint)`
+
+1.  **Filter:** select candidates consistent with the Deal’s `ServiceHint` and provider capabilities (§6.0.1–6.0.2).
+2.  **Seed:** derive a deterministic seed from `(deal_id, chain randomness)`.
+3.  **Select:** sample providers deterministically from the candidate set.
+4.  **Diversity:** enforce distinct failure domains (e.g., ASN/subnet) subject to bootstrap constraints (§5.1).
+
+This section is intentionally conceptual; concrete placement optimization is an RFC target (Appendix B).
+
+---
+
+## § 4 Economics & Flow Control (Conceptual)
+
+NilStore’s economics combine a performance market with user-funded scaling:
+
+### 4.1 Tiered Rewards (Parameters)
+Providers are rewarded by observed inclusion/latency tiers (e.g., Platinum/Gold/Silver/Fail). Exact tier windows and multipliers are protocol parameters (Appendix B).
+
+### 4.2 Saturation & Elasticity (Parameters)
+Providers may signal saturation to trigger user-funded replica/overlay expansion, subject to damping and a minimum TTL to respect data gravity (§6.1–6.2).
+
+### 4.3 Rotation (Planned)
+The protocol anticipates rotation/rebalancing flows where an old provider is only released after a new provider proves readiness (“make-before-break”) (§5.3).
+
+---
+
+## § 5 System Constraints & Meta-Risks (Planned Safeguards)
+
+This section documents accepted architectural risks and required safeguards.
+
+### 5.1 Cold Start Fragility (Bootstrap Mode)
+*   **Risk:** system-defined placement assumes a large, diverse active set. When the active set is small (early testnet), strict diversity constraints may be impossible to satisfy.
+*   **Safeguard:** the chain SHOULD support a governance-gated **Bootstrap Mode** that relaxes diversity constraints until `ActiveSetSize > Threshold`.
+
+### 5.2 Viral Debt Risk (Third-Party Sponsorship)
+*   **Risk:** user-funded elasticity creates a hard stop; if escrow is depleted during a viral event, content throttles.
+*   **Assessment:** this is an acceptable economic state (“you get what you pay for”), but the protocol SHOULD support **third-party sponsorship** (e.g., `MsgFundEscrow`) to let communities fund important content.
+
+### 5.3 Data Gravity & Non-Atomic Migration (Make-Before-Break)
+*   **Risk:** moving data takes time; when a provider is rotated or replaced, there is a gap before the new provider is ready.
+*   **Safeguard:** migration MUST be overlapping: the old provider is not removed until the new provider submits an initial valid proof at the current generation (§8.4).
+
+### 5.4 Economic Sybil Assumption (Wash-Traffic)
+*   **Risk:** unified liveness could be exploited via fake traffic.
+*   **Safeguard:** (1) retrieval receipts require Data Owner signatures; (2) data is stored as ciphertext; (3) protocol burn/debit ensures wash-trading has a real cost.
+
 ## § 6 Product-Aligned Economics
 *(This section’s economic rationale is expanded in [RFC: Data Granularity & Economic Model](rfcs/rfc-data-granularity-and-economics.md). Legacy “capacity tiers / DealSize” language is deprecated; the normative semantics are **thin provisioning** with a per‑deal hard cap.)*
 
@@ -222,7 +304,31 @@ NilStore MAY use a content‑addressed *file* manifest at the application layer 
 
 ## § 7 Retrieval Semantics (Mode 1 Implementation)
 
-This section norms the retrieval path for **Mode 1 – FullReplica** in the current devnet implementation.
+This section norms the retrieval path for **Mode 1 – FullReplica** in the current devnet implementation and defines the evidence model used for retrievability and accountability. Several subsections are explicitly marked as planned, forward-compatible extensions.
+
+### 7.0 Core Invariants (Planned, North-Star)
+
+NilStore’s retrieval system is designed to satisfy two invariants:
+
+1.  **Retrievability / Accountability**
+    *   For every `(Deal, Provider)` assignment, either:
+        *   the encrypted data is reliably retrievable under protocol rules, **or**
+        *   there exists high‑probability, verifiable evidence of failure that can be used to penalize and eventually evict the provider.
+2.  **Self‑Healing Placement**
+    *   Persistently underperforming or malicious providers SHOULD be detected via evidence/health metrics and replaced without manual intervention.
+
+### 7.0.1 Challenge Families (Planned)
+
+To support the invariants, the protocol uses three challenge families, all binding back to the Deal’s on‑chain commitments (§7.3):
+
+1.  **Synthetic Storage Challenges (System‑Driven)**
+    *   For each epoch `e` and `(Deal, Provider)`, the chain derives a finite set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from epoch randomness `R_e`.
+    *   Providers earn storage rewards by satisfying sufficient synthetic coverage over time (direct synthetic proofs or credited retrieval receipts).
+2.  **Retrieval Liveness Challenges (Client / Auditor‑Driven)**
+    *   Normal user reads, provider-initiated audits, and third‑party watchers all issue retrieval challenges.
+    *   Each retrieval SHOULD map deterministically to a verifiable checkpoint so retrievals can satisfy synthetic demand when aligned with `S_e(D,P)`.
+3.  **Escalated On‑Chain Challenges (Panic Mode)**
+    *   Watchers MAY post explicit on‑chain challenges that force a provider to respond within a fixed block window; non‑response is hard evidence of unavailability (§7.5).
 
 ### 7.1 Data Plane: Fetching From Providers
 
@@ -371,6 +477,33 @@ Normative intent:
 * **Anti-griefing:** retrieval requests and receipts MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
 
 Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.4 and should be specified in a dedicated RFC.
+
+### 7.8 SP Audit Debt & Coverage Scaling (Planned)
+
+To ensure coverage scales with total stored data—even when clients are dormant—NilStore MAY introduce **audit debt** as a source of retrieval-style challenges.
+
+Conceptual shape:
+1.  **Audit Debt Definition**
+    *   For each epoch `e` and Provider `P`, compute an obligation proportional to stored bytes:
+        * `audit_debt_bytes(P,e) = α * stored_bytes(P,e)` where `α` is a protocol parameter.
+2.  **Task Assignment**
+    *   Using `R_e`, the chain deterministically assigns `P` a set of retrieval tasks targeting other `(Deal, Provider')` pairs, aggregating to ≈ `audit_debt_bytes(P,e)`.
+3.  **Execution & Incentives**
+    *   `P` executes these audits as an ordinary client.
+    *   Misbehavior (bad proofs, non‑response) discovered can be converted into fraud proofs or escalated challenges (with potential bounties).
+4.  **Enforcement**
+    *   Failure to satisfy audit debt SHOULD reduce placement priority and/or rewards until `P` catches up (distinct from invalid-proof slashing).
+
+### 7.9 Health Metrics & Self‑Healing Placement (Planned)
+
+Self‑healing can be expressed via per‑assignment and per‑provider health metrics:
+
+1.  **Per‑Assignment Health**
+    *   For each `(Deal, Provider)`, track a rolling `HealthState` (e.g., synthetic success ratio, retrieval success ratio, bad data rate, and non‑slashable QoS latency metrics).
+2.  **Eviction & Re‑Replication**
+    *   If `(Deal, Provider)` remains unhealthy long enough, the placement engine recruits replacements, adds them in a pending state, and only removes the old provider after the new provider proves readiness (make‑before‑break, §5.3).
+3.  **Global Provider Health**
+    *   Providers with consistently poor health lose eligibility for new placements and may be jailed/removed by governance.
 
 ---
 

@@ -456,5 +456,5 @@
           - Phase C: optional storage tilting with conservative bounds.
       - Ends with a risks & open questions section to gate any promotion into the main spec.
 
-  Nothing in spec.md / metaspec.md was changed; this RFC is a sandboxed design you can iterate on or ignore
+  Nothing in spec.md was changed; this RFC is a sandboxed design you can iterate on or ignore
   without impacting the current Mode 1 retrievability story.

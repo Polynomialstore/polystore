@@ -47,8 +47,7 @@ The next agent should focus on **verifying and refining the implementation**.
     6.  Check Provider Balance (should not increase).
 
 ## Key Architectural References
-*   **`spec.md`**: Detailed normative spec for v2.6 (MDU sizes, Tiered Rewards).
-*   **`metaspec.md`**: System constraints (Cold Start, Viral Debt).
+*   **`spec.md`**: Detailed normative spec (protocol + system constraints in §5).
 *   **`whitepaper.md`**: High-level unified economy logic.
 
 ## Prompt for Next Agent
