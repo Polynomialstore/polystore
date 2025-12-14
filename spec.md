@@ -348,3 +348,26 @@ NilStore recognizes several classes of evidence derived from retrievals and synt
     *   The chain MUST enforce a bounded response window; failure by the Provider to submit a corresponding `SyntheticStorageProof` within that window is treated as hard evidence of unavailability and MUST be slashable.
 
 These evidence types collectively support the retrievability invariant: for each `(Deal, Provider)`, data is either retrievable under protocol rules or there exists high‑probability, verifiable evidence of failure that can be used to punish and eventually evict the Provider.
+
+### 7.6 Proof Demand Policy (Planned, Parameters TBD)
+
+The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval receipts reduce synthetic proof demand**.
+
+This spec intentionally does not lock constants yet, but the target shape is:
+* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.total_mdus` / `allocated_length`), `ServiceHint` (Hot/Cold), and recent receipt volume.
+* **Receipt credits:** Valid user retrieval receipts contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
+* **Synthetic fill:** If `credits < required_e(D,P)`, the chain derives and enforces `required_e(D,P) - credits` synthetic challenges for that epoch.
+* **Penalties:** Invalid proofs are slashable immediately; failure to meet quota SHOULD degrade reputation and eventually lead to eviction (a slower penalty path than invalid proof slashing).
+
+The normative requirement is that `required_e(D,P)` and the synthetic challenge derivation are deterministic and computable from on-chain state plus epoch randomness `R_e`.
+
+### 7.7 Deputy / Proxy Retrieval (Planned, Anti-griefing Semantics)
+
+NilStore anticipates a “Deputy” (proxy) pattern where a provider may delegate *data-plane* serving (bandwidth, caching, egress) to an untrusted helper, while keeping *control-plane* accountability on the assigned Provider slot.
+
+Normative intent:
+* **Accountability remains with the assigned Provider:** rewards, liveness, and slashing attach to the on-chain provider assignment, not to deputies.
+* **Client verification is mandatory:** clients MUST verify Merkle/KZG proof material before signing a `RetrievalReceipt`, preventing deputies from serving arbitrary bytes.
+* **Anti-griefing:** retrieval requests and receipts MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
+
+Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.4 and should be specified in a dedicated RFC.
