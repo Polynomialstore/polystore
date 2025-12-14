@@ -54,6 +54,8 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 
 			// Verify size (mock)
 			bytesServed := uint64(len(mduBytes))
+			rangeStart := uint64(0)
+			rangeLen := bytesServed
 
 			if err := crypto_ffi.Init(trustedSetupPath); err != nil {
 				return err
@@ -113,11 +115,15 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			var expiresAt uint64 = 0 // 0 = no expiry; chain will only enforce expiry if > 0.
 
 			// 3. Sign Data
-			// Format: DealID (8) + EpochID (8) + Provider (len) + BytesServed (8) + Nonce (8) + ExpiresAt (8)
+			// Format: DealID (8) + EpochID (8) + Provider (len) + FilePath (len) + RangeStart (8) + RangeLen (8)
+			// + BytesServed (8) + Nonce (8) + ExpiresAt (8) + ProofHash (32)
 			buf := make([]byte, 0)
 			buf = append(buf, sdk.Uint64ToBigEndian(dealId)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(epochId)...)
 			buf = append(buf, []byte(providerAddr)...)
+			buf = append(buf, []byte(filePath)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(rangeStart)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(rangeLen)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(bytesServed)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(nonce)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(expiresAt)...)
@@ -141,6 +147,9 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				DealId:        dealId,
 				EpochId:       epochId,
 				Provider:      providerAddr,
+				FilePath:      filePath,
+				RangeStart:    rangeStart,
+				RangeLen:      rangeLen,
 				BytesServed:   bytesServed,
 				ProofDetails:  chainedProof,
 				UserSignature: sig,
@@ -169,7 +178,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 func CmdSubmitRetrievalProof() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit-retrieval-proof [receipt-json-file]",
-		Short: "Submit a signed retrieval receipt as proof of liveness",
+		Short: "Submit a signed retrieval receipt (or batch/session proof) as proof of liveness",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			clientCtx, err := client.GetClientTxContext(cmd)
@@ -183,26 +192,71 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 				return err
 			}
 
+			var obj map[string]json.RawMessage
+			if err := json.Unmarshal(bz, &obj); err != nil {
+				return err
+			}
+
+			creator := clientCtx.GetFromAddress().String()
+
+			// Dispatch based on top-level fields:
+			// - { "session_receipt": ..., "chunks": [...] } -> RetrievalSessionProof
+			// - { "receipts": [...] } -> RetrievalReceiptBatch
+			// - otherwise -> RetrievalReceipt
+			if _, ok := obj["session_receipt"]; ok {
+				var session types.RetrievalSessionProof
+				if err := json.Unmarshal(bz, &session); err != nil {
+					return err
+				}
+				msg := types.MsgProveLiveness{
+					Creator: creator,
+					DealId:  session.SessionReceipt.DealId,
+					EpochId: session.SessionReceipt.EpochId,
+					ProofType: &types.MsgProveLiveness_SessionProof{
+						SessionProof: &session,
+					},
+				}
+				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			}
+
+			if _, ok := obj["receipts"]; ok {
+				var batch types.RetrievalReceiptBatch
+				if err := json.Unmarshal(bz, &batch); err != nil {
+					return err
+				}
+				if len(batch.Receipts) == 0 {
+					return fmt.Errorf("empty receipts batch")
+				}
+				dealID := batch.Receipts[0].DealId
+				epochID := batch.Receipts[0].EpochId
+				for i := range batch.Receipts {
+					if batch.Receipts[i].DealId != dealID || batch.Receipts[i].EpochId != epochID {
+						return fmt.Errorf("all receipts in batch must have same deal_id and epoch_id")
+					}
+				}
+				msg := types.MsgProveLiveness{
+					Creator: creator,
+					DealId:  dealID,
+					EpochId: epochID,
+					ProofType: &types.MsgProveLiveness_UserReceiptBatch{
+						UserReceiptBatch: &batch,
+					},
+				}
+				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			}
+
 			var receipt types.RetrievalReceipt
 			if err := json.Unmarshal(bz, &receipt); err != nil {
 				return err
 			}
-
 			msg := types.MsgProveLiveness{
-				Creator: clientCtx.GetFromAddress().String(),
+				Creator: creator,
 				DealId:  receipt.DealId,
 				EpochId: receipt.EpochId,
 				ProofType: &types.MsgProveLiveness_UserReceipt{
 					UserReceipt: &receipt,
 				},
 			}
-
-			// Wait, I need to check the MsgProveLiveness proto definition for nested types.
-			// Usually: ProofType is oneof.
-			// MsgProveLiveness_UserReceipt struct has field UserReceipt *RetrievalReceipt?
-			// Or does it embed it?
-			// Let's assume wrapper for now.
-
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},
 	}
