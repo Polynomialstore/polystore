@@ -1,7 +1,7 @@
 # PoS²‑L Scaffold — Research Supplement v1
 **Status:** RESEARCH‑ONLY • NOT FOR MAINNET • DISABLED IN ALL PROFILES  
-**File:** `rfcs/PoS2L_scaffold_v1.md`  
-**Relates to:** Core `spec.md` (Nilcoin Core v2.0), `metaspec-v2.md` (NilStore Network)
+**File:** `rfcs/archive/pos2l/PoS2L_scaffold_v1.md`  
+**Relates to:** `spec.md` (canonical), archived research context
 
 ---
 
@@ -38,9 +38,9 @@ Any experimental activation MUST satisfy **all** items:
    - Rewards for sealed‑only proofs are prohibited.
 
 4. **Verification Load Cap (VLC) Respect**
-   - Escalations (e.g., `p`, `p_kzg`) MUST obey the chain’s VLC policies. If VLC is hit, prioritize security‑critical parameters per Core metaspec.
+   - Escalations (e.g., `p`, `p_kzg`) MUST obey the chain’s VLC policies. If VLC is hit, prioritize security‑critical parameters per canonical spec parameters.
 
-**Note:** These brakes mirror § 2.4 and § 9.2 of `metaspec-v2.md` but are restated here for a self‑contained research runbook.
+**Note:** These brakes were originally described in older metaspec drafts; the current canonical constraints live in `spec.md` (§5, Appendix B). This file remains a self-contained research runbook snapshot.
 
 ---
 
@@ -312,7 +312,7 @@ A removal PR SHOULD:
 
 * Delete Annex A body from `spec.md`,
 * Retain the small pointer that this file existed historically,
-* Excise scaffold references from `metaspec-v2.md` § 6.0a.
+* Excise scaffold references from older metaspec drafts (archived).
 
 ---
 
