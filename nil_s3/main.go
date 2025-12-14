@@ -56,6 +56,7 @@ var (
 
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
+var nilAddrRe = regexp.MustCompile(`\bnil1[0-9a-z]{20,}\b`)
 
 var lcdHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
@@ -94,6 +95,13 @@ type txEvent struct {
 
 type txLog struct {
 	Events []txEvent `json:"events"`
+}
+
+type txBroadcastResponse struct {
+	Code      uint32 `json:"code"`
+	Codespace string `json:"codespace"`
+	RawLog    string `json:"raw_log"`
+	TxHash    string `json:"txhash"`
 }
 
 func extractDealID(logs []txLog, events []txEvent) string {
@@ -1890,6 +1898,15 @@ func extractTxHash(out string) string {
 	return ""
 }
 
+func extractNilAddress(out string) string {
+	normalized := strings.ToLower(out)
+	matches := nilAddrRe.FindAllString(normalized, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	return matches[len(matches)-1]
+}
+
 func envDefault(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -1923,14 +1940,28 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 		"--home", homeDir,
 		"--keyring-backend", "test",
 	)
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("keys show timed out after %s", cmdTimeout)
 	}
 	if err != nil {
-		return "", fmt.Errorf("keys show failed: %v (%s)", err, string(out))
+		if ee, ok := err.(*exec.ExitError); ok {
+			combined := append(out, ee.Stderr...)
+			if addr := extractNilAddress(string(combined)); addr != "" {
+				return addr, nil
+			}
+			return "", fmt.Errorf("keys show failed: %v (%s)", err, strings.TrimSpace(string(combined)))
+		}
+		return "", fmt.Errorf("keys show failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	return strings.TrimSpace(string(out)), nil
+	if addr := extractNilAddress(string(out)); addr != "" {
+		return addr, nil
+	}
+	trimmed := strings.TrimSpace(string(out))
+	if addr := extractNilAddress(trimmed); addr != "" {
+		return addr, nil
+	}
+	return "", fmt.Errorf("keys show returned no nil bech32 address (%q)", trimmed)
 }
 
 // submitRetrievalProof submits a retrieval proof for the given deal and file
@@ -2307,6 +2338,11 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.TrimSpace(receipt.Provider) == "" {
+		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
+		return
+	}
+
 	// Save to temp file for CLI submission
 	tmpFile, err := os.CreateTemp(uploadDir, "signed-receipt-*.json")
 	if err != nil {
@@ -2322,6 +2358,20 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	tmpFile.Close()
 
 	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	localProviderAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
+		return
+	}
+	if strings.TrimSpace(receipt.Provider) != strings.TrimSpace(localProviderAddr) {
+		writeJSONError(
+			w,
+			http.StatusForbidden,
+			"receipt.provider must match this provider",
+			fmt.Sprintf("receipt.provider=%q provider_key=%q addr=%q", receipt.Provider, providerKeyName, localProviderAddr),
+		)
+		return
+	}
 
 	// Submit Proof via CLI
 	submitOut, err := runTxWithRetry(
@@ -2334,20 +2384,37 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		"--keyring-backend", "test",
 		"--yes",
 		"--gas-prices", gasPrices,
+		"--output", "json",
 	)
 
-	outStr := string(submitOut)
+	outStr := strings.TrimSpace(string(submitOut))
 	if err != nil {
 		log.Printf("SpSubmitReceipt: submit failed: %v output: %s", err, outStr)
 		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", outStr)
 		return
 	}
 
-	txHash := extractTxHash(outStr)
-	log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
+	var txRes txBroadcastResponse
+	bodyJSON := extractJSONBody(submitOut)
+	if bodyJSON != nil {
+		if err := json.Unmarshal(bodyJSON, &txRes); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to parse tx response", err.Error())
+			return
+		}
+	} else {
+		txRes.TxHash = extractTxHash(outStr)
+	}
+
+	if txRes.Code != 0 {
+		log.Printf("SpSubmitReceipt: tx failed: code=%d codespace=%s txhash=%s raw_log=%s", txRes.Code, txRes.Codespace, txRes.TxHash, txRes.RawLog)
+		writeJSONError(w, http.StatusBadRequest, "retrieval receipt tx failed", txRes.RawLog)
+		return
+	}
+
+	log.Printf("SpSubmitReceipt success: txhash=%s", txRes.TxHash)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
-		"tx_hash": txHash,
+		"tx_hash": txRes.TxHash,
 	})
 }
