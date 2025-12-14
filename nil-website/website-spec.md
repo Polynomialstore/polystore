@@ -357,6 +357,7 @@ The website depends on the following services (configured in `config.ts`):
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path` with `encodeURIComponent` so spaces are `%20`; non-200 is JSON `{error,hint}` with remediation).
 *   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; errors are JSON `{error,hint}`; `file_path` is a plain string, not URL-encoded).
+*   `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce`: Returns the last accepted retrieval receipt nonce for the deal owner (client uses `nonce = last_nonce + 1`).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
 *   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).
@@ -405,10 +406,15 @@ The website depends on the following services (configured in `config.ts`):
 *   **Actual (Target v2.6):**
     1.  Client requests data via `GET /gateway/fetch/...`.
     2.  Gateway streams bytes + returns `X-Nil-Receipt-*` headers.
-    3.  **Client Signs:** Browser triggers MetaMask to sign `RetrievalReceipt` (using headers).
-    4.  **Client Submits:** Browser POSTs signed receipt to `/gateway/receipt`.
+    3.  Client fetches `last_nonce` via `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce`.
+    4.  **Client Signs (v2):** Browser triggers MetaMask to sign a `RetrievalReceipt` typed message that is bound to the submitted proof via `proof_hash`.
+    5.  **Client Submits:** Browser POSTs the signed receipt to `/gateway/receipt` and MUST surface success/failure to the user (no silent failures).
     5.  Gateway/SP submits proof to chain.
 *   **Implication:** Browser now holds the **Liveness Authority** (signing), even if KZG verification is still delegated/simulated in the short term.
+
+**Receipt v2 (Target):**
+- Typed-data fields include: `deal_id`, `epoch_id`, `provider`, `bytes_served`, `nonce`, `expires_at`, `proof_hash`.
+- `proof_hash := keccak256(canonical(ChainedProof))` (cross-language golden vectors required to prevent drift).
 
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
@@ -428,6 +434,7 @@ This sprint prioritizes a clean separation between:
 
 ### 9.1 Primary Observables (Authoritative Sources)
 *   **Deal (LCD):** `GET /nilchain/nilchain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
+*   **Heat (LCD):** `GET /nilchain/nilchain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.

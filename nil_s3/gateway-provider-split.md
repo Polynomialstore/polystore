@@ -37,6 +37,8 @@ This specification defines the architectural split of the legacy `nil_s3` servic
 
 This flow replaces the "Simulated Liveness" where the Gateway signed receipts on behalf of the user.
 
+**Normative (v2 hardening):** A successful on-chain retrieval MUST be backed by a receipt whose user signature is bound to the submitted `proof_details` (via `proof_hash`) and whose fields are consistent with the transaction envelope.
+
 ### 3.1 Flow Diagram
 
 ```text
@@ -71,17 +73,21 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
         *   `X-Nil-Epoch`: `<uint64>`
         *   `X-Nil-Bytes-Served`: `<uint64>`
         *   `X-Nil-Provider`: `<bech32_address>`
+        *   `X-Nil-Proof-JSON`: base64 JSON wrapper containing `proof_details` (and optionally `proof_hash`).
+        *   `X-Nil-Proof-Hash`: `0x` + 32-byte keccak256 of canonical `ChainedProof` encoding.
 
 #### Step 5: Client Signing
 *   **Browser:**
     *   Reads headers.
-    *   Prompts user (or auto-signs if authorized) to sign a `RetrievalReceipt` (EIP-712).
+    *   Prompts user (or auto-signs if authorized) to sign a `RetrievalReceipt` (EIP-712 v2).
     *   **Payload:**
         *   `deal_id`: from header.
         *   `epoch_id`: from header.
         *   `provider`: from header.
         *   `bytes_served`: from header.
-        *   `nonce`: managed by client (fetched from chain if needed).
+        *   `nonce`: fetched from chain (recommended): `nonce = last_nonce + 1`.
+        *   `expires_at`: optional; `0` allowed.
+        *   `proof_hash`: from header (must match the submitted `proof_details`).
 
 #### Step 6: Receipt Submission
 *   **Browser:** Sends `POST /gateway/receipt` with the signed payload.
@@ -96,9 +102,9 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 *   **`POST /sp/receipt`**
     *   **Input:** JSON `RetrievalReceipt` (Signed).
     *   **Logic:**
-        1.  Parse `deal_id`, `provider` (must match self), `user_signature`.
+        1.  Parse `deal_id`, `epoch_id`, `provider` (must match self), `bytes_served`, `proof_details`, `user_signature`, `nonce`, `expires_at`.
         2.  Fetch Deal from Chain (to get Owner).
-        3.  Verify `user_signature` matches Deal Owner.
+        3.  Verify `user_signature` matches Deal Owner (chain also enforces this).
         4.  Store in `receipts.db` (or submit immediately for Devnet).
         5.  **Devnet Shortcut:** Immediately submit `MsgProveLiveness` via `nilchaind`.
     *   **Response:** `200 OK` `{ "tx_hash": "..." }`.
@@ -153,4 +159,15 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
     *   Modify `useFetch` (or download handler) to detect headers and trigger signature flow.
 3.  **Deprecation:**
     *   Remove `submitRetrievalProof` auto-call from `GatewayFetch`.
+
+## 7. Chain-Side “Must-Fail” Invariants (Phase 3)
+
+When `MsgProveLiveness.proof_type = user_receipt`, the chain MUST enforce:
+
+1. `receipt.deal_id == msg.deal_id`
+2. `receipt.epoch_id == msg.epoch_id`
+3. `receipt.provider == msg.creator`
+4. `proof_details` verifies against on-chain `deal.manifest_root` (no bypass)
+5. `user_signature` verifies to `deal.owner` using v2 EIP-712 hash that includes `proof_hash`
+6. `nonce` strictly increases per `deal.owner`
 
