@@ -302,7 +302,9 @@ func main() {
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -2607,45 +2609,19 @@ type SignedReceiptEnvelope struct {
 	Receipt      RetrievalReceipt `json:"receipt"`
 }
 
+type SignedReceiptBatchEnvelope struct {
+	Receipts []SignedReceiptEnvelope `json:"receipts"`
+}
+
 // GatewaySubmitReceipt is the User Daemon endpoint.
 // It accepts a signed receipt from the browser and forwards it to the Provider.
 func GatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
-	setCORS(w)
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
+	forwardToProvider(w, r, "/sp/receipt")
+}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "failed to read body", err.Error())
-		return
-	}
-
-	target := strings.TrimRight(providerBase, "/") + "/sp/receipt"
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(body))
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to create provider request", err.Error())
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
-
-	resp, err := lcdHTTPClient.Do(req)
-	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to contact provider", err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	out, _ := io.ReadAll(resp.Body)
-	if ct := strings.TrimSpace(resp.Header.Get("Content-Type")); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(out)
+// GatewaySubmitReceipts forwards a batch of receipts to the Provider endpoint.
+func GatewaySubmitReceipts(w http.ResponseWriter, r *http.Request) {
+	forwardToProvider(w, r, "/sp/receipts")
 }
 
 // SpSubmitReceipt is the Storage Provider endpoint.
@@ -2768,10 +2744,13 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	tmpFile.Close()
 
 	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	localProviderAddr, err := resolveKeyAddress(r.Context(), providerKeyName)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
-		return
+	localProviderAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(localProviderAddr) == "" {
+		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
+			return
+		}
 	}
 	if strings.TrimSpace(receipt.Provider) != strings.TrimSpace(localProviderAddr) {
 		writeJSONError(
@@ -2783,8 +2762,7 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Submit Proof via CLI
-	submitOut, err := runTxWithRetry(
+	txHash, err := submitTxAndWait(
 		r.Context(),
 		"tx", "nilchain", "submit-retrieval-proof",
 		tmpFile.Name(),
@@ -2797,73 +2775,9 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		"--broadcast-mode", "sync",
 		"--output", "json",
 	)
-
-	outStr := strings.TrimSpace(string(submitOut))
 	if err != nil {
-		log.Printf("SpSubmitReceipt: submit failed: %v output: %s", err, outStr)
-		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", outStr)
-		return
-	}
-
-	var txRes txBroadcastResponse
-	bodyJSON := extractJSONBody(submitOut)
-	if bodyJSON != nil {
-		if err := json.Unmarshal(bodyJSON, &txRes); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to parse tx response", err.Error())
-			return
-		}
-	} else {
-		txRes.TxHash = extractTxHash(outStr)
-	}
-
-	if txRes.Code != 0 {
-		log.Printf("SpSubmitReceipt: tx failed: code=%d codespace=%s txhash=%s raw_log=%s", txRes.Code, txRes.Codespace, txRes.TxHash, txRes.RawLog)
-		writeJSONError(w, http.StatusBadRequest, "retrieval receipt tx failed", txRes.RawLog)
-		return
-	}
-
-	// Confirm DeliverTx inclusion (sync broadcast only covers CheckTx).
-	txHash := strings.TrimSpace(txRes.TxHash)
-	if txHash == "" {
-		writeJSONError(w, http.StatusInternalServerError, "missing txhash in broadcast response", "")
-		return
-	}
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	var deliverCode uint32
-	var deliverRawLog string
-	for i := 0; i < 30; i++ {
-		time.Sleep(500 * time.Millisecond)
-		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/cosmos/tx/v1beta1/txs/%s", lcdBase, txHash), nil)
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode == http.StatusNotFound {
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			continue
-		}
-
-		var txResp struct {
-			TxResponse struct {
-				Code   uint32 `json:"code"`
-				RawLog string `json:"raw_log"`
-			} `json:"tx_response"`
-		}
-		if err := json.Unmarshal(body, &txResp); err != nil {
-			continue
-		}
-		deliverCode = txResp.TxResponse.Code
-		deliverRawLog = txResp.TxResponse.RawLog
-		break
-	}
-
-	if deliverCode != 0 {
-		writeJSONError(w, http.StatusBadRequest, "retrieval receipt tx failed", deliverRawLog)
+		log.Printf("SpSubmitReceipt: submit failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", err.Error())
 		return
 	}
 
@@ -2872,5 +2786,202 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
 		"tx_hash": txHash,
+	})
+}
+
+// SpSubmitReceipts accepts a batch of signed receipts, validates each against its fetch_session,
+// and submits them in a single on-chain transaction.
+func SpSubmitReceipts(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var batch SignedReceiptBatchEnvelope
+	if err := json.Unmarshal(body, &batch); err != nil {
+		// Fallback: accept a raw JSON array of envelopes.
+		var arr []SignedReceiptEnvelope
+		if err2 := json.Unmarshal(body, &arr); err2 != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {receipts:[{fetch_session,receipt},...]} or an array")
+			return
+		}
+		batch.Receipts = arr
+	}
+	if len(batch.Receipts) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "receipts is required", "batch must contain at least one receipt")
+		return
+	}
+
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	localProviderAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(localProviderAddr) == "" {
+		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
+			return
+		}
+	}
+
+	var dealID uint64
+	var epochID uint64
+	receipts := make([]RetrievalReceipt, 0, len(batch.Receipts))
+
+	for i, env := range batch.Receipts {
+		if strings.TrimSpace(env.FetchSession) == "" {
+			writeJSONError(w, http.StatusBadRequest, "fetch_session is required", fmt.Sprintf("missing fetch_session at index %d", i))
+			return
+		}
+
+		receipt := env.Receipt
+		if strings.TrimSpace(receipt.Provider) == "" {
+			writeJSONError(w, http.StatusBadRequest, "provider is required", fmt.Sprintf("missing provider at index %d", i))
+			return
+		}
+		if strings.TrimSpace(receipt.FilePath) == "" {
+			writeJSONError(w, http.StatusBadRequest, "file_path is required", fmt.Sprintf("missing file_path at index %d", i))
+			return
+		}
+		if receipt.RangeLen == 0 {
+			writeJSONError(w, http.StatusBadRequest, "range_len is required", fmt.Sprintf("missing range_len at index %d", i))
+			return
+		}
+		if receipt.BytesServed != receipt.RangeLen {
+			writeJSONError(w, http.StatusBadRequest, "invalid receipt", fmt.Sprintf("bytes_served must equal range_len at index %d", i))
+			return
+		}
+		if len(receipt.UserSignature) == 0 {
+			writeJSONError(w, http.StatusBadRequest, "user_signature is required", fmt.Sprintf("missing user_signature at index %d", i))
+			return
+		}
+		if receipt.Nonce == 0 {
+			writeJSONError(w, http.StatusBadRequest, "nonce is required", fmt.Sprintf("missing nonce at index %d", i))
+			return
+		}
+		if len(bytes.TrimSpace(receipt.ProofDetails)) == 0 || bytes.Equal(bytes.TrimSpace(receipt.ProofDetails), []byte("null")) {
+			writeJSONError(w, http.StatusBadRequest, "proof_details is required", fmt.Sprintf("missing proof_details at index %d", i))
+			return
+		}
+		if strings.TrimSpace(receipt.Provider) != strings.TrimSpace(localProviderAddr) {
+			writeJSONError(
+				w,
+				http.StatusForbidden,
+				"receipt.provider must match this provider",
+				fmt.Sprintf("index=%d receipt.provider=%q provider_key=%q addr=%q", i, receipt.Provider, providerKeyName, localProviderAddr),
+			)
+			return
+		}
+
+		if i == 0 {
+			dealID = receipt.DealId
+			epochID = receipt.EpochId
+		} else {
+			if receipt.DealId != dealID || receipt.EpochId != epochID {
+				writeJSONError(w, http.StatusBadRequest, "batch receipts must match", "all receipts in batch must share deal_id and epoch_id")
+				return
+			}
+		}
+
+		session, ok := takeFetchSession(strings.TrimSpace(env.FetchSession))
+		if !ok {
+			writeJSONError(w, http.StatusBadRequest, "invalid fetch_session", fmt.Sprintf("session expired or unknown at index %d", i))
+			return
+		}
+		if session.DealID != receipt.DealId || session.EpochID != receipt.EpochId {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "deal_id/epoch_id mismatch")
+			return
+		}
+		if strings.TrimSpace(session.Provider) != strings.TrimSpace(receipt.Provider) {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "provider mismatch")
+			return
+		}
+		if session.BytesServed != receipt.BytesServed {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "bytes_served mismatch")
+			return
+		}
+		if strings.TrimSpace(session.FilePath) != strings.TrimSpace(receipt.FilePath) {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "file_path mismatch")
+			return
+		}
+		if session.RangeStart != receipt.RangeStart {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "range_start mismatch")
+			return
+		}
+		if session.RangeLen != receipt.RangeLen {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "range_len mismatch")
+			return
+		}
+
+		var chained types.ChainedProof
+		if err := json.Unmarshal(receipt.ProofDetails, &chained); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid proof_details", err.Error())
+			return
+		}
+		proofHash, _ := types.HashChainedProof(&chained)
+		proofHashHex := "0x" + hex.EncodeToString(proofHash.Bytes())
+		if strings.TrimSpace(session.ProofHash) != "" && strings.TrimSpace(session.ProofHash) != strings.TrimSpace(proofHashHex) {
+			writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "proof_hash mismatch")
+			return
+		}
+
+		receipts = append(receipts, receipt)
+	}
+
+	// Save batch to temp file for CLI submission.
+	tmpFile, err := os.CreateTemp(uploadDir, "signed-receipts-*.json")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create temp file", err.Error())
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+
+	batchJSON, err := json.Marshal(struct {
+		Receipts []RetrievalReceipt `json:"receipts"`
+	}{Receipts: receipts})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode receipt batch", err.Error())
+		return
+	}
+	if _, err := tmpFile.Write(batchJSON); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
+		return
+	}
+	tmpFile.Close()
+
+	txHash, err := submitTxAndWait(
+		r.Context(),
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpFile.Name(),
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
+		"--output", "json",
+	)
+	if err != nil {
+		log.Printf("SpSubmitReceipts: submit failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", err.Error())
+		return
+	}
+
+	log.Printf("SpSubmitReceipts success: deal_id=%d epoch_id=%d receipt_count=%d txhash=%s", dealID, epochID, len(receipts), txHash)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":        "success",
+		"tx_hash":       txHash,
+		"receipt_count": len(receipts),
 	})
 }
