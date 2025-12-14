@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
+import { keccak256 } from 'viem'
 import { appConfig } from '../config'
-import { buildRetrievalReceiptTypedData, buildRetrievalRequestTypedData, RetrievalReceiptIntent, RetrievalRequestIntent } from '../lib/eip712'
+import {
+  buildDownloadSessionReceiptTypedData,
+  buildRetrievalReceiptTypedData,
+  buildRetrievalRequestTypedData,
+  DownloadSessionReceiptIntent,
+  RetrievalReceiptIntent,
+  RetrievalRequestIntent,
+} from '../lib/eip712'
+import { bytesToHex, hexToBytes } from '../lib/merkle'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 
 export interface FetchInput {
@@ -39,14 +48,28 @@ export function useFetch() {
       }
 
       const blobSizeBytes = Number(input.blobSizeBytes || 128 * 1024)
-      const wantRangeStart = Number(input.rangeStart || 0)
-      const wantRangeLen = Number(input.rangeLen || 0)
+      const wantRangeStart = Number(input.rangeStart ?? 0)
+      const wantRangeLen = Number(input.rangeLen ?? 0)
+      const wantFileSize = typeof input.fileSizeBytes === 'number' ? Number(input.fileSizeBytes) : 0
+
+      // For now, treat rangeLen=0 as "download to EOF", but still chunk and sign bounded receipts.
+      // This requires knowing the file length.
+      let effectiveRangeLen = wantRangeLen
+      if (effectiveRangeLen === 0) {
+        if (!wantFileSize) {
+          throw new Error('fileSizeBytes is required for full downloads (rangeLen=0)')
+        }
+        if (wantRangeStart >= wantFileSize) {
+          throw new Error('rangeStart beyond EOF')
+        }
+        effectiveRangeLen = wantFileSize - wantRangeStart
+      }
 
       // Always derive receipt nonce from chain state to avoid local drift.
       let lastReceiptNonce = 0
       try {
         const nonceRes = await fetch(
-          `${appConfig.lcdBase}/nilchain/nilchain/v1/owners/${encodeURIComponent(input.owner)}/receipt-nonce`,
+          `${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(input.dealId)}/receipt-nonce?file_path=${encodeURIComponent(input.filePath)}`,
         )
         if (nonceRes.ok) {
           const json = await nonceRes.json()
@@ -63,6 +86,28 @@ export function useFetch() {
         file_path: input.filePath,
       })
       const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
+
+      const hasMeta =
+        typeof input.fileStartOffset === 'number' &&
+        typeof input.fileSizeBytes === 'number' &&
+        typeof input.mduSizeBytes === 'number' &&
+        typeof input.blobSizeBytes === 'number'
+
+      const chunks =
+        hasMeta
+          ? planNilfsFileRangeChunks({
+              fileStartOffset: input.fileStartOffset!,
+              fileSizeBytes: input.fileSizeBytes!,
+              rangeStart: wantRangeStart,
+              rangeLen: effectiveRangeLen,
+              mduSizeBytes: input.mduSizeBytes!,
+              blobSizeBytes: input.blobSizeBytes!,
+            })
+          : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
+
+      if (!hasMeta && effectiveRangeLen > blobSizeBytes) {
+        throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
+      }
 
       async function fetchOneRange(rangeStart: number, rangeLen: number): Promise<Uint8Array<ArrayBuffer>> {
         // 0) Sign Retrieval Request (authorizes the fetch; does NOT count as receipt)
@@ -120,6 +165,9 @@ export function useFetch() {
         const hDealId = response.headers.get('X-Nil-Deal-ID')
         const hEpoch = response.headers.get('X-Nil-Epoch')
         const hProvider = response.headers.get('X-Nil-Provider')
+        const hFilePath = response.headers.get('X-Nil-File-Path')
+        const hRangeStart = response.headers.get('X-Nil-Range-Start')
+        const hRangeLen = response.headers.get('X-Nil-Range-Len')
         const hBytes = response.headers.get('X-Nil-Bytes-Served')
         const hProofJson = response.headers.get('X-Nil-Proof-JSON')
         const hProofHash = response.headers.get('X-Nil-Proof-Hash')
@@ -127,7 +175,17 @@ export function useFetch() {
 
         const buf = new Uint8Array(await response.arrayBuffer())
 
-        if (!hDealId || !hEpoch || !hProvider || !hBytes || !hProofHash || !hFetchSession) {
+        if (
+          !hDealId ||
+          !hEpoch ||
+          !hProvider ||
+          !hFilePath ||
+          !hRangeStart ||
+          !hRangeLen ||
+          !hBytes ||
+          !hProofHash ||
+          !hFetchSession
+        ) {
           setReceiptStatus('failed')
           setReceiptError('Gateway did not provide receipt headers; cannot submit retrieval receipt.')
           return buf
@@ -151,11 +209,17 @@ export function useFetch() {
           return buf
         }
 
+        const bytesServed = Number(hBytes)
+        const rStart = Number(hRangeStart)
+        const rLen = Number(hRangeLen)
         const intent: RetrievalReceiptIntent = {
           deal_id: Number(hDealId),
           epoch_id: Number(hEpoch),
           provider: hProvider,
-          bytes_served: Number(hBytes),
+          file_path: hFilePath,
+          range_start: rStart,
+          range_len: rLen,
+          bytes_served: bytesServed,
           nonce: nextReceiptNonce,
           expires_at: 0,
           proof_hash: hProofHash as `0x${string}`,
@@ -182,11 +246,13 @@ export function useFetch() {
             deal_id: intent.deal_id,
             epoch_id: intent.epoch_id,
             provider: intent.provider,
+            file_path: intent.file_path,
+            range_start: intent.range_start,
+            range_len: intent.range_len,
             bytes_served: intent.bytes_served,
             nonce: intent.nonce,
             user_signature: sigBase64,
             proof_details: proofDetails,
-            proof_hash: intent.proof_hash,
             expires_at: 0,
           },
         }
@@ -208,43 +274,156 @@ export function useFetch() {
         return buf
       }
 
-      // Multi-blob/multi-MDU range fetch: split into multiple signed sub-requests + receipts.
-      if (wantRangeLen > 0) {
-        const hasMeta =
-          typeof input.fileStartOffset === 'number' &&
-          typeof input.fileSizeBytes === 'number' &&
-          typeof input.mduSizeBytes === 'number' &&
-          typeof input.blobSizeBytes === 'number'
-
-        if (!hasMeta && wantRangeLen > blobSizeBytes) {
-          throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
-        }
-
-        if (hasMeta) {
-          const chunks = planNilfsFileRangeChunks({
-            fileStartOffset: input.fileStartOffset!,
-            fileSizeBytes: input.fileSizeBytes!,
-            rangeStart: wantRangeStart,
-            rangeLen: wantRangeLen,
-            mduSizeBytes: input.mduSizeBytes!,
-            blobSizeBytes: input.blobSizeBytes!,
-          })
-          if (chunks.length > 1) {
-            const parts: Uint8Array<ArrayBuffer>[] = []
-            for (const c of chunks) {
-              parts.push(await fetchOneRange(c.rangeStart, c.rangeLen))
-            }
-            const full = new Blob(parts, { type: 'application/octet-stream' })
-            const url = window.URL.createObjectURL(full)
-            setDownloadUrl(url)
-            return url
-          }
-        }
+      if (chunks.length <= 1) {
+        const blobBytes = await fetchOneRange(chunks[0].rangeStart, chunks[0].rangeLen)
+        const blob = new Blob([blobBytes], { type: 'application/octet-stream' })
+        const url = window.URL.createObjectURL(blob)
+        setDownloadUrl(url)
+        return url
       }
 
-      const blobBytes = await fetchOneRange(wantRangeStart, wantRangeLen)
-      const blob = new Blob([blobBytes], { type: 'application/octet-stream' })
-      const url = window.URL.createObjectURL(blob)
+      // Bundled receipt flow: sign once, fetch many chunks, then sign one DownloadSessionReceipt.
+      const sessionExpiresAt = Math.floor(Date.now() / 1000) + 120
+      const sessionReqNonce = randUint32()
+      const sessionReqIntent: RetrievalRequestIntent = {
+        deal_id: Number(input.dealId),
+        file_path: input.filePath,
+        range_start: wantRangeStart,
+        range_len: effectiveRangeLen,
+        nonce: sessionReqNonce,
+        expires_at: sessionExpiresAt,
+      }
+      const sessionReqTyped = buildRetrievalRequestTypedData(sessionReqIntent, appConfig.chainId)
+      const sessionReqSig: string = await ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [address, JSON.stringify(sessionReqTyped)],
+      })
+      if (typeof sessionReqSig !== 'string' || !sessionReqSig.startsWith('0x') || sessionReqSig.length < 10) {
+        throw new Error('wallet returned invalid request signature')
+      }
+
+      const openParams = new URLSearchParams({
+        deal_id: input.dealId,
+        owner: input.owner,
+        file_path: input.filePath,
+      })
+      const openUrl = `${appConfig.gatewayBase}/gateway/open-session/${input.manifestRoot}?${openParams.toString()}`
+      const openRes = await fetch(openUrl, {
+        method: 'POST',
+        headers: {
+          'X-Nil-Req-Sig': sessionReqSig,
+          'X-Nil-Req-Nonce': String(sessionReqNonce),
+          'X-Nil-Req-Expires-At': String(sessionExpiresAt),
+          'X-Nil-Req-Range-Start': String(sessionReqIntent.range_start),
+          'X-Nil-Req-Range-Len': String(sessionReqIntent.range_len),
+        },
+      })
+      if (!openRes.ok) {
+        const text = await openRes.text()
+        throw new Error(text || `failed to open download session (${openRes.status})`)
+      }
+      const openJson = await openRes.json()
+      const downloadSession = String(openJson.download_session || '')
+      const epochId = Number(openJson.epoch_id || 0)
+      const provider = String(openJson.provider || '')
+      if (!downloadSession) throw new Error('gateway did not return download_session')
+      if (!epochId) throw new Error('gateway did not return epoch_id')
+      if (!provider) throw new Error('gateway did not return provider')
+
+      const parts: Uint8Array<ArrayBuffer>[] = []
+      const leaves: Uint8Array[] = []
+      let totalBytes = 0
+
+      for (const c of chunks) {
+        const end = c.rangeStart + c.rangeLen - 1
+        const res = await fetch(fetchUrl, {
+          headers: {
+            Range: `bytes=${c.rangeStart}-${end}`,
+            'X-Nil-Download-Session': downloadSession,
+          },
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `fetch failed (${res.status})`)
+        }
+
+        const hProofHash = res.headers.get('X-Nil-Proof-Hash')
+        const hChunkStart = Number(res.headers.get('X-Nil-Range-Start') || c.rangeStart)
+        const hChunkLen = Number(res.headers.get('X-Nil-Range-Len') || 0)
+        const hProvider = res.headers.get('X-Nil-Provider') || provider
+        if (hProvider !== provider) {
+          throw new Error(`provider mismatch during session: expected ${provider} got ${hProvider}`)
+        }
+        if (!hProofHash) {
+          throw new Error('missing proof hash for session chunk')
+        }
+
+        const buf = new Uint8Array(await res.arrayBuffer())
+        parts.push(buf)
+
+        const servedLen = hChunkLen || buf.byteLength
+        if (hChunkLen && hChunkLen !== buf.byteLength) {
+          throw new Error(`chunk length mismatch: header=${hChunkLen} body=${buf.byteLength}`)
+        }
+        totalBytes += servedLen
+        leaves.push(hashSessionLeafBytes(hChunkStart, servedLen, hProofHash))
+      }
+
+      const rootBytes = keccakMerkleRootBytes(leaves)
+      const rootHex = bytesToHex(rootBytes)
+
+      const sessionReceiptIntent: DownloadSessionReceiptIntent = {
+        deal_id: Number(input.dealId),
+        epoch_id: epochId,
+        provider,
+        file_path: input.filePath,
+        total_bytes: totalBytes,
+        chunk_count: leaves.length,
+        chunk_leaf_root: rootHex as `0x${string}`,
+        nonce: nextReceiptNonce,
+        expires_at: 0,
+      }
+      const sessionTyped = buildDownloadSessionReceiptTypedData(sessionReceiptIntent, appConfig.chainId)
+      const sessionSig: string = await ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [address, JSON.stringify(sessionTyped)],
+      })
+      if (typeof sessionSig !== 'string' || !sessionSig.startsWith('0x') || sessionSig.length < 10) {
+        throw new Error('wallet returned invalid session signature')
+      }
+
+      const submitPayload = {
+        download_session: downloadSession,
+        receipt: {
+          deal_id: sessionReceiptIntent.deal_id,
+          epoch_id: sessionReceiptIntent.epoch_id,
+          provider: sessionReceiptIntent.provider,
+          file_path: sessionReceiptIntent.file_path,
+          total_bytes: sessionReceiptIntent.total_bytes,
+          chunk_count: sessionReceiptIntent.chunk_count,
+          chunk_leaf_root: bytesToBase64(rootBytes),
+          user_signature: bytesToBase64(hexToBytes(sessionSig)),
+          nonce: sessionReceiptIntent.nonce,
+          expires_at: 0,
+        },
+      }
+
+      const submitRes = await fetch(`${appConfig.gatewayBase}/gateway/session-receipt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submitPayload),
+      })
+      if (!submitRes.ok) {
+        const text = await submitRes.text()
+        setReceiptStatus('failed')
+        setReceiptError(text || `session receipt submission failed (${submitRes.status})`)
+      } else {
+        setReceiptStatus('submitted')
+        setReceiptError(null)
+      }
+
+      const full = new Blob(parts, { type: 'application/octet-stream' })
+      const url = window.URL.createObjectURL(full)
       setDownloadUrl(url)
       return url
     } finally {
@@ -255,20 +434,74 @@ export function useFetch() {
   return { fetchFile, loading, downloadUrl, receiptStatus, receiptError }
 }
 
-function hexToBytes(hex: string): Uint8Array {
-    if (hex.startsWith('0x')) hex = hex.slice(2)
-    const bytes = new Uint8Array(hex.length / 2)
-    for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16)
-    }
-    return bytes
+function randUint32(): number {
+  try {
+    const n = new Uint32Array(1)
+    window.crypto.getRandomValues(n)
+    return Number(n[0] || 0) || 1
+  } catch {
+    return Math.floor(Math.random() * 0xffffffff) || 1
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-    let binary = ''
-    const len = bytes.byteLength
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i])
+  let binary = ''
+  const len = bytes.byteLength
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return window.btoa(binary)
+}
+
+function u64beBytes(n: number): Uint8Array {
+  if (!Number.isFinite(n) || n < 0) throw new Error('uint64 must be >= 0')
+  const x = BigInt(Math.floor(n))
+  const out = new Uint8Array(8)
+  let v = x
+  for (let i = 7; i >= 0; i--) {
+    out[i] = Number(v & 0xffn)
+    v >>= 8n
+  }
+  return out
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.length + b.length)
+  out.set(a, 0)
+  out.set(b, a.length)
+  return out
+}
+
+function hashSessionLeafBytes(rangeStart: number, rangeLen: number, proofHashHex: string): Uint8Array {
+  const proofHashBytes = hexToBytes(proofHashHex)
+  if (proofHashBytes.length !== 32) {
+    throw new Error(`invalid proof_hash length: ${proofHashBytes.length}`)
+  }
+  const buf = new Uint8Array(8 + 8 + 32)
+  buf.set(u64beBytes(rangeStart), 0)
+  buf.set(u64beBytes(rangeLen), 8)
+  buf.set(proofHashBytes, 16)
+  return hexToBytes(keccak256(buf))
+}
+
+function keccakMerkleRootBytes(leaves: Uint8Array[]): Uint8Array {
+  if (leaves.length === 0) throw new Error('empty leaf set')
+  if (leaves.length === 1) {
+    return hexToBytes(keccak256(concatBytes(leaves[0], leaves[0])))
+  }
+
+  let level = leaves.slice()
+  while (level.length > 1) {
+    if (level.length % 2 === 1) {
+      level = [...level, level[level.length - 1]]
     }
-    return window.btoa(binary)
+
+    const next: Uint8Array[] = []
+    for (let i = 0; i < level.length; i += 2) {
+      next.push(hexToBytes(keccak256(concatBytes(level[i], level[i + 1]))))
+    }
+    level = next
+  }
+
+  return level[0]
 }

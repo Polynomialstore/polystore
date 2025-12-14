@@ -102,10 +102,28 @@ export const RetrievalReceiptTypes = {
     { name: 'deal_id', type: 'uint64' },
     { name: 'epoch_id', type: 'uint64' },
     { name: 'provider', type: 'string' },
+    { name: 'file_path', type: 'string' },
+    { name: 'range_start', type: 'uint64' },
+    { name: 'range_len', type: 'uint64' },
     { name: 'bytes_served', type: 'uint64' },
     { name: 'nonce', type: 'uint64' },
     { name: 'expires_at', type: 'uint64' },
     { name: 'proof_hash', type: 'bytes32' },
+  ],
+} as const
+
+export const DownloadSessionReceiptTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  DownloadSessionReceipt: [
+    { name: 'deal_id', type: 'uint64' },
+    { name: 'epoch_id', type: 'uint64' },
+    { name: 'provider', type: 'string' },
+    { name: 'file_path', type: 'string' },
+    { name: 'total_bytes', type: 'uint64' },
+    { name: 'chunk_count', type: 'uint64' },
+    { name: 'chunk_leaf_root', type: 'bytes32' },
+    { name: 'nonce', type: 'uint64' },
+    { name: 'expires_at', type: 'uint64' },
   ],
 } as const
 
@@ -125,10 +143,25 @@ export interface RetrievalReceiptIntent {
   deal_id: number
   epoch_id: number
   provider: string
+  file_path: string
+  range_start: number
+  range_len: number
   bytes_served: number
   nonce: number
   expires_at: number
   proof_hash: `0x${string}`
+}
+
+export interface DownloadSessionReceiptIntent {
+  deal_id: number
+  epoch_id: number
+  provider: string
+  file_path: string
+  total_bytes: number
+  chunk_count: number
+  chunk_leaf_root: `0x${string}`
+  nonce: number
+  expires_at: number
 }
 
 export interface RetrievalRequestIntent {
@@ -175,10 +208,40 @@ export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, c
       deal_id: Number(intent.deal_id),
       epoch_id: Number(intent.epoch_id),
       provider: intent.provider,
+      file_path: intent.file_path,
+      range_start: Number(intent.range_start),
+      range_len: Number(intent.range_len),
       bytes_served: Number(intent.bytes_served),
       nonce: Number(intent.nonce),
       expires_at: Number(intent.expires_at),
       proof_hash: intent.proof_hash,
+    },
+  }
+}
+
+export function buildDownloadSessionReceiptTypedData(
+  intent: DownloadSessionReceiptIntent,
+  chainId: number,
+) {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: DownloadSessionReceiptTypes,
+    primaryType: 'DownloadSessionReceipt' as const,
+    message: {
+      deal_id: Number(intent.deal_id),
+      epoch_id: Number(intent.epoch_id),
+      provider: intent.provider,
+      file_path: intent.file_path,
+      total_bytes: Number(intent.total_bytes),
+      chunk_count: Number(intent.chunk_count),
+      chunk_leaf_root: intent.chunk_leaf_root,
+      nonce: Number(intent.nonce),
+      expires_at: Number(intent.expires_at),
     },
   }
 }
