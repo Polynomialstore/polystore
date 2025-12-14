@@ -295,6 +295,7 @@ func main() {
 	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
@@ -303,8 +304,10 @@ func main() {
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -1267,13 +1270,208 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GatewayFetch serves back a stored file by its Root CID.
-// This is a Mode 1 (FullReplica) helper for local/testnet flows where
-// the gateway acts as both ingress and provider. For devnet correctness,
-// it atomically:
-//  1. Verifies that the requested owner matches the on-chain Deal owner.
-//  2. Submits a retrieval proof (MsgProveLiveness) on-chain.
-//  3. Streams the file back to the caller.
+// GatewayOpenSession creates a server-side download session for a (deal_id, file_path) using a
+// user-signed RetrievalRequest. Subsequent chunk fetches can reference the returned
+// download_session without additional wallet signatures.
+func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
+	if reqSig == "" {
+		reqSig = strings.TrimSpace(q.Get("req_sig"))
+	}
+	reqNonceStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Nonce"))
+	if reqNonceStr == "" {
+		reqNonceStr = strings.TrimSpace(q.Get("req_nonce"))
+	}
+	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Expires-At"))
+	if reqExpiresStr == "" {
+		reqExpiresStr = strings.TrimSpace(q.Get("req_expires_at"))
+	}
+	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Start"))
+	if reqRangeStartStr == "" {
+		reqRangeStartStr = strings.TrimSpace(q.Get("req_range_start"))
+	}
+	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Len"))
+	if reqRangeLenStr == "" {
+		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
+	}
+
+	if dealIDStr == "" || owner == "" {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid file_path", err.Error())
+		return
+	}
+
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
+		return
+	}
+	reqNonce, err := strconv.ParseUint(reqNonceStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
+		return
+	}
+	reqExpiresAt, err := strconv.ParseUint(reqExpiresStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
+		return
+	}
+	reqRangeStart, err := strconv.ParseUint(reqRangeStartStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
+		return
+	}
+	reqRangeLen, err := strconv.ParseUint(reqRangeLenStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
+		return
+	}
+
+	// Guard: ensure the caller's owner matches the on-chain Deal owner.
+	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
+		log.Printf("GatewayOpenSession: failed to fetch deal %d: %v", dealID, err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
+		return
+	}
+	if dealOwner == "" || dealOwner != owner {
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		return
+	}
+
+	// Guard: ensure the caller has an EIP-712 signature authorizing this session.
+	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
+		return
+	}
+
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"deal has no committed manifest_root yet",
+			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+		)
+		return
+	}
+	dealRoot, err := parseManifestRoot(dealCID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+		return
+	}
+	if dealRoot.Canonical != manifestRoot.Canonical {
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"stale manifest_root (does not match on-chain deal state)",
+			fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+		)
+		return
+	}
+
+	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	entry, err := loadSlabIndex(dealDir)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to load slab index", err.Error())
+		return
+	}
+	if _, ok := entry.files[filePath]; !ok {
+		writeJSONError(w, http.StatusNotFound, "file not found in deal", "")
+		return
+	}
+
+	providerAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(providerAddr) == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
+		return
+	}
+
+	// Anti-replay: only consume the request nonce once we've fully validated the deal state.
+	if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+		writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
+		return
+	}
+
+	sessionExpires := time.Unix(int64(reqExpiresAt), 0)
+	downloadID, err := storeDownloadSession(downloadSession{
+		DealID:     dealID,
+		EpochID:    1,
+		Owner:      owner,
+		Provider:   providerAddr,
+		FilePath:   filePath,
+		RangeStart: reqRangeStart,
+		RangeLen:   reqRangeLen,
+		ExpiresAt:  sessionExpires,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create download session", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"download_session": downloadID,
+		"deal_id":          dealID,
+		"epoch_id":         1,
+		"provider":         providerAddr,
+		"file_path":        filePath,
+		"expires_at":       uint64(sessionExpires.Unix()),
+	})
+}
+
+// GatewayFetch serves back a stored file by its manifest root, resolving the NilFS file_path.
+//
+// Retrieval is interactive: the gateway returns enough metadata for the client to sign a receipt,
+// and records a short-lived session so the provider can later submit MsgProveLiveness.
+//
+// Modes:
+// - Per-chunk receipts: validates a signed RetrievalRequest (req_sig), creates a one-time fetch_session,
+//   and returns `X-Nil-Fetch-Session` for receipt submission.
+// - Bundled download sessions: accepts a `download_session` created by GatewayOpenSession and records
+//   chunk proofs server-side; the client later submits a single DownloadSessionReceipt.
 func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -1319,6 +1517,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	if reqRangeLenStr == "" {
 		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
 	}
+
+	downloadSessionID := strings.TrimSpace(r.Header.Get("X-Nil-Download-Session"))
+	if downloadSessionID == "" {
+		downloadSessionID = strings.TrimSpace(q.Get("download_session"))
+	}
+	isDownloadSession := downloadSessionID != ""
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -1339,29 +1543,35 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqNonce, err := strconv.ParseUint(reqNonceStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
-		return
-	}
-	reqExpiresAt, err := strconv.ParseUint(reqExpiresStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
-		return
-	}
-	reqRangeStart, err := strconv.ParseUint(reqRangeStartStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
-		return
-	}
-	reqRangeLen, err := strconv.ParseUint(reqRangeLenStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
-		return
-	}
-	if reqRangeLen > uint64(types.BLOB_SIZE) {
-		writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("req_range_len must be <= %d", types.BLOB_SIZE))
-		return
+	var reqNonce uint64
+	var reqExpiresAt uint64
+	var reqRangeStart uint64
+	var reqRangeLen uint64
+	if !isDownloadSession {
+		reqNonce, err = strconv.ParseUint(reqNonceStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
+			return
+		}
+		reqExpiresAt, err = strconv.ParseUint(reqExpiresStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
+			return
+		}
+		reqRangeStart, err = strconv.ParseUint(reqRangeStartStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
+			return
+		}
+		reqRangeLen, err = strconv.ParseUint(reqRangeLenStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
+			return
+		}
+		if reqRangeLen > uint64(types.BLOB_SIZE) {
+			writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("req_range_len must be <= %d", types.BLOB_SIZE))
+			return
+		}
 	}
 
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
@@ -1381,9 +1591,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
-	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
-		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
-		return
+	// For download sessions, this check is done once in GatewayOpenSession.
+	if !isDownloadSession {
+		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
+			return
+		}
 	}
 	if strings.TrimSpace(dealCID) == "" {
 		writeJSONError(
@@ -1423,6 +1636,27 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var dlSession downloadSession
+	if isDownloadSession {
+		dlSession, err = loadDownloadSession(downloadSessionID)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid download_session", err.Error())
+			return
+		}
+		if dlSession.DealID != dealID {
+			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "deal_id mismatch")
+			return
+		}
+		if strings.TrimSpace(dlSession.Owner) != strings.TrimSpace(owner) {
+			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "owner mismatch")
+			return
+		}
+		if strings.TrimSpace(dlSession.FilePath) != strings.TrimSpace(filePath) {
+			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "file_path mismatch")
+			return
+		}
+	}
+
 	// 2. Resolve NilFS file.
 	rangeHeader := strings.TrimSpace(r.Header.Get("Range"))
 	var rangeHeaderStart uint64
@@ -1436,14 +1670,54 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		rangeHeaderStart = start
 		rangeHeaderLen = length
 	}
-	if rangeHeader != "" && reqRangeLen == 0 {
-		writeJSONError(w, http.StatusBadRequest, "range must be signed", "include range_start/range_len in the signed retrieval request")
-		return
-	}
-	if reqRangeLen > 0 && rangeHeader != "" {
-		if rangeHeaderStart != reqRangeStart || rangeHeaderLen != reqRangeLen {
-			writeJSONError(w, http.StatusBadRequest, "range mismatch", "Range header must match signed request")
+	if isDownloadSession {
+		if rangeHeader == "" {
+			writeJSONError(w, http.StatusBadRequest, "Range header is required", "download_session fetches must be chunked")
 			return
+		}
+		if rangeHeaderLen == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid Range header", "range length must be non-zero")
+			return
+		}
+		if rangeHeaderLen > uint64(types.BLOB_SIZE) {
+			writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("range must be <= %d", types.BLOB_SIZE))
+			return
+		}
+
+		reqRangeStart = rangeHeaderStart
+		reqRangeLen = rangeHeaderLen
+
+		// Enforce the signed session range (range_len == 0 means "until EOF").
+		if reqRangeStart < dlSession.RangeStart {
+			writeJSONError(w, http.StatusBadRequest, "range outside session", "range_start before session start")
+			return
+		}
+		if dlSession.RangeLen > 0 {
+			if reqRangeStart > reqRangeStart+reqRangeLen {
+				writeJSONError(w, http.StatusBadRequest, "range outside session", "range overflow")
+				return
+			}
+			end := reqRangeStart + reqRangeLen
+			limit := dlSession.RangeStart + dlSession.RangeLen
+			if limit < dlSession.RangeStart {
+				writeJSONError(w, http.StatusBadRequest, "range outside session", "session range overflow")
+				return
+			}
+			if end > limit {
+				writeJSONError(w, http.StatusBadRequest, "range outside session", "range exceeds session limit")
+				return
+			}
+		}
+	} else {
+		if rangeHeader != "" && reqRangeLen == 0 {
+			writeJSONError(w, http.StatusBadRequest, "range must be signed", "include range_start/range_len in the signed retrieval request")
+			return
+		}
+		if reqRangeLen > 0 && rangeHeader != "" {
+			if rangeHeaderStart != reqRangeStart || rangeHeaderLen != reqRangeLen {
+				writeJSONError(w, http.StatusBadRequest, "range mismatch", "Range header must match signed request")
+				return
+			}
 		}
 	}
 
@@ -1472,6 +1746,10 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	providerAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(providerAddr) == "" {
 		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
+		return
+	}
+	if isDownloadSession && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
 		return
 	}
 
@@ -1513,30 +1791,55 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Anti-replay: only consume the request nonce once we've fully validated the deal state
-	// and successfully generated the proof/segment.
-	if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
-		writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
-		return
-	}
+	var fetchSessionID string
+	if isDownloadSession {
+		var wrapper struct {
+			ProofDetail json.RawMessage `json:"proof_details"`
+		}
+		if err := json.Unmarshal(proofPayload, &wrapper); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to parse proof_details", err.Error())
+			return
+		}
+		var chained types.ChainedProof
+		if err := json.Unmarshal(wrapper.ProofDetail, &chained); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to parse proof_details", err.Error())
+			return
+		}
+		if err := appendDownloadChunkToSession(downloadSessionID, downloadChunk{
+			RangeStart:   reqRangeStart,
+			RangeLen:     servedLen,
+			ProofDetails: chained,
+		}); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to record download session chunk", err.Error())
+			return
+		}
+	} else {
+		// Anti-replay: only consume the request nonce once we've fully validated the deal state
+		// and successfully generated the proof/segment.
+		if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+			writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
+			return
+		}
 
-	sessionID, serr := storeFetchSession(fetchSession{
-		DealID:      dealID,
-		EpochID:     1,
-		Owner:       owner,
-		Provider:    providerAddr,
-		FilePath:    filePath,
-		RangeStart:  reqRangeStart,
-		RangeLen:    servedLen,
-		BytesServed: servedLen,
-		ProofHash:   proofHash,
-		ReqNonce:    reqNonce,
-		ReqExpires:  reqExpiresAt,
-		ExpiresAt:   time.Now().Add(10 * time.Minute),
-	})
-	if serr != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
-		return
+		sessionID, serr := storeFetchSession(fetchSession{
+			DealID:      dealID,
+			EpochID:     1,
+			Owner:       owner,
+			Provider:    providerAddr,
+			FilePath:    filePath,
+			RangeStart:  reqRangeStart,
+			RangeLen:    servedLen,
+			BytesServed: servedLen,
+			ProofHash:   proofHash,
+			ReqNonce:    reqNonce,
+			ReqExpires:  reqExpiresAt,
+			ExpiresAt:   time.Now().Add(10 * time.Minute),
+		})
+		if serr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
+			return
+		}
+		fetchSessionID = sessionID
 	}
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
@@ -1549,7 +1852,11 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Nil-Range-Len", strconv.FormatUint(servedLen, 10))
 	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
 	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
-	w.Header().Set("X-Nil-Fetch-Session", sessionID)
+	if isDownloadSession {
+		w.Header().Set("X-Nil-Download-Session", downloadSessionID)
+	} else {
+		w.Header().Set("X-Nil-Fetch-Session", fetchSessionID)
+	}
 	if proofHash != "" {
 		w.Header().Set("X-Nil-Proof-Hash", proofHash)
 	}
@@ -2613,6 +2920,11 @@ type SignedReceiptBatchEnvelope struct {
 	Receipts []SignedReceiptEnvelope `json:"receipts"`
 }
 
+type SignedSessionReceiptEnvelope struct {
+	DownloadSession string                    `json:"download_session"`
+	Receipt         types.DownloadSessionReceipt `json:"receipt"`
+}
+
 // GatewaySubmitReceipt is the User Daemon endpoint.
 // It accepts a signed receipt from the browser and forwards it to the Provider.
 func GatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
@@ -2622,6 +2934,11 @@ func GatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
 // GatewaySubmitReceipts forwards a batch of receipts to the Provider endpoint.
 func GatewaySubmitReceipts(w http.ResponseWriter, r *http.Request) {
 	forwardToProvider(w, r, "/sp/receipts")
+}
+
+// GatewaySubmitSessionReceipt forwards a bundled download session receipt to the Provider.
+func GatewaySubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
+	forwardToProvider(w, r, "/sp/session-receipt")
 }
 
 // SpSubmitReceipt is the Storage Provider endpoint.
@@ -2983,5 +3300,220 @@ func SpSubmitReceipts(w http.ResponseWriter, r *http.Request) {
 		"status":        "success",
 		"tx_hash":       txHash,
 		"receipt_count": len(receipts),
+	})
+}
+
+// SpSubmitSessionReceipt accepts a bundled DownloadSessionReceipt, validates it against
+// the locally recorded download session chunks, and submits a single on-chain tx.
+func SpSubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var env SignedSessionReceiptEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {download_session, receipt}")
+		return
+	}
+	sessionID := strings.TrimSpace(env.DownloadSession)
+	if sessionID == "" {
+		writeJSONError(w, http.StatusBadRequest, "download_session is required", "")
+		return
+	}
+
+	receipt := env.Receipt
+	if receipt.DealId == 0 {
+		writeJSONError(w, http.StatusBadRequest, "deal_id is required", "")
+		return
+	}
+	if receipt.EpochId == 0 {
+		writeJSONError(w, http.StatusBadRequest, "epoch_id is required", "")
+		return
+	}
+	if strings.TrimSpace(receipt.Provider) == "" {
+		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
+		return
+	}
+	if strings.TrimSpace(receipt.FilePath) == "" {
+		writeJSONError(w, http.StatusBadRequest, "file_path is required", "")
+		return
+	}
+	if receipt.TotalBytes == 0 {
+		writeJSONError(w, http.StatusBadRequest, "total_bytes is required", "")
+		return
+	}
+	if receipt.ChunkCount == 0 {
+		writeJSONError(w, http.StatusBadRequest, "chunk_count is required", "")
+		return
+	}
+	if len(receipt.ChunkLeafRoot) != 32 {
+		writeJSONError(w, http.StatusBadRequest, "chunk_leaf_root is required", "must be 32 bytes")
+		return
+	}
+	if len(receipt.UserSignature) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "user_signature is required", "")
+		return
+	}
+	if receipt.Nonce == 0 {
+		writeJSONError(w, http.StatusBadRequest, "nonce is required", "")
+		return
+	}
+
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	localProviderAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(localProviderAddr) == "" {
+		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
+			return
+		}
+	}
+	if strings.TrimSpace(receipt.Provider) != strings.TrimSpace(localProviderAddr) {
+		writeJSONError(
+			w,
+			http.StatusForbidden,
+			"receipt.provider must match this provider",
+			fmt.Sprintf("receipt.provider=%q provider_key=%q addr=%q", receipt.Provider, providerKeyName, localProviderAddr),
+		)
+		return
+	}
+
+	session, err := loadDownloadSession(sessionID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid download_session", err.Error())
+		return
+	}
+	if session.DealID != receipt.DealId || session.EpochID != receipt.EpochId {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match download session", "deal_id/epoch_id mismatch")
+		return
+	}
+	if strings.TrimSpace(session.Provider) != strings.TrimSpace(receipt.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match download session", "provider mismatch")
+		return
+	}
+	if strings.TrimSpace(session.FilePath) != strings.TrimSpace(receipt.FilePath) {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match download session", "file_path mismatch")
+		return
+	}
+	if len(session.Chunks) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "download session has no chunks", "fetch at least one chunk before submitting the session receipt")
+		return
+	}
+	if uint64(len(session.Chunks)) != receipt.ChunkCount {
+		writeJSONError(w, http.StatusBadRequest, "chunk_count mismatch", "receipt.chunk_count must equal recorded chunk count")
+		return
+	}
+
+	chunks := make([]downloadChunk, len(session.Chunks))
+	copy(chunks, session.Chunks)
+	sort.Slice(chunks, func(i, j int) bool {
+		if chunks[i].RangeStart != chunks[j].RangeStart {
+			return chunks[i].RangeStart < chunks[j].RangeStart
+		}
+		return chunks[i].RangeLen < chunks[j].RangeLen
+	})
+
+	leaves := make([]common.Hash, len(chunks))
+	paths := make([][][]byte, len(chunks))
+	var totalBytes uint64
+	for i := range chunks {
+		if chunks[i].RangeLen == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid chunk", "chunk range_len must be non-zero")
+			return
+		}
+		if totalBytes > totalBytes+chunks[i].RangeLen {
+			writeJSONError(w, http.StatusBadRequest, "invalid chunk", "total_bytes overflow")
+			return
+		}
+		totalBytes += chunks[i].RangeLen
+
+		proofHash, _ := types.HashChainedProof(&chunks[i].ProofDetails)
+		leaves[i] = types.HashSessionLeaf(chunks[i].RangeStart, chunks[i].RangeLen, proofHash)
+	}
+
+	root, merklePaths := keccakMerkleRootAndPaths(leaves)
+	copy(paths, merklePaths)
+	if totalBytes != receipt.TotalBytes {
+		writeJSONError(w, http.StatusBadRequest, "total_bytes mismatch", "receipt.total_bytes must equal sum of recorded chunks")
+		return
+	}
+	if root != common.BytesToHash(receipt.ChunkLeafRoot) {
+		writeJSONError(w, http.StatusBadRequest, "chunk_leaf_root mismatch", "receipt root does not match recorded chunks")
+		return
+	}
+
+	sessionProof := types.RetrievalSessionProof{
+		SessionReceipt: receipt,
+		Chunks:         make([]types.SessionChunkProof, len(chunks)),
+	}
+	for i := range chunks {
+		sessionProof.Chunks[i] = types.SessionChunkProof{
+			RangeStart:   chunks[i].RangeStart,
+			RangeLen:     chunks[i].RangeLen,
+			ProofDetails: chunks[i].ProofDetails,
+			LeafIndex:    uint32(i),
+			MerklePath:   paths[i],
+		}
+	}
+
+	// Save to temp file for CLI submission.
+	tmpFile, err := os.CreateTemp(uploadDir, "session-proof-*.json")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create temp file", err.Error())
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+
+	sessionJSON, err := json.Marshal(sessionProof)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode session proof", err.Error())
+		return
+	}
+	if _, err := tmpFile.Write(sessionJSON); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
+		return
+	}
+	tmpFile.Close()
+
+	txHash, err := submitTxAndWait(
+		r.Context(),
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpFile.Name(),
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
+		"--output", "json",
+	)
+	if err != nil {
+		log.Printf("SpSubmitSessionReceipt: submit failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "submit-retrieval-proof failed", err.Error())
+		return
+	}
+
+	// Consume the download session once it's been successfully submitted.
+	_, _ = takeDownloadSession(sessionID)
+
+	log.Printf("SpSubmitSessionReceipt success: deal_id=%d file_path=%s chunk_count=%d txhash=%s", receipt.DealId, receipt.FilePath, len(chunks), txHash)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":      "success",
+		"tx_hash":     txHash,
+		"chunk_count": len(chunks),
 	})
 }
