@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,9 +23,12 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcutil/bech32"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
 
 	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 
 	"nil_s3/pkg/builder"
 	"nil_s3/pkg/layout"
@@ -1287,6 +1291,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
 	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	reqSig := strings.TrimSpace(q.Get("req_sig"))
+	reqNonceStr := strings.TrimSpace(q.Get("req_nonce"))
+	reqExpiresStr := strings.TrimSpace(q.Get("req_expires_at"))
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -1307,6 +1314,17 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reqNonce, err := strconv.ParseUint(reqNonceStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
+		return
+	}
+	reqExpiresAt, err := strconv.ParseUint(reqExpiresStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
+		return
+	}
+
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 	if err != nil {
@@ -1320,6 +1338,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	if dealOwner == "" || dealOwner != owner {
 		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		return
+	}
+
+	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
+	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqNonce, reqExpiresAt, reqSig); err != nil {
+		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
 		return
 	}
 	if strings.TrimSpace(dealCID) == "" {
@@ -1905,6 +1929,91 @@ func extractNilAddress(out string) string {
 		return ""
 	}
 	return matches[len(matches)-1]
+}
+
+func eip712ChainID() *big.Int {
+	// Prefer numeric chain IDs (local devnet uses 31337). If NIL_CHAIN_ID is not
+	// numeric (e.g. "test-1"), fall back to 31337 to match the web UI default.
+	raw := strings.TrimSpace(chainID)
+	if raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			return big.NewInt(n)
+		}
+	}
+	return big.NewInt(31337)
+}
+
+func recoverEvmAddressFromDigest(digest []byte, signature []byte) (common.Address, error) {
+	if len(digest) != 32 {
+		return common.Address{}, fmt.Errorf("invalid digest length: %d", len(digest))
+	}
+	if len(signature) != 65 {
+		return common.Address{}, fmt.Errorf("invalid signature length: %d", len(signature))
+	}
+	sig := make([]byte, 65)
+	copy(sig, signature)
+	v := sig[64]
+	if v == 27 || v == 28 {
+		v -= 27
+	}
+	if v != 0 && v != 1 {
+		return common.Address{}, fmt.Errorf("invalid signature v: %d", sig[64])
+	}
+	sig[64] = v
+
+	pub, err := crypto.SigToPub(digest, sig)
+	if err != nil {
+		return common.Address{}, err
+	}
+	return crypto.PubkeyToAddress(*pub), nil
+}
+
+func verifyRetrievalRequestSignature(dealOwner string, dealID uint64, filePath string, nonce uint64, expiresAt uint64, sigHex string) error {
+	if strings.TrimSpace(sigHex) == "" {
+		return fmt.Errorf("req_sig is required")
+	}
+	if expiresAt == 0 {
+		return fmt.Errorf("req_expires_at is required")
+	}
+	now := uint64(time.Now().Unix())
+	// Allow a small clock skew, but never accept long-lived tickets.
+	if expiresAt+30 < now {
+		return fmt.Errorf("request signature expired")
+	}
+	if expiresAt > now+10*60 {
+		return fmt.Errorf("request signature expires too far in the future")
+	}
+	if nonce == 0 {
+		return fmt.Errorf("req_nonce is required")
+	}
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return fmt.Errorf("file_path is required")
+	}
+
+	sigBytes, err := decodeHex(sigHex)
+	if err != nil {
+		return fmt.Errorf("invalid req_sig: %w", err)
+	}
+	if len(sigBytes) != 65 {
+		return fmt.Errorf("invalid req_sig length: %d", len(sigBytes))
+	}
+
+	domainSep := types.HashDomainSeparator(eip712ChainID())
+	structHash := types.HashRetrievalRequest(dealID, filePath, nonce, expiresAt)
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
+	evmAddr, err := recoverEvmAddressFromDigest(digest, sigBytes)
+	if err != nil {
+		return fmt.Errorf("failed to recover request signer: %w", err)
+	}
+	nilAddr, err := evmHexToNilAddress(evmAddr.Hex())
+	if err != nil {
+		return fmt.Errorf("failed to map request signer to nil address: %w", err)
+	}
+	if strings.TrimSpace(nilAddr) != strings.TrimSpace(dealOwner) {
+		return fmt.Errorf("request signer is not deal owner")
+	}
+	return nil
 }
 
 func envDefault(key, def string) string {

@@ -22,9 +22,12 @@ import (
 	"testing"
 	"time"
 
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
 
 	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+
+	"nilchain/x/nilchain/types"
 
 	"nil_s3/pkg/builder"
 )
@@ -91,6 +94,37 @@ func encodeRawToMdu(raw []byte) []byte {
 	return encoded
 }
 
+const testEvmPrivKeyHex = "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"
+
+func testDealOwner(t *testing.T) string {
+	t.Helper()
+	key, err := ethcrypto.HexToECDSA(strings.TrimPrefix(testEvmPrivKeyHex, "0x"))
+	if err != nil {
+		t.Fatalf("HexToECDSA failed: %v", err)
+	}
+	nilAddr, err := evmHexToNilAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+	if err != nil {
+		t.Fatalf("evmHexToNilAddress failed: %v", err)
+	}
+	return nilAddr
+}
+
+func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, nonce uint64, expiresAt uint64) string {
+	t.Helper()
+	key, err := ethcrypto.HexToECDSA(strings.TrimPrefix(testEvmPrivKeyHex, "0x"))
+	if err != nil {
+		t.Fatalf("HexToECDSA failed: %v", err)
+	}
+	domainSep := types.HashDomainSeparator(eip712ChainID())
+	structHash := types.HashRetrievalRequest(dealID, filePath, nonce, expiresAt)
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
+	sig, err := ethcrypto.Sign(digest, key)
+	if err != nil {
+		t.Fatalf("Sign failed: %v", err)
+	}
+	return "0x" + hex.EncodeToString(sig)
+}
+
 // helper to build a router with only the GatewayFetch endpoint wired.
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
@@ -142,7 +176,8 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 
 	// Stub LCD so fetchDealOwnerAndCID returns a specific owner/cid.
 	root := mustTestManifestRoot(t, "owner-mismatch")
-	srv := mockDealServer("nil1realowner", root.Canonical)
+	realOwner := testDealOwner(t)
+	srv := mockDealServer(realOwner, root.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -152,6 +187,8 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	q.Set("deal_id", "1")
 	q.Set("owner", "nil1otherowner")
 	q.Set("file_path", "video.mp4")
+	q.Set("req_nonce", "1")
+	q.Set("req_expires_at", strconv.FormatUint(uint64(time.Now().Unix())+120, 10))
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+root.Canonical+"?"+q.Encode(), nil)
 	w := httptest.NewRecorder()
 
@@ -168,7 +205,8 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	// Stub LCD: owner matches, cid does not.
 	rootReq := mustTestManifestRoot(t, "cid-mismatch-req")
 	rootChain := mustTestManifestRoot(t, "cid-mismatch-chain")
-	srv := mockDealServer("nil1owner", rootChain.Canonical)
+	owner := testDealOwner(t)
+	srv := mockDealServer(owner, rootChain.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -176,8 +214,13 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 
 	q := url.Values{}
 	q.Set("deal_id", "2")
-	q.Set("owner", "nil1owner")
+	q.Set("owner", owner)
 	q.Set("file_path", "video.mp4")
+	nonce := uint64(1)
+	expiresAt := uint64(time.Now().Unix()) + 120
+	q.Set("req_nonce", strconv.FormatUint(nonce, 10))
+	q.Set("req_expires_at", strconv.FormatUint(expiresAt, 10))
+	q.Set("req_sig", signRetrievalRequest(t, 2, "video.mp4", nonce, expiresAt))
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+rootReq.Canonical+"?"+q.Encode(), nil)
 	w := httptest.NewRecorder()
 

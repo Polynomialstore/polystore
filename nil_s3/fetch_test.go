@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"nil_s3/pkg/builder"
 	"nil_s3/pkg/layout"
@@ -15,6 +16,7 @@ import (
 func TestGatewayFetch_ByPath(t *testing.T) {
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	owner := testDealOwner(t)
 
 	// Setup Fake Deal
 	manifestRoot := mustTestManifestRoot(t, "fetch-by-path")
@@ -48,7 +50,7 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	os.WriteFile(mdu25Path, encodeRawToMdu(fileContent), 0644)
 
 	// Mock LCD for owner check
-	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
+	srv := mockDealServer(owner, manifestRoot.Canonical)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -57,7 +59,19 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	r := testRouter()
 
 	// Request
-	u := fmt.Sprintf("/gateway/fetch/%s?deal_id=1&owner=nil1owner&file_path=video.mp4", manifestRoot.Canonical)
+	const dealID = 1
+	nonce := uint64(1)
+	expiresAt := uint64(time.Now().Unix()) + 120
+	reqSig := signRetrievalRequest(t, dealID, "video.mp4", nonce, expiresAt)
+	u := fmt.Sprintf(
+		"/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=video.mp4&req_sig=%s&req_nonce=%d&req_expires_at=%d",
+		manifestRoot.Canonical,
+		dealID,
+		owner,
+		reqSig,
+		nonce,
+		expiresAt,
+	)
 	req := httptest.NewRequest("GET", u, nil)
 	w := httptest.NewRecorder()
 
