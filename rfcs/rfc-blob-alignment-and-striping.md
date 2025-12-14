@@ -80,6 +80,8 @@ To generate the `M` parity Blobs for each `row`:
   * **Homomorphic Property:** Because KZG commitments are homomorphic, the parity Blobs are also valid 128 KiB KZG polynomials with valid commitments.
   * *Result:* Parity Nodes are indistinguishable from Data Nodes in terms of verification logic. They hold valid Blobs with valid Commitments.
 
+**Determinism (Normative):** For a fixed `(K, M)` profile and the canonical leaf ordering, RS encoding/decoding must be deterministic so repairs reconstruct bit-identical shard Blobs for the same `(mdu_index, leaf_index)`.
+
 -----
 
 ## 4. The Replicated Metadata Policy (Crucial)

@@ -153,6 +153,8 @@ To generate the `M` parity Blobs for each `row`:
 *   Due to the homomorphic property of KZG, the Parity Shards are also composed of valid 128 KiB KZG polynomials.
 *   Parity Nodes are indistinguishable from Data Nodes in terms of verification logic.
 
+**Determinism (Normative):** For a fixed `(K, M)` profile and the canonical leaf ordering (§8.1.3), RS encoding/decoding MUST be deterministic, so that repairing a missing slot reconstructs a bit‑identical shard Blob to what the evicted provider stored for the same `(mdu_index, leaf_index)`.
+
 ### 8.3 Replicated Metadata Policy
 To support this model, the "Map" must be fully replicated:
 *   **User Data MDUs:** **Striped** (1 slot shard per Provider).
