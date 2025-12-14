@@ -1525,7 +1525,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		Provider:    providerAddr,
 		FilePath:    filePath,
 		RangeStart:  reqRangeStart,
-		RangeLen:    reqRangeLen,
+		RangeLen:    servedLen,
 		BytesServed: servedLen,
 		ProofHash:   proofHash,
 		ReqNonce:    reqNonce,
@@ -1542,6 +1542,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
 	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(servedLen, 10))
 	w.Header().Set("X-Nil-Provider", providerAddr)
+	w.Header().Set("X-Nil-File-Path", filePath)
+	w.Header().Set("X-Nil-Range-Start", strconv.FormatUint(reqRangeStart, 10))
+	w.Header().Set("X-Nil-Range-Len", strconv.FormatUint(servedLen, 10))
 	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
 	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
 	w.Header().Set("X-Nil-Fetch-Session", sessionID)
@@ -2589,6 +2592,9 @@ type RetrievalReceipt struct {
 	DealId        uint64          `json:"deal_id"`
 	EpochId       uint64          `json:"epoch_id"`
 	Provider      string          `json:"provider"`
+	FilePath      string          `json:"file_path"`
+	RangeStart    uint64          `json:"range_start"`
+	RangeLen      uint64          `json:"range_len"`
 	BytesServed   uint64          `json:"bytes_served"`
 	ProofDetails  json.RawMessage `json:"proof_details"`
 	UserSignature []byte          `json:"user_signature"`
@@ -2676,6 +2682,18 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
 		return
 	}
+	if strings.TrimSpace(receipt.FilePath) == "" {
+		writeJSONError(w, http.StatusBadRequest, "file_path is required", "")
+		return
+	}
+	if receipt.RangeLen == 0 {
+		writeJSONError(w, http.StatusBadRequest, "range_len is required", "")
+		return
+	}
+	if receipt.BytesServed != receipt.RangeLen {
+		writeJSONError(w, http.StatusBadRequest, "invalid receipt", "bytes_served must equal range_len")
+		return
+	}
 	if len(receipt.UserSignature) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "user_signature is required", "client must sign the retrieval receipt (EIP-712) before submission")
 		return
@@ -2704,6 +2722,18 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 	if session.BytesServed != receipt.BytesServed {
 		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "bytes_served mismatch")
+		return
+	}
+	if strings.TrimSpace(session.FilePath) != strings.TrimSpace(receipt.FilePath) {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "file_path mismatch")
+		return
+	}
+	if session.RangeStart != receipt.RangeStart {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "range_start mismatch")
+		return
+	}
+	if session.RangeLen != receipt.RangeLen {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "range_len mismatch")
 		return
 	}
 	var chained types.ChainedProof
