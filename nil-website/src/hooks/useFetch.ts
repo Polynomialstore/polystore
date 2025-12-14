@@ -14,10 +14,14 @@ export function useFetch() {
   const { address } = useAccount()
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
+  const [receiptError, setReceiptError] = useState<string | null>(null)
 
   async function fetchFile(input: FetchInput) {
     setLoading(true)
     setDownloadUrl(null)
+    setReceiptStatus('idle')
+    setReceiptError(null)
     try {
       // 1. Fetch File (Bytes + Headers)
       // Note: input.filePath must be URL encoded if it contains spaces, but URLSearchParams does that.
@@ -47,14 +51,26 @@ export function useFetch() {
       const hProvider = response.headers.get('X-Nil-Provider')
       const hBytes = response.headers.get('X-Nil-Bytes-Served')
       const hProofJson = response.headers.get('X-Nil-Proof-JSON')
+      const hProofHash = response.headers.get('X-Nil-Proof-Hash')
 
       const blob = await response.blob()
       
       // If headers are present and wallet is connected, initiate signing flow.
-      if (hDealId && hEpoch && hProvider && hBytes && address) {
-          const nonceKey = `nilstore:receiptNonces:${address.toLowerCase()}`
-          const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
-          const nextNonce = currentNonce + 1
+      if (hDealId && hEpoch && hProvider && hBytes && hProofHash && address) {
+          // Always derive receipt nonce from chain state to avoid local drift.
+          let lastNonce = 0
+          try {
+              const nonceRes = await fetch(
+                  `${appConfig.lcdBase}/nilchain/nilchain/v1/owners/${encodeURIComponent(input.owner)}/receipt-nonce`,
+              )
+              if (nonceRes.ok) {
+                  const json = await nonceRes.json()
+                  lastNonce = Number(json.last_nonce || 0) || 0
+              }
+          } catch (e) {
+              console.warn("Failed to fetch receipt nonce, falling back to 0", e)
+          }
+          const nextNonce = lastNonce + 1
           
           let proofDetails = null
           if (hProofJson) {
@@ -75,6 +91,8 @@ export function useFetch() {
               provider: hProvider,
               bytes_served: Number(hBytes),
               nonce: nextNonce,
+              expires_at: 0,
+              proof_hash: hProofHash as `0x${string}`,
           }
           
           const typedData = buildRetrievalReceiptTypedData(intent, appConfig.chainId)
@@ -102,21 +120,29 @@ export function useFetch() {
                       nonce: intent.nonce,
                       user_signature: sigBase64,
                       proof_details: proofDetails,
+                      proof_hash: intent.proof_hash,
                       expires_at: 0
                   }
 
                   // Async post (fire and forget, or await?)
                   // We await to catch errors, but don't block the UI excessively.
-                  await fetch(`${appConfig.gatewayBase}/gateway/receipt`, {
+                  const submitRes = await fetch(`${appConfig.gatewayBase}/gateway/receipt`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(receiptPayload)
                   })
-                  
-                  window.localStorage.setItem(nonceKey, String(nextNonce))
-                  console.log("Retrieval receipt submitted successfully")
+                  if (!submitRes.ok) {
+                      const text = await submitRes.text()
+                      setReceiptStatus('failed')
+                      setReceiptError(text || `receipt submission failed (${submitRes.status})`)
+                  } else {
+                      setReceiptStatus('submitted')
+                      setReceiptError(null)
+                  }
               } catch (e) {
                   console.error("Failed to sign/submit receipt", e)
+                  setReceiptStatus('failed')
+                  setReceiptError(String(e))
                   // Don't fail the download itself
               }
           }
@@ -130,7 +156,7 @@ export function useFetch() {
     }
   }
 
-  return { fetchFile, loading, downloadUrl }
+  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError }
 }
 
 function hexToBytes(hex: string): Uint8Array {

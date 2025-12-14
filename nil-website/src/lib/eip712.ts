@@ -104,6 +104,8 @@ export const RetrievalReceiptTypes = {
     { name: 'provider', type: 'string' },
     { name: 'bytes_served', type: 'uint64' },
     { name: 'nonce', type: 'uint64' },
+    { name: 'expires_at', type: 'uint64' },
+    { name: 'proof_hash', type: 'bytes32' },
   ],
 } as const
 
@@ -113,6 +115,8 @@ export interface RetrievalReceiptIntent {
   provider: string
   bytes_served: number
   nonce: number
+  expires_at: number
+  proof_hash: `0x${string}`
 }
 
 export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, chainId: number) {
@@ -131,6 +135,8 @@ export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, c
       provider: intent.provider,
       bytes_served: Number(intent.bytes_served),
       nonce: Number(intent.nonce),
+      expires_at: Number(intent.expires_at),
+      proof_hash: intent.proof_hash,
     },
   }
 }

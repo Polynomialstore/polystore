@@ -38,7 +38,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -252,6 +252,17 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 {deal.cid && (
                     <div className="sm:col-span-2 mt-2 space-y-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      {receiptStatus !== 'idle' && (
+                        <div className="text-[11px]">
+                          {receiptStatus === 'submitted' ? (
+                            <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
+                          ) : (
+                            <span className="text-red-500 dark:text-red-400">
+                              Receipt failed{receiptError ? `: ${receiptError}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
