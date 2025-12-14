@@ -109,14 +109,14 @@ func testDealOwner(t *testing.T) string {
 	return nilAddr
 }
 
-func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, nonce uint64, expiresAt uint64) string {
+func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) string {
 	t.Helper()
 	key, err := ethcrypto.HexToECDSA(strings.TrimPrefix(testEvmPrivKeyHex, "0x"))
 	if err != nil {
 		t.Fatalf("HexToECDSA failed: %v", err)
 	}
 	domainSep := types.HashDomainSeparator(eip712ChainID())
-	structHash := types.HashRetrievalRequest(dealID, filePath, nonce, expiresAt)
+	structHash := types.HashRetrievalRequest(dealID, filePath, rangeStart, rangeLen, nonce, expiresAt)
 	digest := types.ComputeEIP712Digest(domainSep, structHash)
 	sig, err := ethcrypto.Sign(digest, key)
 	if err != nil {
@@ -187,9 +187,12 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	q.Set("deal_id", "1")
 	q.Set("owner", "nil1otherowner")
 	q.Set("file_path", "video.mp4")
-	q.Set("req_nonce", "1")
-	q.Set("req_expires_at", strconv.FormatUint(uint64(time.Now().Unix())+120, 10))
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+root.Canonical+"?"+q.Encode(), nil)
+	req.Header.Set("X-Nil-Req-Sig", "0x"+strings.Repeat("11", 65))
+	req.Header.Set("X-Nil-Req-Nonce", "1")
+	req.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(uint64(time.Now().Unix())+120, 10))
+	req.Header.Set("X-Nil-Req-Range-Start", "0")
+	req.Header.Set("X-Nil-Req-Range-Len", "0")
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -218,10 +221,12 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	q.Set("file_path", "video.mp4")
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
-	q.Set("req_nonce", strconv.FormatUint(nonce, 10))
-	q.Set("req_expires_at", strconv.FormatUint(expiresAt, 10))
-	q.Set("req_sig", signRetrievalRequest(t, 2, "video.mp4", nonce, expiresAt))
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+rootReq.Canonical+"?"+q.Encode(), nil)
+	req.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, 2, "video.mp4", 0, 0, nonce, expiresAt))
+	req.Header.Set("X-Nil-Req-Nonce", strconv.FormatUint(nonce, 10))
+	req.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
+	req.Header.Set("X-Nil-Req-Range-Start", "0")
+	req.Header.Set("X-Nil-Req-Range-Len", "0")
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)

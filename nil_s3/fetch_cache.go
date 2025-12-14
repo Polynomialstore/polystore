@@ -107,6 +107,41 @@ func resolveNilfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, u
 	return reader, mduIdx, mduPath, info.Length, nil
 }
 
+// resolveNilfsFileSegmentForFetch resolves a NilFS file and returns a reader for a subrange.
+// If rangeLen is 0, it returns bytes from rangeStart to EOF (of the file record).
+func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
+	entry, err := loadSlabIndex(dealDir)
+	if err != nil {
+		return nil, 0, "", 0, 0, 0, err
+	}
+
+	info, ok := entry.files[filePath]
+	if !ok {
+		return nil, 0, "", 0, 0, 0, os.ErrNotExist
+	}
+
+	fileLen := info.Length
+	if rangeStart >= fileLen {
+		return nil, 0, "", 0, fileLen, 0, fmt.Errorf("rangeStart beyond EOF")
+	}
+	remaining := fileLen - rangeStart
+	segmentLen := remaining
+	if rangeLen != 0 && rangeLen < segmentLen {
+		segmentLen = rangeLen
+	}
+
+	slabStartIdx := 1 + entry.witnessCount
+	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset+rangeStart, segmentLen)
+	if err != nil {
+		return nil, 0, "", 0, fileLen, 0, err
+	}
+
+	absOffset := info.StartOffset + rangeStart
+	mduIdx := 1 + entry.witnessCount + (absOffset / RawMduCapacity)
+	mduPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIdx))
+	return reader, mduIdx, mduPath, absOffset, segmentLen, fileLen, nil
+}
+
 var (
 	providerAddrMu          sync.Mutex
 	providerAddrCached      string

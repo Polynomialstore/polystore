@@ -8,6 +8,8 @@ export interface FetchInput {
   manifestRoot: string
   owner: string
   filePath: string
+  rangeStart?: number
+  rangeLen?: number
 }
 
 export function useFetch() {
@@ -46,6 +48,8 @@ export function useFetch() {
       const reqIntent: RetrievalRequestIntent = {
         deal_id: Number(input.dealId),
         file_path: input.filePath,
+        range_start: Number(input.rangeStart || 0),
+        range_len: Number(input.rangeLen || 0),
         nonce: reqNonce,
         expires_at: expiresAt,
       }
@@ -64,13 +68,21 @@ export function useFetch() {
         deal_id: input.dealId,
         owner: input.owner,
         file_path: input.filePath,
-        req_sig: reqSignature,
-        req_nonce: String(reqNonce),
-        req_expires_at: String(expiresAt),
       })
       const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
       
-      const response = await fetch(fetchUrl)
+      const reqHeaders: Record<string, string> = {
+        'X-Nil-Req-Sig': reqSignature,
+        'X-Nil-Req-Nonce': String(reqNonce),
+        'X-Nil-Req-Expires-At': String(expiresAt),
+        'X-Nil-Req-Range-Start': String(reqIntent.range_start),
+        'X-Nil-Req-Range-Len': String(reqIntent.range_len),
+      }
+      if (reqIntent.range_len > 0) {
+        reqHeaders['Range'] = `bytes=${reqIntent.range_start}-${reqIntent.range_start + reqIntent.range_len - 1}`
+      }
+
+      const response = await fetch(fetchUrl, { headers: reqHeaders })
       if (!response.ok) {
         // Try to parse JSON error
         const text = await response.text()
@@ -90,12 +102,13 @@ export function useFetch() {
       const hBytes = response.headers.get('X-Nil-Bytes-Served')
       const hProofJson = response.headers.get('X-Nil-Proof-JSON')
       const hProofHash = response.headers.get('X-Nil-Proof-Hash')
+      const hFetchSession = response.headers.get('X-Nil-Fetch-Session')
       
       // Download bytes first (so the receipt signature is an explicit post-download acknowledgement).
       const blob = await response.blob()
 
       // If headers are present and wallet is connected, initiate signing flow.
-      if (hDealId && hEpoch && hProvider && hBytes && hProofHash && address) {
+      if (hDealId && hEpoch && hProvider && hBytes && hProofHash && hFetchSession && address) {
           // Always derive receipt nonce from chain state to avoid local drift.
           let lastNonce = 0
           try {
@@ -158,15 +171,18 @@ export function useFetch() {
                   const sigBase64 = bytesToBase64(sigBytes)
 
                   const receiptPayload = {
-                      deal_id: intent.deal_id,
-                      epoch_id: intent.epoch_id,
-                      provider: intent.provider,
-                      bytes_served: intent.bytes_served,
-                      nonce: intent.nonce,
-                      user_signature: sigBase64,
-                      proof_details: proofDetails,
-                      proof_hash: intent.proof_hash,
-                      expires_at: 0
+                      fetch_session: hFetchSession,
+                      receipt: {
+                          deal_id: intent.deal_id,
+                          epoch_id: intent.epoch_id,
+                          provider: intent.provider,
+                          bytes_served: intent.bytes_served,
+                          nonce: intent.nonce,
+                          user_signature: sigBase64,
+                          proof_details: proofDetails,
+                          proof_hash: intent.proof_hash,
+                          expires_at: 0
+                      },
                   }
 
                   // Async post (fire and forget, or await?)
@@ -191,6 +207,10 @@ export function useFetch() {
                   // Don't fail the download itself
               }
           }
+      }
+      if (address && receiptStatus === 'idle' && (!hFetchSession || !hProofHash || !hDealId)) {
+        setReceiptStatus('failed')
+        setReceiptError('Gateway did not provide receipt headers; cannot submit retrieval receipt.')
       }
 
       const url = window.URL.createObjectURL(blob)

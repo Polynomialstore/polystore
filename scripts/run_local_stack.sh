@@ -222,7 +222,7 @@ PY
 
 start_chain() {
   banner "Starting nilchaind"
-  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" SKIP_KZG_VERIFY="true" \
+  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" \
     "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \

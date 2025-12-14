@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -151,7 +152,7 @@ var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 //	{ "proof_details": <ChainedProof> }
 //
 // This function is performance critical and caches results keyed by (mduIndex,mduPath,manifestPath,blobIndex,epoch).
-func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) ([]byte, string, error) {
+func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, blobIndex uint32, zHint uint64) ([]byte, string, error) {
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
@@ -176,7 +177,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		mduIndex:      mduIndex,
 		mduPath:       mduPath,
 		manifestPath:  manifestPath,
-		blobIndex:     0,
+		blobIndex:     blobIndex,
 		manifestEpoch: epoch,
 	}
 
@@ -229,8 +230,11 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		return nil, "", fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
 	}
 
-	blobIndex := uint32(0)
-	blobCommitment := witnessRaw[:commitmentBytes]
+	if blobIndex >= uint32(types.BLOBS_PER_MDU) {
+		return nil, "", fmt.Errorf("blobIndex out of range: %d", blobIndex)
+	}
+	commitmentOffset := int(blobIndex) * commitmentBytes
+	blobCommitment := witnessRaw[commitmentOffset : commitmentOffset+commitmentBytes]
 
 	leafHashes := make([][32]byte, 0, types.BLOBS_PER_MDU)
 	for i := 0; i < len(witnessRaw); i += commitmentBytes {
@@ -247,6 +251,9 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	z := make([]byte, 32)
 	z[0] = 42
 	z[1] = byte(blobIndex)
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], zHint)
+	copy(z[2:10], b[:])
 	kzgProofBytes, y, err := crypto_ffi.ComputeBlobProof(blobBytes, z)
 	if err != nil {
 		return nil, "", fmt.Errorf("ComputeBlobProof failed: %w", err)

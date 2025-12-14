@@ -39,11 +39,12 @@ var (
 	// v2 binds the user's signature to the exact proof_details via proof_hash and includes expires_at.
 	RetrievalReceiptTypeHashV2 = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce,uint64 expires_at,bytes32 proof_hash)"))
 
-	// keccak256("RetrievalRequest(uint64 deal_id,string file_path,uint64 nonce,uint64 expires_at)")
+	// keccak256("RetrievalRequest(uint64 deal_id,string file_path,uint64 range_start,uint64 range_len,uint64 nonce,uint64 expires_at)")
 	//
 	// This is an off-chain authorization signature used by the Gateway to
-	// ensure only the Deal Owner can initiate a fetch for a specific file path.
-	RetrievalRequestTypeHash = crypto.Keccak256([]byte("RetrievalRequest(uint64 deal_id,string file_path,uint64 nonce,uint64 expires_at)"))
+	// ensure only the Deal Owner can initiate a fetch for a specific file path
+	// and byte-range.
+	RetrievalRequestTypeHash = crypto.Keccak256([]byte("RetrievalRequest(uint64 deal_id,string file_path,uint64 range_start,uint64 range_len,uint64 nonce,uint64 expires_at)"))
 )
 
 // HashDomainSeparator computes the domain separator for a specific chain ID.
@@ -168,9 +169,11 @@ func HashRetrievalReceiptV2(receipt *RetrievalReceipt) (common.Hash, error) {
 }
 
 // HashRetrievalRequest computes the struct hash for an off-chain retrieval request.
-// Fields: deal_id, file_path, nonce, expires_at
-func HashRetrievalRequest(dealID uint64, filePath string, nonce uint64, expiresAt uint64) common.Hash {
+// Fields: deal_id, file_path, range_start, range_len, nonce, expires_at
+func HashRetrievalRequest(dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) common.Hash {
 	deal := new(big.Int).SetUint64(dealID)
+	rs := new(big.Int).SetUint64(rangeStart)
+	rl := new(big.Int).SetUint64(rangeLen)
 	n := new(big.Int).SetUint64(nonce)
 	exp := new(big.Int).SetUint64(expiresAt)
 
@@ -178,6 +181,8 @@ func HashRetrievalRequest(dealID uint64, filePath string, nonce uint64, expiresA
 		RetrievalRequestTypeHash,
 		math.PaddedBigBytes(deal, 32),
 		keccak256String(filePath),
+		math.PaddedBigBytes(rs, 32),
+		math.PaddedBigBytes(rl, 32),
 		math.PaddedBigBytes(n, 32),
 		math.PaddedBigBytes(exp, 32),
 	)

@@ -65,7 +65,14 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const reqNonce = 1
   const reqExpiresAt = Math.floor(Date.now() / 1000) + 120
   const reqTypedData = buildRetrievalRequestTypedData(
-    { deal_id: Number(dealId), file_path: filePath, nonce: reqNonce, expires_at: reqExpiresAt },
+    {
+      deal_id: Number(dealId),
+      file_path: filePath,
+      range_start: 0,
+      range_len: 0,
+      nonce: reqNonce,
+      expires_at: reqExpiresAt,
+    },
     Number(process.env.CHAIN_ID || 31337),
   )
   const reqSig = await account.signTypedData({
@@ -76,9 +83,17 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const fetchUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
     dealId,
   )}&owner=${encodeURIComponent(owner)}&file_path=${encodeURIComponent(filePath)}`
-  const signedFetchUrl = `${fetchUrl}&req_sig=${encodeURIComponent(reqSig)}&req_nonce=${reqNonce}&req_expires_at=${reqExpiresAt}`
   const perfStart = Date.now()
-  const perfResp = await request.get(signedFetchUrl, { timeout: 20_000 })
+  const perfResp = await request.get(fetchUrl, {
+    timeout: 20_000,
+    headers: {
+      'X-Nil-Req-Sig': reqSig,
+      'X-Nil-Req-Nonce': String(reqNonce),
+      'X-Nil-Req-Expires-At': String(reqExpiresAt),
+      'X-Nil-Req-Range-Start': '0',
+      'X-Nil-Req-Range-Len': '0',
+    },
+  })
   const perfElapsedMs = Date.now() - perfStart
   expect(perfResp.status()).toBe(200)
   expect(perfElapsedMs).toBeLessThan(20_000)

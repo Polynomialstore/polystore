@@ -113,3 +113,61 @@ Frontend rule:
 **Test gates (frontend):**
 - Unit test: typed-data shape matches chain (golden vector).
 - Smoke test: download triggers signature prompt and receipt submission; heat increments.
+
+---
+
+## 8. Phase 4 TODO (Signed Fetch, Ranges, and Session Binding)
+
+This phase removes the remaining “short-circuit” surfaces and improves the audit story for *what exactly* was requested and served.
+
+### 8.1 Signed Retrieval Request (Pre-Fetch Authorization)
+
+**Problem:** Without a signed pre-fetch ticket, anyone who knows `{deal_id, owner, file_path}` can ask the gateway to stream bytes. Worse, if signatures are in URLs they leak to logs/history.
+
+**Requirement:** `GET /gateway/fetch/{manifest_root}` MUST require a short-lived EIP-712 `RetrievalRequest` signature from the Deal Owner, passed via **request headers** (not query params).
+
+**Signed fields (EIP-712 RetrievalRequest):**
+- `deal_id` (uint64)
+- `file_path` (string)
+- `range_start` (uint64; 0 allowed)
+- `range_len` (uint64; 0 means “entire file from range_start”)
+- `nonce` (uint64; random/unique per request)
+- `expires_at` (uint64; unix seconds; short-lived, e.g. 2 minutes)
+
+**Gateway invariants (must-fail):**
+- Signature recovers to Deal Owner (EVM address → bech32 `nil` mapping).
+- `expires_at` is within a tight window (expired or far-future must fail).
+- The served range MUST match `(range_start, range_len)` signed by the user.
+
+### 8.2 Request Replay Protection (Gateway)
+
+**Requirement:** The gateway MUST reject replays for `(deal_id, owner, nonce)` within the request’s expiry window (in-memory TTL cache is acceptable for devnet).
+
+### 8.3 Fetch Session Binding (Gateway ↔ Receipt)
+
+**Problem:** Even with a signed receipt, the Provider should ensure the receipt exactly matches what the gateway served (bytes_served, proof_details, etc.), not an attacker-modified payload.
+
+**Requirement:** `/gateway/fetch` MUST return a `fetch_session` identifier and the provider must only accept `/gateway/receipt` submissions that reference a live session whose parameters match:
+- `deal_id`, `epoch_id`, `provider`
+- `bytes_served` (must equal actual streamed bytes)
+- `proof_hash` derived from `proof_details` must equal the session’s proof hash
+
+**Note:** The session object is off-chain state. It is purely a *local correctness/anti-tamper* mechanism.
+
+### 8.4 HTTP Range Support (User-Level Files)
+
+**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for NilFS files.
+
+**Constraints (devnet acceptable):**
+- Support single-range requests (no multipart ranges).
+- Enforce a max range length (e.g., 128 KiB) to match the “single blob proof” model.
+
+### Phase 4 test gates
+
+**Gateway:**
+- Unit tests: invalid request signature rejected; replay rejected; range mismatch rejected.
+- Unit test: receipt submission fails without session or with mismatched bytes/proof hash.
+
+**Browser E2E:**
+- Smoke: download triggers two signatures (request + receipt) and heat increments.
+- Smoke: direct fetch perf test includes signed request headers (no query signatures).

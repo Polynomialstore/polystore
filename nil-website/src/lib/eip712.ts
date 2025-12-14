@@ -114,6 +114,8 @@ export const RetrievalRequestTypes = {
   RetrievalRequest: [
     { name: 'deal_id', type: 'uint64' },
     { name: 'file_path', type: 'string' },
+    { name: 'range_start', type: 'uint64' },
+    { name: 'range_len', type: 'uint64' },
     { name: 'nonce', type: 'uint64' },
     { name: 'expires_at', type: 'uint64' },
   ],
@@ -132,6 +134,8 @@ export interface RetrievalReceiptIntent {
 export interface RetrievalRequestIntent {
   deal_id: number
   file_path: string
+  range_start: number
+  range_len: number
   nonce: number
   expires_at: number
 }
@@ -149,6 +153,8 @@ export function buildRetrievalRequestTypedData(intent: RetrievalRequestIntent, c
     message: {
       deal_id: Number(intent.deal_id),
       file_path: intent.file_path,
+      range_start: Number(intent.range_start),
+      range_len: Number(intent.range_len),
       nonce: Number(intent.nonce),
       expires_at: Number(intent.expires_at),
     },

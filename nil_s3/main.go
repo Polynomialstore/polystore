@@ -1291,9 +1291,26 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
 	filePath, err := validateNilfsFilePath(q.Get("file_path"))
-	reqSig := strings.TrimSpace(q.Get("req_sig"))
-	reqNonceStr := strings.TrimSpace(q.Get("req_nonce"))
-	reqExpiresStr := strings.TrimSpace(q.Get("req_expires_at"))
+	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
+	if reqSig == "" {
+		reqSig = strings.TrimSpace(q.Get("req_sig"))
+	}
+	reqNonceStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Nonce"))
+	if reqNonceStr == "" {
+		reqNonceStr = strings.TrimSpace(q.Get("req_nonce"))
+	}
+	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Expires-At"))
+	if reqExpiresStr == "" {
+		reqExpiresStr = strings.TrimSpace(q.Get("req_expires_at"))
+	}
+	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Start"))
+	if reqRangeStartStr == "" {
+		reqRangeStartStr = strings.TrimSpace(q.Get("req_range_start"))
+	}
+	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Len"))
+	if reqRangeLenStr == "" {
+		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
+	}
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -1324,6 +1341,20 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
 		return
 	}
+	reqRangeStart, err := strconv.ParseUint(reqRangeStartStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
+		return
+	}
+	reqRangeLen, err := strconv.ParseUint(reqRangeLenStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
+		return
+	}
+	if reqRangeLen > uint64(types.BLOB_SIZE) {
+		writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("req_range_len must be <= %d", types.BLOB_SIZE))
+		return
+	}
 
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
@@ -1342,8 +1373,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
-	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqNonce, reqExpiresAt, reqSig); err != nil {
+	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
 		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
+		return
+	}
+	if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+		writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
 		return
 	}
 	if strings.TrimSpace(dealCID) == "" {
@@ -1385,7 +1420,30 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Resolve NilFS file.
-	content, mduIdx, mduPath, fileLen, err := resolveNilfsFileForFetch(dealDir, filePath)
+	rangeHeader := strings.TrimSpace(r.Header.Get("Range"))
+	var rangeHeaderStart uint64
+	var rangeHeaderLen uint64
+	if rangeHeader != "" {
+		start, length, perr := parseHTTPRange(rangeHeader)
+		if perr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid Range header", perr.Error())
+			return
+		}
+		rangeHeaderStart = start
+		rangeHeaderLen = length
+	}
+	if rangeHeader != "" && reqRangeLen == 0 {
+		writeJSONError(w, http.StatusBadRequest, "range must be signed", "include range_start/range_len in the signed retrieval request")
+		return
+	}
+	if reqRangeLen > 0 && rangeHeader != "" {
+		if rangeHeaderStart != reqRangeStart || rangeHeaderLen != reqRangeLen {
+			writeJSONError(w, http.StatusBadRequest, "range mismatch", "Range header must match signed request")
+			return
+		}
+	}
+
+	content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, reqRangeStart, reqRangeLen)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
@@ -1396,11 +1454,15 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		log.Printf("resolveNilfsFileForFetch failed: %v", err)
+		log.Printf("resolveNilfsFileSegmentForFetch failed: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file", "")
 		return
 	}
 	defer content.Close()
+	if servedLen == 0 {
+		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+		return
+	}
 
 	// Resolve Provider Address for the Header (for Client-Side Signing)
 	providerAddr := cachedProviderAddress(r.Context())
@@ -1415,21 +1477,63 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	var proofHash string
 	var proofMs int64
 	proofStart := time.Now()
-	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
+	offsetInMdu := absOffset % RawMduCapacity
+	blobIndex, berr := rawOffsetToEncodedBlobIndex(offsetInMdu)
+	if berr != nil {
+		blobIndex = 0
+	}
+	// Range requests must stay within a single physical MDU and blob for now.
+	if reqRangeLen > 0 {
+		endAbs := absOffset + servedLen - 1
+		if absOffset/RawMduCapacity != endAbs/RawMduCapacity {
+			writeJSONError(w, http.StatusBadRequest, "range crosses MDU boundary", "split into multiple requests")
+			return
+		}
+		endOffsetInMdu := endAbs % RawMduCapacity
+		endBlob, eerr := rawOffsetToEncodedBlobIndex(endOffsetInMdu)
+		if eerr != nil || endBlob != blobIndex {
+			writeJSONError(w, http.StatusBadRequest, "range crosses blob boundary", "split into multiple requests")
+			return
+		}
+	}
+
+	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath, blobIndex, absOffset)
 	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
 		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
-		proofPayload = nil
-		proofHash = ""
+		writeJSONError(w, http.StatusInternalServerError, "failed to generate proof_details", err.Error())
+		return
+	}
+	if proofHash == "" || proofPayload == nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to generate proof_details", "")
+		return
+	}
+
+	sessionID, serr := storeFetchSession(fetchSession{
+		DealID:      dealID,
+		EpochID:     1,
+		Owner:       owner,
+		Provider:    providerAddr,
+		FilePath:    filePath,
+		RangeStart:  reqRangeStart,
+		RangeLen:    reqRangeLen,
+		BytesServed: servedLen,
+		ProofHash:   proofHash,
+		ExpiresAt:   time.Now().Add(10 * time.Minute),
+	})
+	if serr != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
+		return
 	}
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
 	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
 	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
-	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(fileLen, 10))
+	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(servedLen, 10))
 	w.Header().Set("X-Nil-Provider", providerAddr)
 	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
 	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
+	w.Header().Set("X-Nil-Fetch-Session", sessionID)
 	if proofHash != "" {
 		w.Header().Set("X-Nil-Proof-Hash", proofHash)
 	}
@@ -1437,12 +1541,20 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
 	}
 
-	// Serve as attachment so browsers will download instead of inline JSON.
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.FormatUint(fileLen, 10))
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
-	_, _ = io.Copy(w, content)
-}
+		// Serve as attachment so browsers will download instead of inline JSON.
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", strconv.FormatUint(servedLen, 10))
+		if reqRangeLen > 0 || rangeHeader != "" {
+			end := reqRangeStart + servedLen - 1
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", reqRangeStart, end, totalFileLen))
+			w.WriteHeader(http.StatusPartialContent)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+		_, _ = io.Copy(w, content)
+	}
 
 type nilfsFileEntry struct {
 	Path        string `json:"path"`
@@ -1901,8 +2013,8 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
 func extractTxHash(out string) string {
@@ -1929,6 +2041,61 @@ func extractNilAddress(out string) string {
 		return ""
 	}
 	return matches[len(matches)-1]
+}
+
+func parseHTTPRange(header string) (start uint64, length uint64, err error) {
+	// Only support a single explicit range: "bytes=start-end".
+	// No suffix ranges, no multipart ranges.
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0, 0, fmt.Errorf("empty Range")
+	}
+	if !strings.HasPrefix(strings.ToLower(header), "bytes=") {
+		return 0, 0, fmt.Errorf("unsupported range unit")
+	}
+	spec := strings.TrimSpace(header[len("bytes="):])
+	if spec == "" || strings.Contains(spec, ",") {
+		return 0, 0, fmt.Errorf("multiple ranges not supported")
+	}
+	parts := strings.Split(spec, "-")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("invalid range format")
+	}
+	if strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return 0, 0, fmt.Errorf("open-ended ranges not supported")
+	}
+	s, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid range start")
+	}
+	e, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid range end")
+	}
+	if e < s {
+		return 0, 0, fmt.Errorf("invalid range end before start")
+	}
+	return s, e - s + 1, nil
+}
+
+func rawOffsetToEncodedBlobIndex(rawOffsetInMdu uint64) (uint32, error) {
+	// Map a raw NilFS payload offset to the underlying encoded MDU byte position
+	// (32-byte scalars, right-aligned payload), then to a 128 KiB blob index.
+	//
+	// Note: This assumes the standard NilFS packing (31 payload bytes per 32-byte scalar).
+	if rawOffsetInMdu >= RawMduCapacity {
+		return 0, fmt.Errorf("raw offset out of bounds: %d", rawOffsetInMdu)
+	}
+	scalarIdx := rawOffsetInMdu / nilfsScalarPayloadBytes
+	payloadOffset := rawOffsetInMdu % nilfsScalarPayloadBytes
+	// Most scalars have a 1-byte left pad (32-31). The very last scalar of a
+	// partially-filled MDU can have a larger pad, but in devnet we treat it as 1.
+	encodedPos := scalarIdx*nilfsScalarBytes + 1 + payloadOffset
+	blobIdx := encodedPos / uint64(types.BLOB_SIZE)
+	if blobIdx >= uint64(types.BLOBS_PER_MDU) {
+		return 0, fmt.Errorf("derived blob index out of range: %d", blobIdx)
+	}
+	return uint32(blobIdx), nil
 }
 
 func eip712ChainID() *big.Int {
@@ -1968,7 +2135,7 @@ func recoverEvmAddressFromDigest(digest []byte, signature []byte) (common.Addres
 	return crypto.PubkeyToAddress(*pub), nil
 }
 
-func verifyRetrievalRequestSignature(dealOwner string, dealID uint64, filePath string, nonce uint64, expiresAt uint64, sigHex string) error {
+func verifyRetrievalRequestSignature(dealOwner string, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64, sigHex string) error {
 	if strings.TrimSpace(sigHex) == "" {
 		return fmt.Errorf("req_sig is required")
 	}
@@ -2000,7 +2167,7 @@ func verifyRetrievalRequestSignature(dealOwner string, dealID uint64, filePath s
 	}
 
 	domainSep := types.HashDomainSeparator(eip712ChainID())
-	structHash := types.HashRetrievalRequest(dealID, filePath, nonce, expiresAt)
+	structHash := types.HashRetrievalRequest(dealID, filePath, rangeStart, rangeLen, nonce, expiresAt)
 	digest := types.ComputeEIP712Digest(domainSep, structHash)
 	evmAddr, err := recoverEvmAddressFromDigest(digest, sigBytes)
 	if err != nil {
@@ -2418,6 +2585,11 @@ type RetrievalReceipt struct {
 	ExpiresAt     uint64          `json:"expires_at"`
 }
 
+type SignedReceiptEnvelope struct {
+	FetchSession string           `json:"fetch_session"`
+	Receipt      RetrievalReceipt `json:"receipt"`
+}
+
 // GatewaySubmitReceipt is the User Daemon endpoint.
 // It accepts a signed receipt from the browser and forwards it to the Provider.
 func GatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
@@ -2441,12 +2613,17 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var receipt RetrievalReceipt
-	if err := json.Unmarshal(body, &receipt); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON", err.Error())
+	var env SignedReceiptEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {fetch_session, receipt}")
+		return
+	}
+	if strings.TrimSpace(env.FetchSession) == "" {
+		writeJSONError(w, http.StatusBadRequest, "fetch_session is required", "")
 		return
 	}
 
+	receipt := env.Receipt
 	if strings.TrimSpace(receipt.Provider) == "" {
 		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
 		return
@@ -2464,6 +2641,35 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, ok := loadFetchSession(strings.TrimSpace(env.FetchSession))
+	if !ok {
+		writeJSONError(w, http.StatusBadRequest, "invalid fetch_session", "session expired or unknown; retry the download")
+		return
+	}
+	if session.DealID != receipt.DealId || session.EpochID != receipt.EpochId {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "deal_id/epoch_id mismatch")
+		return
+	}
+	if strings.TrimSpace(session.Provider) != strings.TrimSpace(receipt.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "provider mismatch")
+		return
+	}
+	if session.BytesServed != receipt.BytesServed {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "bytes_served mismatch")
+		return
+	}
+	var chained types.ChainedProof
+	if err := json.Unmarshal(receipt.ProofDetails, &chained); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid proof_details", err.Error())
+		return
+	}
+	proofHash, _ := types.HashChainedProof(&chained)
+	proofHashHex := "0x" + hex.EncodeToString(proofHash.Bytes())
+	if strings.TrimSpace(session.ProofHash) != "" && strings.TrimSpace(session.ProofHash) != strings.TrimSpace(proofHashHex) {
+		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "proof_hash mismatch")
+		return
+	}
+
 	// Save to temp file for CLI submission
 	tmpFile, err := os.CreateTemp(uploadDir, "signed-receipt-*.json")
 	if err != nil {
@@ -2472,7 +2678,12 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpFile.Name())
 
-	if _, err := tmpFile.Write(body); err != nil {
+	receiptJSON, err := json.Marshal(receipt)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode receipt", err.Error())
+		return
+	}
+	if _, err := tmpFile.Write(receiptJSON); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
 		return
 	}
@@ -2577,6 +2788,8 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "retrieval receipt tx failed", deliverRawLog)
 		return
 	}
+
+	deleteFetchSession(strings.TrimSpace(env.FetchSession))
 
 	log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
 	w.Header().Set("Content-Type", "application/json")
