@@ -16,6 +16,7 @@ validator_key.json
 libnil_core.dylib
 .nilchain_retrieval
 nil_s3/uploads/
+uploads/sessions.db
 .gemini
 nil-website/test-results/
 nil-website/playwright-report/

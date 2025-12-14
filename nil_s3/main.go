@@ -37,6 +37,7 @@ import (
 // Configurable paths & chain settings (overridable via env).
 var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
+	sessionDBPath   = envDefault("NIL_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
 	nilCliPath      = envDefault("NIL_CLI_BIN", "../nil_cli/target/release/nil_cli")
 	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../nilchain/trusted_setup.txt")
 	nilchaindBin    = envDefault("NILCHAIND_BIN", "nilchaind")
@@ -265,6 +266,10 @@ func main() {
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
+	}
+
+	if err := initSessionDB(sessionDBPath); err != nil {
+		log.Fatalf("failed to open session db %s: %v", sessionDBPath, err)
 	}
 
 	// Initialize KZG (load trusted setup once)
@@ -1373,14 +1378,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
-		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
-			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
-			return
-		}
-		if strings.TrimSpace(dealCID) == "" {
-			writeJSONError(
-				w,
-				http.StatusConflict,
+	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
+		return
+	}
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(
+			w,
+			http.StatusConflict,
 			"deal has no committed manifest_root yet",
 			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
 		)
@@ -1500,34 +1505,34 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to generate proof_details", err.Error())
 		return
 	}
-		if proofHash == "" || proofPayload == nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to generate proof_details", "")
-			return
-		}
+	if proofHash == "" || proofPayload == nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to generate proof_details", "")
+		return
+	}
 
-		// Anti-replay: only consume the request nonce once we've fully validated the deal state
-		// and successfully generated the proof/segment.
-		if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
-			writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
-			return
-		}
+	// Anti-replay: only consume the request nonce once we've fully validated the deal state
+	// and successfully generated the proof/segment.
+	if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+		writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
+		return
+	}
 
-		sessionID, serr := storeFetchSession(fetchSession{
-			DealID:      dealID,
-			EpochID:     1,
-			Owner:       owner,
+	sessionID, serr := storeFetchSession(fetchSession{
+		DealID:      dealID,
+		EpochID:     1,
+		Owner:       owner,
 		Provider:    providerAddr,
 		FilePath:    filePath,
-			RangeStart:  reqRangeStart,
-			RangeLen:    reqRangeLen,
-			BytesServed: servedLen,
-			ProofHash:   proofHash,
-			ReqNonce:    reqNonce,
-			ReqExpires:  reqExpiresAt,
-			ExpiresAt:   time.Now().Add(10 * time.Minute),
-		})
-		if serr != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
+		RangeStart:  reqRangeStart,
+		RangeLen:    reqRangeLen,
+		BytesServed: servedLen,
+		ProofHash:   proofHash,
+		ReqNonce:    reqNonce,
+		ReqExpires:  reqExpiresAt,
+		ExpiresAt:   time.Now().Add(10 * time.Minute),
+	})
+	if serr != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
 		return
 	}
 
@@ -1546,20 +1551,20 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
 	}
 
-		// Serve as attachment so browsers will download instead of inline JSON.
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
-		w.Header().Set("Accept-Ranges", "bytes")
-		w.Header().Set("Content-Length", strconv.FormatUint(servedLen, 10))
-		if reqRangeLen > 0 || rangeHeader != "" {
-			end := reqRangeStart + servedLen - 1
-			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", reqRangeStart, end, totalFileLen))
-			w.WriteHeader(http.StatusPartialContent)
-		} else {
-			w.WriteHeader(http.StatusOK)
-		}
-		_, _ = io.Copy(w, content)
+	// Serve as attachment so browsers will download instead of inline JSON.
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Length", strconv.FormatUint(servedLen, 10))
+	if reqRangeLen > 0 || rangeHeader != "" {
+		end := reqRangeStart + servedLen - 1
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", reqRangeStart, end, totalFileLen))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
 	}
+	_, _ = io.Copy(w, content)
+}
 
 type nilfsFileEntry struct {
 	Path        string `json:"path"`
@@ -2646,11 +2651,11 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		session, ok := takeFetchSession(strings.TrimSpace(env.FetchSession))
-		if !ok {
-			writeJSONError(w, http.StatusBadRequest, "invalid fetch_session", "session expired or unknown; retry the download")
-			return
-		}
+	session, ok := takeFetchSession(strings.TrimSpace(env.FetchSession))
+	if !ok {
+		writeJSONError(w, http.StatusBadRequest, "invalid fetch_session", "session expired or unknown; retry the download")
+		return
+	}
 	if session.DealID != receipt.DealId || session.EpochID != receipt.EpochId {
 		writeJSONError(w, http.StatusBadRequest, "receipt does not match fetch session", "deal_id/epoch_id mismatch")
 		return
@@ -2794,10 +2799,10 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status":  "success",
+	log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
 		"tx_hash": txHash,
 	})
 }
