@@ -14,6 +14,7 @@ import (
 
 func TestGatewayFetch_ByPath(t *testing.T) {
 	useTempUploadDir(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 
 	// Setup Fake Deal
 	manifestRoot := mustTestManifestRoot(t, "fetch-by-path")

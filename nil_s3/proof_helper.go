@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -140,6 +140,7 @@ type cachedProof struct {
 	mduModTime      int64
 	manifestModTime int64
 	payload         []byte
+	proofHashHex    string
 }
 
 var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
@@ -150,7 +151,7 @@ var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 //	{ "proof_details": <ChainedProof> }
 //
 // This function is performance critical and caches results keyed by (mduIndex,mduPath,manifestPath,blobIndex,epoch).
-func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) ([]byte, error) {
+func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) ([]byte, string, error) {
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
@@ -163,11 +164,11 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 
 	mduStat, err := os.Stat(mduPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat MDU: %w", err)
+		return nil, "", fmt.Errorf("failed to stat MDU: %w", err)
 	}
 	manifestStat, err := os.Stat(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat manifest: %w", err)
+		return nil, "", fmt.Errorf("failed to stat manifest: %w", err)
 	}
 
 	key := proofCacheKey{
@@ -182,31 +183,31 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	if cachedAny, ok := proofHeaderCache.Load(key); ok {
 		cached := cachedAny.(*cachedProof)
 		if cached.mduModTime == mduStat.ModTime().UnixNano() && cached.manifestModTime == manifestStat.ModTime().UnixNano() {
-			return cached.payload, nil
+			return cached.payload, cached.proofHashHex, nil
 		}
 	}
 
 	manifestBlob, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest: %w", err)
+		return nil, "", fmt.Errorf("failed to read manifest: %w", err)
 	}
 	if len(manifestBlob) != types.BLOB_SIZE {
-		return nil, fmt.Errorf("invalid Manifest size: %d", len(manifestBlob))
+		return nil, "", fmt.Errorf("invalid Manifest size: %d", len(manifestBlob))
 	}
 
 	dealDir := filepath.Dir(mduPath)
 	meta, err := loadSlabIndex(dealDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load slab index: %w", err)
+		return nil, "", fmt.Errorf("failed to load slab index: %w", err)
 	}
 
 	// Derive the user-MDU ordinal from the physical slab index.
 	// Layout: mdu_0 (manifest), mdu_1..mdu_W (witness), mdu_(W+1).. (user).
 	if mduIndex <= meta.witnessCount {
-		return nil, fmt.Errorf("invalid mdu index %d for user data (witness=%d)", mduIndex, meta.witnessCount)
+		return nil, "", fmt.Errorf("invalid mdu index %d for user data (witness=%d)", mduIndex, meta.witnessCount)
 	}
 	if mduIndex < 1+meta.witnessCount {
-		return nil, fmt.Errorf("invalid slab layout for mdu index %d (witness=%d)", mduIndex, meta.witnessCount)
+		return nil, "", fmt.Errorf("invalid slab layout for mdu index %d (witness=%d)", mduIndex, meta.witnessCount)
 	}
 	userOrdinal := mduIndex - (1 + meta.witnessCount)
 
@@ -217,15 +218,15 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 
 	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open witness reader: %w", err)
+		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
 	}
 	witnessRaw, err := io.ReadAll(witnessReader)
 	_ = witnessReader.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read witness commitments: %w", err)
+		return nil, "", fmt.Errorf("failed to read witness commitments: %w", err)
 	}
 	if uint64(len(witnessRaw)) != commitmentSpan {
-		return nil, fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
+		return nil, "", fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
 	}
 
 	blobIndex := uint32(0)
@@ -241,19 +242,19 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	// Hop 3: compute a single blob opening proof without recomputing commitments.
 	blobBytes, err := readMduBlob(mduPath, uint64(blobIndex))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read blob bytes: %w", err)
+		return nil, "", fmt.Errorf("failed to read blob bytes: %w", err)
 	}
 	z := make([]byte, 32)
 	z[0] = 42
 	z[1] = byte(blobIndex)
 	kzgProofBytes, y, err := crypto_ffi.ComputeBlobProof(blobBytes, z)
 	if err != nil {
-		return nil, fmt.Errorf("ComputeBlobProof failed: %w", err)
+		return nil, "", fmt.Errorf("ComputeBlobProof failed: %w", err)
 	}
 
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	chainedProof := types.ChainedProof{
@@ -268,33 +269,40 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		KzgOpeningProof: kzgProofBytes,
 	}
 
+	proofHash, err := types.HashChainedProof(&chainedProof)
+	if err != nil {
+		return nil, "", err
+	}
+	proofHashHex := "0x" + hex.EncodeToString(proofHash.Bytes())
+
 	proofBytes, err := json.Marshal(chainedProof)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	headerPayload, err := json.Marshal(struct {
 		DealId      uint64          `json:"deal_id"`
 		EpochId     uint64          `json:"epoch_id"`
 		ProofDetail json.RawMessage `json:"proof_details"`
-		Nonce       uint64          `json:"nonce"`
+		ProofHash   string          `json:"proof_hash"`
 	}{
 		DealId:      dealID,
 		EpochId:     epoch,
 		ProofDetail: json.RawMessage(proofBytes),
-		Nonce:       uint64(time.Now().UnixNano()),
+		ProofHash:   proofHashHex,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	proofHeaderCache.Store(key, &cachedProof{
 		mduModTime:      mduStat.ModTime().UnixNano(),
 		manifestModTime: manifestStat.ModTime().UnixNano(),
 		payload:         headerPayload,
+		proofHashHex:    proofHashHex,
 	})
 
-	return headerPayload, nil
+	return headerPayload, proofHashHex, nil
 }
 
 func readMduBlob(mduPath string, blobIndex uint64) ([]byte, error) {

@@ -1372,17 +1372,23 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve Provider Address for the Header (for Client-Side Signing)
 	providerAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(providerAddr) == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
+		return
+	}
 
 	// Generate Proof Details payload (for receipt submission).
 	manifestPath := filepath.Join(dealDir, "manifest.bin")
 	var proofPayload []byte
+	var proofHash string
 	var proofMs int64
 	proofStart := time.Now()
-	proofPayload, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
+	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath)
 	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
 		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
 		proofPayload = nil
+		proofHash = ""
 	}
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
@@ -1392,6 +1398,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Nil-Provider", providerAddr)
 	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
 	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
+	if proofHash != "" {
+		w.Header().Set("X-Nil-Proof-Hash", proofHash)
+	}
 	if proofPayload != nil {
 		w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
 	}
@@ -1861,7 +1870,7 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
 func extractTxHash(out string) string {
