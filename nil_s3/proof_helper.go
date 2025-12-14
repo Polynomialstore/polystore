@@ -144,17 +144,8 @@ func generateProofJSON(ctx context.Context, dealID uint64, epoch uint64, mduInde
 	epochStr := strconv.FormatUint(epoch, 10)
 	mduIndexStr := strconv.FormatUint(mduIndex, 10)
 
-	// 1. Compute KZG commitments/roots for the already-encoded MDU.
-	// Use a unique prefix to avoid collisions
-	prefix := fmt.Sprintf("%s-%d.proof", mduPath, time.Now().UnixNano())
-	
-	_, err = shardFile(ctx, mduPath, true, prefix)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode MDU for proof: %w", err)
-	}
-	encodedMduPath := fmt.Sprintf("%s.mdu.0.bin", prefix)
-	defer os.Remove(encodedMduPath)
-	defer os.Remove(prefix + ".json")
+	// For proof generation, we use the MDU file directly.
+	encodedMduPath := mduPath
 
 	// 4. Sign Receipt (Generate JSON)
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
