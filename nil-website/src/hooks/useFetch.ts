@@ -64,7 +64,7 @@ export function useFetch() {
       })
       const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
 
-      async function fetchOneRange(rangeStart: number, rangeLen: number): Promise<Uint8Array> {
+      async function fetchOneRange(rangeStart: number, rangeLen: number): Promise<Uint8Array<ArrayBuffer>> {
         // 0) Sign Retrieval Request (authorizes the fetch; does NOT count as receipt)
         const expiresAt = Math.floor(Date.now() / 1000) + 120
         let reqNonce = 0
@@ -230,7 +230,7 @@ export function useFetch() {
             blobSizeBytes: input.blobSizeBytes!,
           })
           if (chunks.length > 1) {
-            const parts: Uint8Array[] = []
+            const parts: Uint8Array<ArrayBuffer>[] = []
             for (const c of chunks) {
               parts.push(await fetchOneRange(c.rangeStart, c.rangeLen))
             }
