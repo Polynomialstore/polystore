@@ -8,6 +8,7 @@ import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
 import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
+import { useFetch } from '../hooks/useFetch'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
@@ -137,6 +138,7 @@ export function Dashboard() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const { proofs, loading: proofsLoading } = useProofs()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -832,16 +834,22 @@ export function Dashboard() {
                               <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                 Files In Slab
                               </div>
+                              {receiptStatus !== 'idle' && (
+                                <div className="text-[11px]">
+                                  {receiptStatus === 'submitted' ? (
+                                    <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
+                                  ) : (
+                                    <span className="text-red-500 dark:text-red-400">
+                                      Receipt failed{receiptError ? `: ${receiptError}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               {contentFilesLoading ? (
                                 <div className="text-xs text-muted-foreground">Loading file table…</div>
                               ) : contentFiles && contentFiles.length > 0 ? (
                                 <div className="space-y-2">
                                   {contentFiles.map((f) => {
-                                    const downloadUrl = `${appConfig.gatewayBase}/gateway/fetch/${encodeURIComponent(
-                                      contentManifestRoot,
-                                    )}?deal_id=${encodeURIComponent(targetDealId)}&owner=${encodeURIComponent(
-                                      nilAddress,
-                                    )}&file_path=${encodeURIComponent(f.path)}`
                                     return (
                                       <div
                                         key={`${f.path}:${f.start_offset}`}
@@ -856,11 +864,26 @@ export function Dashboard() {
                                           </div>
                                         </div>
                                         <button
-                                          onClick={() => window.open(downloadUrl, '_blank')}
-                                          className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors"
+                                          onClick={async () => {
+                                            const url = await fetchFile({
+                                              dealId: String(targetDealId),
+                                              manifestRoot: contentManifestRoot,
+                                              owner: nilAddress,
+                                              filePath: f.path,
+                                            })
+                                            if (url) {
+                                              const a = document.createElement('a')
+                                              a.href = url
+                                              a.download = f.path.split('/').pop() || 'download'
+                                              a.click()
+                                              setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                                            }
+                                          }}
+                                          disabled={downloading}
+                                          className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                         >
                                           <ArrowDownRight className="w-4 h-4" />
-                                          Download
+                                          {downloading ? 'Downloading...' : 'Download'}
                                         </button>
                                       </div>
                                     )

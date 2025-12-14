@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test'
+import { privateKeyToAccount } from 'viem/accounts'
+import type { Hex } from 'viem'
+import { buildRetrievalRequestTypedData } from '../src/lib/eip712'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
@@ -56,11 +59,26 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   // Directly hit the gateway to measure /gateway/fetch performance.
   // Hard timeout: 20s; target proof generation < 1s.
+  const e2ePk = (process.env.VITE_E2E_PK ||
+    '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as Hex
+  const account = privateKeyToAccount(e2ePk)
+  const reqNonce = 1
+  const reqExpiresAt = Math.floor(Date.now() / 1000) + 120
+  const reqTypedData = buildRetrievalRequestTypedData(
+    { deal_id: Number(dealId), file_path: filePath, nonce: reqNonce, expires_at: reqExpiresAt },
+    Number(process.env.CHAIN_ID || 31337),
+  )
+  const reqSig = await account.signTypedData({
+    ...reqTypedData,
+    domain: { ...reqTypedData.domain, chainId: BigInt(reqTypedData.domain.chainId) },
+  } as any)
+
   const fetchUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
     dealId,
   )}&owner=${encodeURIComponent(owner)}&file_path=${encodeURIComponent(filePath)}`
+  const signedFetchUrl = `${fetchUrl}&req_sig=${encodeURIComponent(reqSig)}&req_nonce=${reqNonce}&req_expires_at=${reqExpiresAt}`
   const perfStart = Date.now()
-  const perfResp = await request.get(fetchUrl, { timeout: 20_000 })
+  const perfResp = await request.get(signedFetchUrl, { timeout: 20_000 })
   const perfElapsedMs = Date.now() - perfStart
   expect(perfResp.status()).toBe(200)
   expect(perfElapsedMs).toBeLessThan(20_000)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
 import { appConfig } from '../config'
-import { buildRetrievalReceiptTypedData, RetrievalReceiptIntent } from '../lib/eip712'
+import { buildRetrievalReceiptTypedData, buildRetrievalRequestTypedData, RetrievalReceiptIntent, RetrievalRequestIntent } from '../lib/eip712'
 
 export interface FetchInput {
   dealId: string
@@ -23,12 +23,50 @@ export function useFetch() {
     setReceiptStatus('idle')
     setReceiptError(null)
     try {
+      if (!address) {
+        throw new Error('Connect a wallet to sign retrieval requests and receipts')
+      }
+      const ethereum = (window as any).ethereum
+      if (!ethereum || typeof ethereum.request !== 'function') {
+        throw new Error('Ethereum provider (MetaMask) not available')
+      }
+
+      // 0) Sign Retrieval Request (authorizes the fetch; does NOT count as receipt)
+      const expiresAt = Math.floor(Date.now() / 1000) + 120
+      let reqNonce = 0
+      try {
+        const n = new Uint32Array(1)
+        window.crypto.getRandomValues(n)
+        reqNonce = Number(n[0] || 0)
+      } catch {
+        reqNonce = Math.floor(Math.random() * 0xffffffff)
+      }
+      if (!reqNonce) reqNonce = 1
+
+      const reqIntent: RetrievalRequestIntent = {
+        deal_id: Number(input.dealId),
+        file_path: input.filePath,
+        nonce: reqNonce,
+        expires_at: expiresAt,
+      }
+      const reqTypedData = buildRetrievalRequestTypedData(reqIntent, appConfig.chainId)
+      const reqSignature: string = await ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [address, JSON.stringify(reqTypedData)],
+      })
+      if (typeof reqSignature !== 'string' || !reqSignature.startsWith('0x') || reqSignature.length < 10) {
+        throw new Error('wallet returned invalid request signature')
+      }
+
       // 1. Fetch File (Bytes + Headers)
       // Note: input.filePath must be URL encoded if it contains spaces, but URLSearchParams does that.
       const fetchParams = new URLSearchParams({
         deal_id: input.dealId,
         owner: input.owner,
         file_path: input.filePath,
+        req_sig: reqSignature,
+        req_nonce: String(reqNonce),
+        req_expires_at: String(expiresAt),
       })
       const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
       
@@ -53,6 +91,9 @@ export function useFetch() {
       const hProofJson = response.headers.get('X-Nil-Proof-JSON')
       const hProofHash = response.headers.get('X-Nil-Proof-Hash')
       
+      // Download bytes first (so the receipt signature is an explicit post-download acknowledgement).
+      const blob = await response.blob()
+
       // If headers are present and wallet is connected, initiate signing flow.
       if (hDealId && hEpoch && hProvider && hBytes && hProofHash && address) {
           // Always derive receipt nonce from chain state to avoid local drift.
@@ -99,10 +140,6 @@ export function useFetch() {
           
           const typedData = buildRetrievalReceiptTypedData(intent, appConfig.chainId)
           
-          const ethereum = (window as any).ethereum
-          if (!ethereum) {
-              console.warn("No wallet found, skipping retrieval receipt signature")
-          } else {
               try {
                   const signature: string = await ethereum.request({
                       method: 'eth_signTypedData_v4',
@@ -154,10 +191,8 @@ export function useFetch() {
                   // Don't fail the download itself
               }
           }
-          }
       }
 
-      const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       setDownloadUrl(url)
       return url

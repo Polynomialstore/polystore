@@ -109,6 +109,16 @@ export const RetrievalReceiptTypes = {
   ],
 } as const
 
+export const RetrievalRequestTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  RetrievalRequest: [
+    { name: 'deal_id', type: 'uint64' },
+    { name: 'file_path', type: 'string' },
+    { name: 'nonce', type: 'uint64' },
+    { name: 'expires_at', type: 'uint64' },
+  ],
+} as const
+
 export interface RetrievalReceiptIntent {
   deal_id: number
   epoch_id: number
@@ -117,6 +127,32 @@ export interface RetrievalReceiptIntent {
   nonce: number
   expires_at: number
   proof_hash: `0x${string}`
+}
+
+export interface RetrievalRequestIntent {
+  deal_id: number
+  file_path: string
+  nonce: number
+  expires_at: number
+}
+
+export function buildRetrievalRequestTypedData(intent: RetrievalRequestIntent, chainId: number) {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: RetrievalRequestTypes,
+    primaryType: 'RetrievalRequest' as const,
+    message: {
+      deal_id: Number(intent.deal_id),
+      file_path: intent.file_path,
+      nonce: Number(intent.nonce),
+      expires_at: Number(intent.expires_at),
+    },
+  }
 }
 
 export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, chainId: number) {
