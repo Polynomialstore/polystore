@@ -54,6 +54,22 @@ Instead of splitting blobs, we distribute complete blobs:
 
 **Verification Benefit:** Since $SP_0$ holds 8 complete 128 KiB Blobs, they can verify each one individually using standard KZG. No cross-network chatter is required for self-verification.
 
+### 3.3 Locked: Slot-major leaf ordering (serve-first)
+
+To prioritize serving/proving, Mode 2 defines the canonical Merkle leaf ordering for one SP‑MDU as **slot-major**.
+
+Let:
+* `K` = data shards, `M` = parity shards, `N = K+M`
+* Constraint: `K | 64`
+* `rows = 64 / K`
+
+Canonical mapping:
+* `blob_index = slot * rows + row`
+* `slot = blob_index / rows`
+* `row  = blob_index % rows`
+
+This makes the leaf ranges per provider slot contiguous (good for the hot path). RS repair still operates row-by-row but becomes strided in this ordering.
+
 ### 3.2 Parity Calculation & Homomorphism
 
 To generate the 4 Parity Shards ($P_0 \dots P_3$):
@@ -105,7 +121,7 @@ This section defines the normative flow for a file "Life Cycle" in Mode 2.
 
 ### 5.3 Phase 3: Challenge (Unified Liveness)
 **Scenario:** Chain challenges $SP_1$ for `MDU #100, Blob #13`.
-1.  **Routing:** Chain determines `Blob_Index % 12 == 1`, so $SP_1$ is responsible.
+1.  **Routing:** Using the slot-major mapping, the chain computes `rows = 64 / K` and `slot = blob_index / rows`. For RS(12,8), `rows = 8`, so `slot = 13 / 8 = 1`, therefore $SP_1$ is responsible.
 2.  **Lookup:** $SP_1$ reads local **Witness MDU** to find `Commitment #13` and sibling commitments.
 3.  **Proof Gen:**
     *   **Hop 1:** Verify `MDU_Root` vs `Manifest`.

@@ -116,6 +116,24 @@ An 8 MiB MDU consists of 64 Blobs ($B_0 \dots B_{63}$). These are distributed to
 
 **Benefit:** Since each provider holds complete 128 KiB Blobs, they can verify each one individually using standard KZG.
 
+#### 8.1.3 Locked: Slot-major `blob_index` ordering
+
+To prioritize the hot-path (serving/proving), Mode 2 uses a **slot-major** canonical leaf ordering for the per-SP‑MDU Merkle tree.
+
+Definitions:
+*   `K` = data shards
+*   `M` = parity shards
+*   `N = K+M` = total slots/providers
+*   Constraint: `K | 64` (so rows are integral)
+*   `rows = 64 / K`
+
+Leaf mapping (canonical):
+*   `blob_index = slot * rows + row`
+*   `slot = blob_index / rows`
+*   `row  = blob_index % rows`
+
+In this ordering, each provider slot owns a contiguous range of leaf indices for each SP‑MDU, which simplifies witness lookup and on-chain enforcement.
+
 ### 8.2 Parity & Homomorphism
 To generate the 4 Parity Shards ($P_0 \dots P_3$):
 *   Parity is calculated across the "row" of blobs ($B_0 \dots B_7 \rightarrow P_0$).
