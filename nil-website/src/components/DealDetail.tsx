@@ -307,6 +307,10 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                       manifestRoot: deal.cid,
                                       owner: nilAddress,
                                       filePath: f.path,
+                                      fileStartOffset: f.start_offset,
+                                      fileSizeBytes: f.size_bytes,
+                                      mduSizeBytes: slab?.mdu_size_bytes,
+                                      blobSizeBytes: slab?.blob_size_bytes,
                                     })
                                     if (url) {
                                       const a = document.createElement('a')

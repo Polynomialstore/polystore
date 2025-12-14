@@ -870,6 +870,10 @@ export function Dashboard() {
                                               manifestRoot: contentManifestRoot,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              fileStartOffset: f.start_offset,
+                                              fileSizeBytes: f.size_bytes,
+                                              mduSizeBytes: contentSlab?.mdu_size_bytes,
+                                              blobSizeBytes: contentSlab?.blob_size_bytes,
                                             })
                                             if (url) {
                                               const a = document.createElement('a')
