@@ -71,33 +71,33 @@ export const ShardingDeepDive = () => {
         {/* Section 2: Configurable Erasure Coding */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Layers className="w-5 h-5 text-purple-500" /> Mode 2: StripeReplica (RS 12,8)
+            <Layers className="w-5 h-5 text-purple-500" /> Mode 2: StripeReplica (RS(K, K+M))
           </h3>
           <p className="text-muted-foreground mb-6">
-            Each 8 MiB MDU is mathematically split using Reed-Solomon encoding into <strong>12 Atomic Shards</strong> of <strong>1 MB</strong> each.
+            Each 8 MiB MDU is encoded with Reed-Solomon across <strong>N = K+M provider slots</strong> (default <strong>N=12</strong>). Each slot stores <strong>8 MiB / K</strong> bytes per MDU (default <strong>1 MiB</strong> when <strong>K=8</strong>).
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <p className="text-sm text-muted-foreground mb-4">
-              <strong>The Math:</strong> We use a standard <strong>RS(12,8)</strong> configuration. This means the 8 MiB of user data is split into 8 Data Shards, and we generate 4 Parity Shards for redundancy.
+              <strong>The Math (default profile):</strong> <strong>K=8</strong> data slots + <strong>M=4</strong> parity slots (<strong>N=12</strong>). The protocol is defined as RS(K, K+M) (with <strong>K | 64</strong>), so other profiles are possible.
             </p>
             <div className="flex justify-around items-center text-center mt-6">
               <div className="flex flex-col items-center">
                 <span className="text-4xl font-bold text-blue-400">8</span>
-                <span className="text-sm text-muted-foreground">Data Shards (1 MB)</span>
+                <span className="text-sm text-muted-foreground">Data Slots (default)</span>
               </div>
               <span className="text-3xl text-muted-foreground">+</span>
               <div className="flex flex-col items-center">
                 <span className="text-4xl font-bold text-purple-400">4</span>
-                <span className="text-sm text-muted-foreground">Parity Shards (1 MB)</span>
+                <span className="text-sm text-muted-foreground">Parity Slots (default)</span>
               </div>
               <span className="text-3xl text-muted-foreground">=</span>
               <div className="flex flex-col items-center">
                 <span className="text-4xl font-bold text-green-400">12</span>
-                <span className="text-sm text-muted-foreground">Total Nodes</span>
+                <span className="text-sm text-muted-foreground">Total Slots (default)</span>
               </div>
             </div>
             <p className="text-sm text-muted-foreground italic mt-6">
-              You can lose any 4 nodes (33% of the network) and recover the file instantly.
+              In the default 8+4 profile, you can lose any 4 of 12 nodes (33%) and still recover the file.
             </p>
           </div>
         </section>
@@ -113,14 +113,14 @@ export const ShardingDeepDive = () => {
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm mb-6">
             <h4 className="font-bold text-foreground mb-2">Replicated Metadata ("The Map")</h4>
             <p className="text-sm text-muted-foreground">
-              While the <strong>Data</strong> is stripped (1 MB per node), the <strong>Metadata</strong> (Witness MDU) is replicated to <strong>all 12 nodes</strong>.
+              While user data is striped across slots, the <strong>Metadata</strong> (MDU #0 + Witness) is replicated to <strong>all N slots</strong> (default 12).
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               This allows any single node to cryptographically prove they hold the correct shard ("Shared-Nothing Verification") without needing to ask their neighbors.
             </p>
           </div>
           <ul className="list-disc list-inside text-muted-foreground space-y-2 mb-6">
-            <li><strong>Atomic Repair:</strong> If a node fails, a new node can reconstruct the missing 1 MB shard by asking any 8 neighbors, validating them against the Witness Map trustlessly.</li>
+            <li><strong>Atomic Repair:</strong> If a node fails, a new node can reconstruct the missing slot shard by asking any <strong>K</strong> neighbors (default 8), validating them against the Witness Map trustlessly.</li>
             <li><strong>Parallel Throughput:</strong> Users download from 12 nodes simultaneously, aggregating bandwidth.</li>
           </ul>
         </section>

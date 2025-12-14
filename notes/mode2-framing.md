@@ -97,7 +97,7 @@ In Design A:
 - Cost:
   - Slab indexing gets more complex (extra MDUs; mapping parity ↔ data-bearing SP‑MDUs).
   - Deal sizing must account for parity MDUs competing for RootTable slots.
-  - Efficient packing is needed to avoid wasting space (e.g., 4 MiB parity per 8 MiB data in the RS(8,12) case).
+  - Efficient packing is needed to avoid wasting space (e.g., 4 MiB parity per 8 MiB data in the default `K=8, M=4` profile).
 
 ## 6) Locked decision: Slot-major leaf ordering (prioritize serving)
 

@@ -276,9 +276,10 @@ Future agents utilizing this documentation must be aware of the following archit
 We have finalized the design for **Mode 2 (StripeReplica)** and the **NilFS Layout**.
 
 ### 9.1 Mode 2 Alignment
-*   **Atomic Unit:** 1 MB Shard.
-*   **MDU Unit:** 8 MB (8 Shards x 1 MB).
-*   **Configuration:** RS(12, 8). 12 Providers per Deal.
+*   **Atomic Unit:** 128 KiB Blob (KZG atom).
+*   **SP‑MDU Unit:** 8 MiB (64 Blobs).
+*   **Per‑Slot Bytes:** `8 MiB / K` (default `K=8` → 1 MiB).
+*   **Configuration:** RS(K, K+M) with default `K=8`, `M=4` (`N=12`), with constraint `K | 64`.
 *   **Verification:** Uses **Replicated Metadata** (Witness MDUs) to enable Shared-Nothing Verification.
 *   **Source of Truth:** `rfcs/rfc-blob-alignment-and-striping.md`.
 

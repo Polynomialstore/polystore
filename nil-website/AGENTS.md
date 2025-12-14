@@ -47,8 +47,8 @@ The following updates are required to align the website with the final Architect
     *   **Correction:** Clarify that Commitments bind to **1 MB Atomic Units** (Blobs), not 8 MB chunks directly.
 
 - [ ] **`src/pages/ShardingDeepDive.tsx`**:
-    *   **Correction:** Change `RS(12,9)` to **`RS(12,8)`**.
-    *   **Correction:** Update terminology: **1 MB Shards** (Atomic), **8 MB MDUs** (User Unit).
+    *   **Correction:** Replace hard-coded RS profiles with **RS(K, K+M)** (default `K=8`, `M=4`, `N=12`, with constraint `K | 64`).
+    *   **Correction:** Update terminology: **128 KiB Blobs** (KZG atom), **slot shard bytes = 8 MiB / K** (default 1 MiB when `K=8`), **8 MiB MDUs** (user unit).
     *   **Add Concept:** **Replicated Metadata**. Explain that *every* node holds the Witness Map to verify *any* shard independently.
     *   **Add Concept:** **Self-Healing**. Explain how a new node reconstructs data from neighbors trustlessly.
 
