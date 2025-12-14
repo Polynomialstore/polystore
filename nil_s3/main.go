@@ -2342,6 +2342,18 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
 		return
 	}
+	if len(receipt.UserSignature) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "user_signature is required", "client must sign the retrieval receipt (EIP-712) before submission")
+		return
+	}
+	if receipt.Nonce == 0 {
+		writeJSONError(w, http.StatusBadRequest, "nonce is required", "client must fetch and increment the on-chain receipt nonce before submission")
+		return
+	}
+	if len(bytes.TrimSpace(receipt.ProofDetails)) == 0 || bytes.Equal(bytes.TrimSpace(receipt.ProofDetails), []byte("null")) {
+		writeJSONError(w, http.StatusBadRequest, "proof_details is required", "gateway must supply proof_details so the user signature is bound to an exact proof")
+		return
+	}
 
 	// Save to temp file for CLI submission
 	tmpFile, err := os.CreateTemp(uploadDir, "signed-receipt-*.json")
@@ -2384,6 +2396,7 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		"--keyring-backend", "test",
 		"--yes",
 		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
 		"--output", "json",
 	)
 
@@ -2411,10 +2424,55 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("SpSubmitReceipt success: txhash=%s", txRes.TxHash)
+	// Confirm DeliverTx inclusion (sync broadcast only covers CheckTx).
+	txHash := strings.TrimSpace(txRes.TxHash)
+	if txHash == "" {
+		writeJSONError(w, http.StatusInternalServerError, "missing txhash in broadcast response", "")
+		return
+	}
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	var deliverCode uint32
+	var deliverRawLog string
+	for i := 0; i < 30; i++ {
+		time.Sleep(500 * time.Millisecond)
+		req, _ := http.NewRequest("GET", fmt.Sprintf("%s/cosmos/tx/v1beta1/txs/%s", lcdBase, txHash), nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+
+		var txResp struct {
+			TxResponse struct {
+				Code   uint32 `json:"code"`
+				RawLog string `json:"raw_log"`
+			} `json:"tx_response"`
+		}
+		if err := json.Unmarshal(body, &txResp); err != nil {
+			continue
+		}
+		deliverCode = txResp.TxResponse.Code
+		deliverRawLog = txResp.TxResponse.RawLog
+		break
+	}
+
+	if deliverCode != 0 {
+		writeJSONError(w, http.StatusBadRequest, "retrieval receipt tx failed", deliverRawLog)
+		return
+	}
+
+	log.Printf("SpSubmitReceipt success: txhash=%s", txHash)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
-		"tx_hash": txRes.TxHash,
+		"tx_hash": txHash,
 	})
 }
