@@ -85,3 +85,29 @@ fn test_constant_polynomial_all_ones() {
         "y should be 1 for constant polynomial"
     );
 }
+
+#[test]
+fn test_manifest_inclusion_round_trip() {
+    let path = get_trusted_setup_path();
+    let ctx = KzgContext::load_from_file(&path).unwrap();
+
+    // Use a non-canonical 32-byte value (looks like a hash) to ensure reduction logic is exercised.
+    let root = [0x42u8; 32];
+    let (commitment, manifest_blob) = ctx.compute_manifest_commitment(&[root]).unwrap();
+
+    let z_bytes = z_for_cell(0);
+    let (proof, y_out) = ctx.compute_proof(&manifest_blob, &z_bytes).unwrap();
+
+    // Index 0 maps to z = 1. The opening value should equal the first evaluation.
+    assert_eq!(y_out, root, "manifest opening y must match root bytes (BE)");
+
+    let ok_direct = ctx
+        .verify_proof(&commitment, &z_bytes, &y_out, &proof)
+        .unwrap();
+    assert!(ok_direct, "direct KZG proof verification must succeed");
+
+    let ok = ctx
+        .verify_manifest_inclusion(&commitment, &root, 0, &proof)
+        .unwrap();
+    assert!(ok, "manifest inclusion must verify for index 0");
+}

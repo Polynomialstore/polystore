@@ -1,10 +1,7 @@
-use crate::utils::{fr_to_bytes_be, get_modulus, get_root_of_unity_4096};
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ff::{Field, PrimeField};
 use group::Curve;
-use num_bigint::BigUint;
-use num_integer::Integer;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -48,6 +45,8 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 pub struct KzgContext {
     g1_points: Vec<G1Affine>,
     g2_points: Vec<G2Affine>,
+    g1_generator: G1Affine,
+    g1_points_are_monomial: bool,
 }
 
 impl KzgContext {
@@ -102,9 +101,34 @@ impl KzgContext {
             g2_points.push(p);
         }
 
+        if g1_points.len() < 2 || g2_points.len() < 2 {
+            return Err(KzgError::Internal("Trusted setup too small".into()));
+        }
+
+        // Determine whether the provided G1 points are monomial powers-of-τ (SRS) or Lagrange
+        // points over the blob domain. The standard EIP-4844 ceremony file provides Lagrange
+        // points for G1 (to commit directly from blob evaluations).
+        let g1_points_are_monomial =
+            bls12_381::pairing(&g1_points[1], &g2_points[0]) == bls12_381::pairing(&g1_points[0], &g2_points[1]);
+
+        // The KZG verification equation uses the base G1 generator (τ^0).
+        // - Monomial SRS: generator is g1_points[0].
+        // - Lagrange SRS: generator is the commitment to the all-ones blob (Σ L_i(τ) = 1).
+        let g1_generator = if g1_points_are_monomial {
+            g1_points[0]
+        } else {
+            let mut acc = G1Projective::identity();
+            for p in g1_points.iter() {
+                acc += G1Projective::from(*p);
+            }
+            acc.to_affine()
+        };
+
         Ok(Self {
             g1_points,
             g2_points,
+            g1_generator,
+            g1_points_are_monomial,
         })
     }
 
@@ -117,33 +141,38 @@ impl KzgContext {
             return Ok(zero_blob_commitment());
         }
 
-        let mut points = Vec::new();
-        let mut scalars = Vec::new();
-        for (i, chunk) in blob_bytes.chunks_exact(32).enumerate() {
-            if i >= self.g1_points.len() {
-                break;
-            }
-            if chunk.iter().all(|&b| b == 0) {
-                continue;
-            }
-            let mut wide = [0u8; 64];
-            wide[..32].copy_from_slice(chunk);
-            wide[..32].reverse();
-            let scalar = Scalar::from_bytes_wide(&wide);
-            if bool::from(scalar.is_zero()) {
-                continue;
-            }
-            points.push(self.g1_points[i]);
-            scalars.push(scalar);
-        }
-        if points.is_empty() {
-            return Ok(zero_blob_commitment());
-        }
+        if self.g1_points_are_monomial {
+            // Blob is in evaluation form; interpolate to coefficients, then commit using monomial SRS.
+            let omega = scalar_for_cell_index(1)?;
+            let mut coeffs = bytes_to_scalars(blob_bytes)?;
+            ifft_in_place(&mut coeffs, omega)?;
 
-        let acc = msm_pippenger_g1(&points, &scalars);
+            let mut points = Vec::new();
+            let mut scalars = Vec::new();
+            for (i, coeff) in coeffs.iter().enumerate() {
+                if i >= self.g1_points.len() {
+                    break;
+                }
+                if bool::from(coeff.is_zero()) {
+                    continue;
+                }
+                points.push(self.g1_points[i]);
+                scalars.push(*coeff);
+            }
 
-        let affine = acc.to_affine();
-        Ok(affine.to_compressed())
+            let acc = if points.is_empty() {
+                G1Projective::identity()
+            } else {
+                msm_pippenger_g1(&points, &scalars)
+            };
+
+            Ok(acc.to_affine().to_compressed())
+        } else {
+            // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
+            // over the evaluations.
+            let evals = bytes_to_scalars(blob_bytes)?;
+            Ok(msm_pippenger_g1(&self.g1_points, &evals).to_affine().to_compressed())
+        }
     }
 
     pub fn mdu_to_kzg_commitments(&self, mdu_bytes: &[u8]) -> Result<Vec<KzgCommitment>, KzgError> {
@@ -185,34 +214,133 @@ impl KzgContext {
             return Err(KzgError::InvalidDataLength);
         }
 
-        // Parse blob into scalars (evaluation form).
-        let scalars = bytes_to_scalars(blob_bytes)?;
+        let z = parse_scalar(input_point_bytes)?;
 
-        // Map z to its domain index (power of the 4096th root of unity).
-        let modulus = get_modulus();
-        let omega = get_root_of_unity_4096();
-        let z_bn = BigUint::from_bytes_be(input_point_bytes);
-        let mut cur = BigUint::from(1u32);
-        let mut idx: usize = 0;
-        for i in 0..scalars.len() {
-            if cur == z_bn {
-                idx = i;
+        if self.g1_points_are_monomial {
+            // Monomial SRS: interpolate evaluations to coefficients, then use the standard KZG
+            // opening proof algorithm in coefficient form.
+            let omega = scalar_for_cell_index(1)?;
+            let mut coeffs = bytes_to_scalars(blob_bytes)?;
+            ifft_in_place(&mut coeffs, omega)?;
+
+            // Evaluate p(z) via Horner's method.
+            let mut y = Scalar::zero();
+            for coeff in coeffs.iter().rev() {
+                y *= z;
+                y += coeff;
+            }
+
+            // Compute quotient polynomial q(x) = (p(x) - p(z)) / (x - z) using synthetic division.
+            let n = coeffs.len();
+            let mut b = vec![Scalar::zero(); n];
+            b[n - 1] = coeffs[n - 1];
+            for i in (0..n - 1).rev() {
+                b[i] = coeffs[i] + b[i + 1] * z;
+            }
+
+            // Commitment to q(x) using monomial setup points.
+            let mut points = Vec::new();
+            let mut scalars = Vec::new();
+            for (i, qi) in b.iter().skip(1).enumerate() {
+                if i >= self.g1_points.len() {
+                    break;
+                }
+                if bool::from(qi.is_zero()) {
+                    continue;
+                }
+                points.push(self.g1_points[i]);
+                scalars.push(*qi);
+            }
+
+            let proof = if points.is_empty() {
+                G1Affine::identity().to_compressed()
+            } else {
+                msm_pippenger_g1(&points, &scalars).to_affine().to_compressed()
+            };
+
+            let mut y_le = y.to_repr();
+            let mut y_be = [0u8; 32];
+            y_le.as_mut().reverse();
+            y_be.copy_from_slice(y_le.as_ref());
+
+            return Ok((proof, y_be));
+        }
+
+        // Lagrange SRS: treat blob bytes as evaluations over the roots-of-unity domain, compute:
+        // - y = p(z) via barycentric interpolation
+        // - q_i = (p(x_i) - y) / (x_i - z) for all domain points x_i = ω^i
+        //   with a special-case for z in-domain to avoid division by zero.
+        let evals = bytes_to_scalars(blob_bytes)?;
+
+        let omega = scalar_for_cell_index(1)?;
+        let mut domain = Vec::with_capacity(4096);
+        let mut x = Scalar::one();
+        for _ in 0..4096 {
+            domain.push(x);
+            x *= omega;
+        }
+
+        let mut z_domain_index = None;
+        for (i, xi) in domain.iter().enumerate() {
+            if *xi == z {
+                z_domain_index = Some(i);
                 break;
             }
-            cur = (&cur * &omega).mod_floor(&modulus);
-        }
-        if idx >= scalars.len() {
-            idx = 0;
         }
 
-        let scalar = scalars[idx];
-        let mut y_le = scalar.to_repr();
+        let y = if let Some(k) = z_domain_index {
+            evals[k]
+        } else {
+            // Barycentric interpolation on the roots-of-unity domain:
+            // weights w_i = x_i / n, but the constant factor cancels, so we use w_i = x_i.
+            let mut num = Scalar::zero();
+            let mut den = Scalar::zero();
+            for (fi, xi) in evals.iter().zip(domain.iter()) {
+                let inv = Option::<Scalar>::from((z - xi).invert())
+                    .ok_or_else(|| KzgError::Internal("z unexpectedly equals a domain point".into()))?;
+                let t = *xi * inv;
+                den += t;
+                num += *fi * t;
+            }
+            let den_inv = Option::<Scalar>::from(den.invert())
+                .ok_or_else(|| KzgError::Internal("barycentric denominator is not invertible".into()))?;
+            num * den_inv
+        };
+
+        let mut q_evals = vec![Scalar::zero(); 4096];
+        if let Some(k) = z_domain_index {
+            let mut sum = Scalar::zero();
+            for i in 0..4096 {
+                if i == k {
+                    continue;
+                }
+                let inv = Option::<Scalar>::from((domain[i] - z).invert())
+                    .ok_or_else(|| KzgError::Internal("unexpected zero denominator in q_evals".into()))?;
+                let qi = (evals[i] - y) * inv;
+                q_evals[i] = qi;
+                sum += qi * domain[i];
+            }
+            // Enforce deg(q) < 4095 by setting the top coefficient to 0, which is equivalent to:
+            // Σ q_i * ω^i = 0  =>  q_k = -(Σ_{i!=k} q_i * ω^i) / ω^k.
+            let inv_z = Option::<Scalar>::from(z.invert())
+                .ok_or_else(|| KzgError::Internal("domain point must be invertible".into()))?;
+            q_evals[k] = -sum * inv_z;
+        } else {
+            for i in 0..4096 {
+                let inv = Option::<Scalar>::from((domain[i] - z).invert())
+                    .ok_or_else(|| KzgError::Internal("unexpected zero denominator in q_evals".into()))?;
+                q_evals[i] = (evals[i] - y) * inv;
+            }
+        }
+
+        let proof = msm_pippenger_g1(&self.g1_points, &q_evals).to_affine().to_compressed();
+
+        let mut y_le = y.to_repr();
         let mut y_be = [0u8; 32];
         y_le.as_mut().reverse();
         y_be.copy_from_slice(y_le.as_ref());
 
-        // Proof is currently stubbed; caller only needs y for tests.
-        Ok(([0u8; 48], y_be))
+        Ok((proof, y_be))
     }
 
     pub fn verify_proof(
@@ -237,7 +365,7 @@ impl KzgContext {
         let z_g2_proj = G2Projective::from(h_g2) * z;
         let s_min_z = G2Projective::from(s_g2) - z_g2_proj;
 
-        let y_g1_proj = G1Projective::from(self.g1_points[0]) * y;
+        let y_g1_proj = G1Projective::from(self.g1_generator) * y;
         let c_min_y = G1Projective::from(commitment) - y_g1_proj;
 
         let p1 = bls12_381::pairing(&proof, &s_min_z.to_affine());
@@ -250,30 +378,39 @@ impl KzgContext {
         &self,
         mdu_roots: &[[u8; 32]],
     ) -> Result<(KzgCommitment, Vec<u8>), KzgError> {
+        // The manifest blob is stored as evaluations over the roots-of-unity domain.
+        // Each entry is the (reduced) 32-byte MDU merkle root at that index.
         let mut blob_bytes = vec![0u8; BLOB_SIZE];
-        let modulus = get_modulus();
-        for (i, root) in mdu_roots.iter().enumerate() {
-            if i >= 4096 {
-                break;
-            }
+        for (i, root) in mdu_roots.iter().enumerate().take(4096) {
             let start = i * 32;
-            // Map arbitrary 32-byte root into the scalar field to satisfy canonical encoding.
-            let fr = BigUint::from_bytes_be(root).mod_floor(&modulus);
-            let fr_bytes = fr_to_bytes_be(&fr);
-            blob_bytes[start..start + 32].copy_from_slice(&fr_bytes);
+            blob_bytes[start..start + 32].copy_from_slice(&scalar_to_bytes_be(&reduce_bytes32_to_scalar(root)));
         }
+
         let commitment = self.blob_to_commitment(&blob_bytes)?;
         Ok((commitment, blob_bytes))
     }
 
     pub fn verify_manifest_inclusion(
         &self,
-        _manifest_commitment_bytes: &[u8],
-        _mdu_root_bytes: &[u8],
-        _mdu_index: usize,
-        _proof_bytes: &[u8],
+        manifest_commitment_bytes: &[u8],
+        mdu_root_bytes: &[u8],
+        mdu_index: usize,
+        proof_bytes: &[u8],
     ) -> Result<bool, KzgError> {
-        Ok(true)
+        if mdu_index >= 4096 {
+            return Ok(false);
+        }
+        if mdu_root_bytes.len() != 32 || proof_bytes.len() != 48 {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        let mut root_arr = [0u8; 32];
+        root_arr.copy_from_slice(mdu_root_bytes);
+        let y = reduce_bytes32_to_scalar(&root_arr);
+        let y_bytes = scalar_to_bytes_be(&y);
+
+        let z_bytes = crate::utils::z_for_cell(mdu_index);
+        self.verify_proof(manifest_commitment_bytes, &z_bytes, &y_bytes, proof_bytes)
     }
 
     pub fn verify_mdu_merkle_proof(
@@ -314,6 +451,81 @@ impl KzgContext {
 fn zero_blob_commitment() -> KzgCommitment {
     static ZERO: OnceLock<KzgCommitment> = OnceLock::new();
     *ZERO.get_or_init(|| G1Affine::identity().to_compressed())
+}
+
+fn reduce_bytes32_to_scalar(bytes: &[u8; 32]) -> Scalar {
+    let mut wide = [0u8; 64];
+    wide[..32].copy_from_slice(bytes);
+    wide[..32].reverse();
+    Scalar::from_bytes_wide(&wide)
+}
+
+fn scalar_to_bytes_be(s: &Scalar) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out.copy_from_slice(s.to_repr().as_ref());
+    out.reverse();
+    out
+}
+
+fn scalar_for_cell_index(idx: usize) -> Result<Scalar, KzgError> {
+    let z_bytes = crate::utils::z_for_cell(idx);
+    parse_scalar(&z_bytes)
+}
+
+fn ifft_in_place(values: &mut [Scalar], omega: Scalar) -> Result<(), KzgError> {
+    if values.len() != 4096 {
+        return Err(KzgError::InvalidDataLength);
+    }
+
+    let omega_inv = Option::<Scalar>::from(omega.invert())
+        .ok_or_else(|| KzgError::Internal("omega is not invertible".into()))?;
+
+    fft_in_place(values, omega_inv)?;
+
+    let n_inv = Option::<Scalar>::from(Scalar::from(values.len() as u64).invert())
+        .ok_or_else(|| KzgError::Internal("n is not invertible".into()))?;
+    for v in values.iter_mut() {
+        *v *= n_inv;
+    }
+    Ok(())
+}
+
+fn fft_in_place(values: &mut [Scalar], omega: Scalar) -> Result<(), KzgError> {
+    let n = values.len();
+    if n == 0 || !n.is_power_of_two() {
+        return Err(KzgError::InvalidDataLength);
+    }
+
+    bit_reverse_permute(values);
+
+    let mut len = 2;
+    while len <= n {
+        let half = len / 2;
+        let wlen = omega.pow_vartime(&[((n / len) as u64), 0, 0, 0]);
+        for i in (0..n).step_by(len) {
+            let mut w = Scalar::one();
+            for j in 0..half {
+                let u = values[i + j];
+                let v = values[i + j + half] * w;
+                values[i + j] = u + v;
+                values[i + j + half] = u - v;
+                w *= wlen;
+            }
+        }
+        len *= 2;
+    }
+    Ok(())
+}
+
+fn bit_reverse_permute(values: &mut [Scalar]) {
+    let n = values.len();
+    let bits = n.trailing_zeros();
+    for i in 0..n {
+        let j = i.reverse_bits() >> (usize::BITS - bits);
+        if j > i {
+            values.swap(i, j);
+        }
+    }
 }
 
 fn pippenger_window_size(n: usize) -> usize {
@@ -449,7 +661,20 @@ fn parse_scalar(bytes: &[u8]) -> Result<Scalar, KzgError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::{fr_to_bytes_be, get_modulus};
+    use num_bigint::BigUint;
+    use num_integer::Integer;
     use rand::{RngCore, SeedableRng};
+    use std::path::PathBuf;
+
+    fn get_trusted_setup_path() -> PathBuf {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop(); // repo root
+        path.push("demos");
+        path.push("kzg");
+        path.push("trusted_setup.txt");
+        path
+    }
 
     #[test]
     fn bytes_to_scalars_accepts_arbitrary_blob_bytes() {
@@ -510,5 +735,43 @@ mod tests {
 
         let fast = msm_pippenger_g1(&points, &scalars);
         assert_eq!(fast.to_affine(), naive.to_affine());
+    }
+
+    #[test]
+    fn fft_round_trip_4096() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(99);
+        let omega = scalar_for_cell_index(1).expect("omega must parse");
+
+        let mut evals = Vec::with_capacity(4096);
+        for _ in 0..4096 {
+            let mut wide = [0u8; 64];
+            rng.fill_bytes(&mut wide);
+            evals.push(Scalar::from_bytes_wide(&wide));
+        }
+        let original = evals.clone();
+
+        ifft_in_place(&mut evals, omega).expect("ifft must succeed");
+        fft_in_place(&mut evals, omega).expect("fft must succeed");
+
+        assert_eq!(evals, original, "fft(ifft(evals)) must recover evals");
+    }
+
+    #[test]
+    fn verify_proof_round_trip() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+
+        // p(x) = 1 in evaluation form: blob of all-ones field elements.
+        let mut blob = vec![0u8; BLOB_SIZE];
+        for i in 0..4096 {
+            blob[i * 32 + 31] = 1;
+        }
+
+        let commitment = ctx.blob_to_commitment(&blob).unwrap();
+        let z_bytes = crate::utils::z_for_cell(0); // z = 1
+        let (proof, y_out) = ctx.compute_proof(&blob, &z_bytes).unwrap();
+
+        let ok = ctx.verify_proof(&commitment, &z_bytes, &y_out, &proof).unwrap();
+        assert!(ok, "KZG proof must verify for constant-one blob");
     }
 }
