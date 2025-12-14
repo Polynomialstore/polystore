@@ -216,7 +216,8 @@ NilStore MAY use a content‑addressed *file* manifest at the application layer 
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
-  * **Encryption:** All data is encrypted client-side before ingress.
+  * **Encryption:** All data is encrypted client-side before ingress. Deal commitments (and KZG proofs) bind to the **ciphertext bytes**; decryption is purely a client concern.
+  * **Metadata confidentiality (optional):** NilFS metadata (MDU #0 and higher-level manifests) MAY be encrypted the same way as file data. If metadata is encrypted, SPs remain oblivious (they store bytes), while clients decrypt after verifying against `Deal.manifest_root`.
   * **Deletion:** Achieved via key destruction (Crypto-Erasure).
 
 ## § 7 Retrieval Semantics (Mode 1 Implementation)
@@ -238,6 +239,13 @@ For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → 
 
 * **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (typically the fastest responders), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
 * **Synthetic challenges (accountability):** the protocol derives challenges keyed by `(deal_id, slot)` so every slot is independently accountable. In a Mode 2 proof, the chain enforces that the submitting provider matches the challenged `slot` (see §7.4).
+
+#### 7.1.2 Client bootstrap & caching (Non-normative guidance)
+
+Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed system at the deal layer and cache aggressively:
+* **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify NilFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
+* **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
+* **Data caching:** cache reconstructed plaintext files (or reconstructed SP‑MDUs) behind an LRU keyed by `(deal_id, Deal.current_gen, file_path, byte_range)` to avoid repeated network fetches; revalidation can be performed by re-checking on-chain `Deal.manifest_root` and (optionally) re-verifying proofs on cache fill.
 
 ### 7.2 Control Plane: Retrieval Receipts & On‑Chain State
 
