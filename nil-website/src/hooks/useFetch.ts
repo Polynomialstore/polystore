@@ -52,8 +52,6 @@ export function useFetch() {
       const hBytes = response.headers.get('X-Nil-Bytes-Served')
       const hProofJson = response.headers.get('X-Nil-Proof-JSON')
       const hProofHash = response.headers.get('X-Nil-Proof-Hash')
-
-      const blob = await response.blob()
       
       // If headers are present and wallet is connected, initiate signing flow.
       if (hDealId && hEpoch && hProvider && hBytes && hProofHash && address) {
@@ -84,6 +82,10 @@ export function useFetch() {
                   console.warn("Failed to parse proof details", e)
               }
           }
+          if (!proofDetails) {
+              setReceiptStatus('failed')
+              setReceiptError('Gateway did not provide proof_details; refusing to submit unsigned/unenforced receipt.')
+          } else {
           
           const intent: RetrievalReceiptIntent = {
               deal_id: Number(hDealId),
@@ -109,7 +111,13 @@ export function useFetch() {
                   
                   // 3. Post Receipt
                   // Convert 0x hex signature to Base64 for Go json decoder
+                  if (typeof signature !== 'string' || !signature.startsWith('0x') || signature.length < 10) {
+                      throw new Error('wallet returned invalid signature')
+                  }
                   const sigBytes = hexToBytes(signature)
+                  if (sigBytes.length !== 65) {
+                      throw new Error(`wallet returned invalid signature length: ${sigBytes.length}`)
+                  }
                   const sigBase64 = bytesToBase64(sigBytes)
 
                   const receiptPayload = {
@@ -146,8 +154,10 @@ export function useFetch() {
                   // Don't fail the download itself
               }
           }
+          }
       }
 
+      const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       setDownloadUrl(url)
       return url

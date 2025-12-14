@@ -55,6 +55,23 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     fetchHeat(deal.id)
   }, [deal.cid, deal.id, nilAddress])
 
+  useEffect(() => {
+    if (receiptStatus !== 'submitted') return
+    let canceled = false
+    const run = async () => {
+      // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
+      for (let i = 0; i < 8; i++) {
+        if (canceled) return
+        await fetchHeat(deal.id)
+        await new Promise((r) => setTimeout(r, 750))
+      }
+    }
+    run()
+    return () => {
+      canceled = true
+    }
+  }, [receiptStatus, deal.id])
+
   async function fetchSlab(cid: string, dealId?: string, owner?: string) {
     setLoadingSlab(true)
     try {

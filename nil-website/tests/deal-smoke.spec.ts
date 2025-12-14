@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
+const lcdBase = process.env.E2E_LCD_BASE || 'http://localhost:1317'
 
 test('deal lifecycle smoke (connect → fund → create → upload → commit → explore → fetch)', async ({
   page,
@@ -92,6 +93,25 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   // Retrievals column is the 5th column (index 4)
   const retrievalsCell = page.getByTestId(`deal-row-${dealId}`).locator('td').nth(4)
   await expect(retrievalsCell).toHaveText('1', { timeout: 60_000 })
+
+  // Verify on-chain DealHeatState incremented (successful_retrievals_total + bytes_served_total)
+  const heatUrl = `${lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(dealId)}/heat`
+  let heatOk = false
+  for (let i = 0; i < 20; i++) {
+    const heatResp = await request.get(heatUrl)
+    if (heatResp.ok()) {
+      const json: any = await heatResp.json().catch(() => null)
+      const heat = json?.heat
+      const retrievals = Number(heat?.successful_retrievals_total || 0)
+      const bytesServed = Number(heat?.bytes_served_total || 0)
+      if (retrievals >= 1 && bytesServed >= fileBytes.length) {
+        heatOk = true
+        break
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  expect(heatOk).toBeTruthy()
 })
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
