@@ -2,12 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
+
+	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
@@ -118,52 +123,80 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	return extractTxHash(outStr), nil
 }
 
-// generateProofJSON generates the RetrievalReceipt JSON (with proof details) using nilchaind.
-// It does NOT submit it.
+// generateProofJSON generates the RetrievalReceipt JSON (with proof details) using in-process crypto.
 func generateProofJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) ([]byte, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
+	mduBytes, err := os.ReadFile(mduPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read MDU: %w", err)
+	}
+	if len(mduBytes) != 8388608 {
+		return nil, fmt.Errorf("invalid MDU size: %d", len(mduBytes))
+	}
+
 	if abs, err := filepath.Abs(manifestPath); err == nil {
 		manifestPath = abs
 	}
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
-	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
+	manifestBlob, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolveKeyAddress failed: %w", err)
+		return nil, fmt.Errorf("failed to read manifest: %w", err)
+	}
+	if len(manifestBlob) != 131072 {
+		return nil, fmt.Errorf("invalid Manifest size: %d", len(manifestBlob))
 	}
 
-	dealIDStr := strconv.FormatUint(dealID, 10)
-	if epoch == 0 {
-		epoch = 1
+	// 3. Compute MDU Root
+	root, err := crypto_ffi.ComputeMduMerkleRoot(mduBytes)
+	if err != nil {
+		return nil, err
 	}
-	epochStr := strconv.FormatUint(epoch, 10)
-	mduIndexStr := strconv.FormatUint(mduIndex, 10)
 
-	// For proof generation, we use the MDU file directly.
-	encodedMduPath := mduPath
+	// 4. Compute MDU Proof (Chunk 0)
+	chunkIndex := uint32(0)
+	commitment, merkleProof, z, y, kzgProofBytes, err := crypto_ffi.ComputeMduProofTest(mduBytes, chunkIndex)
+	if err != nil {
+		return nil, err
+	}
 
-	// 4. Sign Receipt (Generate JSON)
-	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
-	defer cancel()
-	signCmd := execNilchaind(
-		signCtx,
-		"tx", "nilchain", "sign-retrieval-receipt",
-		dealIDStr,
-		providerAddr,
-		epochStr,
-		encodedMduPath,
-		trustedSetup,
-		manifestPath,
-		mduIndexStr,
-		"--from", providerKeyName,
-		"--home", homeDir,
-		"--keyring-backend", "test",
-		"--offline",
-	)
+	// Unflatten Merkle Proof
+	merklePath := make([][]byte, 0)
+	for i := 0; i < len(merkleProof); i += 32 {
+		merklePath = append(merklePath, merkleProof[i:i+32])
+	}
 
-	return signCmd.Output()
+	// 5. Compute Manifest Proof
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	// 6. Construct ChainedProof
+	chainedProof := types.ChainedProof{
+		MduIndex:        mduIndex,
+		MduRootFr:       root,
+		ManifestOpening: manifestProof,
+		BlobCommitment:  commitment,
+		MerklePath:      merklePath,
+		BlobIndex:       chunkIndex,
+		ZValue:          z,
+		YValue:          y,
+		KzgOpeningProof: kzgProofBytes,
+	}
+
+	proofBytes, err := json.Marshal(chainedProof)
+	if err != nil {
+		return nil, err
+	}
+
+	receipt := RetrievalReceipt{
+		DealId:       dealID,
+		EpochId:      epoch,
+		BytesServed:  uint64(len(mduBytes)),
+		ProofDetails: json.RawMessage(proofBytes),
+		Nonce:        uint64(time.Now().UnixNano()),
+	}
+
+	return json.Marshal(receipt)
 }

@@ -24,6 +24,8 @@ import (
 	"github.com/btcsuite/btcutil/bech32"
 	"github.com/gorilla/mux"
 
+	"nilchain/x/crypto_ffi"
+
 	"nil_s3/pkg/builder"
 	"nil_s3/pkg/layout"
 )
@@ -249,6 +251,12 @@ func main() {
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
+	}
+
+	// Initialize KZG (load trusted setup once)
+	log.Printf("Initializing KZG from %s...", trustedSetup)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		log.Fatalf("Failed to initialize KZG: %v. Check path.", err)
 	}
 
 	r := mux.NewRouter()
