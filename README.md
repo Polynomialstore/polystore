@@ -76,6 +76,10 @@ cd nil_faucet
 
 See `ECONOMY.md` for the full tokenomics specification.
 
+## 📚 Documentation
+
+See `DOCS.md` for a curated index of canonical protocol docs, RFCs, and working notes.
+
 ## 🧪 Performance Benchmarks
 
 See `performance/PERFORMANCE_TEST_PLAN.md` and the **Performance Report** page on the website for detailed benchmarks.
