@@ -38,6 +38,12 @@ var (
 	//
 	// v2 binds the user's signature to the exact proof_details via proof_hash and includes expires_at.
 	RetrievalReceiptTypeHashV2 = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce,uint64 expires_at,bytes32 proof_hash)"))
+
+	// keccak256("RetrievalRequest(uint64 deal_id,string file_path,uint64 nonce,uint64 expires_at)")
+	//
+	// This is an off-chain authorization signature used by the Gateway to
+	// ensure only the Deal Owner can initiate a fetch for a specific file path.
+	RetrievalRequestTypeHash = crypto.Keccak256([]byte("RetrievalRequest(uint64 deal_id,string file_path,uint64 nonce,uint64 expires_at)"))
 )
 
 // HashDomainSeparator computes the domain separator for a specific chain ID.
@@ -159,6 +165,22 @@ func HashRetrievalReceiptV2(receipt *RetrievalReceipt) (common.Hash, error) {
 		math.PaddedBigBytes(big.NewInt(int64(receipt.ExpiresAt)), 32),
 		pad32(proofHash.Bytes()),
 	), nil
+}
+
+// HashRetrievalRequest computes the struct hash for an off-chain retrieval request.
+// Fields: deal_id, file_path, nonce, expires_at
+func HashRetrievalRequest(dealID uint64, filePath string, nonce uint64, expiresAt uint64) common.Hash {
+	deal := new(big.Int).SetUint64(dealID)
+	n := new(big.Int).SetUint64(nonce)
+	exp := new(big.Int).SetUint64(expiresAt)
+
+	return crypto.Keccak256Hash(
+		RetrievalRequestTypeHash,
+		math.PaddedBigBytes(deal, 32),
+		keccak256String(filePath),
+		math.PaddedBigBytes(n, 32),
+		math.PaddedBigBytes(exp, 32),
+	)
 }
 
 // ComputeEIP712Digest combines the domain separator and struct hash.
