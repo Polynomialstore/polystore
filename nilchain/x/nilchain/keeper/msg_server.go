@@ -59,12 +59,8 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length (expected 65 bytes)")
 	}
 
-	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
-
-	// Use 31337 for local devnet.
-
-	eip712ChainID := big.NewInt(31337)
-
+	params := k.GetParams(ctx)
+	eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
 	domainSep := types.HashDomainSeparator(eip712ChainID)
 
 	structHash, err := types.HashCreateDeal(intent)
@@ -487,10 +483,8 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length")
 	}
 
-	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
-	// Use 31337 for local devnet. In production, this should be fetched from EVM keeper or config.
-	eip712ChainID := big.NewInt(31337)
-
+	params := k.GetParams(ctx)
+	eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
 	domainSep := types.HashDomainSeparator(eip712ChainID)
 	structHash, err := types.HashUpdateContent(intent)
 	if err != nil {
@@ -599,47 +593,28 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
 	}
 
-	hChallenge := int64(deal.StartBlock)
-	beacon := ctx.BlockHeader().LastBlockId.Hash
-	_ = beacon
+	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool) (bool, error) {
+		if chainedProof == nil {
+			return false, nil
+		}
+		if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
+			len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
+			len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
+			return false, nil
+		}
+		if len(deal.ManifestRoot) != 48 {
+			return false, nil
+		}
 
-	var chainedProof types.ChainedProof
-	var isUserReceipt bool
-	switch pt := msg.ProofType.(type) {
-	case *types.MsgProveLiveness_SystemProof:
-		chainedProof = *pt.SystemProof
-		isUserReceipt = false
-	case *types.MsgProveLiveness_UserReceipt:
-		chainedProof = pt.UserReceipt.ProofDetails
-		isUserReceipt = true
-	default:
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
-	}
-
-	// TRIPLE PROOF VERIFICATION
-	// Call crypto_ffi.VerifyChainedProof(deal.ManifestRoot, chainedProof)
-	valid := true
-
-	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
-		len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
-		len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
-		valid = false
-		ctx.Logger().Info("Invalid proof component lengths")
-	} else if len(deal.ManifestRoot) != 48 {
-		valid = false
-		ctx.Logger().Info("Deal manifest root not set")
-	} else {
-		// Flatten Merkle Path
 		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
 		for _, node := range chainedProof.MerklePath {
 			if len(node) != 32 {
-				valid = false
-				break
+				return false, nil
 			}
 			flattenedMerkle = append(flattenedMerkle, node...)
 		}
 
-		if valid {
+		if logInput {
 			ctx.Logger().Info("VerifyChainedProof Input",
 				"ManifestRoot", hex.EncodeToString(deal.ManifestRoot),
 				"MduIndex", chainedProof.MduIndex,
@@ -651,38 +626,27 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				"YValue", hex.EncodeToString(chainedProof.YValue),
 				"KzgOpening", hex.EncodeToString(chainedProof.KzgOpeningProof),
 			)
-			v, err := crypto_ffi.VerifyChainedProof(
-				deal.ManifestRoot,
-				chainedProof.MduIndex,
-				chainedProof.ManifestOpening,
-				chainedProof.MduRootFr,
-				chainedProof.BlobCommitment,
-				uint64(chainedProof.BlobIndex),
-				flattenedMerkle,
-				chainedProof.ZValue,
-				chainedProof.YValue,
-				chainedProof.KzgOpeningProof,
-			)
-			if err != nil {
-				ctx.Logger().Error("Triple Proof Verification Error", "err", err)
-				valid = false
-			} else {
-				valid = v
-			}
 		}
+
+		v, err := crypto_ffi.VerifyChainedProof(
+			deal.ManifestRoot,
+			chainedProof.MduIndex,
+			chainedProof.ManifestOpening,
+			chainedProof.MduRootFr,
+			chainedProof.BlobCommitment,
+			uint64(chainedProof.BlobIndex),
+			flattenedMerkle,
+			chainedProof.ZValue,
+			chainedProof.YValue,
+			chainedProof.KzgOpeningProof,
+		)
+		if err != nil {
+			return false, err
+		}
+		return v, nil
 	}
 
-	if isUserReceipt {
-		if !valid {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
-		}
-	} else {
-		if !valid {
-			// Track health for system proofs that fail verification.
-			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
-			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
-		}
-	}
+	hChallenge := int64(deal.StartBlock)
 
 	// 4. Calculate Tier based on block height latency
 	hProof := ctx.BlockHeight()
@@ -749,32 +713,58 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	storageReward := math.LegacyNewDecFromInt(decayedReward).Mul(rewardMultiplier).TruncateInt()
 
-	var bandwidthPayment math.Int
-	if isUserReceipt {
-		receipt := msg.GetProofType().(*types.MsgProveLiveness_UserReceipt).UserReceipt
+	var bandwidthBytes uint64
+	var isUserReceipt bool
+
+	verifyRetrievalReceipt := func(receipt *types.RetrievalReceipt) error {
+		if receipt == nil {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt is required")
+		}
 
 		// Receipt/Tx envelope consistency (must-fail).
 		if receipt.DealId != msg.DealId {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("receipt.deal_id must match msg.deal_id")
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.deal_id must match msg.deal_id")
 		}
 		if receipt.EpochId != msg.EpochId {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("receipt.epoch_id must match msg.epoch_id")
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.epoch_id must match msg.epoch_id")
 		}
 		if receipt.Provider != msg.Creator {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("receipt.provider must match msg.creator")
+			return sdkerrors.ErrUnauthorized.Wrap("receipt.provider must match msg.creator")
 		}
 
-		// Anti-replay and expiry checks
+		filePath := strings.TrimSpace(receipt.FilePath)
+		if filePath == "" {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.file_path is required")
+		}
+		if receipt.FilePath != filePath {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.file_path must be trimmed (no leading/trailing whitespace)")
+		}
+		if receipt.RangeLen == 0 {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.range_len must be non-zero")
+		}
+		if receipt.BytesServed != receipt.RangeLen {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt.bytes_served must equal receipt.range_len")
+		}
+
+		// Anti-replay and expiry checks.
 		if receipt.ExpiresAt != 0 && uint64(ctx.BlockHeight()) > receipt.ExpiresAt {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt expired")
+			return sdkerrors.ErrUnauthorized.Wrap("retrieval receipt expired")
 		}
-
-		lastNonce, err := k.ReceiptNonces.Get(ctx, deal.Owner)
+		lastNonce, err := k.ReceiptNoncesByDealFile.Get(ctx, collections.Join(receipt.DealId, filePath))
 		if err != nil && !errors.Is(err, collections.ErrNotFound) {
-			return nil, fmt.Errorf("failed to load last receipt nonce: %w", err)
+			return fmt.Errorf("failed to load last receipt nonce: %w", err)
 		}
 		if receipt.Nonce <= lastNonce {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt nonce must be strictly increasing")
+			return sdkerrors.ErrUnauthorized.Wrap("retrieval receipt nonce must be strictly increasing")
+		}
+
+		// Verify triple-proof.
+		ok, err := verifyChainedProof(&receipt.ProofDetails, false)
+		if err != nil {
+			return sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+		}
+		if !ok {
+			return sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
 		}
 
 		// Reconstruct signed message buffer (Cosmos signing path).
@@ -783,6 +773,9 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		buf = append(buf, sdk.Uint64ToBigEndian(receipt.DealId)...)
 		buf = append(buf, sdk.Uint64ToBigEndian(receipt.EpochId)...)
 		buf = append(buf, []byte(receipt.Provider)...)
+		buf = append(buf, []byte(receipt.FilePath)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.RangeStart)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.RangeLen)...)
 		buf = append(buf, sdk.Uint64ToBigEndian(receipt.BytesServed)...)
 		buf = append(buf, sdk.Uint64ToBigEndian(receipt.Nonce)...)
 		buf = append(buf, sdk.Uint64ToBigEndian(receipt.ExpiresAt)...)
@@ -790,17 +783,16 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			buf = append(buf, proofHash.Bytes()...)
 		}
 
-		// Verification Logic
+		// Verification Logic.
 		isValid := false
 
 		// Attempt EIP-712 Recovery (if signature is 65 bytes)
 		if len(receipt.UserSignature) == 65 {
-			// For devnet, assume ChainID 31337 for EIP-712 domain
-			eip712ChainID := big.NewInt(31337)
+			eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
 			domainSep := types.HashDomainSeparator(eip712ChainID)
 
-			// Prefer v2 hashing (binds signature to proof_details via proof_hash).
-			if structHash, errHash := types.HashRetrievalReceiptV2(receipt); errHash == nil {
+			// v3 hashing (range binding + proof_hash binding).
+			if structHash, errHash := types.HashRetrievalReceiptV3(receipt); errHash == nil {
 				digest := types.ComputeEIP712Digest(domainSep, structHash)
 				if evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature); errRec == nil {
 					signerAcc := sdk.AccAddress(evmAddr.Bytes())
@@ -809,31 +801,18 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 					}
 				}
 			}
-
-			// Migration fallback: accept legacy v1 receipts if v2 did not validate.
-			if !isValid {
-				if structHash, errHash := types.HashRetrievalReceiptV1(receipt); errHash == nil {
-					digest := types.ComputeEIP712Digest(domainSep, structHash)
-					if evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature); errRec == nil {
-						signerAcc := sdk.AccAddress(evmAddr.Bytes())
-						if signerAcc.String() == deal.Owner {
-							isValid = true
-						}
-					}
-				}
-			}
 		}
 
 		if !isValid {
-			// Fallback to Cosmos Signature Verification
+			// Fallback to Cosmos Signature Verification.
 			ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
 			if err != nil {
-				return nil, fmt.Errorf("invalid owner address: %w", err)
+				return fmt.Errorf("invalid owner address: %w", err)
 			}
 
 			ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
 			if ownerAccount == nil {
-				return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found", deal.Owner)
+				return sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found", deal.Owner)
 			}
 			pubKey := ownerAccount.GetPubKey()
 			if pubKey != nil && pubKey.VerifySignature(buf, receipt.UserSignature) {
@@ -842,36 +821,209 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 
 		if !isValid {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
+			return sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
 		}
 
-		// Update stored nonce after all checks
-		if err := k.ReceiptNonces.Set(ctx, deal.Owner, receipt.Nonce); err != nil {
+		// Update stored nonce after all checks.
+		if err := k.ReceiptNoncesByDealFile.Set(ctx, collections.Join(receipt.DealId, filePath), receipt.Nonce); err != nil {
+			return fmt.Errorf("failed to update receipt nonce: %w", err)
+		}
+
+		// Track bandwidth for escrow/payment accounting and UI heat stats.
+		if bandwidthBytes > bandwidthBytes+receipt.BytesServed {
+			return sdkerrors.ErrInvalidRequest.Wrap("receipt bytes overflow")
+		}
+		bandwidthBytes += receipt.BytesServed
+
+		if err := k.IncrementHeat(ctx, deal.Id, receipt.BytesServed, false); err != nil {
+			ctx.Logger().Error("failed to increment heat", "error", err)
+		}
+
+		return nil
+	}
+
+	switch pt := msg.ProofType.(type) {
+	case *types.MsgProveLiveness_SystemProof:
+		ok, err := verifyChainedProof(pt.SystemProof, true)
+		if err != nil {
+			ctx.Logger().Error("Triple Proof Verification Error", "err", err)
+			ok = false
+		}
+		if !ok {
+			// Track health for system proofs that fail verification.
+			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
+		}
+	case *types.MsgProveLiveness_UserReceipt:
+		isUserReceipt = true
+		if err := verifyRetrievalReceipt(pt.UserReceipt); err != nil {
+			return nil, err
+		}
+	case *types.MsgProveLiveness_UserReceiptBatch:
+		isUserReceipt = true
+		if pt.UserReceiptBatch == nil || len(pt.UserReceiptBatch.Receipts) == 0 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("receipt batch is empty")
+		}
+		for _, receipt := range pt.UserReceiptBatch.Receipts {
+			r := receipt // copy to avoid pointer reuse in loop
+			if err := verifyRetrievalReceipt(&r); err != nil {
+				return nil, err
+			}
+		}
+	case *types.MsgProveLiveness_SessionProof:
+		isUserReceipt = true
+		if pt.SessionProof == nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_proof is required")
+		}
+		receipt := pt.SessionProof.SessionReceipt
+
+		// Receipt/Tx envelope consistency (must-fail).
+		if receipt.DealId != msg.DealId {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.deal_id must match msg.deal_id")
+		}
+		if receipt.EpochId != msg.EpochId {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.epoch_id must match msg.epoch_id")
+		}
+		if receipt.Provider != msg.Creator {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("session_receipt.provider must match msg.creator")
+		}
+
+		filePath := strings.TrimSpace(receipt.FilePath)
+		if filePath == "" {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.file_path is required")
+		}
+		if receipt.FilePath != filePath {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.file_path must be trimmed (no leading/trailing whitespace)")
+		}
+		if receipt.TotalBytes == 0 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.total_bytes must be non-zero")
+		}
+		if receipt.ChunkCount == 0 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.chunk_count must be non-zero")
+		}
+		if len(receipt.ChunkLeafRoot) != 32 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.chunk_leaf_root must be 32 bytes")
+		}
+
+		// Anti-replay and expiry checks.
+		if receipt.ExpiresAt != 0 && uint64(ctx.BlockHeight()) > receipt.ExpiresAt {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("download session receipt expired")
+		}
+		lastNonce, err := k.ReceiptNoncesByDealFile.Get(ctx, collections.Join(receipt.DealId, filePath))
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return nil, fmt.Errorf("failed to load last receipt nonce: %w", err)
+		}
+		if receipt.Nonce <= lastNonce {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("download session receipt nonce must be strictly increasing")
+		}
+
+		// Verify user signature (EIP-712 only).
+		if len(receipt.UserSignature) != 65 {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid user signature length (expected 65 bytes)")
+		}
+		{
+			eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
+			domainSep := types.HashDomainSeparator(eip712ChainID)
+			structHash, err := types.HashDownloadSessionReceipt(&receipt)
+			if err != nil {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash session receipt: %s", err)
+			}
+			digest := types.ComputeEIP712Digest(domainSep, structHash)
+			evmAddr, err := recoverEvmAddressFromDigest(digest, receipt.UserSignature)
+			if err != nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
+			}
+			signerAcc := sdk.AccAddress(evmAddr.Bytes())
+			if signerAcc.String() != deal.Owner {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("session receipt signature does not match deal owner")
+			}
+		}
+
+		chunks := pt.SessionProof.Chunks
+		if uint64(len(chunks)) != receipt.ChunkCount {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_proof.chunks length must equal session_receipt.chunk_count")
+		}
+
+		root := gethCommon.BytesToHash(receipt.ChunkLeafRoot)
+		seenLeaves := make(map[uint32]struct{}, len(chunks))
+		var totalBytes uint64
+
+		for _, chunk := range chunks {
+			if chunk.RangeLen == 0 {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("session chunk range_len must be non-zero")
+			}
+			if chunk.LeafIndex >= uint32(receipt.ChunkCount) {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("session chunk leaf_index out of bounds")
+			}
+			if _, ok := seenLeaves[chunk.LeafIndex]; ok {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("duplicate session chunk leaf_index")
+			}
+			seenLeaves[chunk.LeafIndex] = struct{}{}
+
+			// Verify triple-proof.
+			ok, err := verifyChainedProof(&chunk.ProofDetails, false)
+			if err != nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+			}
+			if !ok {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
+			}
+
+			proofHash, err := types.HashChainedProof(&chunk.ProofDetails)
+			if err != nil {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash chained proof: %s", err)
+			}
+			leaf := types.HashSessionLeaf(chunk.RangeStart, chunk.RangeLen, proofHash)
+			if !types.VerifyKeccakMerklePath(root, leaf, chunk.LeafIndex, chunk.MerklePath) {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("invalid session chunk merkle proof")
+			}
+
+			if totalBytes > totalBytes+chunk.RangeLen {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("session bytes overflow")
+			}
+			totalBytes += chunk.RangeLen
+
+			if bandwidthBytes > bandwidthBytes+chunk.RangeLen {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("session bytes overflow")
+			}
+			bandwidthBytes += chunk.RangeLen
+
+			if err := k.IncrementHeat(ctx, deal.Id, chunk.RangeLen, false); err != nil {
+				ctx.Logger().Error("failed to increment heat", "error", err)
+			}
+		}
+
+		if totalBytes != receipt.TotalBytes {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session proof total_bytes mismatch")
+		}
+
+		// Update stored nonce after all checks.
+		if err := k.ReceiptNoncesByDealFile.Set(ctx, collections.Join(receipt.DealId, filePath), receipt.Nonce); err != nil {
 			return nil, fmt.Errorf("failed to update receipt nonce: %w", err)
 		}
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
+	}
 
-			// Bandwidth payment (devnet): charge proportional to bytes served so that
-			// chunked (blob-sized) receipts don't exhaust escrow immediately.
-			//
-			// Units are the base denom (micro-NIL). Current placeholder pricing:
-			//   1 unit per KiB (rounded up), so a 128 KiB chunk costs 128 units.
-			const bytesPerUnit = uint64(1024)
-			units := (receipt.BytesServed + bytesPerUnit - 1) / bytesPerUnit
-			if units == 0 {
-				units = 1
-			}
-			bandwidthPayment = math.NewIntFromUint64(units)
+	var bandwidthPayment math.Int
+	if isUserReceipt {
+		// Bandwidth payment (devnet): charge proportional to bytes served so that
+		// chunked (blob-sized) receipts don't exhaust escrow immediately.
+		//
+		// Units are the base denom (micro-NIL). Current placeholder pricing:
+		//   1 unit per KiB (rounded up).
+		const bytesPerUnit = uint64(1024)
+		units := (bandwidthBytes + bytesPerUnit - 1) / bytesPerUnit
+		if units == 0 {
+			units = 1
+		}
+		bandwidthPayment = math.NewIntFromUint64(units)
 
 		newEscrowBalance := deal.EscrowBalance.Sub(bandwidthPayment)
 		if newEscrowBalance.IsNegative() {
 			return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow exhausted", msg.DealId)
 		}
 		deal.EscrowBalance = newEscrowBalance
-
-		// Increment heat stats
-		if err := k.IncrementHeat(ctx, deal.Id, receipt.BytesServed, false); err != nil {
-			ctx.Logger().Error("failed to increment heat", "error", err)
-		}
 	} else {
 		bandwidthPayment = math.NewInt(0)
 	}

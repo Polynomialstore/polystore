@@ -1,17 +1,17 @@
 package keeper
 
 import (
-	"errors" // ADDED
-	"fmt"
-	"crypto/sha256" // ADDED
+	"crypto/sha256"   // ADDED
 	"encoding/binary" // ADDED
+	"errors"          // ADDED
+	"fmt"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/address"
 	corestore "cosmossdk.io/core/store"
+	"cosmossdk.io/math" // ADDED
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types" // ADDED for Context
-	"cosmossdk.io/math" // ADDED
 	"nilchain/x/nilchain/types"
 )
 
@@ -22,25 +22,26 @@ type Keeper struct {
 	// Address capable of executing a MsgUpdateParams message.
 	// Typically, this should be the x/gov module account.
 	authority []byte
-	
-	BankKeeper types.BankKeeper
+
+	BankKeeper    types.BankKeeper
 	AccountKeeper types.AuthKeeper
 
-	Schema collections.Schema
-	Params collections.Item[types.Params]
+	Schema     collections.Schema
+	Params     collections.Item[types.Params]
 	ProofCount collections.Sequence
 	Proofs     collections.Map[uint64, types.Proof]
-    
+
 	// New collections for Deals and Providers
-	DealCount  collections.Sequence
-	Deals      collections.Map[uint64, types.Deal]
-	Providers  collections.Map[string, types.Provider] // Key by address string
-	DealProviderStatus   collections.Map[collections.Pair[uint64, string], uint64]
-	DealProviderFailures collections.Map[collections.Pair[uint64, string], uint64]
-	ProviderRewards      collections.Map[string, math.Int]
-	ReceiptNonces        collections.Map[string, uint64]
-	EvmNonces            collections.Map[string, uint64]
-	DealHeatStates       collections.Map[uint64, types.DealHeatState]
+	DealCount               collections.Sequence
+	Deals                   collections.Map[uint64, types.Deal]
+	Providers               collections.Map[string, types.Provider] // Key by address string
+	DealProviderStatus      collections.Map[collections.Pair[uint64, string], uint64]
+	DealProviderFailures    collections.Map[collections.Pair[uint64, string], uint64]
+	ProviderRewards         collections.Map[string, math.Int]
+	ReceiptNonces           collections.Map[string, uint64]
+	ReceiptNoncesByDealFile collections.Map[collections.Pair[uint64, string], uint64]
+	EvmNonces               collections.Map[string, uint64]
+	DealHeatStates          collections.Map[uint64, types.DealHeatState]
 }
 
 func NewKeeper(
@@ -50,7 +51,7 @@ func NewKeeper(
 	authority []byte,
 	bankKeeper types.BankKeeper,
 	accountKeeper types.AuthKeeper,
-    
+
 ) Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
 		panic(fmt.Sprintf("invalid authority address %s: %s", authority, err))
@@ -59,26 +60,27 @@ func NewKeeper(
 	sb := collections.NewSchemaBuilder(storeService)
 
 	k := Keeper{
-		storeService: storeService,
-		cdc:          cdc,
-		addressCodec: addressCodec,
-		authority:    authority,
-		BankKeeper:   bankKeeper,
+		storeService:  storeService,
+		cdc:           cdc,
+		addressCodec:  addressCodec,
+		authority:     authority,
+		BankKeeper:    bankKeeper,
 		AccountKeeper: accountKeeper,
-		
-		Params:       collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		ProofCount:   collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
-		Proofs:       collections.NewMap(sb, types.ProofsKey, "proofs", collections.Uint64Key, codec.CollValue[types.Proof](cdc)),
 
-		DealCount:    collections.NewSequence(sb, types.DealCountKey, "deal_count"),
-		Deals:        collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
-		Providers:    collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
-		DealProviderStatus:   collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		DealProviderFailures: collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		ProviderRewards:      collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
-		ReceiptNonces:        collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
-		EvmNonces:            collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
-		DealHeatStates:       collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+		Params:     collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProofCount: collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
+		Proofs:     collections.NewMap(sb, types.ProofsKey, "proofs", collections.Uint64Key, codec.CollValue[types.Proof](cdc)),
+
+		DealCount:               collections.NewSequence(sb, types.DealCountKey, "deal_count"),
+		Deals:                   collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
+		Providers:               collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
+		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		ProviderRewards:         collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
+		ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
+		ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
+		DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
 	}
 
 	schema, err := sb.Build()
@@ -95,7 +97,7 @@ func NewKeeper(
 // from the active provider list, respecting service hints and diversity constraints.
 func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string, count uint64) ([]string, error) {
 	var allProviders []types.Provider
-	
+
 	// Collect all providers
 	err := k.Providers.Walk(ctx, nil, func(key string, provider types.Provider) (stop bool, err error) {
 		allProviders = append(allProviders, provider)
@@ -139,8 +141,8 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	}
 
 	assignedProviders := make([]string, count)
-	selectedIndices := make(map[int]struct{})       // To ensure unique providers from candidateProviders slice
-	selectedAddresses := make(map[string]struct{})   // To ensure unique provider addresses
+	selectedIndices := make(map[int]struct{})      // To ensure unique providers from candidateProviders slice
+	selectedAddresses := make(map[string]struct{}) // To ensure unique provider addresses
 
 	seedBase := make([]byte, 0)
 	seedBase = append(seedBase, sdk.Uint64ToBigEndian(dealID)...)
@@ -149,7 +151,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	for i := uint64(0); i < count; {
 		// Deterministic seed for this selection round
 		currentHash := sha256.Sum256(append(seedBase, sdk.Uint64ToBigEndian(i)...))
-		
+
 		// Use the hash as a random source to pick an index
 		idx := int(binary.BigEndian.Uint64(currentHash[:8]) % uint64(len(candidateProviders)))
 
@@ -163,7 +165,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 			seedBase = newSeed[:]
 			continue
 		}
-		
+
 		// Ensure unique provider addresses. This implicitly handles diversity (for now)
 		// as it ensures each provider address is distinct.
 		if _, exists := selectedAddresses[provider.Address]; exists {
@@ -173,13 +175,14 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		}
 
 		assignedProviders[i] = provider.Address
-		selectedIndices[idx] = struct{}{}       
-		selectedAddresses[provider.Address] = struct{}{}   
+		selectedIndices[idx] = struct{}{}
+		selectedAddresses[provider.Address] = struct{}{}
 		i++
 	}
 
 	return assignedProviders, nil
 }
+
 // GetAuthority returns the module's authority.
 func (k Keeper) GetAuthority() []byte {
 	return k.authority

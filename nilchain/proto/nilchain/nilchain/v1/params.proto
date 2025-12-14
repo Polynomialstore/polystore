@@ -13,4 +13,5 @@ message Params {
 
   uint64 base_stripe_cost = 1; // NIL per epoch
   uint64 halving_interval = 2; // Blocks
+  uint64 eip712_chain_id = 3; // Numeric EIP-712 domain chainId (default 31337 for localhost devnet)
 }

@@ -526,6 +526,9 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 		EpochId:     1,
 		Provider:    assignedProvider,
 		BytesServed: 1024,
+		FilePath:    "file.txt",
+		RangeStart:  0,
+		RangeLen:    1024,
 		ProofDetails: types.ChainedProof{
 			MduIndex:        0,
 			MduRootFr:       root,
@@ -558,7 +561,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 
 	// Simulate a stored nonce, and then try to submit a receipt with a stale
 	// nonce to exercise the anti-replay check.
-	err = f.keeper.ReceiptNonces.Set(f.ctx, owner, 5)
+	err = f.keeper.ReceiptNoncesByDealFile.Set(f.ctx, collections.Join(resDeal.DealId, receipt.FilePath), 5)
 	require.NoError(t, err)
 	receipt.Nonce = 3
 

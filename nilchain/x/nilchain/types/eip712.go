@@ -39,6 +39,16 @@ var (
 	// v2 binds the user's signature to the exact proof_details via proof_hash and includes expires_at.
 	RetrievalReceiptTypeHashV2 = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce,uint64 expires_at,bytes32 proof_hash)"))
 
+	// keccak256("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,string file_path,uint64 range_start,uint64 range_len,uint64 bytes_served,uint64 nonce,uint64 expires_at,bytes32 proof_hash)")
+	//
+	// v3 adds range binding (file_path + range) while preserving proof_hash binding.
+	RetrievalReceiptTypeHashV3 = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,string file_path,uint64 range_start,uint64 range_len,uint64 bytes_served,uint64 nonce,uint64 expires_at,bytes32 proof_hash)"))
+
+	// keccak256("DownloadSessionReceipt(uint64 deal_id,uint64 epoch_id,string provider,string file_path,uint64 total_bytes,uint64 chunk_count,bytes32 chunk_leaf_root,uint64 nonce,uint64 expires_at)")
+	//
+	// A session-level signature committing to a Merkle root of per-chunk leaf hashes.
+	DownloadSessionReceiptTypeHash = crypto.Keccak256([]byte("DownloadSessionReceipt(uint64 deal_id,uint64 epoch_id,string provider,string file_path,uint64 total_bytes,uint64 chunk_count,bytes32 chunk_leaf_root,uint64 nonce,uint64 expires_at)"))
+
 	// keccak256("RetrievalRequest(uint64 deal_id,string file_path,uint64 range_start,uint64 range_len,uint64 nonce,uint64 expires_at)")
 	//
 	// This is an off-chain authorization signature used by the Gateway to
@@ -165,6 +175,67 @@ func HashRetrievalReceiptV2(receipt *RetrievalReceipt) (common.Hash, error) {
 		math.PaddedBigBytes(big.NewInt(int64(receipt.Nonce)), 32),
 		math.PaddedBigBytes(big.NewInt(int64(receipt.ExpiresAt)), 32),
 		pad32(proofHash.Bytes()),
+	), nil
+}
+
+// HashRetrievalReceiptV3 computes the v3 struct hash for a RetrievalReceipt.
+// v3 adds file_path + range binding and still binds the user signature to proof_details via proof_hash.
+func HashRetrievalReceiptV3(receipt *RetrievalReceipt) (common.Hash, error) {
+	proofHash, err := HashChainedProof(&receipt.ProofDetails)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	deal := new(big.Int).SetUint64(receipt.DealId)
+	epoch := new(big.Int).SetUint64(receipt.EpochId)
+	rs := new(big.Int).SetUint64(receipt.RangeStart)
+	rl := new(big.Int).SetUint64(receipt.RangeLen)
+	bs := new(big.Int).SetUint64(receipt.BytesServed)
+	nonce := new(big.Int).SetUint64(receipt.Nonce)
+	exp := new(big.Int).SetUint64(receipt.ExpiresAt)
+
+	return crypto.Keccak256Hash(
+		RetrievalReceiptTypeHashV3,
+		math.PaddedBigBytes(deal, 32),
+		math.PaddedBigBytes(epoch, 32),
+		keccak256String(receipt.Provider),
+		keccak256String(receipt.FilePath),
+		math.PaddedBigBytes(rs, 32),
+		math.PaddedBigBytes(rl, 32),
+		math.PaddedBigBytes(bs, 32),
+		math.PaddedBigBytes(nonce, 32),
+		math.PaddedBigBytes(exp, 32),
+		pad32(proofHash.Bytes()),
+	), nil
+}
+
+// HashDownloadSessionReceipt computes the struct hash for a DownloadSessionReceipt.
+func HashDownloadSessionReceipt(receipt *DownloadSessionReceipt) (common.Hash, error) {
+	if receipt == nil {
+		return common.Hash{}, nil
+	}
+	if len(receipt.ChunkLeafRoot) != 32 {
+		return common.Hash{}, nil
+	}
+
+	deal := new(big.Int).SetUint64(receipt.DealId)
+	epoch := new(big.Int).SetUint64(receipt.EpochId)
+	total := new(big.Int).SetUint64(receipt.TotalBytes)
+	chunks := new(big.Int).SetUint64(receipt.ChunkCount)
+	nonce := new(big.Int).SetUint64(receipt.Nonce)
+	exp := new(big.Int).SetUint64(receipt.ExpiresAt)
+
+	return crypto.Keccak256Hash(
+		DownloadSessionReceiptTypeHash,
+		math.PaddedBigBytes(deal, 32),
+		math.PaddedBigBytes(epoch, 32),
+		keccak256String(receipt.Provider),
+		keccak256String(receipt.FilePath),
+		math.PaddedBigBytes(total, 32),
+		math.PaddedBigBytes(chunks, 32),
+		pad32(receipt.ChunkLeafRoot),
+		math.PaddedBigBytes(nonce, 32),
+		math.PaddedBigBytes(exp, 32),
 	), nil
 }
 

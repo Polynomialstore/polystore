@@ -51,19 +51,22 @@ func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealH
 	return &types.QueryGetDealHeatResponse{Heat: heat}, nil
 }
 
-// GetReceiptNonce returns the last accepted retrieval receipt nonce for an owner.
+// GetReceiptNonce returns the last accepted retrieval receipt nonce for a (deal_id, file_path).
 func (q queryServer) GetReceiptNonce(goCtx context.Context, req *types.QueryGetReceiptNonceRequest) (*types.QueryGetReceiptNonceResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
-	owner := strings.TrimSpace(req.Owner)
-	if owner == "" {
-		return nil, status.Error(codes.InvalidArgument, "owner is required")
+	if req.DealId == 0 {
+		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
+	}
+	filePath := strings.TrimSpace(req.FilePath)
+	if filePath == "" {
+		return nil, status.Error(codes.InvalidArgument, "file_path is required")
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	lastNonce, err := q.k.ReceiptNonces.Get(ctx, owner)
+	lastNonce, err := q.k.ReceiptNoncesByDealFile.Get(ctx, collections.Join(req.DealId, filePath))
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return &types.QueryGetReceiptNonceResponse{LastNonce: 0}, nil

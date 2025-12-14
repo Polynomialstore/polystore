@@ -76,6 +76,44 @@ message RetrievalReceipt {
   uint64 bytes_served = 4;  // Actual bytes transferred (for one shard chunk)
   ChainedProof proof_details = 5 [(gogoproto.nullable) = false]; // Chained proof for the served chunk
   bytes user_signature = 6; // User's signature over the retrieval fields
-  uint64 nonce = 7;         // Strictly increasing per owner/payer to prevent replay
+  uint64 nonce = 7;         // Strictly increasing per (deal_id, file_path) to prevent replay
   uint64 expires_at = 8;    // Optional block height/timestamp after which this receipt is invalid (0 = no expiry)
+  string file_path = 9;     // NilFS file path (opaque to chain; used for nonce scoping and audits)
+  uint64 range_start = 10;  // Byte range start within file (for auditability/accounting)
+  uint64 range_len = 11;    // Byte range length within file (MUST equal bytes_served)
+}
+
+// RetrievalReceiptBatch allows a provider to submit multiple receipts in one tx.
+message RetrievalReceiptBatch {
+  repeated RetrievalReceipt receipts = 1 [(gogoproto.nullable) = false];
+}
+
+// DownloadSessionReceipt is a session-level user signature authorizing a set of chunk proofs.
+// The session commits to a Merkle root over per-chunk leaf hashes derived from (range_start, range_len, proof_hash).
+message DownloadSessionReceipt {
+  uint64 deal_id = 1;
+  uint64 epoch_id = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string file_path = 4;
+  uint64 total_bytes = 5;
+  uint64 chunk_count = 6;
+  bytes chunk_leaf_root = 7; // 32-byte Merkle root over chunk leaf hashes
+  bytes user_signature = 8;  // 65-byte EIP-712 signature (R||S||V)
+  uint64 nonce = 9;          // Strictly increasing per (deal_id, file_path)
+  uint64 expires_at = 10;    // Optional expiry (0 = no expiry)
+}
+
+// SessionChunkProof is a single proved chunk within a DownloadSessionReceipt.
+message SessionChunkProof {
+  uint64 range_start = 1;
+  uint64 range_len = 2;
+  ChainedProof proof_details = 3 [(gogoproto.nullable) = false];
+  uint32 leaf_index = 4;          // Index of leaf in the session Merkle tree
+  repeated bytes merkle_path = 5; // Merkle path siblings (32-byte nodes)
+}
+
+// RetrievalSessionProof bundles a session receipt with the per-chunk proofs it commits to.
+message RetrievalSessionProof {
+  DownloadSessionReceipt session_receipt = 1 [(gogoproto.nullable) = false];
+  repeated SessionChunkProof chunks = 2 [(gogoproto.nullable) = false];
 }

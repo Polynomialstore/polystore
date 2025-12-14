@@ -195,6 +195,8 @@ message MsgProveLiveness {
   oneof proof_type {
     RetrievalReceipt user_receipt = 4; // Path A (Hot)
     ChainedProof system_proof = 5;     // Path B (Cold)
+    RetrievalReceiptBatch user_receipt_batch = 6; // Path A (Hot, batched)
+    RetrievalSessionProof session_proof = 7;      // Path A (Hot, session receipt)
   }
 }
 

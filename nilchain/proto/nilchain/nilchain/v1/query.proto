@@ -48,9 +48,9 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
   }
 
-  // Queries the last accepted retrieval receipt nonce for an owner.
+  // Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
   rpc GetReceiptNonce(QueryGetReceiptNonceRequest) returns (QueryGetReceiptNonceResponse) {
-    option (google.api.http).get = "/nilchain/nilchain/v1/owners/{owner}/receipt-nonce";
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/receipt-nonce";
   }
 }
 
@@ -118,7 +118,8 @@ message QueryGetDealHeatResponse {
 }
 
 message QueryGetReceiptNonceRequest {
-  string owner = 1;
+  uint64 deal_id = 1;
+  string file_path = 2;
 }
 
 message QueryGetReceiptNonceResponse {

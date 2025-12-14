@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-    "nilchain/x/nilchain/keeper"
-    "nilchain/x/nilchain/types"
+	"nilchain/x/nilchain/keeper"
+	"nilchain/x/nilchain/types"
 )
 
 func TestMsgUpdateParams(t *testing.T) {
@@ -41,7 +41,8 @@ func TestMsgUpdateParams(t *testing.T) {
 				Authority: authorityStr,
 				Params:    types.Params{},
 			},
-			expErr: false,
+			expErr:    true,
+			expErrMsg: "eip712_chain_id must be non-zero",
 		},
 		{
 			name: "all good",
