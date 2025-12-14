@@ -47,6 +47,11 @@ service Query {
   rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
   }
+
+  // Queries the last accepted retrieval receipt nonce for an owner.
+  rpc GetReceiptNonce(QueryGetReceiptNonceRequest) returns (QueryGetReceiptNonceResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/owners/{owner}/receipt-nonce";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -110,4 +115,12 @@ message QueryGetDealHeatRequest {
 
 message QueryGetDealHeatResponse {
   DealHeatState heat = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryGetReceiptNonceRequest {
+  string owner = 1;
+}
+
+message QueryGetReceiptNonceResponse {
+  uint64 last_nonce = 1;
 }

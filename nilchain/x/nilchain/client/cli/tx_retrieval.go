@@ -40,20 +40,20 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			}
 			filePath := args[3]
 			trustedSetupPath := args[4]
-            manifestPath := args[5]
-            mduIndex, err := strconv.ParseUint(args[6], 10, 64)
-            if err != nil {
-                return err
-            }
+			manifestPath := args[5]
+			mduIndex, err := strconv.ParseUint(args[6], 10, 64)
+			if err != nil {
+				return err
+			}
 
 			// 1. Read File & Compute Proof
 			mduBytes, err := ioutil.ReadFile(filePath)
 			if err != nil {
 				return err
 			}
-            
-            // Verify size (mock)
-            bytesServed := uint64(len(mduBytes))
+
+			// Verify size (mock)
+			bytesServed := uint64(len(mduBytes))
 
 			if err := crypto_ffi.Init(trustedSetupPath); err != nil {
 				return err
@@ -67,41 +67,41 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			if err != nil {
 				return err
 			}
-            
-            // Unflatten Merkle Proof
-            merklePath := make([][]byte, 0)
-            for i := 0; i < len(merkleProof); i += 32 {
-                merklePath = append(merklePath, merkleProof[i:i+32])
-            }
-            
-            // --- Hop 1: Manifest Proof ---
-            // Read Manifest Blob
-            manifestBlob, err := ioutil.ReadFile(manifestPath)
-            if err != nil {
-                return fmt.Errorf("failed to read manifest: %w", err)
-            }
-            if len(manifestBlob) != 131072 {
-                 // Try to decode if it's hex string? 
-                 // Assuming CLI/nil_s3 passes binary temp file.
-                 // But nil-cli outputs hex. So nil_s3 must decode or write binary.
-                 // Let's assume it is binary 128KB.
-                 // If not, try hex decode.
-            }
-            
-            manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
-            if err != nil {
-                return fmt.Errorf("ComputeManifestProof failed: %w", err)
-            }
+
+			// Unflatten Merkle Proof
+			merklePath := make([][]byte, 0)
+			for i := 0; i < len(merkleProof); i += 32 {
+				merklePath = append(merklePath, merkleProof[i:i+32])
+			}
+
+			// --- Hop 1: Manifest Proof ---
+			// Read Manifest Blob
+			manifestBlob, err := ioutil.ReadFile(manifestPath)
+			if err != nil {
+				return fmt.Errorf("failed to read manifest: %w", err)
+			}
+			if len(manifestBlob) != 131072 {
+				// Try to decode if it's hex string?
+				// Assuming CLI/nil_s3 passes binary temp file.
+				// But nil-cli outputs hex. So nil_s3 must decode or write binary.
+				// Let's assume it is binary 128KB.
+				// If not, try hex decode.
+			}
+
+			manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+			if err != nil {
+				return fmt.Errorf("ComputeManifestProof failed: %w", err)
+			}
 
 			chainedProof := types.ChainedProof{
 				MduIndex:        mduIndex,
-				MduRootFr:       root, 
+				MduRootFr:       root,
 				ManifestOpening: manifestProof,
-				
-				BlobCommitment:  commitment,
-				MerklePath:      merklePath,
-				BlobIndex:       chunkIndex,
-				
+
+				BlobCommitment: commitment,
+				MerklePath:     merklePath,
+				BlobIndex:      chunkIndex,
+
 				ZValue:          z,
 				YValue:          y,
 				KzgOpeningProof: kzgProofBytes,
@@ -113,25 +113,28 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			var expiresAt uint64 = 0 // 0 = no expiry; chain will only enforce expiry if > 0.
 
 			// 3. Sign Data
-            // Format: DealID (8) + EpochID (8) + Provider (len) + BytesServed (8) + Nonce (8) + ExpiresAt (8)
-            buf := make([]byte, 0)
-            buf = append(buf, sdk.Uint64ToBigEndian(dealId)...)
-            buf = append(buf, sdk.Uint64ToBigEndian(epochId)...)
-            buf = append(buf, []byte(providerAddr)...)
-            buf = append(buf, sdk.Uint64ToBigEndian(bytesServed)...)
+			// Format: DealID (8) + EpochID (8) + Provider (len) + BytesServed (8) + Nonce (8) + ExpiresAt (8)
+			buf := make([]byte, 0)
+			buf = append(buf, sdk.Uint64ToBigEndian(dealId)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(epochId)...)
+			buf = append(buf, []byte(providerAddr)...)
+			buf = append(buf, sdk.Uint64ToBigEndian(bytesServed)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(nonce)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(expiresAt)...)
+			if proofHash, err := types.HashChainedProof(&chainedProof); err == nil {
+				buf = append(buf, proofHash.Bytes()...)
+			}
 
-            // Sign with Keyring
-            name := clientCtx.GetFromName()
-            if name == "" {
-                return fmt.Errorf("--from flag required")
-            }
-            
-            sig, _, err := clientCtx.Keyring.Sign(name, buf, signing.SignMode_SIGN_MODE_DIRECT)
-            if err != nil {
-                return err
-            }
+			// Sign with Keyring
+			name := clientCtx.GetFromName()
+			if name == "" {
+				return fmt.Errorf("--from flag required")
+			}
+
+			sig, _, err := clientCtx.Keyring.Sign(name, buf, signing.SignMode_SIGN_MODE_DIRECT)
+			if err != nil {
+				return err
+			}
 
 			// 4. Construct Receipt
 			receipt := types.RetrievalReceipt{
@@ -150,11 +153,11 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			if err != nil {
 				return err
 			}
-            
-            fmt.Println(string(bz))
-            
-            // Optionally write to file if flag provided? 
-            // For now, stdout is fine or user redirects.
+
+			fmt.Println(string(bz))
+
+			// Optionally write to file if flag provided?
+			// For now, stdout is fine or user redirects.
 			return nil
 		},
 	}
@@ -188,17 +191,17 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 			msg := types.MsgProveLiveness{
 				Creator: clientCtx.GetFromAddress().String(),
 				DealId:  receipt.DealId,
-                EpochId: receipt.EpochId,
+				EpochId: receipt.EpochId,
 				ProofType: &types.MsgProveLiveness_UserReceipt{
 					UserReceipt: &receipt,
 				},
 			}
-            
-            // Wait, I need to check the MsgProveLiveness proto definition for nested types.
-            // Usually: ProofType is oneof.
-            // MsgProveLiveness_UserReceipt struct has field UserReceipt *RetrievalReceipt?
-            // Or does it embed it?
-            // Let's assume wrapper for now.
+
+			// Wait, I need to check the MsgProveLiveness proto definition for nested types.
+			// Usually: ProofType is oneof.
+			// MsgProveLiveness_UserReceipt struct has field UserReceipt *RetrievalReceipt?
+			// Or does it embed it?
+			// Let's assume wrapper for now.
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},

@@ -2,7 +2,8 @@ package keeper
 
 import (
 	"context"
-    "errors"
+	"errors"
+	"strings"
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -35,17 +36,40 @@ func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealH
 	heat, err := q.k.DealHeatStates.Get(ctx, req.DealId)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-             // Return empty heat state instead of error for UX
-             return &types.QueryGetDealHeatResponse{
-                 Heat: types.DealHeatState{
-                     BytesServedTotal: 0,
-                     FailedChallengesTotal: 0,
-                     LastUpdateHeight: 0,
-                 },
-             }, nil
+			// Return empty heat state instead of error for UX
+			return &types.QueryGetDealHeatResponse{
+				Heat: types.DealHeatState{
+					BytesServedTotal:      0,
+					FailedChallengesTotal: 0,
+					LastUpdateHeight:      0,
+				},
+			}, nil
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &types.QueryGetDealHeatResponse{Heat: heat}, nil
+}
+
+// GetReceiptNonce returns the last accepted retrieval receipt nonce for an owner.
+func (q queryServer) GetReceiptNonce(goCtx context.Context, req *types.QueryGetReceiptNonceRequest) (*types.QueryGetReceiptNonceResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	owner := strings.TrimSpace(req.Owner)
+	if owner == "" {
+		return nil, status.Error(codes.InvalidArgument, "owner is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	lastNonce, err := q.k.ReceiptNonces.Get(ctx, owner)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return &types.QueryGetReceiptNonceResponse{LastNonce: 0}, nil
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetReceiptNonceResponse{LastNonce: lastNonce}, nil
 }

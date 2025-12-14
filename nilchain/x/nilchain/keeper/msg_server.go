@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-    "os"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -16,8 +15,8 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
-	"nilchain/x/nilchain/types"
 	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 type msgServer struct {
@@ -60,99 +59,55 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrUnauthorized.Wrap("invalid EVM signature length (expected 65 bytes)")
 	}
 
-            	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
+	// EIP-712 Verification -- TEMPORARILY DISABLED FOR E2E TESTING
 
-                // Use 31337 for local devnet.
+	// Use 31337 for local devnet.
 
-                eip712ChainID := big.NewInt(31337)
+	eip712ChainID := big.NewInt(31337)
 
-        
+	domainSep := types.HashDomainSeparator(eip712ChainID)
 
-            	domainSep := types.HashDomainSeparator(eip712ChainID)
+	structHash, err := types.HashCreateDeal(intent)
 
-        structHash, err := types.HashCreateDeal(intent)
+	if err != nil {
 
-        if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
 
-            return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to hash intent: %s", err)
+	}
 
-        }
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
 
-        
+	// DEBUG: EIP-712 Tracing
 
-    digest := types.ComputeEIP712Digest(domainSep, structHash)
+	ctx.Logger().Info("DEBUG EIP-712 CreateDeal",
 
-    
+		"Intent", fmt.Sprintf("%+v", intent),
 
-                // DEBUG: EIP-712 Tracing
+		"ChainID", eip712ChainID.String(),
 
-    
+		"DomainSep", domainSep.Hex(),
 
-                ctx.Logger().Info("DEBUG EIP-712 CreateDeal",
+		"StructHash", structHash.Hex(),
 
-    
+		"Digest", fmt.Sprintf("%x", digest),
 
-                    "Intent", fmt.Sprintf("%+v", intent),
+		"Signature", fmt.Sprintf("%x", msg.EvmSignature),
+	)
 
-    
+	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
 
-                    "ChainID", eip712ChainID.String(),
+	if err != nil {
 
-    
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
 
-                    "DomainSep", domainSep.Hex(),
+	}
 
-    
+	ctx.Logger().Info("DEBUG EIP-712 Recovery",
 
-                    "StructHash", structHash.Hex(),
+		"Recovered", evmAddr.Hex(),
 
-    
-
-                    "Digest", fmt.Sprintf("%x", digest),
-
-    
-
-                    "Signature", fmt.Sprintf("%x", msg.EvmSignature),
-
-    
-
-                )
-
-    
-
-        
-
-    
-
-            	evmAddr, err := recoverEvmAddressFromDigest(digest, msg.EvmSignature)
-
-    
-
-            	if err != nil {
-
-    
-
-            		return nil, sdkerrors.ErrUnauthorized.Wrapf("failed to recover EVM signer: %s", err)
-
-    
-
-            	}
-
-    
-
-                ctx.Logger().Info("DEBUG EIP-712 Recovery",
-
-    
-
-                    "Recovered", evmAddr.Hex(),
-
-    
-
-                    "Expected", intent.CreatorEvm,
-
-    
-
-                )
+		"Expected", intent.CreatorEvm,
+	)
 
 	creator := strings.ToLower(strings.TrimSpace(intent.CreatorEvm))
 	if creator == "" {
@@ -177,7 +132,6 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	if err := k.EvmNonces.Set(ctx, evmKey, intent.Nonce); err != nil {
 		return nil, fmt.Errorf("failed to update bridge nonce: %w", err)
 	}
-
 
 	// Map EVM address -> Cosmos bech32 (same bytes, different prefix).
 	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
@@ -250,7 +204,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	deal := types.Deal{
 		Id:                 dealID,
 		ManifestRoot:       nil, // Empty initially
-		Size_:              0,  // Empty initially
+		Size_:              0,   // Empty initially
 		Owner:              ownerAddrStr,
 		EscrowBalance:      intent.InitialEscrow,
 		StartBlock:         uint64(ctx.BlockHeight()),
@@ -304,12 +258,12 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 
 	// Create new Provider object
 	provider := types.Provider{
-		Address: creatorAddr.String(),
-		TotalStorage: msg.TotalStorage,
-		UsedStorage: 0, // Initially 0
-		Capabilities: msg.Capabilities,
-		Status: "Active", // Initially active
-        ReputationScore: 100, // Initial Score
+		Address:         creatorAddr.String(),
+		TotalStorage:    msg.TotalStorage,
+		UsedStorage:     0, // Initially 0
+		Capabilities:    msg.Capabilities,
+		Status:          "Active", // Initially active
+		ReputationScore: 100,      // Initial Score
 	}
 
 	if err := k.Providers.Set(ctx, provider.Address, provider); err != nil {
@@ -327,7 +281,6 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 
 	return &types.MsgRegisterProviderResponse{Success: true}, nil
 }
-
 
 // CreateDeal handles MsgCreateDeal to create a new storage deal.
 func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (*types.MsgCreateDealResponse, error) {
@@ -417,7 +370,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	if maxMonthlySpend.IsNil() || maxMonthlySpend.IsNegative() {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", msg.MaxMonthlySpend)
 	}
-	
+
 	// For the local devnet, we denominate escrow in the staking token ("stake").
 	escrowCoin := sdk.NewCoins(sdk.NewCoin("stake", initialEscrowAmount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, escrowCoin); err != nil {
@@ -494,7 +447,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = msg.Size_
-	
+
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
@@ -649,7 +602,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	hChallenge := int64(deal.StartBlock)
 	beacon := ctx.BlockHeader().LastBlockId.Hash
 	_ = beacon
-	
+
 	var chainedProof types.ChainedProof
 	var isUserReceipt bool
 	switch pt := msg.ProofType.(type) {
@@ -665,63 +618,58 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	// TRIPLE PROOF VERIFICATION
 	// Call crypto_ffi.VerifyChainedProof(deal.ManifestRoot, chainedProof)
-	valid := true 
-	skipKZG := os.Getenv("SKIP_KZG_VERIFY") == "true"
-	
-	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 || 
-       len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
-       len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
-           valid = false
-           ctx.Logger().Info("Invalid proof component lengths")
-    } else if len(deal.ManifestRoot) != 48 {
-           valid = false
-           ctx.Logger().Info("Deal manifest root not set")
-    } else {
-         // Flatten Merkle Path
-         flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
-         for _, node := range chainedProof.MerklePath {
-             if len(node) != 32 {
-                 valid = false
-                 break
-             }
-             flattenedMerkle = append(flattenedMerkle, node...)
-         }
-         
-         if valid {
-             ctx.Logger().Info("VerifyChainedProof Input",
-                 "ManifestRoot", hex.EncodeToString(deal.ManifestRoot),
-                 "MduIndex", chainedProof.MduIndex,
-                 "MduRootFr", hex.EncodeToString(chainedProof.MduRootFr),
-                 "BlobCommitment", hex.EncodeToString(chainedProof.BlobCommitment),
-                 "BlobIndex", chainedProof.BlobIndex,
-                 "MerklePath", hex.EncodeToString(flattenedMerkle),
-                 "ZValue", hex.EncodeToString(chainedProof.ZValue),
-                 "YValue", hex.EncodeToString(chainedProof.YValue),
-                 "KzgOpening", hex.EncodeToString(chainedProof.KzgOpeningProof),
-             )
-             v, err := crypto_ffi.VerifyChainedProof(
-                deal.ManifestRoot,
-                chainedProof.MduIndex,
-                chainedProof.ManifestOpening,
-                chainedProof.MduRootFr,
-                chainedProof.BlobCommitment,
-                uint64(chainedProof.BlobIndex),
-                flattenedMerkle,
-                chainedProof.ZValue,
-                chainedProof.YValue,
-                chainedProof.KzgOpeningProof,
-             )
-             if err != nil {
-                 ctx.Logger().Error("Triple Proof Verification Error", "err", err)
-                 valid = false
-             } else {
-                 valid = v
-             }
-         }
-    }
+	valid := true
 
-	if skipKZG {
-		valid = true
+	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
+		len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
+		len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
+		valid = false
+		ctx.Logger().Info("Invalid proof component lengths")
+	} else if len(deal.ManifestRoot) != 48 {
+		valid = false
+		ctx.Logger().Info("Deal manifest root not set")
+	} else {
+		// Flatten Merkle Path
+		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
+		for _, node := range chainedProof.MerklePath {
+			if len(node) != 32 {
+				valid = false
+				break
+			}
+			flattenedMerkle = append(flattenedMerkle, node...)
+		}
+
+		if valid {
+			ctx.Logger().Info("VerifyChainedProof Input",
+				"ManifestRoot", hex.EncodeToString(deal.ManifestRoot),
+				"MduIndex", chainedProof.MduIndex,
+				"MduRootFr", hex.EncodeToString(chainedProof.MduRootFr),
+				"BlobCommitment", hex.EncodeToString(chainedProof.BlobCommitment),
+				"BlobIndex", chainedProof.BlobIndex,
+				"MerklePath", hex.EncodeToString(flattenedMerkle),
+				"ZValue", hex.EncodeToString(chainedProof.ZValue),
+				"YValue", hex.EncodeToString(chainedProof.YValue),
+				"KzgOpening", hex.EncodeToString(chainedProof.KzgOpeningProof),
+			)
+			v, err := crypto_ffi.VerifyChainedProof(
+				deal.ManifestRoot,
+				chainedProof.MduIndex,
+				chainedProof.ManifestOpening,
+				chainedProof.MduRootFr,
+				chainedProof.BlobCommitment,
+				uint64(chainedProof.BlobIndex),
+				flattenedMerkle,
+				chainedProof.ZValue,
+				chainedProof.YValue,
+				chainedProof.KzgOpeningProof,
+			)
+			if err != nil {
+				ctx.Logger().Error("Triple Proof Verification Error", "err", err)
+				valid = false
+			} else {
+				valid = v
+			}
+		}
 	}
 
 	if isUserReceipt {
@@ -736,7 +684,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 	}
 
-    // 4. Calculate Tier based on block height latency
+	// 4. Calculate Tier based on block height latency
 	hProof := ctx.BlockHeight()
 	latency := hProof - hChallenge // Latency in blocks (Block difference from challenge start to proof inclusion)
 
@@ -745,138 +693,165 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	tierName := "Fail"
 
 	if latency <= 1 {
-		tier = 0 // Platinum
+		tier = 0                                             // Platinum
 		rewardMultiplier = math.LegacyNewDecWithPrec(100, 2) // 1.00
 		tierName = "Platinum"
 	} else if latency <= 5 {
-		tier = 1 // Gold
+		tier = 1                                            // Gold
 		rewardMultiplier = math.LegacyNewDecWithPrec(80, 2) // 0.80
 		tierName = "Gold"
 	} else if latency <= 10 {
-		tier = 2 // Silver
+		tier = 2                                            // Silver
 		rewardMultiplier = math.LegacyNewDecWithPrec(50, 2) // 0.50
 		tierName = "Silver"
 	} else {
-		tier = 3 // Fail
+		tier = 3                                           // Fail
 		rewardMultiplier = math.LegacyNewDecWithPrec(0, 2) // 0.00
 		tierName = "Fail"
 		// Slashing already handled above for !valid proofs.
 		// For valid but too slow proofs, no reward, potentially still a small slash based on spec.
 	}
-    
-    // Update reputation for success
-    if tier < 3 {
-        provider, errGet := k.Providers.Get(ctx, msg.Creator)
-        if errGet == nil {
-            provider.ReputationScore += 1
-            if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
-                    ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
-            }
-        }
-    }
 
-    params := k.GetParams(ctx)
+	// Update reputation for success
+	if tier < 3 {
+		provider, errGet := k.Providers.Get(ctx, msg.Creator)
+		if errGet == nil {
+			provider.ReputationScore += 1
+			if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
+				ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
+			}
+		}
+	}
+
+	params := k.GetParams(ctx)
 
 	// --- INFLATIONARY DECAY ---
-    // BaseReward = 1 NIL * (1 / 2^(Height/Interval))
-    initialReward := math.NewInt(1000000)
-    decayFactor := uint64(ctx.BlockHeight()) / params.HalvingInterval
-    
-    // Using bit shifting for power of 2 division
-    // However, math.Int doesn't support bit shifting directly in all versions easily or for large numbers
-    // safer to use integer division: initialReward / 2^decayFactor
-    
-    // Calculate divisor: 2^decayFactor
-    // Warning: decayFactor can be large, so 2^decayFactor might overflow uint64.
-    // But HalvingInterval is 1000 blocks. If block time is 1s, 1000 blocks is ~16 mins.
-    // 64 halvings is a lot. Effectively 0 reward.
-    
-    var decayedReward math.Int
-    if decayFactor >= 64 {
-        decayedReward = math.ZeroInt()
-    } else {
-        divisor := uint64(1) << decayFactor
-        decayedReward = initialReward.Quo(math.NewIntFromUint64(divisor))
-    }
+	// BaseReward = 1 NIL * (1 / 2^(Height/Interval))
+	initialReward := math.NewInt(1000000)
+	decayFactor := uint64(ctx.BlockHeight()) / params.HalvingInterval
+
+	// Using bit shifting for power of 2 division
+	// However, math.Int doesn't support bit shifting directly in all versions easily or for large numbers
+	// safer to use integer division: initialReward / 2^decayFactor
+
+	// Calculate divisor: 2^decayFactor
+	// Warning: decayFactor can be large, so 2^decayFactor might overflow uint64.
+	// But HalvingInterval is 1000 blocks. If block time is 1s, 1000 blocks is ~16 mins.
+	// 64 halvings is a lot. Effectively 0 reward.
+
+	var decayedReward math.Int
+	if decayFactor >= 64 {
+		decayedReward = math.ZeroInt()
+	} else {
+		divisor := uint64(1) << decayFactor
+		decayedReward = initialReward.Quo(math.NewIntFromUint64(divisor))
+	}
 
 	storageReward := math.LegacyNewDecFromInt(decayedReward).Mul(rewardMultiplier).TruncateInt()
 
 	var bandwidthPayment math.Int
 	if isUserReceipt {
-        receipt := msg.GetProofType().(*types.MsgProveLiveness_UserReceipt).UserReceipt
+		receipt := msg.GetProofType().(*types.MsgProveLiveness_UserReceipt).UserReceipt
 
-        // Anti-replay and expiry checks
-        if receipt.ExpiresAt != 0 && uint64(ctx.BlockHeight()) > receipt.ExpiresAt {
-            return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt expired")
-        }
+		// Receipt/Tx envelope consistency (must-fail).
+		if receipt.DealId != msg.DealId {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("receipt.deal_id must match msg.deal_id")
+		}
+		if receipt.EpochId != msg.EpochId {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("receipt.epoch_id must match msg.epoch_id")
+		}
+		if receipt.Provider != msg.Creator {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("receipt.provider must match msg.creator")
+		}
 
-        lastNonce, err := k.ReceiptNonces.Get(ctx, deal.Owner)
-        if err != nil && !errors.Is(err, collections.ErrNotFound) {
-            return nil, fmt.Errorf("failed to load last receipt nonce: %w", err)
-        }
-        if receipt.Nonce <= lastNonce {
-            return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt nonce must be strictly increasing")
-        }
+		// Anti-replay and expiry checks
+		if receipt.ExpiresAt != 0 && uint64(ctx.BlockHeight()) > receipt.ExpiresAt {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt expired")
+		}
 
-        // Reconstruct signed message buffer (must match CLI)
-        buf := make([]byte, 0)
-        buf = append(buf, sdk.Uint64ToBigEndian(receipt.DealId)...)
-        buf = append(buf, sdk.Uint64ToBigEndian(receipt.EpochId)...)
-        buf = append(buf, []byte(receipt.Provider)...)
-        buf = append(buf, sdk.Uint64ToBigEndian(receipt.BytesServed)...)
-        buf = append(buf, sdk.Uint64ToBigEndian(receipt.Nonce)...)
-        buf = append(buf, sdk.Uint64ToBigEndian(receipt.ExpiresAt)...)
+		lastNonce, err := k.ReceiptNonces.Get(ctx, deal.Owner)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return nil, fmt.Errorf("failed to load last receipt nonce: %w", err)
+		}
+		if receipt.Nonce <= lastNonce {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("retrieval receipt nonce must be strictly increasing")
+		}
 
-        // Verification Logic
-        isValid := false
+		// Reconstruct signed message buffer (Cosmos signing path).
+		// This is not EIP-712; it exists as a fallback for local keyring flows.
+		buf := make([]byte, 0)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.DealId)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.EpochId)...)
+		buf = append(buf, []byte(receipt.Provider)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.BytesServed)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.Nonce)...)
+		buf = append(buf, sdk.Uint64ToBigEndian(receipt.ExpiresAt)...)
+		if proofHash, err := types.HashChainedProof(&receipt.ProofDetails); err == nil {
+			buf = append(buf, proofHash.Bytes()...)
+		}
 
-        // Attempt EIP-712 Recovery (if signature is 65 bytes)
-        if len(receipt.UserSignature) == 65 {
-             // For devnet, assume ChainID 31337 for EIP-712 domain
-             eip712ChainID := big.NewInt(31337)
-             domainSep := types.HashDomainSeparator(eip712ChainID)
-             structHash, errHash := types.HashRetrievalReceipt(receipt)
-             if errHash == nil {
-                 digest := types.ComputeEIP712Digest(domainSep, structHash)
-                 evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature)
-                 if errRec == nil {
-                     // Verify against Deal Owner
-                     signerAcc := sdk.AccAddress(evmAddr.Bytes())
-                     if signerAcc.String() == deal.Owner {
-                         isValid = true
-                     }
-                 }
-             }
-        }
+		// Verification Logic
+		isValid := false
 
-        if !isValid {
-            // Fallback to Cosmos Signature Verification
-            ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
-            if err != nil {
-                 return nil, fmt.Errorf("invalid owner address: %w", err)
-            }
-            
-            ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
-            if ownerAccount == nil {
-                return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found", deal.Owner)
-            }
-            pubKey := ownerAccount.GetPubKey()
-            if pubKey != nil && pubKey.VerifySignature(buf, receipt.UserSignature) {
-                isValid = true
-            }
-        }
+		// Attempt EIP-712 Recovery (if signature is 65 bytes)
+		if len(receipt.UserSignature) == 65 {
+			// For devnet, assume ChainID 31337 for EIP-712 domain
+			eip712ChainID := big.NewInt(31337)
+			domainSep := types.HashDomainSeparator(eip712ChainID)
 
-        if !isValid {
-            return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
-        }
+			// Prefer v2 hashing (binds signature to proof_details via proof_hash).
+			if structHash, errHash := types.HashRetrievalReceiptV2(receipt); errHash == nil {
+				digest := types.ComputeEIP712Digest(domainSep, structHash)
+				if evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature); errRec == nil {
+					signerAcc := sdk.AccAddress(evmAddr.Bytes())
+					if signerAcc.String() == deal.Owner {
+						isValid = true
+					}
+				}
+			}
 
-        // Update stored nonce after all checks
-        if err := k.ReceiptNonces.Set(ctx, deal.Owner, receipt.Nonce); err != nil {
-            return nil, fmt.Errorf("failed to update receipt nonce: %w", err)
-        }
+			// Migration fallback: accept legacy v1 receipts if v2 did not validate.
+			if !isValid {
+				if structHash, errHash := types.HashRetrievalReceiptV1(receipt); errHash == nil {
+					digest := types.ComputeEIP712Digest(domainSep, structHash)
+					if evmAddr, errRec := recoverEvmAddressFromDigest(digest, receipt.UserSignature); errRec == nil {
+						signerAcc := sdk.AccAddress(evmAddr.Bytes())
+						if signerAcc.String() == deal.Owner {
+							isValid = true
+						}
+					}
+				}
+			}
+		}
+
+		if !isValid {
+			// Fallback to Cosmos Signature Verification
+			ownerAddr, err := sdk.AccAddressFromBech32(deal.Owner)
+			if err != nil {
+				return nil, fmt.Errorf("invalid owner address: %w", err)
+			}
+
+			ownerAccount := k.AccountKeeper.GetAccount(ctx, ownerAddr)
+			if ownerAccount == nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrapf("owner account %s not found", deal.Owner)
+			}
+			pubKey := ownerAccount.GetPubKey()
+			if pubKey != nil && pubKey.VerifySignature(buf, receipt.UserSignature) {
+				isValid = true
+			}
+		}
+
+		if !isValid {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval receipt signature")
+		}
+
+		// Update stored nonce after all checks
+		if err := k.ReceiptNonces.Set(ctx, deal.Owner, receipt.Nonce); err != nil {
+			return nil, fmt.Errorf("failed to update receipt nonce: %w", err)
+		}
 
 		bandwidthPayment = math.NewInt(500000) // Placeholder 0.5 NIL
-		
+
 		newEscrowBalance := deal.EscrowBalance.Sub(bandwidthPayment)
 		if newEscrowBalance.IsNegative() {
 			return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow exhausted", msg.DealId)
@@ -895,34 +870,34 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	// --- REWARD ACCUMULATION ---
 	if totalReward.IsPositive() {
-        // Accumulate to ProviderRewards store
-        currentRewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
-        if err != nil {
-            if !errors.Is(err, collections.ErrNotFound) {
-                return nil, err
-            }
-            currentRewards = math.ZeroInt()
-        }
-        
-        newRewards := currentRewards.Add(totalReward)
-        if err := k.ProviderRewards.Set(ctx, msg.Creator, newRewards); err != nil {
-            return nil, fmt.Errorf("failed to set provider rewards: %w", err)
-        }
-        
-        // Note: We are NOT minting coins yet. Coins are minted on Withdraw.
-        // BUT wait, BandwidthPayment comes from Escrow (User -> Module). 
-        // StorageReward comes from Inflation (Mint).
-        // If we mix them, we need to be careful.
-        // For Bandwidth, funds are already in Module Account (escrow).
-        // For Storage, funds don't exist yet.
-        
-        // Strategy: Keep accounting virtual.
-        // For Bandwidth: We already deducted from Deal.EscrowBalance (which is just a number field in the Deal struct).
-        // The actual tokens are in the 'nilchain' module account.
-        // So we effectively "moved" claim from Deal to ProviderReward.
-        // For Storage: We will mint when withdrawing.
+		// Accumulate to ProviderRewards store
+		currentRewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
+		if err != nil {
+			if !errors.Is(err, collections.ErrNotFound) {
+				return nil, err
+			}
+			currentRewards = math.ZeroInt()
+		}
+
+		newRewards := currentRewards.Add(totalReward)
+		if err := k.ProviderRewards.Set(ctx, msg.Creator, newRewards); err != nil {
+			return nil, fmt.Errorf("failed to set provider rewards: %w", err)
+		}
+
+		// Note: We are NOT minting coins yet. Coins are minted on Withdraw.
+		// BUT wait, BandwidthPayment comes from Escrow (User -> Module).
+		// StorageReward comes from Inflation (Mint).
+		// If we mix them, we need to be careful.
+		// For Bandwidth, funds are already in Module Account (escrow).
+		// For Storage, funds don't exist yet.
+
+		// Strategy: Keep accounting virtual.
+		// For Bandwidth: We already deducted from Deal.EscrowBalance (which is just a number field in the Deal struct).
+		// The actual tokens are in the 'nilchain' module account.
+		// So we effectively "moved" claim from Deal to ProviderReward.
+		// For Storage: We will mint when withdrawing.
 	}
-	
+
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal state: %w", err)
 	}
@@ -1021,174 +996,174 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 // SignalSaturation handles MsgSignalSaturation to trigger pre-emptive scaling.
 func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalSaturation) (*types.MsgSignalSaturationResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	
-    deal, err := k.Deals.Get(ctx, msg.DealId)
-    if err != nil {
-        return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
-    }
 
-    isAssigned := false
-    for _, p := range deal.Providers {
-        if p == msg.Creator {
-            isAssigned = true
-            break
-        }
-    }
-    if !isAssigned {
-        return nil, sdkerrors.ErrUnauthorized.Wrapf("only assigned providers can signal saturation")
-    }
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
+	}
 
-    // --- BUDGET CHECK ---
-    // Cost = (CurrentReplication + 12) * BaseStripeCost
-    params := k.GetParams(ctx)
-    currentReplication := deal.CurrentReplication
-    newReplication := currentReplication + types.DealBaseReplication
-    estimatedCost := math.NewInt(int64(newReplication)).Mul(math.NewInt(int64(params.BaseStripeCost)))
-    
-    if estimatedCost.GT(deal.MaxMonthlySpend) {
-         return nil, sdkerrors.ErrInvalidRequest.Wrapf("scaling denied: new cost %s exceeds max monthly spend %s", estimatedCost, deal.MaxMonthlySpend)
-    }
-    
-    blockHash := ctx.BlockHeader().LastBlockId.Hash
-    derivedID := deal.Id + (deal.CurrentReplication * 1000) 
-    
-    newProviders, err := k.AssignProviders(ctx, derivedID, blockHash, "Hot", types.DealBaseReplication)
-    if err != nil {
-        return nil, fmt.Errorf("failed to assign new hot stripe: %w", err)
-    }
+	isAssigned := false
+	for _, p := range deal.Providers {
+		if p == msg.Creator {
+			isAssigned = true
+			break
+		}
+	}
+	if !isAssigned {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("only assigned providers can signal saturation")
+	}
 
-    deal.Providers = append(deal.Providers, newProviders...)
-    deal.CurrentReplication += types.DealBaseReplication
-    
-    if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
-        return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
-    }
+	// --- BUDGET CHECK ---
+	// Cost = (CurrentReplication + 12) * BaseStripeCost
+	params := k.GetParams(ctx)
+	currentReplication := deal.CurrentReplication
+	newReplication := currentReplication + types.DealBaseReplication
+	estimatedCost := math.NewInt(int64(newReplication)).Mul(math.NewInt(int64(params.BaseStripeCost)))
 
-    ctx.EventManager().EmitEvent(
-        sdk.NewEvent(
-            types.TypeMsgSignalSaturation,
-            sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
-            sdk.NewAttribute("new_stripe_index", fmt.Sprintf("%d", (deal.CurrentReplication/types.DealBaseReplication))),
-            sdk.NewAttribute("new_providers", fmt.Sprintf("%v", newProviders)),
-        ),
-    )
+	if estimatedCost.GT(deal.MaxMonthlySpend) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("scaling denied: new cost %s exceeds max monthly spend %s", estimatedCost, deal.MaxMonthlySpend)
+	}
+
+	blockHash := ctx.BlockHeader().LastBlockId.Hash
+	derivedID := deal.Id + (deal.CurrentReplication * 1000)
+
+	newProviders, err := k.AssignProviders(ctx, derivedID, blockHash, "Hot", types.DealBaseReplication)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign new hot stripe: %w", err)
+	}
+
+	deal.Providers = append(deal.Providers, newProviders...)
+	deal.CurrentReplication += types.DealBaseReplication
+
+	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+		return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgSignalSaturation,
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute("new_stripe_index", fmt.Sprintf("%d", (deal.CurrentReplication/types.DealBaseReplication))),
+			sdk.NewAttribute("new_providers", fmt.Sprintf("%v", newProviders)),
+		),
+	)
 
 	return &types.MsgSignalSaturationResponse{
-		Success: true,
-		Message: fmt.Sprintf("Saturation processed. New stripe added."),
+		Success:      true,
+		Message:      fmt.Sprintf("Saturation processed. New stripe added."),
 		NewProviders: newProviders,
 	}, nil
 }
 
 // AddCredit allows a user to top up the escrow balance for a deal.
 func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*types.MsgAddCreditResponse, error) {
-    ctx := sdk.UnwrapSDKContext(goCtx)
-    
-    senderAddr, err := sdk.AccAddressFromBech32(msg.Creator)
-    if err != nil {
-        return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid sender address: %s", err)
-    }
-    
-    deal, err := k.Deals.Get(ctx, msg.DealId)
-    if err != nil {
-        return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
-    }
-    
-    amount := msg.Amount
-    if amount.IsNil() || amount.IsNegative() {
-        return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid amount")
-    }
-    
-    coins := sdk.NewCoins(sdk.NewCoin("stake", amount))
-    if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, senderAddr, types.ModuleName, coins); err != nil {
-        return nil, err
-    }
-    
-    deal.EscrowBalance = deal.EscrowBalance.Add(amount)
-    if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
-        return nil, err
-    }
-    
-    return &types.MsgAddCreditResponse{NewBalance: deal.EscrowBalance}, nil
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	senderAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid sender address: %s", err)
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+
+	amount := msg.Amount
+	if amount.IsNil() || amount.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid amount")
+	}
+
+	coins := sdk.NewCoins(sdk.NewCoin("stake", amount))
+	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, senderAddr, types.ModuleName, coins); err != nil {
+		return nil, err
+	}
+
+	deal.EscrowBalance = deal.EscrowBalance.Add(amount)
+	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		return nil, err
+	}
+
+	return &types.MsgAddCreditResponse{NewBalance: deal.EscrowBalance}, nil
 }
 
 // WithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
 func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdrawRewards) (*types.MsgWithdrawRewardsResponse, error) {
-    ctx := sdk.UnwrapSDKContext(goCtx)
-    
-    providerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
-    if err != nil {
-        return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", err)
-    }
-    
-    rewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
-    if err != nil {
-        if errors.Is(err, collections.ErrNotFound) {
-            return nil, sdkerrors.ErrNotFound.Wrap("no rewards found")
-        }
-        return nil, err
-    }
-    
-    if rewards.IsZero() || rewards.IsNegative() {
-        return nil, sdkerrors.ErrInvalidRequest.Wrap("no rewards to withdraw")
-    }
-    
-    // Mint tokens
-    // Wait, if the rewards came from Deal Escrow (Bandwidth), they are already in the module account (sent from User).
-    // If they are Storage Rewards (Inflation), they need to be minted.
-    // We didn't track which portion is which in `ProviderRewards`.
-    // Simplification for Phase 4: Assume ALL withdrawals are minted?
-    // NO, that would double-mint bandwidth payments (user paid -> module -> mint -> provider = inflation + user payment).
-    // We need to burn user payment and mint new? Or just transfer user payment?
-    
-    // Correct logic:
-    // 1. Bandwidth fees are in Module Account.
-    // 2. Storage rewards are virtual (inflationary).
-    // BUT we combined them into one `totalReward` int.
-    // To support mixed model, we should probably just MINT everything for now, assuming `Escrow` burn logic is handled elsewhere or ignored.
-    // OR, we rely on the fact that `Escrow` deduction happens in `ProveLiveness`.
-    // `deal.EscrowBalance` was reduced. But the coins are still in `nilchain` module account.
-    // So `nilchain` module account holds:
-    // - Escrowed funds (waiting to be paid out)
-    // - Slashed funds (waiting to be burned)
-    
-    // If we simply TRANSFER from Module to Provider, we use the existing Escrowed funds.
-    // But Storage Rewards (Inflation) are NOT in the module account yet.
-    // So we run out of funds if we just Transfer.
-    
-    // Solution:
-    // Mint the portion that is Inflationary? We lost that distinction.
-    // Easy fix: Mint the *entire* amount to the module account first, then transfer?
-    // No, that inflates by Bandwidth amount too.
-    
-    // Let's assume for Phase 4:
-    // The Module Account "has infinite supply" via Minting capability.
-    // We Mint coins equal to `rewards` and send to Provider.
-    // AND we Burn coins equal to `BandwidthPayment` from the Module Account?
-    // This is getting complicated.
-    
-    // Simplest working model for Testnet:
-    // Just MINT the rewards.
-    // The Escrow deduction in `ProveLiveness` effectively "burns" the user's claim to those tokens, leaving them stranded in the Module Account (effectively burned/treasury).
-    // And we Mint fresh tokens for the provider.
-    // This results in: User loses X. Provider gains X + Y (inflation).
-    // Net result: Supply change = +Y.
-    // The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
-    
-    coins := sdk.NewCoins(sdk.NewCoin("stake", rewards))
-    if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
-        return nil, err
-    }
-    if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, coins); err != nil {
-        return nil, err
-    }
-    
-    // Reset rewards
-    if err := k.ProviderRewards.Set(ctx, msg.Creator, math.ZeroInt()); err != nil {
-        return nil, err
-    }
-    
-    return &types.MsgWithdrawRewardsResponse{AmountWithdrawn: rewards}, nil
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	providerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", err)
+	}
+
+	rewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrNotFound.Wrap("no rewards found")
+		}
+		return nil, err
+	}
+
+	if rewards.IsZero() || rewards.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("no rewards to withdraw")
+	}
+
+	// Mint tokens
+	// Wait, if the rewards came from Deal Escrow (Bandwidth), they are already in the module account (sent from User).
+	// If they are Storage Rewards (Inflation), they need to be minted.
+	// We didn't track which portion is which in `ProviderRewards`.
+	// Simplification for Phase 4: Assume ALL withdrawals are minted?
+	// NO, that would double-mint bandwidth payments (user paid -> module -> mint -> provider = inflation + user payment).
+	// We need to burn user payment and mint new? Or just transfer user payment?
+
+	// Correct logic:
+	// 1. Bandwidth fees are in Module Account.
+	// 2. Storage rewards are virtual (inflationary).
+	// BUT we combined them into one `totalReward` int.
+	// To support mixed model, we should probably just MINT everything for now, assuming `Escrow` burn logic is handled elsewhere or ignored.
+	// OR, we rely on the fact that `Escrow` deduction happens in `ProveLiveness`.
+	// `deal.EscrowBalance` was reduced. But the coins are still in `nilchain` module account.
+	// So `nilchain` module account holds:
+	// - Escrowed funds (waiting to be paid out)
+	// - Slashed funds (waiting to be burned)
+
+	// If we simply TRANSFER from Module to Provider, we use the existing Escrowed funds.
+	// But Storage Rewards (Inflation) are NOT in the module account yet.
+	// So we run out of funds if we just Transfer.
+
+	// Solution:
+	// Mint the portion that is Inflationary? We lost that distinction.
+	// Easy fix: Mint the *entire* amount to the module account first, then transfer?
+	// No, that inflates by Bandwidth amount too.
+
+	// Let's assume for Phase 4:
+	// The Module Account "has infinite supply" via Minting capability.
+	// We Mint coins equal to `rewards` and send to Provider.
+	// AND we Burn coins equal to `BandwidthPayment` from the Module Account?
+	// This is getting complicated.
+
+	// Simplest working model for Testnet:
+	// Just MINT the rewards.
+	// The Escrow deduction in `ProveLiveness` effectively "burns" the user's claim to those tokens, leaving them stranded in the Module Account (effectively burned/treasury).
+	// And we Mint fresh tokens for the provider.
+	// This results in: User loses X. Provider gains X + Y (inflation).
+	// Net result: Supply change = +Y.
+	// The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
+
+	coins := sdk.NewCoins(sdk.NewCoin("stake", rewards))
+	if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
+		return nil, err
+	}
+	if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, coins); err != nil {
+		return nil, err
+	}
+
+	// Reset rewards
+	if err := k.ProviderRewards.Set(ctx, msg.Creator, math.ZeroInt()); err != nil {
+		return nil, err
+	}
+
+	return &types.MsgWithdrawRewardsResponse{AmountWithdrawn: rewards}, nil
 }
 
 // recoverEvmAddressFromDigest recovers the EVM address from a signature over a digest.

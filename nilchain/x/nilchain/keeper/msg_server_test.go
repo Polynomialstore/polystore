@@ -2,6 +2,7 @@ package keeper_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"testing"
@@ -15,8 +16,31 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
-// Valid 48-byte hex string (96 chars) + 0x prefix
-const validManifestCid = "0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"
+func mustComputeManifestCid(t *testing.T, mduRoots [][]byte) (cid string, manifestBlob []byte) {
+	t.Helper()
+
+	commitment, blob, err := crypto_ffi.ComputeManifestCommitment(mduRoots)
+	require.NoError(t, err)
+	return "0x" + hex.EncodeToString(commitment), blob
+}
+
+func mustDecodeHexBytes(t *testing.T, hexStr string) []byte {
+	t.Helper()
+	s := hexStr
+	if len(s) >= 2 && s[:2] == "0x" {
+		s = s[2:]
+	}
+	bz, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return bz
+}
+
+// dummyManifestCid is a syntactically valid 48-byte hex string used by tests that
+// do not exercise KZG verification.
+const dummyManifestCid = "0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"
+
+// Legacy alias: a number of tests use this name but only require a 48-byte hex string.
+const validManifestCid = dummyManifestCid
 
 func TestRegisterProvider(t *testing.T) {
 	f := initFixture(t)
@@ -125,8 +149,8 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 	user, _ := f.addressCodec.BytesToString(userBz)
 
 	msg := &types.MsgCreateDeal{
-		Creator:             sponsor,
-		DurationBlocks:      100,
+		Creator:        sponsor,
+		DurationBlocks: 100,
 		// Encode owner override into the service hint as used by the web gateway.
 		ServiceHint:         fmt.Sprintf("General:owner=%s", user),
 		MaxMonthlySpend:     math.NewInt(500000),
@@ -228,13 +252,12 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
-	os.Unsetenv("SKIP_KZG_VERIFY")
-
 	// 0. Setup Trusted Setup (Needed even for invalid proofs to init context)
 	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
 	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
 		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping e2e kzg test")
 	}
+	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 
 	// 1. Setup Deal (Need to register providers first)
 	provBz := []byte("provider_for_proof__")
@@ -261,8 +284,9 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit Content
+	cid, _ := mustComputeManifestCid(t, [][]byte{make([]byte, 32)})
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 100,
+		Creator: user, DealId: resDeal.DealId, Cid: cid, Size_: 100,
 	})
 	require.NoError(t, err)
 
@@ -278,11 +302,11 @@ func TestProveLiveness_Invalid(t *testing.T) {
 				MduIndex:        0,
 				MduRootFr:       make([]byte, 32),
 				ManifestOpening: make([]byte, 48),
-				
-				BlobCommitment:  make([]byte, 48),
-				MerklePath:      [][]byte{make([]byte, 32)},
-				BlobIndex:       0,
-				
+
+				BlobCommitment: make([]byte, 48),
+				MerklePath:     [][]byte{make([]byte, 32)},
+				BlobIndex:      0,
+
 				ZValue:          make([]byte, 32),
 				YValue:          make([]byte, 32),
 				KzgOpeningProof: make([]byte, 48),
@@ -298,9 +322,6 @@ func TestProveLiveness_Invalid(t *testing.T) {
 func TestProveLiveness_HappyPath(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
-
-	os.Setenv("SKIP_KZG_VERIFY", "true")
-	defer os.Unsetenv("SKIP_KZG_VERIFY")
 
 	// 1. Setup Trusted Setup
 	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
@@ -339,12 +360,6 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Commit Content
-	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 8 * 1024 * 1024,
-	})
-	require.NoError(t, err)
-
 	assignedProvider := resDeal.AssignedProviders[0]
 
 	// 4. Generate Proof
@@ -359,10 +374,42 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
 	require.NoError(t, err)
 
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	require.NoError(t, err)
+
+	// Commit Content with the real ManifestRoot commitment so VerifyChainedProof can succeed.
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+	})
+	require.NoError(t, err)
+
 	// Compute Proof for chunk 0
 	chunkIdx := uint32(0)
 	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
 	require.NoError(t, err)
+
+	// Sanity: Hop2+Hop3 should verify in isolation.
+	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, z, y, kzgProof)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Sanity: full chained proof should verify before submitting.
+	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
+	ok, err = crypto_ffi.VerifyChainedProof(
+		manifestCommitment,
+		0,
+		manifestProof,
+		root,
+		commitment,
+		uint64(chunkIdx),
+		merkleProof,
+		z,
+		y,
+		kzgProof,
+	)
+	require.NoError(t, err)
+	require.True(t, ok)
 
 	// Unflatten Merkle Proof
 	merklePath := make([][]byte, 0)
@@ -378,13 +425,13 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
 				MduIndex:        0, // Mock
-				MduRootFr:       root, // Mock
-				ManifestOpening: make([]byte, 48), // Mock (48 bytes for G1)
-				
-				BlobCommitment:  commitment,
-				MerklePath:      merklePath,
-				BlobIndex:       chunkIdx,
-				
+				MduRootFr:       root,
+				ManifestOpening: manifestProof,
+
+				BlobCommitment: commitment,
+				MerklePath:     merklePath,
+				BlobIndex:      chunkIdx,
+
 				ZValue:          z,
 				YValue:          y,
 				KzgOpeningProof: kzgProof,
@@ -448,26 +495,47 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Build a valid 1-MDU manifest so ProveLiveness reaches the signature checks.
+	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
+	mduData := make([]byte, 8*1024*1024)
+	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	require.NoError(t, err)
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	require.NoError(t, err)
+
+	chunkIdx := uint32(0)
+	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
+	require.NoError(t, err)
+	merklePath := make([][]byte, 0)
+	for i := 0; i < len(merkleProof); i += 32 {
+		merklePath = append(merklePath, merkleProof[i:i+32])
+	}
+
 	// Commit Content
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: owner, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 8 * 1024 * 1024,
+		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
 	})
 	require.NoError(t, err)
 
 	assignedProvider := resDeal.AssignedProviders[0]
 
-	// Construct a minimal RetrievalReceipt with a bogus signature and stale nonce.
-	// We deliberately do not construct a valid KZG proof here; the goal is to
-	// exercise the nonce/signature checks rather than the cryptography.
+	// Construct a RetrievalReceipt with a bogus signature (proof is valid).
 	receipt := types.RetrievalReceipt{
-		DealId:        resDeal.DealId,
-		EpochId:       1,
-		Provider:      assignedProvider,
-		BytesServed:   1024,
-		ProofDetails:  types.ChainedProof{
-			MduIndex: 0, MduRootFr: make([]byte, 32), ManifestOpening: make([]byte, 48), // Mock
-			BlobCommitment: make([]byte, 48), MerklePath: [][]byte{make([]byte, 32)}, BlobIndex: 0,
-			ZValue: make([]byte, 32), YValue: make([]byte, 32), KzgOpeningProof: make([]byte, 48),
+		DealId:      resDeal.DealId,
+		EpochId:     1,
+		Provider:    assignedProvider,
+		BytesServed: 1024,
+		ProofDetails: types.ChainedProof{
+			MduIndex:        0,
+			MduRootFr:       root,
+			ManifestOpening: manifestProof,
+			BlobCommitment:  commitment,
+			MerklePath:      merklePath,
+			BlobIndex:       chunkIdx,
+			ZValue:          z,
+			YValue:          y,
+			KzgOpeningProof: kzgProof,
 		},
 		UserSignature: []byte("not-a-real-signature"),
 		Nonce:         1,
@@ -506,10 +574,6 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	require.Error(t, err, "stale retrieval receipt nonce should be rejected")
 }
 
-// TestProveLiveness_StrictBinding verifies that when a deal opts into a
-// stricter redundancy mode (RedundancyMode == 2) and encodes a 32-byte hex
-// commitment in its CID, ProveLiveness enforces that the KZG proof's
-// MDU merkle root matches this commitment.
 func TestProveLiveness_StrictBinding(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
@@ -530,8 +594,19 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3. Create a deal normally, then override its RedundancyMode and Cid
-	// to simulate a strict-binding mainnet deal.
+	// Register extra providers for placement.
+	for i := 0; i < 15; i++ {
+		extraBz := []byte(fmt.Sprintf("extra_prov_bind_%02d", i))
+		extraAddr, _ := f.addressCodec.BytesToString(extraBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      extraAddr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+		})
+		require.NoError(t, err)
+	}
+
+	// 3. Create a deal and commit a real ManifestRoot so VerifyChainedProof is meaningful.
 	userBz := []byte("user_strict_bind_____")
 	user, _ := f.addressCodec.BytesToString(userBz)
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
@@ -543,54 +618,54 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Commit Content (will be overridden manually, but good to init)
-	// Use 48-byte hex for manifest root
-	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 8 * 1024 * 1024,
-	})
-	require.NoError(t, err)
-
 	assignedProvider := resDeal.AssignedProviders[0]
 
-	// Generate a KZG proof for a zero-filled MDU and derive its root.
+	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	err = crypto_ffi.Init("../../../trusted_setup.txt")
-	require.NoError(t, err)
 	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	require.NoError(t, err)
+
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator: user, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+	})
 	require.NoError(t, err)
 
 	chunkIdx := uint32(0)
 	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
 	require.NoError(t, err)
 
+	// Sanity: Hop2+Hop3 should verify in isolation.
+	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, z, y, kzgProof)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Sanity: full chained proof should verify before submitting.
+	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
+	ok, err = crypto_ffi.VerifyChainedProof(
+		manifestCommitment,
+		0,
+		manifestProof,
+		root,
+		commitment,
+		uint64(chunkIdx),
+		merkleProof,
+		z,
+		y,
+		kzgProof,
+	)
+	require.NoError(t, err)
+	require.True(t, ok)
+
 	merklePath := make([][]byte, 0)
 	for i := 0; i < len(merkleProof); i += 32 {
 		merklePath = append(merklePath, merkleProof[i:i+32])
 	}
 
-	// Override the stored deal to enable strict binding and set ManifestRoot to the
-	// hex-encoded MDU root.
-	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
-	require.NoError(t, err)
-	deal.RedundancyMode = 2
-	
-	// ManifestRoot expects 48 bytes (KZG). Root is 32 bytes (Merkle).
-	// We need a 48 byte dummy for test matching if we verify exact match.
-	// But ProveLiveness now uses VerifyChainedProof placeholder.
-	// We will manually set ManifestRoot to something that matches what we put in proof.
-	
-	// For this test, we want to prove "Strict Binding".
-	// The new strict binding logic in ProveLiveness (placeholder) accepts if ManifestOpening is 48 bytes.
-	// It doesn't actually check signature against deal.ManifestRoot yet in the placeholder.
-	// So this test is effectively just testing that we can submit a proof structure.
-	// We'll proceed with standard setup.
-	
-	deal.ManifestRoot = bytes.Repeat([]byte{0xAA}, 48)
-	err = f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal)
-	require.NoError(t, err)
-
-	// 4. Submit a proof.
-	proofMsg := &types.MsgProveLiveness{
+	okMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
 		EpochId: 1,
@@ -598,12 +673,10 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 			SystemProof: &types.ChainedProof{
 				MduIndex:        0,
 				MduRootFr:       root,
-				ManifestOpening: make([]byte, 48), // Mock 48 bytes
-				
+				ManifestOpening: manifestProof,
 				BlobCommitment:  commitment,
 				MerklePath:      merklePath,
 				BlobIndex:       chunkIdx,
-				
 				ZValue:          z,
 				YValue:          y,
 				KzgOpeningProof: kzgProof,
@@ -611,21 +684,18 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 		},
 	}
 
-	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
+	res, err := msgServer.ProveLiveness(f.ctx, okMsg)
 	require.NoError(t, err)
+	require.True(t, res.Success)
 
-	// 5. Now store a mismatched CID and verify that strict binding rejects it.
-	// Since verification is placeholder "valid := true", this will NOT fail in current codebase.
-	// I will remove the failure expectation for now or comment it out until FFI is ready.
-	
-	/*
-	deal.ManifestRoot = bytes.Repeat([]byte{0xFF}, 48)
-	err = f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal)
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
+	deal.ManifestRoot = bytes.Repeat([]byte{0x42}, 48)
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal))
 
-	_, err = msgServer.ProveLiveness(f.ctx, proofMsg)
-	require.Error(t, err, "strict binding must reject mismatched MDU roots")
-	*/
+	res2, err := msgServer.ProveLiveness(f.ctx, okMsg)
+	require.NoError(t, err)
+	require.False(t, res2.Success)
 }
 
 func TestSignalSaturation(t *testing.T) {
@@ -659,7 +729,7 @@ func TestSignalSaturation(t *testing.T) {
 
 	// Commit Content
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: dealID, Cid: validManifestCid, Size_: 100,
+		Creator: user, DealId: dealID, Cid: dummyManifestCid, Size_: 100,
 	})
 	require.NoError(t, err)
 

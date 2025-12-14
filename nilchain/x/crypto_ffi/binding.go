@@ -130,6 +130,39 @@ func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte,
 	return proof, y, nil
 }
 
+// ComputeManifestCommitment computes the 48-byte ManifestRoot commitment (G1) and the corresponding
+// 128 KiB Manifest blob from a list of MDU roots (32-byte each).
+func ComputeManifestCommitment(mdu_roots [][]byte) (commitment []byte, manifest_blob []byte, err error) {
+	if len(mdu_roots) == 0 {
+		return nil, nil, errors.New("mdu_roots must be non-empty")
+	}
+	flat := make([]byte, 0, len(mdu_roots)*32)
+	for i, r := range mdu_roots {
+		if len(r) != 32 {
+			return nil, nil, fmt.Errorf("invalid mdu_roots[%d] length: expected 32, got %d", i, len(r))
+		}
+		flat = append(flat, r...)
+	}
+
+	commitment = make([]byte, 48)
+	manifest_blob = make([]byte, types.BLOB_SIZE)
+
+	cRoots := (*C.uchar)(unsafe.Pointer(&flat[0]))
+	cCommitment := (*C.uchar)(unsafe.Pointer(&commitment[0]))
+	cManifestBlob := (*C.uchar)(unsafe.Pointer(&manifest_blob[0]))
+
+	res := C.nil_compute_manifest_commitment(
+		cRoots,
+		C.size_t(len(mdu_roots)),
+		cCommitment,
+		cManifestBlob,
+	)
+	if res != 0 {
+		return nil, nil, fmt.Errorf("nil_compute_manifest_commitment failed with code: %d", res)
+	}
+	return commitment, manifest_blob, nil
+}
+
 // ComputeBlobProof computes a KZG opening proof for a single encoded 128 KiB blob.
 func ComputeBlobProof(blob_bytes []byte, z_bytes []byte) (proof []byte, y []byte, err error) {
 	if len(blob_bytes) != types.BLOB_SIZE {
