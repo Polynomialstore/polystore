@@ -850,7 +850,17 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			return nil, fmt.Errorf("failed to update receipt nonce: %w", err)
 		}
 
-		bandwidthPayment = math.NewInt(500000) // Placeholder 0.5 NIL
+			// Bandwidth payment (devnet): charge proportional to bytes served so that
+			// chunked (blob-sized) receipts don't exhaust escrow immediately.
+			//
+			// Units are the base denom (micro-NIL). Current placeholder pricing:
+			//   1 unit per KiB (rounded up), so a 128 KiB chunk costs 128 units.
+			const bytesPerUnit = uint64(1024)
+			units := (receipt.BytesServed + bytesPerUnit - 1) / bytesPerUnit
+			if units == 0 {
+				units = 1
+			}
+			bandwidthPayment = math.NewIntFromUint64(units)
 
 		newEscrowBalance := deal.EscrowBalance.Sub(bandwidthPayment)
 		if newEscrowBalance.IsNegative() {

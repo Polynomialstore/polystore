@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
 import { buildRetrievalRequestTypedData } from '../src/lib/eip712'
+import { planNilfsFileRangeChunks } from '../src/lib/rangeChunker'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
@@ -121,11 +122,40 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const downloadedBytes = await streamToBuffer(stream)
   expect(downloadedBytes).toEqual(fileBytes)
 
-  // Verify Retrieval Count increment (Proof submission success)
+  // Compute expected chunk count for a full-file download (default UI behavior now uses
+  // range-chunked fetches to ensure each receipt/proof corresponds to a single blob/MDU window).
+  const slabResp = await request.get(
+    `${gatewayBase}/gateway/slab/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(
+      owner,
+    )}`,
+  )
+  expect(slabResp.ok()).toBeTruthy()
+  const slabJson: any = await slabResp.json().catch(() => null)
+  const listResp = await request.get(
+    `${gatewayBase}/gateway/list-files/${encodeURIComponent(
+      manifestRoot,
+    )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(owner)}`,
+  )
+  expect(listResp.ok()).toBeTruthy()
+  const listJson: any = await listResp.json().catch(() => null)
+  const files: any[] = listJson?.files || []
+  const entry = files.find((f) => f?.path === filePath)
+  expect(entry).toBeTruthy()
+  const expectedChunks = planNilfsFileRangeChunks({
+    fileStartOffset: Number(entry.start_offset),
+    fileSizeBytes: Number(entry.size_bytes),
+    rangeStart: 0,
+    rangeLen: Number(entry.size_bytes),
+    mduSizeBytes: Number(slabJson?.mdu_size_bytes || 8 * 1024 * 1024),
+    blobSizeBytes: Number(slabJson?.blob_size_bytes || 128 * 1024),
+  }).length
+  expect(expectedChunks).toBeGreaterThanOrEqual(1)
+
+  // Verify Retrieval Count increment (one proof per chunk)
   await page.getByTestId('deal-detail-close').click()
   // Retrievals column is the 5th column (index 4)
   const retrievalsCell = page.getByTestId(`deal-row-${dealId}`).locator('td').nth(4)
-  await expect(retrievalsCell).toHaveText('1', { timeout: 60_000 })
+  await expect(retrievalsCell).toHaveText(String(expectedChunks), { timeout: 120_000 })
 
   // Verify on-chain DealHeatState incremented (successful_retrievals_total + bytes_served_total)
   const heatUrl = `${lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(dealId)}/heat`
@@ -137,7 +167,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
       const heat = json?.heat
       const retrievals = Number(heat?.successful_retrievals_total || 0)
       const bytesServed = Number(heat?.bytes_served_total || 0)
-      if (retrievals >= 1 && bytesServed >= fileBytes.length) {
+      if (retrievals >= expectedChunks && bytesServed >= fileBytes.length) {
         heatOk = true
         break
       }
