@@ -52,7 +52,7 @@ export const AdversarialSimulation = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Reward Tier</p>
-              <p className="text-sm font-bold text-cyan-400">Platinum (Block H+1)</p>
+              <p className="text-sm font-bold text-cyan-400">Platinum (example: Block H+1)</p>
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@ export const AdversarialSimulation = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Reward Tier</p>
-              <p className="text-sm font-bold text-yellow-500">Gold/Fail (Block H+10)</p>
+              <p className="text-sm font-bold text-yellow-500">Gold/Fail (example: Block H+10)</p>
             </div>
           </div>
         </div>

@@ -49,17 +49,17 @@ export const PerformanceDeepDive = () => {
           <div className="space-y-10 relative">
             {/* Start Line */}
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-dashed border-l border-white/20 z-10"></div>
-            {/* Finish Line (Block H+1) */}
+            {/* Finish Line (example: Block H+1) */}
             <div className="absolute left-[30%] top-0 bottom-0 w-px bg-cyan-500/30 z-0">
-                <div className="absolute -top-6 left-0 text-[10px] text-cyan-500 whitespace-nowrap">Platinum (H+1)</div>
+                <div className="absolute -top-6 left-0 text-[10px] text-cyan-500 whitespace-nowrap">Platinum (example: H+1)</div>
             </div>
-            {/* Finish Line (Block H+5) */}
+            {/* Finish Line (example: Block H+5) */}
             <div className="absolute left-[60%] top-0 bottom-0 w-px bg-yellow-500/30 z-0">
-                <div className="absolute -top-6 left-0 text-[10px] text-yellow-500 whitespace-nowrap">Gold (H+5)</div>
+                <div className="absolute -top-6 left-0 text-[10px] text-yellow-500 whitespace-nowrap">Gold (example: H+5)</div>
             </div>
-             {/* Finish Line (Block H+20) */}
+             {/* Finish Line (example: Block H+20) */}
              <div className="absolute right-0 top-0 bottom-0 w-px bg-red-500/30 z-0">
-                <div className="absolute -top-6 right-0 text-[10px] text-red-500 whitespace-nowrap">Cutoff (H+20)</div>
+                <div className="absolute -top-6 right-0 text-[10px] text-red-500 whitespace-nowrap">Cutoff (example: H+20)</div>
             </div>
 
             {/* Lane 1: Platinum */}

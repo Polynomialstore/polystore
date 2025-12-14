@@ -59,7 +59,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
     *   *Goal:* Anti-Sybil. Forced Diversity.
 *   **Architecture Change 2: Performance Market.**
     *   *Old:* 1.1s Deadline or Slash.
-    *   *New:* Block-Tiered Rewards. H+1 (Platinum), H+5 (Gold), H+20 (Fail).
+    *   *New:* Block-Tiered Rewards (example windows). H+1 (Platinum), H+5 (Gold), H+20 (Fail). Exact tier windows are protocol parameters.
     *   *Goal:* Incentivize speed without punishing honest jitter. Implicitly filters S3 Glacier.
 *   **Architecture Change 3: Explicit Deal State.**
     *   *Old:* Stateless proofs.

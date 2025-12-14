@@ -100,7 +100,7 @@ export const Home = () => {
           <FeatureCard 
             icon={<Activity className="w-8 h-8 text-blue-400" />}
             title="The Performance Market"
-            desc="Tiered Rewards. Responses in Block H+1 earn Platinum rewards. Slow adapters earn dust. Speed is incentivized, not just enforced."
+            desc="Tiered Rewards (example windows). Responses in Block H+1 earn Platinum rewards. Slow adapters earn dust. Speed is incentivized, not just enforced."
           />
           <FeatureCard 
             icon={<Database className="w-8 h-8 text-purple-400" />}

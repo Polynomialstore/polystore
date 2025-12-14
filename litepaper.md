@@ -28,9 +28,9 @@ Instead of separate "Storage Audits" and "Retrieval Requests," NilStore unifies 
 
 ### B. The Performance Market (Tiered Rewards)
 We don't ban S3. We just pay for speed.
-*   **Platinum (Block H+1):** 100% Reward. (Requires Local NVMe).
-*   **Gold (Block H+5):** 80% Reward.
-*   **Fail (>H+20):** 0% Reward + Slash. (Glacier/Offline).
+*   **Platinum (example: Block H+1):** 100% Reward. (Requires Local NVMe).
+*   **Gold (example: Block H+5):** 80% Reward.
+*   **Fail (example: >H+20):** 0% Reward + Slash. (Glacier/Offline).
 
 ### C. Retrievability & Self-Healing (High-Level)
 

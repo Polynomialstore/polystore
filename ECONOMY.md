@@ -16,6 +16,8 @@ Storage proofs (`MsgProveLiveness`) serve two functions:
 ### 1.2 Tiered Rewards
 Rewards are calculated based on the delay between the **Challenge Block** and the **Proof Inclusion Block**.
 
+**Note:** The tier windows and multipliers below are illustrative examples; the canonical tier cutoffs are protocol parameters (see `spec.md`).
+
 | Tier | Latency (Blocks) | Reward Multiplier | Requirement |
 | :--- | :--- | :--- | :--- |
 | **Platinum** | 0 - 1 | 100% | NVMe / RAM |
@@ -52,7 +54,7 @@ Providers earn tokens via:
 2.  **Bandwidth Fees:** Paid from User Escrow for retrieval receipts.
 
 ### 3.3 Sinks (Burning)
-*   **Slashing:** Missed proofs (`ProofWindow` violation) trigger a 10 $NIL slash and potential jailing.
+*   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
 *   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
 
 ## 4. S3 Adapter (Web2 Gateway)

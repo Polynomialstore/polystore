@@ -24,7 +24,7 @@
         *   *Copy:* "Zero Wasted Work. User retrievals *are* the storage proofs. We don't separate 'auditing' from 'serving'. High traffic = High security."
     *   **Card 2: The Performance Market.**
         *   *Icon:* `Trophy` (Ranking).
-        *   *Copy:* "Tiered Rewards. Responses in Block H+1 earn Platinum rewards. Slow adapters earn dust. We don't ban S3; we just make it unprofitable."
+        *   *Copy:* "Tiered Rewards (example windows). Responses in Block H+1 earn Platinum rewards. Slow adapters earn dust. We don't ban S3; we just make it unprofitable."
     *   **Card 3: Elasticity & Privacy.**
         *   *Icon:* `Scale` (Scaling).
         *   *Copy:* "Stripe-Aligned Scaling. Viral content spawns 'Hot Replicas' automatically, funded by user escrow. Zero-Knowledge encryption ensures privacy even during replication."
@@ -41,9 +41,9 @@
         *   **Concept:** "The Latency Racer".
         *   **Interactive:** A visualization showing three lanes (NVMe, HDD, S3).
         *   **Animation:** A "Request" signal fires.
-            *   NVMe Node finishes in **Block H+1** (Platinum Reward).
-            *   HDD Node finishes in **Block H+5** (Gold Reward).
-            *   S3 Node finishes in **Block H+20** (Fail/Slash).
+            *   Example: NVMe node finishes in **Block H+1** (Platinum Reward).
+            *   Example: HDD node finishes in **Block H+5** (Gold Reward).
+            *   Example: S3 node finishes in **Block H+20** (Fail/Slash).
         *   **Takeaway:** "Physics dictates the payout."
 
 ### C. Security Page: "The Bankruptcy Simulation" (`src/pages/AdversarialSimulation.tsx`)
