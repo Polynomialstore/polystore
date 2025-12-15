@@ -118,6 +118,8 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		"--home", homeDir,
 		"--keyring-backend", "test",
 		"--yes",
+		"--gas", "auto",
+		"--gas-adjustment", "1.6",
 		"--gas-prices", gasPrices,
 	)
 	outStr := string(submitOut)
