@@ -24,7 +24,7 @@ export function useCreateDeal() {
         throw new Error('EVM address required for EVM-bridged deal creation')
       }
       const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
-      let serviceHint = `General:replicas=${replicas}`
+      const serviceHint = `General:replicas=${replicas}`
 
       // Build EvmCreateDealIntent payload.
       const nonceKey = `nilstore:evmNonces:${evmAddress.toLowerCase()}`
@@ -43,15 +43,15 @@ export function useCreateDeal() {
 
       const typedData = buildCreateDealTypedData(intent, appConfig.chainId)
 
-      const ethereum = (window as any).ethereum
+      const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
 
-      const signature: string = await ethereum.request({
+      const signature = (await ethereum.request({
         method: 'eth_signTypedData_v4',
         params: [evmAddress, JSON.stringify(typedData)],
-      })
+      })) as string
 
       // Construct the Intent object for the Gateway (must match protobuf/backend expectation)
       // Backend expects chain_id as string in the intent JSON.

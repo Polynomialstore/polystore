@@ -40,13 +40,13 @@ export function useFileSharder() {
             const bytes = new Uint8Array(buffer);
             
             workerRef.current?.postMessage({ type: 'INIT', payload: bytes });
-        } catch (e: any) {
+        } catch (e) {
             setStatus('error');
-            setError(e.message);
+            setError(e instanceof Error ? e.message : String(e));
         }
     };
 
-    const expandMdu = (data: Uint8Array): Promise<any> => {
+    const expandMdu = (data: Uint8Array): Promise<unknown> => {
         return new Promise((resolve, reject) => {
             if (status !== 'ready' || !workerRef.current) {
                 reject(new Error('Worker not ready'));

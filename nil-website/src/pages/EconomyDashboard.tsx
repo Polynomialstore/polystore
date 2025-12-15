@@ -212,9 +212,16 @@ export const EconomyDashboard = () => {
             );
           };
           
-          const MetricCard = ({ title, value, icon, sub, delay }: any) => (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
+          interface MetricCardProps {
+            title: string
+            value: string | number
+            icon: React.ReactNode
+            sub: string
+            delay: number
+          }
+          
+          const MetricCard = ({ title, value, icon, sub, delay }: MetricCardProps) => (
+            <motion.div              initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
               transition={{ delay, duration: 0.4 }}
               className="bg-card p-6 rounded-xl border border-border flex items-center justify-between hover:border-primary/50 transition-colors group shadow-sm"

@@ -19,12 +19,13 @@ contract NilBridgeTest is Test {
         assertEq(bridge.latestBlockHeight(), 1);
     }
 
-    function testFail_UpdateOldBlock() public {
+    function test_RevertWhen_UpdateOldBlock() public {
         bytes32 root1 = keccak256("root1");
         bridge.updateStateRoot(10, root1);
         
         bytes32 root2 = keccak256("root2");
         // Should fail because 5 < 10
+        vm.expectRevert("Block height must increase");
         bridge.updateStateRoot(5, root2);
     }
 

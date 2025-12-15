@@ -51,8 +51,8 @@ export function useProofs(pollMs: number = 10000) {
         const res = await fetch(url)
         if (!res.ok) return
         const json = await res.json()
-        const arr = Array.isArray(json.proof) ? json.proof : []
-        const mapped: ProofRow[] = arr.map((p: any) => {
+        const arr = (Array.isArray(json.proof) ? json.proof : []) as Record<string, unknown>[]
+        const mapped: ProofRow[] = arr.map((p) => {
           const base: ProofRow = {
             id: String(p.id ?? ''),
             creator: String(p.creator ?? ''),
@@ -70,7 +70,7 @@ export function useProofs(pollMs: number = 10000) {
         if (!cancelled) setLoading(false)
       }
     }
-    ;(async () => {
+    (async () => {
       await load()
       if (pollMs > 0) {
         timer = window.setInterval(load, pollMs)

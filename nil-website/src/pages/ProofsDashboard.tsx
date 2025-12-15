@@ -42,7 +42,7 @@ export const ProofsDashboard = () => {
       }
     > = {}
 
-    let total = proofs.length
+    const total = proofs.length
     let valid = 0
     let invalid = 0
 

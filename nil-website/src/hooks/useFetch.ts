@@ -48,7 +48,9 @@ export function useFetch() {
           return json.message.trim()
         }
       }
-    } catch {}
+    } catch (e) {
+      void e
+    }
     return trimmed
   }
 
@@ -67,7 +69,7 @@ export function useFetch() {
       if (!address) {
         throw new Error('Connect a wallet to sign retrieval requests and receipts')
       }
-      const ethereum = (window as any).ethereum
+      const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
@@ -134,7 +136,7 @@ export function useFetch() {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
-      async function fetchOneRange(rangeStart: number, rangeLen: number): Promise<Uint8Array<ArrayBuffer>> {
+      const fetchOneRange = async (rangeStart: number, rangeLen: number): Promise<Uint8Array<ArrayBuffer>> => {
         // 0) Sign Retrieval Request (authorizes the fetch; does NOT count as receipt)
         const expiresAt = Math.floor(Date.now() / 1000) + 120
         let reqNonce = 0
@@ -156,10 +158,10 @@ export function useFetch() {
           expires_at: expiresAt,
         }
         const reqTypedData = buildRetrievalRequestTypedData(reqIntent, appConfig.chainId)
-        const reqSignature: string = await ethereum.request({
+        const reqSignature = (await ethereum.request({
           method: 'eth_signTypedData_v4',
           params: [address, JSON.stringify(reqTypedData)],
-        })
+        })) as string
         if (typeof reqSignature !== 'string' || !reqSignature.startsWith('0x') || reqSignature.length < 10) {
           throw new Error('wallet returned invalid request signature')
         }
@@ -210,7 +212,7 @@ export function useFetch() {
           return buf
         }
 
-        let proofDetails: any = null
+        let proofDetails: unknown = null
         if (hProofJson) {
           try {
             const jsonStr = atob(hProofJson)
@@ -246,10 +248,10 @@ export function useFetch() {
         nextReceiptNonce += 1
 
         const typedData = buildRetrievalReceiptTypedData(intent, appConfig.chainId)
-        const signature: string = await ethereum.request({
+        const signature = (await ethereum.request({
           method: 'eth_signTypedData_v4',
           params: [address, JSON.stringify(typedData)],
-        })
+        })) as string
         if (typeof signature !== 'string' || !signature.startsWith('0x') || signature.length < 10) {
           throw new Error('wallet returned invalid signature')
         }
@@ -313,10 +315,10 @@ export function useFetch() {
         expires_at: sessionExpiresAt,
       }
       const sessionReqTyped = buildRetrievalRequestTypedData(sessionReqIntent, appConfig.chainId)
-      const sessionReqSig: string = await ethereum.request({
+      const sessionReqSig = (await ethereum.request({
         method: 'eth_signTypedData_v4',
         params: [address, JSON.stringify(sessionReqTyped)],
-      })
+      })) as string
       if (typeof sessionReqSig !== 'string' || !sessionReqSig.startsWith('0x') || sessionReqSig.length < 10) {
         throw new Error('wallet returned invalid request signature')
       }
@@ -403,10 +405,10 @@ export function useFetch() {
         expires_at: 0,
       }
       const sessionTyped = buildDownloadSessionReceiptTypedData(sessionReceiptIntent, appConfig.chainId)
-      const sessionSig: string = await ethereum.request({
+      const sessionSig = (await ethereum.request({
         method: 'eth_signTypedData_v4',
         params: [address, JSON.stringify(sessionTyped)],
-      })
+      })) as string
       if (typeof sessionSig !== 'string' || !sessionSig.startsWith('0x') || sessionSig.length < 10) {
         throw new Error('wallet returned invalid session signature')
       }

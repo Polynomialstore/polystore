@@ -39,15 +39,15 @@ export function useUpdateDealContent() {
 
       const typedData = buildUpdateContentTypedData(intent, appConfig.chainId)
 
-      const ethereum = (window as any).ethereum
+      const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
 
-      const signature: string = await ethereum.request({
+      const signature = (await ethereum.request({
         method: 'eth_signTypedData_v4',
         params: [evmAddress, JSON.stringify(typedData)],
-      })
+      })) as string
 
       // Construct intent for backend
       const gatewayIntent = { ...intent, chain_id: appConfig.cosmosChainId }

@@ -62,7 +62,7 @@ export const Home = () => {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-		    <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
               <strong className="text-purple-600 dark:text-purple-400">NilStore</strong> is a <strong className="text-purple-600 dark:text-purple-400">Decentralized</strong>, <strong className="text-purple-600 dark:text-purple-400">Autonomous</strong> and <strong className="text-purple-600 dark:text-purple-400">Self-Governing</strong><br/><strong className="text-purple-600 dark:text-purple-400">Storage</strong> and <strong className="text-purple-600 dark:text-purple-400">Distribution Network</strong>.
             </p>
             <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
@@ -114,7 +114,13 @@ export const Home = () => {
   );
 };
 
-const FeatureCard = ({ icon, title, desc }: any) => (
+interface FeatureCardProps {
+  icon: React.ReactNode
+  title: string
+  desc: string
+}
+
+const FeatureCard = ({ icon, title, desc }: FeatureCardProps) => (
   <motion.div
     whileHover={{ y: -5 }}
     className="p-8 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all shadow-sm"

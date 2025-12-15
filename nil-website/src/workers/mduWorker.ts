@@ -2,7 +2,9 @@
 // Assumes wasm-pack output is located at /public/wasm/nil_core.js
 
 // We declare globals for the WASM module since it's loaded dynamically
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let wasmModule: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let nilWasm: any;
 
 self.onmessage = async (e: MessageEvent) => {
@@ -17,7 +19,7 @@ self.onmessage = async (e: MessageEvent) => {
             // But standard dynamic import works for static assets usually.
             const wasmUrl = new URL('/wasm/nil_core.js', import.meta.url).toString();
             // Vite keeps /public assets at root, so we explicitly ignore bundler resolution here.
-            // @ts-ignore - module typing is provided in src/types/wasm.d.ts
+            // @ts-expect-error - module typing is provided in src/types/wasm.d.ts
             wasmModule = await import(/* @vite-ignore */ wasmUrl);
             
             // 2. Initialize WASM memory
@@ -35,8 +37,8 @@ self.onmessage = async (e: MessageEvent) => {
             const result = nilWasm.expand_file(payload);
             self.postMessage({ type: 'EXPAND_SUCCESS', payload: result });
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error("Worker Error:", err);
-        self.postMessage({ type: 'ERROR', payload: err.message || String(err) });
+        self.postMessage({ type: 'ERROR', payload: err instanceof Error ? err.message : String(err) });
     }
 };

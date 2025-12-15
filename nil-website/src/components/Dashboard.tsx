@@ -276,7 +276,7 @@ export function Dashboard() {
       const json = await res.json()
       const bal = Array.isArray(json?.balances) ? json.balances : []
       const getAmt = (denom: string) => {
-        const hit = bal.find((b: any) => b.denom === denom)
+        const hit = bal.find((b: { denom: string; amount: string }) => b.denom === denom)
         return hit ? hit.amount : undefined
       }
       setBankBalances({
@@ -330,10 +330,10 @@ export function Dashboard() {
 
       // Auto-commit into the selected deal.
       await handleUpdateContent(result.cid, result.sizeBytes)
-    } catch (e: any) {
+    } catch (e) {
       console.error(e)
       setStatusTone('error')
-      setStatusMsg(`File upload/sharding failed: ${e.message || 'Check gateway logs.'}`)
+      setStatusMsg(`File upload/sharding failed: ${e instanceof Error ? e.message : String(e) || 'Check gateway logs.'}`)
     }
   }
 

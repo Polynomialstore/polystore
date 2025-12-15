@@ -113,7 +113,7 @@ test('repro bug: download from commit content widget', async ({
     const response = await route.fetch();
     const json = await response.json();
     if (json.deals && Array.isArray(json.deals)) {
-        const myDeal = json.deals.find((d: any) => d.owner === nilAddress)
+        const myDeal = json.deals.find((d: { owner: string; id: string }) => d.owner === nilAddress)
         if (myDeal) {
             console.log(`Intercepting deal ${myDeal.id} for ${nilAddress} and changing ID to 0`)
             myDeal.id = '0';
@@ -232,7 +232,7 @@ test('repro bug: download from commit content widget', async ({
   
   if (await commitBtn.isDisabled()) {
       console.log('Commit button is disabled. Checking why...')
-      await expect(commitBtn).toBeEnabled({ timeout: 10_000 }).catch(e => console.log('Commit button still disabled after 10s'))
+      await expect(commitBtn).toBeEnabled({ timeout: 10_000 }).catch(() => console.log('Commit button still disabled after 10s'))
   }
   
   await commitBtn.click()

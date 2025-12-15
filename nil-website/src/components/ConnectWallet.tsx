@@ -42,8 +42,8 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
       await switchNetwork().catch(() => undefined)
       await connectAsync({ connector: injectedConnector })
       await switchNetwork().catch(() => undefined)
-    } catch (e: any) {
-      setError(e?.message || 'Failed to connect wallet')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e) || 'Failed to connect wallet')
     }
   }
 
@@ -51,8 +51,8 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
     setError(null)
     try {
       await switchNetwork()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to switch network')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e) || 'Failed to switch network')
     }
   }
 
