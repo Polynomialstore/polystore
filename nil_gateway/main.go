@@ -3408,10 +3408,6 @@ func SpSubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	receipt := env.Receipt
-	if receipt.DealId == 0 {
-		writeJSONError(w, http.StatusBadRequest, "deal_id is required", "")
-		return
-	}
 	if receipt.EpochId == 0 {
 		writeJSONError(w, http.StatusBadRequest, "epoch_id is required", "")
 		return
