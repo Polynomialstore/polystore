@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -15,6 +16,7 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
+	ma "github.com/multiformats/go-multiaddr"
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
@@ -244,6 +246,49 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid capabilities: %s", msg.Capabilities)
 	}
 
+	if len(msg.Endpoints) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoints is required (at least one Multiaddr)")
+	}
+	if len(msg.Endpoints) > 8 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("too many endpoints (max 8)")
+	}
+	endpoints := make([]string, 0, len(msg.Endpoints))
+	seenEndpoints := make(map[string]struct{}, len(msg.Endpoints))
+	hasHTTP := false
+	for _, raw := range msg.Endpoints {
+		ep := strings.TrimSpace(raw)
+		if ep == "" {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint must be non-empty")
+		}
+		if len(ep) > 256 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint too long")
+		}
+		if !strings.HasPrefix(ep, "/") {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
+		}
+		if strings.IndexFunc(ep, func(r rune) bool { return unicode.IsSpace(r) || r < 0x20 }) != -1 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint contains whitespace/control characters")
+		}
+		parsed, err := ma.NewMultiaddr(ep)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
+		}
+		for _, proto := range parsed.Protocols() {
+			if proto.Code == ma.P_HTTP || proto.Code == ma.P_HTTPS {
+				hasHTTP = true
+			}
+		}
+		canonical := parsed.String()
+		if _, ok := seenEndpoints[canonical]; ok {
+			continue
+		}
+		seenEndpoints[canonical] = struct{}{}
+		endpoints = append(endpoints, canonical)
+	}
+	if !hasHTTP {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("at least one HTTP or HTTPS endpoint is required")
+	}
+
 	_, err = k.Providers.Get(ctx, msg.Creator)
 	if err == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("provider %s already registered", msg.Creator)
@@ -260,6 +305,7 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		Capabilities:    msg.Capabilities,
 		Status:          "Active", // Initially active
 		ReputationScore: 100,      // Initial Score
+		Endpoints:       endpoints,
 	}
 
 	if err := k.Providers.Set(ctx, provider.Address, provider); err != nil {

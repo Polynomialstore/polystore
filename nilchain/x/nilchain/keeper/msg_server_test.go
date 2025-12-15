@@ -42,6 +42,8 @@ const dummyManifestCid = "0x000102030405060708090a0b0c0d0e0f00010203040506070809
 // Legacy alias: a number of tests use this name but only require a 48-byte hex string.
 const validManifestCid = dummyManifestCid
 
+var testProviderEndpoints = []string{"/ip4/127.0.0.1/tcp/8080/http"}
+
 func TestRegisterProvider(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
@@ -54,6 +56,7 @@ func TestRegisterProvider(t *testing.T) {
 		Creator:      creator,
 		Capabilities: "Archive",
 		TotalStorage: 1000000000, // 1 GB
+		Endpoints:    testProviderEndpoints,
 	}
 
 	res, err := msgServer.RegisterProvider(f.ctx, msg)
@@ -84,6 +87,7 @@ func TestCreateDeal(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		}
 		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
 		require.NoError(t, err)
@@ -138,6 +142,7 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -182,6 +187,7 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -223,6 +229,7 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 		Creator:      addr,
 		Capabilities: "General",
 		TotalStorage: 100000000000,
+		Endpoints:    testProviderEndpoints,
 	})
 	require.NoError(t, err)
 
@@ -263,14 +270,14 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	provBz := []byte("provider_for_proof__")
 	provider, _ := f.addressCodec.BytesToString(provBz)
 
-	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: provider, Capabilities: "General", TotalStorage: 1000})
+	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: provider, Capabilities: "General", TotalStorage: 1000, Endpoints: testProviderEndpoints})
 	require.NoError(t, err)
 
 	// Need enough providers for placement
 	for i := 0; i < 15; i++ {
 		addrBz := []byte(fmt.Sprintf("extra_prov________%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: addr, Capabilities: "General", TotalStorage: 1000})
+		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: addr, Capabilities: "General", TotalStorage: 1000, Endpoints: testProviderEndpoints})
 	}
 
 	// Create Deal
@@ -337,6 +344,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 		Creator:      providerAddr,
 		Capabilities: "General",
 		TotalStorage: 100000000000,
+		Endpoints:    testProviderEndpoints,
 	})
 	require.NoError(t, err)
 
@@ -344,7 +352,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		addrBz := []byte(fmt.Sprintf("extra_prov_happy_%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: addr, Capabilities: "General", TotalStorage: 1000})
+		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: addr, Capabilities: "General", TotalStorage: 1000, Endpoints: testProviderEndpoints})
 	}
 
 	// 3. Create Deal
@@ -470,6 +478,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 		Creator:      providerAddr,
 		Capabilities: "General",
 		TotalStorage: 100000000000,
+		Endpoints:    testProviderEndpoints,
 	})
 	require.NoError(t, err)
 	for i := 0; i < 5; i++ {
@@ -479,6 +488,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 			Creator:      extraAddr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -594,6 +604,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 		Creator:      providerAddr,
 		Capabilities: "General",
 		TotalStorage: 100000000000,
+		Endpoints:    testProviderEndpoints,
 	})
 	require.NoError(t, err)
 
@@ -605,6 +616,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 			Creator:      extraAddr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -714,6 +726,7 @@ func TestSignalSaturation(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		}
 		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
 		require.NoError(t, err)

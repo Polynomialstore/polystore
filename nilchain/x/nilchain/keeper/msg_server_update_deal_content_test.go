@@ -20,11 +20,13 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(string(rune('A' + i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
+		require.NoError(t, err)
 	}
 
 	userBz := []byte("user_update_happy___")
@@ -55,7 +57,7 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	// 3. Verify State
 	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	
+
 	expectedRoot, _ := hex.DecodeString(strings.TrimPrefix(validManifestCid, "0x"))
 	require.Equal(t, expectedRoot, deal.ManifestRoot)
 	require.Equal(t, size, deal.Size_)
@@ -69,11 +71,13 @@ func TestUpdateDealContent_Unauthorized(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(string(rune('A' + i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
+		require.NoError(t, err)
 	}
 
 	aliceBz := []byte("alice_______________")
@@ -110,11 +114,13 @@ func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(string(rune('A' + i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
+		require.NoError(t, err)
 	}
 
 	userBz := []byte("user_capacity_______")
@@ -131,7 +137,7 @@ func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2. Commit a large payload (5 GiB); dynamic sizing should allow this.
-	size := uint64(5 * 1024 * 1024 * 1024) 
+	size := uint64(5 * 1024 * 1024 * 1024)
 
 	resUpd, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator: user,
@@ -155,11 +161,13 @@ func TestUpdateDealContent_InvalidInput(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(string(rune('A' + i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
-		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
+		require.NoError(t, err)
 	}
 
 	userBz := []byte("user_invalid________")

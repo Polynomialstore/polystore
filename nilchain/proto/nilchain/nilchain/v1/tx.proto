@@ -77,6 +77,7 @@ message MsgRegisterProvider {
   string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
   string capabilities = 2; // "Archive", "General", "Edge"
   uint64 total_storage = 3; // Total storage capacity in bytes
+  repeated string endpoints = 4; // Provider endpoints as Multiaddr strings (HTTP first)
 }
 
 // MsgRegisterProviderResponse defines the response structure for registering a provider.

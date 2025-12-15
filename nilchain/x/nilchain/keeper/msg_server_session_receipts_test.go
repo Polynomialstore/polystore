@@ -57,6 +57,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -187,6 +188,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}

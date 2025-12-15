@@ -41,6 +41,7 @@ message Provider {
   string capabilities = 4; // "Archive", "General", "Edge"
   string status = 5; // "Active", "Offline", "Jailed"
   int64 reputation_score = 6; // Uptime/Performance score
+  repeated string endpoints = 7; // Provider transport endpoints as Multiaddrs (HTTP now; libp2p future)
 }
 
 // VirtualStripe tracks overlay replicas for a deal, used for elasticity.

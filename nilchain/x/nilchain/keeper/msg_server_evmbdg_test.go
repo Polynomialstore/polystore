@@ -58,6 +58,7 @@ func TestCreateDealFromEvm_ValidSignature(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -125,6 +126,7 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -165,7 +167,7 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 		CreatorEvm: evmAddr.Hex(),
 		DealId:     createRes.DealId,
 		Cid:        makeManifestRootHex(0xab), // 48-byte hex
-		SizeBytes:  1024 * 1024 * 100,                                                     // 100 MB
+		SizeBytes:  1024 * 1024 * 100,         // 100 MB
 		Nonce:      2,
 		ChainId:    chainID,
 	}
@@ -203,6 +205,7 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -269,6 +272,7 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -336,6 +340,7 @@ func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -382,6 +387,7 @@ func TestCreateDealFromEvm_ReplayNonce(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
@@ -435,6 +441,7 @@ func TestCreateDealFromEvm_WrongChainID(t *testing.T) {
 			Creator:      addr,
 			Capabilities: "General",
 			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
 		})
 		require.NoError(t, err)
 	}
