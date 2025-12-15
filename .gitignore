@@ -22,3 +22,7 @@ nil-website/test-results/
 nil-website/playwright-report/
 nil_bridge/broadcast/**/run-*.json
 nil_bridge/cache/**/run-*.json
+nil_bridge/cache/solidity-files-cache.json
+nil_bridge/cache/test-failures
+nil_bridge/cache/
+nil_bridge/broadcast/
