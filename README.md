@@ -80,6 +80,11 @@ See `ECONOMY.md` for the full tokenomics specification.
 
 See `DOCS.md` for a curated index of canonical protocol docs, RFCs, and working notes.
 
+## 🧩 Multi-Provider Devnet (Join Guide)
+
+- Local multi-provider devnet (single machine): `PROVIDER_COUNT=5 ./scripts/run_devnet_alpha_multi_sp.sh start`
+- Hub + remote providers: see `DEVNET_MULTI_PROVIDER.md`
+
 ## 🧪 Performance Benchmarks
 
 See `performance/PERFORMANCE_TEST_PLAN.md` and the **Performance Report** page on the website for detailed benchmarks.
