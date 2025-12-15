@@ -29,6 +29,9 @@ export NIL_EVM_DEV_PRIVKEY
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
 export NIL_DISABLE_EVM_MEMPOOL
+# Auto-fund the default demo EVM account by calling the faucet once on startup.
+NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-1}"
+NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -36,6 +39,114 @@ fi
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+eth_to_nil_bech32() {
+  local eth_addr="$1"
+  python3 - "$eth_addr" <<'PY'
+import sys
+
+CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+CHARSET_REV = {c: i for i, c in enumerate(CHARSET)}
+
+def bech32_polymod(values):
+    GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]
+    chk = 1
+    for v in values:
+        b = chk >> 25
+        chk = ((chk & 0x1ffffff) << 5) ^ v
+        for i in range(5):
+            chk ^= GEN[i] if ((b >> i) & 1) else 0
+    return chk
+
+def bech32_hrp_expand(hrp):
+    return [ord(x) >> 5 for x in hrp] + [0] + [ord(x) & 31 for x in hrp]
+
+def bech32_create_checksum(hrp, data):
+    values = bech32_hrp_expand(hrp) + data
+    polymod = bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ 1
+    return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
+
+def bech32_encode(hrp, data):
+    combined = data + bech32_create_checksum(hrp, data)
+    return hrp + "1" + "".join([CHARSET[d] for d in combined])
+
+def convertbits(data, frombits, tobits, pad=True):
+    acc = 0
+    bits = 0
+    ret = []
+    maxv = (1 << tobits) - 1
+    max_acc = (1 << (frombits + tobits - 1)) - 1
+    for value in data:
+        if value < 0 or (value >> frombits):
+            return None
+        acc = ((acc << frombits) | value) & max_acc
+        bits += frombits
+        while bits >= tobits:
+            bits -= tobits
+            ret.append((acc >> bits) & maxv)
+    if pad:
+        if bits:
+            ret.append((acc << (tobits - bits)) & maxv)
+    elif bits >= frombits or ((acc << (tobits - bits)) & maxv):
+        return None
+    return ret
+
+addr = sys.argv[1].strip()
+if addr.startswith("0x") or addr.startswith("0X"):
+    addr = addr[2:]
+addr = addr.strip()
+if len(addr) != 40:
+    raise SystemExit("invalid eth address length")
+
+raw = bytes.fromhex(addr)
+data5 = convertbits(raw, 8, 5, True)
+print(bech32_encode("nil", data5))
+PY
+}
+
+auto_faucet_request() {
+  if [ "${NIL_AUTO_FAUCET_EVM}" != "1" ]; then
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "Skipping auto faucet request: curl not found"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "Skipping auto faucet request: python3 not found"
+    return 0
+  fi
+
+  local target_nil
+  if [[ "$NIL_AUTO_FAUCET_EVM_ADDR" == 0x* || "$NIL_AUTO_FAUCET_EVM_ADDR" == 0X* ]]; then
+    target_nil="$(eth_to_nil_bech32 "$NIL_AUTO_FAUCET_EVM_ADDR" 2>/dev/null || true)"
+  else
+    target_nil="$NIL_AUTO_FAUCET_EVM_ADDR"
+  fi
+
+  if [ -z "$target_nil" ]; then
+    echo "Skipping auto faucet request: failed to convert $NIL_AUTO_FAUCET_EVM_ADDR"
+    return 0
+  fi
+
+  # Best-effort: the account may already be funded in genesis. This is just
+  # a convenience top-up for local dev UX.
+  local attempts=20
+  local i
+  for i in $(seq 1 "$attempts"); do
+    if timeout 10s curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/health 2>/dev/null | grep -q "^200$"; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  echo "Auto faucet: requesting funds for $NIL_AUTO_FAUCET_EVM_ADDR -> $target_nil"
+  timeout 20s curl -sS -X POST http://127.0.0.1:8081/faucet \
+    -H "Content-Type: application/json" \
+    --data "$(printf '{"address":"%s"}' "$target_nil")" \
+    >/dev/null 2>&1 || true
+}
 
 wait_for_ports_clear() {
   local ports=(26657 26656 1317 8545 8080 8081 5173)
@@ -379,6 +490,7 @@ start_all() {
   start_chain
   register_demo_provider
   start_faucet
+  auto_faucet_request
   start_gateway
   start_bridge
   start_web
