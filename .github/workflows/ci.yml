@@ -25,6 +25,20 @@ jobs:
           go-version: '1.22' # Using modern Go
           cache-dependency-path: ${{ matrix.service }}/go.sum
 
+      - name: Set up Rust
+        if: matrix.service == 'nil_gateway' || matrix.service == 'nilchain'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build nil_core
+        if: matrix.service == 'nil_gateway' || matrix.service == 'nilchain'
+        run: |
+          cd nil_core
+          cargo build --release
+
       - name: Test ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
         run: |

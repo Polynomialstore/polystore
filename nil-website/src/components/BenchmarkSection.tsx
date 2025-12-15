@@ -14,25 +14,25 @@ export const BenchmarkSection = () => {
 
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-8">
-	            <BenchmarkCard
-	              title="Verification Speed"
-	              value="< 1 ms"
-	              subtitle="Per Proof (Blob)"
-	              description="Verifying a KZG/Merkle proof is computationally trivial, allowing low-power devices to participate in consensus."
-	              icon={<ZapIcon className="w-6 h-6 text-yellow-500" />}
-	              barColor="bg-green-500"
-	              percentage={5} // Visual representation
-	            />
-	            <BenchmarkCard
-	              title="Sealing Latency"
-	              value="0s"
-	              subtitle="(No Sealing)"
-	              description="Providers don't precompute. They store bytes and compete to serve them quickly; slower adapters earn less in the Performance Market."
-	              icon={<Clock className="w-6 h-6 text-blue-500" />}
-	              barColor="bg-blue-600"
-	              percentage={0}
-	            />
-	          </div>
+              <BenchmarkCard
+                title="Verification Speed"
+                value="< 1 ms"
+                subtitle="Per Proof (Blob)"
+                description="Verifying a KZG/Merkle proof is computationally trivial, allowing low-power devices to participate in consensus."
+                icon={<ZapIcon className="w-6 h-6 text-yellow-500" />}
+                barColor="bg-green-500"
+                percentage={5} // Visual representation
+              />
+              <BenchmarkCard
+                title="Sealing Latency"
+                value="0s"
+                subtitle="(No Sealing)"
+                description="Providers don't precompute. They store bytes and compete to serve them quickly; slower adapters earn less in the Performance Market."
+                icon={<Clock className="w-6 h-6 text-blue-500" />}
+                barColor="bg-blue-600"
+                percentage={0}
+              />
+            </div>
 
           <div className="bg-card p-8 rounded-3xl border shadow-lg">
             <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">

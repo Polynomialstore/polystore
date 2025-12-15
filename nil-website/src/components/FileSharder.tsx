@@ -96,7 +96,7 @@ export function FileSharder() {
 
         try {
             // Call WASM
-            const result = await expandMdu(chunk);
+            const result = (await expandMdu(chunk)) as { witness: number[][] };
             // result = { witness: [ [u8;48]... ], shards: [...] }
             
             // Convert witness to hex for display
@@ -203,41 +203,41 @@ export function FileSharder() {
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-	          <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
               <FileJson className="w-5 h-5 text-primary" />
               Manifest Visualization
             </h3>
-	            <div className="text-sm text-muted-foreground font-mono">
-	              {shards.filter(s => s.status === 'expanded').length} / {shards.length} MDUs Expanded
-	            </div>
-	          </div>
+              <div className="text-sm text-muted-foreground font-mono">
+                {shards.filter(s => s.status === 'expanded').length} / {shards.length} MDUs Expanded
+              </div>
+            </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {shards.map((shard) => (
               <div 
                 key={shard.id}
-	                className={`
-	                  aspect-square rounded-lg p-2 flex flex-col justify-between text-[10px] font-mono transition-all duration-500 border
-	                  ${shard.status === 'expanded' 
-	                    ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300' 
-	                    : shard.status === 'processing'
-	                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-300 animate-pulse'
-	                    : 'bg-secondary border-border text-muted-foreground'
-	                  }
-	                `}
+                  className={`
+                    aspect-square rounded-lg p-2 flex flex-col justify-between text-[10px] font-mono transition-all duration-500 border
+                    ${shard.status === 'expanded' 
+                      ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300' 
+                      : shard.status === 'processing'
+                      ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-300 animate-pulse'
+                      : 'bg-secondary border-border text-muted-foreground'
+                    }
+                  `}
                 title={shard.commitments[0] || 'Pending...'}
               >
-	                <div className="flex justify-between opacity-50">
-	                  <span>#{shard.id}</span>
-	                  <span>8MiB</span>
-	                </div>
-	                <div className="truncate text-[8px] opacity-75">
-	                  {shard.status === 'expanded' ? shard.commitments[0].slice(0, 8) : shard.status === 'processing' ? 'Expanding...' : 'Pending'}
-	                </div>
-	              </div>
-	            ))}
-	          </div>
+                  <div className="flex justify-between opacity-50">
+                    <span>#{shard.id}</span>
+                    <span>8MiB</span>
+                  </div>
+                  <div className="truncate text-[8px] opacity-75">
+                    {shard.status === 'expanded' ? shard.commitments[0].slice(0, 8) : shard.status === 'processing' ? 'Expanding...' : 'Pending'}
+                  </div>
+                </div>
+              ))}
+            </div>
           
           <div className="mt-4 p-4 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
             <p className="mb-2 text-primary font-bold">System Activity:</p>

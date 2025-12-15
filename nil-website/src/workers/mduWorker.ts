@@ -19,7 +19,6 @@ self.onmessage = async (e: MessageEvent) => {
             // But standard dynamic import works for static assets usually.
             const wasmUrl = new URL('/wasm/nil_core.js', import.meta.url).toString();
             // Vite keeps /public assets at root, so we explicitly ignore bundler resolution here.
-            // @ts-expect-error - module typing is provided in src/types/wasm.d.ts
             wasmModule = await import(/* @vite-ignore */ wasmUrl);
             
             // 2. Initialize WASM memory
