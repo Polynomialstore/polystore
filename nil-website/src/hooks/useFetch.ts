@@ -10,6 +10,7 @@ import {
   RetrievalReceiptIntent,
   RetrievalRequestIntent,
 } from '../lib/eip712'
+import { normalizeDealId } from '../lib/dealId'
 import { bytesToHex, hexToBytes } from '../lib/merkle'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 
@@ -33,12 +34,36 @@ export function useFetch() {
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
   const [receiptError, setReceiptError] = useState<string | null>(null)
 
+  function decodeHttpError(bodyText: string): string {
+    const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
+    if (!trimmed) return 'request failed'
+    try {
+      const json = JSON.parse(trimmed)
+      if (json && typeof json === 'object') {
+        if (typeof json.error === 'string' && json.error.trim()) {
+          const hint = typeof json.hint === 'string' && json.hint.trim() ? ` (${json.hint.trim()})` : ''
+          return `${json.error.trim()}${hint}`
+        }
+        if (typeof json.message === 'string' && json.message.trim()) {
+          return json.message.trim()
+        }
+      }
+    } catch {}
+    return trimmed
+  }
+
   async function fetchFile(input: FetchInput) {
     setLoading(true)
     setDownloadUrl(null)
     setReceiptStatus('idle')
     setReceiptError(null)
     try {
+      const dealId = normalizeDealId(input.dealId)
+      const owner = String(input.owner ?? '').trim()
+      if (!owner) {
+        throw new Error('owner is required')
+      }
+
       if (!address) {
         throw new Error('Connect a wallet to sign retrieval requests and receipts')
       }
@@ -69,7 +94,7 @@ export function useFetch() {
       let lastReceiptNonce = 0
       try {
         const nonceRes = await fetch(
-          `${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(input.dealId)}/receipt-nonce?file_path=${encodeURIComponent(input.filePath)}`,
+          `${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(dealId)}/receipt-nonce?file_path=${encodeURIComponent(input.filePath)}`,
         )
         if (nonceRes.ok) {
           const json = await nonceRes.json()
@@ -81,8 +106,8 @@ export function useFetch() {
       let nextReceiptNonce = lastReceiptNonce + 1
 
       const fetchParams = new URLSearchParams({
-        deal_id: input.dealId,
-        owner: input.owner,
+        deal_id: dealId,
+        owner,
         file_path: input.filePath,
       })
       const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
@@ -123,7 +148,7 @@ export function useFetch() {
         if (!reqNonce) reqNonce = 1
 
         const reqIntent: RetrievalRequestIntent = {
-          deal_id: Number(input.dealId),
+          deal_id: Number(dealId),
           file_path: input.filePath,
           range_start: Number(rangeStart),
           range_len: Number(rangeLen),
@@ -152,14 +177,8 @@ export function useFetch() {
 
         const response = await fetch(fetchUrl, { headers: reqHeaders })
         if (!response.ok) {
-          const text = await response.text()
-          let errMessage = text
-          try {
-            const json = JSON.parse(text)
-            if (json.error) errMessage = json.error
-            if (json.hint) errMessage += ` (${json.hint})`
-          } catch {}
-          throw new Error(errMessage)
+          const text = await response.text().catch(() => '')
+          throw new Error(decodeHttpError(text) || `fetch failed (${response.status})`)
         }
 
         const hDealId = response.headers.get('X-Nil-Deal-ID')
@@ -286,7 +305,7 @@ export function useFetch() {
       const sessionExpiresAt = Math.floor(Date.now() / 1000) + 120
       const sessionReqNonce = randUint32()
       const sessionReqIntent: RetrievalRequestIntent = {
-        deal_id: Number(input.dealId),
+        deal_id: Number(dealId),
         file_path: input.filePath,
         range_start: wantRangeStart,
         range_len: effectiveRangeLen,
@@ -303,8 +322,8 @@ export function useFetch() {
       }
 
       const openParams = new URLSearchParams({
-        deal_id: input.dealId,
-        owner: input.owner,
+        deal_id: dealId,
+        owner,
         file_path: input.filePath,
       })
       const openUrl = `${appConfig.gatewayBase}/gateway/open-session/${input.manifestRoot}?${openParams.toString()}`
@@ -319,8 +338,8 @@ export function useFetch() {
         },
       })
       if (!openRes.ok) {
-        const text = await openRes.text()
-        throw new Error(text || `failed to open download session (${openRes.status})`)
+        const text = await openRes.text().catch(() => '')
+        throw new Error(decodeHttpError(text) || `failed to open download session (${openRes.status})`)
       }
       const openJson = await openRes.json()
       const downloadSession = String(openJson.download_session || '')
@@ -343,8 +362,8 @@ export function useFetch() {
           },
         })
         if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `fetch failed (${res.status})`)
+          const text = await res.text().catch(() => '')
+          throw new Error(decodeHttpError(text) || `fetch failed (${res.status})`)
         }
 
         const hProofHash = res.headers.get('X-Nil-Proof-Hash')
@@ -373,7 +392,7 @@ export function useFetch() {
       const rootHex = bytesToHex(rootBytes)
 
       const sessionReceiptIntent: DownloadSessionReceiptIntent = {
-        deal_id: Number(input.dealId),
+        deal_id: Number(dealId),
         epoch_id: epochId,
         provider,
         file_path: input.filePath,
@@ -414,9 +433,9 @@ export function useFetch() {
         body: JSON.stringify(submitPayload),
       })
       if (!submitRes.ok) {
-        const text = await submitRes.text()
+        const text = await submitRes.text().catch(() => '')
         setReceiptStatus('failed')
-        setReceiptError(text || `session receipt submission failed (${submitRes.status})`)
+        setReceiptError(decodeHttpError(text) || `session receipt submission failed (${submitRes.status})`)
       } else {
         setReceiptStatus('submitted')
         setReceiptError(null)
@@ -426,6 +445,11 @@ export function useFetch() {
       const url = window.URL.createObjectURL(full)
       setDownloadUrl(url)
       return url
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setReceiptStatus('failed')
+      setReceiptError(msg)
+      return null
     } finally {
       setLoading(false)
     }
