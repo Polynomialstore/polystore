@@ -523,6 +523,43 @@ This is the **canonical execution checklist** for the next sprint, focused on re
     - **Change:** Make `/gateway/receipt` a real forwarder to `/sp/receipt` with authn, and add negative tests (wrong provider, wrong proof hash, replayed session).
     - **Pass gate:** Direct calls to `/sp/receipt` without gateway auth fail; forwarded calls succeed; negative tests pass.
 
+### 11.1.1 Devnet Alpha (Multi-SP, Mode 1 Single-Replica)
+
+This sprint turns the current “single-machine” gateway/provider implementation into a **multi-provider devnet** with **low expectations**:
+* Deals are Mode 1 but **single-replica** (`replicas=1`), so we do not need protocol-level replication yet.
+* Providers are discoverable via **on-chain Multiaddr endpoints** (HTTP first, libp2p later).
+* Providers serve bytes+proof material and own session state; the gateway routes/proxies.
+
+#### Goal 1: On-chain provider endpoint discovery (Multiaddr)
+- [ ] **Chain:** Extend `Provider` with `endpoints[]` (Multiaddr strings) and extend `MsgRegisterProvider` to accept endpoints.
+- [ ] **Chain:** Validate endpoints (parseable Multiaddr; basic length/limit protections).
+- [ ] **Chain:** Ensure `Query/GetProvider` and `Query/ListProviders` expose endpoints.
+- [ ] **CLI:** Update `register-provider` to accept `--endpoint` (repeatable).
+- **Pass gate:** `nilchaind q nilchain providers` returns endpoints for each registered provider.
+- **Test gate:** `cd nilchain && go test ./...`
+
+#### Goal 2: Gateway becomes a router/proxy (no local proving)
+- [ ] **Gateway:** Add “router mode” (env-gated) where `GatewayFetch`, `GatewayListFiles`, `GatewaySlab`, `GatewayUpload`, and session/receipt endpoints route to the assigned provider.
+- [ ] **Gateway:** Implement provider selection using `Deal.providers[]` and provider endpoints from chain; pick an HTTP Multiaddr and convert to URL.
+- [ ] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-Nil-*`).
+- **Pass gate:** UI fetch/download works when gateway has no deal bytes on disk.
+- **Test gate:** `cd nil_s3 && go test ./...`
+
+#### Goal 3: Provider is the serving/proving party (source of bytes + proof headers)
+- [ ] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-Nil-Proof-*` headers and session IDs.
+- [ ] **Provider:** Ensure download session chunks are recorded on the provider (not the gateway) in router mode.
+- **Pass gate:** Receipts/session receipts verify and submit even if the gateway restarts mid-download (provider session survives).
+
+#### Goal 4: Ingest directed to assigned provider (Mode 1 single replica)
+- [ ] **Upload:** Require `deal_id` for devnet-alpha upload flows (or route initial ingest based on deal assignment); ensure “first content commit” works for thin deals.
+- [ ] **UI:** Default deal creation to `replicas=1` and ensure upload/commit uses deal_id consistently.
+- **Pass gate:** Create deal → upload → commit results in the assigned provider having the slab bytes and being able to serve + submit receipts.
+
+#### Goal 5: Devnet orchestration
+- [ ] Add docker-compose / scripts to start 1 gateway-router + N providers with distinct keys/ports/storage roots.
+- [ ] Add a smoke script: register providers (with Multiaddrs) → create deal (replicas=1) → upload/commit → fetch → submit session receipt.
+- **Pass gate:** single command stands up a 3-provider devnet and runs the smoke.
+
 ### 11.0.1 Completed Goals (Previous Sprint)
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.

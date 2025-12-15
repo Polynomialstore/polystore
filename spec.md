@@ -542,3 +542,45 @@ This specification defines normative *interfaces* and verification rules but int
 7. **Deputy/Proxy Mechanics:** discovery, routing, compensation/delegation (if any), and additional griefing defenses beyond nonce/expiry and rate limits.
 8. **Encryption & Key Management Details:** exact encryption constructions, key derivation/rotation, metadata leakage model, padding strategy, and client recovery UX.
 9. **Transport/Wire Protocol:** concrete fetch/prove message formats, range/chunking rules, retry/backoff, and gateway/SP interoperability requirements.
+
+---
+
+## Appendix C: Devnet Alpha Target Matrix (Non-normative Profile)
+
+This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **multi-provider network** running with **low expectations** and minimal protocol surface.
+
+### C.1 Guiding constraints
+
+* **Mode 1 only:** Devnet Alpha does not attempt Mode 2 RS striping, repair, or rebalancing.
+* **No protocol-level Mode 1 replication:** Mode 1 is treated as a single-provider deal. If a user wants redundancy today, they do it out-of-band.
+* **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in receipts (or from an explicit deputy, once specified).
+* **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
+
+### C.2 Target matrix
+
+| Capability | Devnet Alpha Target | Notes |
+|---|---:|---|
+| Multiple providers registered | MUST | ≥ 3 providers on the devnet |
+| On-chain provider endpoint discovery | MUST | `Provider.endpoints[]` as Multiaddr strings |
+| HTTP transport | MUST | e.g. `/dns4/sp1.example.com/tcp/8080/http` |
+| libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
+| Mode 1 replication (`providers[]` length > 1) | NO | Devnet Alpha uses `replicas=1` in `ServiceHint` |
+| Mode 2 RS deals | NO | Separate milestone |
+| Gateway role | MUST | routes/proxies to the assigned provider; SHOULD not read local deal bytes |
+| Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
+| Upload/ingest | MUST | upload directed to the assigned provider for the deal |
+| Retrieval by `file_path` + `Range` | MUST | chunked retrievals; max chunk ≤ one blob (`BLOB_SIZE`) |
+| Receipt submission | MUST | per-chunk receipts or session receipts; provider submits to chain |
+| Bundled session receipts | SHOULD | reduce wallet prompts / tx count |
+| Synthetic challenges | DEFER | no hard quotas; receipts are still accepted evidence |
+| Deputy / proxy routing | DEFER | tracked as an RFC / later sprint |
+| Repair / rotation / rebalancing | NO | deferred to Mode 2 + deputy + policy |
+| Docker/devnet orchestration | SHOULD | compose scripts to run 1 gateway + N providers |
+
+### C.3 Definition of Done (Devnet Alpha)
+
+Given 3–5 providers with advertised HTTP Multiaddrs:
+1. Create a deal with `replicas=1`.
+2. Upload content to the assigned provider and commit `Deal.manifest_root`.
+3. Fetch a multi-chunk range through the gateway/router from that provider.
+4. Submit a bundled session receipt (or batched receipts) and observe `MsgProveLiveness` succeed on-chain.
