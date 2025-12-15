@@ -10,6 +10,9 @@
 # Usage:
 #   ./scripts/run_devnet_alpha_multi_sp.sh start
 #   ./scripts/run_devnet_alpha_multi_sp.sh stop
+#
+# Hub-only mode (no local providers):
+#   PROVIDER_COUNT=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -361,9 +364,11 @@ stop_all() {
 
   # Best-effort kill by port in case go run spawned children.
   local ports=(26657 26656 1317 "$EVM_RPC_PORT" 8080 8081 5173)
-  for i in $(seq 1 "$PROVIDER_COUNT"); do
-    ports+=("$((PROVIDER_PORT_BASE + i - 1))")
-  done
+  if [ "$PROVIDER_COUNT" -gt 0 ]; then
+    for i in $(seq 1 "$PROVIDER_COUNT"); do
+      ports+=("$((PROVIDER_PORT_BASE + i - 1))")
+    done
+  fi
   for port in "${ports[@]}"; do
     pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$pids" ]; then
@@ -394,20 +399,22 @@ start_all() {
   wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
   wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
 
-  banner "Registering providers"
-  for i in $(seq 1 "$PROVIDER_COUNT"); do
-    port="$((PROVIDER_PORT_BASE + i - 1))"
-    register_provider_retry "provider$i" "/ip4/127.0.0.1/tcp/$port/http"
-  done
+  if [ "$PROVIDER_COUNT" -gt 0 ]; then
+    banner "Registering providers"
+    for i in $(seq 1 "$PROVIDER_COUNT"); do
+      port="$((PROVIDER_PORT_BASE + i - 1))"
+      register_provider_retry "provider$i" "/ip4/127.0.0.1/tcp/$port/http"
+    done
 
-  banner "Starting providers"
-  for i in $(seq 1 "$PROVIDER_COUNT"); do
-    start_provider "$i"
-  done
-  for i in $(seq 1 "$PROVIDER_COUNT"); do
-    port="$((PROVIDER_PORT_BASE + i - 1))"
-    wait_for_http "provider$i" "http://localhost:$port/gateway/upload" "200,405" 60 1
-  done
+    banner "Starting providers"
+    for i in $(seq 1 "$PROVIDER_COUNT"); do
+      start_provider "$i"
+    done
+    for i in $(seq 1 "$PROVIDER_COUNT"); do
+      port="$((PROVIDER_PORT_BASE + i - 1))"
+      wait_for_http "provider$i" "http://localhost:$port/gateway/upload" "200,405" 60 1
+    done
+  fi
 
   start_router
   wait_for_http "router" "http://localhost:8080/gateway/upload" "200,405" 60 1
@@ -417,6 +424,7 @@ start_all() {
   fi
 
   banner "Devnet Alpha multi-SP stack ready"
+  echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
   cat <<EOF
 RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
@@ -426,6 +434,7 @@ Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard
 Providers:   $PROVIDER_COUNT (ports starting at $PROVIDER_PORT_BASE)
 Home:        $CHAIN_HOME
+SP Auth:     $NIL_GATEWAY_SP_AUTH  (also saved in $LOG_DIR/sp_auth.txt)
 EOF
 }
 
