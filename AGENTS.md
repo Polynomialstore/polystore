@@ -596,10 +596,10 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 - **Pass gate:** A new participant can follow the wizard and appear on `/nilchain/nilchain/v1/providers` with a reachable endpoint.
 
 #### Goal 2: Remove “faucet signs user actions” (MetaMask pays gas)
-- [ ] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
-- [ ] Replace retrieval “receipt submission” with a wallet-sent transaction path or a single wallet-sent “session open” tx (no `eth_signTypedData_v4` prompts).
+- [x] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
+- [x] Replace retrieval “receipt submission” with a wallet-sent transaction path or a single wallet-sent “session open” tx (no `eth_signTypedData_v4` prompts).
 - **Implementation options (choose one):**
-    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally.
+    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally. (**Implemented:** NilStore precompile at `0x0000000000000000000000000000000000000900`.)
     - **B:** Support EVM-signed Cosmos txs (EIP-712 sign mode) and broadcast directly from the browser to LCD (still “sign typed data”, not an EVM tx).
 - **Pass gate:** A user can create deal → commit content → download → finalize receipt with **zero gateway-held funded keys**.
 
