@@ -1,12 +1,25 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */import { test, expect } from '@playwright/test'
-import { privateKeyToAccount } from 'viem/accounts'
-import type { Hex } from 'viem'
-import { buildRetrievalRequestTypedData } from '../src/lib/eip712'
+import { test, expect } from '@playwright/test'
 import { planNilfsFileRangeChunks } from '../src/lib/rangeChunker'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
 const lcdBase = process.env.E2E_LCD_BASE || 'http://localhost:1317'
+
+type SlabLayoutResponse = {
+  mdu_size_bytes?: number
+  blob_size_bytes?: number
+}
+
+type ListFilesResponse = {
+  files?: Array<{ path?: string; size_bytes?: number; start_offset?: number }>
+}
+
+type DealHeatResponse = {
+  heat?: {
+    successful_retrievals_total?: number | string
+    bytes_served_total?: number | string
+  }
+}
 
 test('deal lifecycle smoke (connect → fund → create → upload → commit → explore → fetch)', async ({
   page,
@@ -58,53 +71,10 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const dealSizeMb = Number.parseFloat((await dealSizeCell.textContent()) || '0')
   expect(dealSizeMb).toBeGreaterThan(0)
 
-  // Directly hit the gateway to measure /gateway/fetch performance.
-  // Hard timeout: 20s; target proof generation < 1s.
-  const e2ePk = (process.env.VITE_E2E_PK ||
-    '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as Hex
-  const account = privateKeyToAccount(e2ePk)
-  const reqNonce = 1
-  const reqExpiresAt = Math.floor(Date.now() / 1000) + 120
-  const reqTypedData = buildRetrievalRequestTypedData(
-    {
-      deal_id: Number(dealId),
-      file_path: filePath,
-      range_start: 0,
-      range_len: 0,
-      nonce: reqNonce,
-      expires_at: reqExpiresAt,
-    },
-    Number(process.env.CHAIN_ID || 31337),
-  )
-  const reqSig = await account.signTypedData({
-    ...reqTypedData,
-    domain: { ...reqTypedData.domain, chainId: BigInt(reqTypedData.domain.chainId) },
-  } as any)
-
-  const fetchUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
+  // Load slab + file table to choose a per-blob range (NilFS file offsets may not be blob-aligned).
+  const fetchBaseUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
     dealId,
   )}&owner=${encodeURIComponent(owner)}&file_path=${encodeURIComponent(filePath)}`
-  const perfStart = Date.now()
-  const perfResp = await request.get(fetchUrl, {
-    timeout: 20_000,
-    headers: {
-      'X-Nil-Req-Sig': reqSig,
-      'X-Nil-Req-Nonce': String(reqNonce),
-      'X-Nil-Req-Expires-At': String(reqExpiresAt),
-      'X-Nil-Req-Range-Start': '0',
-      'X-Nil-Req-Range-Len': '0',
-    },
-  })
-  const perfElapsedMs = Date.now() - perfStart
-  expect(perfResp.status()).toBe(200)
-  expect(perfElapsedMs).toBeLessThan(20_000)
-  const proofMsRaw = perfResp.headers()['x-nil-gateway-proof-ms']
-  expect(proofMsRaw).toBeTruthy()
-  const proofMs = Number(proofMsRaw)
-  expect(Number.isFinite(proofMs)).toBeTruthy()
-  expect(proofMs).toBeLessThan(1_000)
-  const perfBody = await perfResp.body()
-  expect(Buffer.from(perfBody)).toEqual(fileBytes)
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible()
@@ -122,34 +92,56 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const downloadedBytes = await streamToBuffer(stream)
   expect(downloadedBytes).toEqual(fileBytes)
 
-  // Compute expected chunk count for a full-file download (default UI behavior now uses
-  // range-chunked fetches to ensure each receipt/proof corresponds to a single blob/MDU window).
+  // Compute chunk plan (default UI behavior uses range-chunked fetches so each receipt/proof corresponds to a single blob).
   const slabResp = await request.get(
     `${gatewayBase}/gateway/slab/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(
       owner,
     )}`,
   )
   expect(slabResp.ok()).toBeTruthy()
-  const slabJson: any = await slabResp.json().catch(() => null)
+  const slabJson = (await slabResp.json().catch(() => null)) as SlabLayoutResponse | null
   const listResp = await request.get(
     `${gatewayBase}/gateway/list-files/${encodeURIComponent(
       manifestRoot,
     )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(owner)}`,
   )
   expect(listResp.ok()).toBeTruthy()
-  const listJson: any = await listResp.json().catch(() => null)
-  const files: any[] = listJson?.files || []
+  const listJson = (await listResp.json().catch(() => null)) as ListFilesResponse | null
+  const files = Array.isArray(listJson?.files) ? listJson!.files! : []
   const entry = files.find((f) => f?.path === filePath)
   expect(entry).toBeTruthy()
-  const expectedChunks = planNilfsFileRangeChunks({
-    fileStartOffset: Number(entry.start_offset),
-    fileSizeBytes: Number(entry.size_bytes),
+  const chunkPlan = planNilfsFileRangeChunks({
+    fileStartOffset: Number(entry?.start_offset || 0),
+    fileSizeBytes: Number(entry?.size_bytes || 0),
     rangeStart: 0,
-    rangeLen: Number(entry.size_bytes),
+    rangeLen: Number(entry?.size_bytes || 0),
     mduSizeBytes: Number(slabJson?.mdu_size_bytes || 8 * 1024 * 1024),
     blobSizeBytes: Number(slabJson?.blob_size_bytes || 128 * 1024),
-  }).length
+  })
+  const expectedChunks = chunkPlan.length
   expect(expectedChunks).toBeGreaterThanOrEqual(1)
+
+  // Directly hit the gateway to measure /gateway/fetch performance.
+  // Hard timeout: 20s; target proof generation < 1s for a single chunk.
+  const first = chunkPlan[0]
+  const end = first.rangeStart + first.rangeLen - 1
+  const perfStart = Date.now()
+  const perfResp = await request.get(fetchBaseUrl, {
+    timeout: 20_000,
+    headers: {
+      Range: `bytes=${first.rangeStart}-${end}`,
+    },
+  })
+  const perfElapsedMs = Date.now() - perfStart
+  expect(perfResp.status()).toBe(206)
+  expect(perfElapsedMs).toBeLessThan(20_000)
+  const proofMsRaw = perfResp.headers()['x-nil-gateway-proof-ms']
+  expect(proofMsRaw).toBeTruthy()
+  const proofMs = Number(proofMsRaw)
+  expect(Number.isFinite(proofMs)).toBeTruthy()
+  expect(proofMs).toBeLessThan(1_000)
+  const perfBody = await perfResp.body()
+  expect(Buffer.from(perfBody)).toEqual(fileBytes.subarray(first.rangeStart, first.rangeStart + first.rangeLen))
 
   // Verify Retrieval Count increment (one proof per chunk)
   await page.getByTestId('deal-detail-close').click()
@@ -162,7 +154,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   for (let i = 0; i < 20; i++) {
     const heatResp = await request.get(heatUrl)
     if (heatResp.ok()) {
-      const json: any = await heatResp.json().catch(() => null)
+      const json = (await heatResp.json().catch(() => null)) as DealHeatResponse | null
       const heat = json?.heat
       const retrievals = Number(heat?.successful_retrievals_total || 0)
       const bytesServed = Number(heat?.bytes_served_total || 0)

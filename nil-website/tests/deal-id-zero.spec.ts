@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
+import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
+import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
+const precompile = '0x0000000000000000000000000000000000000900'
 
 function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -21,8 +24,69 @@ test('repro bug: download from commit content widget', async ({
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
+  const txCreate = (`0x${'11'.repeat(32)}` as Hex)
+  const txUpdate = (`0x${'22'.repeat(32)}` as Hex)
+  const txProve = (`0x${'33'.repeat(32)}` as Hex)
   
   console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+
+  // Mock EVM RPC receipts for the precompile-based flow.
+  const dealCreatedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
+  const dealCreatedTopic0 = getEventSelector(dealCreatedEvent)
+  const dealIdTopic = toHex(0n, { size: 32 })
+  const ownerTopic = padHex(account.address, { size: 32 })
+
+  await page.route('**://localhost:8545', async (route) => {
+    const req = route.request()
+    const payload = JSON.parse(req.postData() || '{}') as any
+    const method = payload?.method
+    const params = payload?.params || []
+    if (method === 'eth_getTransactionReceipt') {
+      const hash = String(params?.[0] || '')
+      if (hash === txCreate) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: payload?.id ?? 1,
+            result: {
+              transactionHash: txCreate,
+              status: '0x1',
+              logs: [
+                {
+                  address: precompile,
+                  topics: [dealCreatedTopic0, dealIdTopic, ownerTopic],
+                  data: '0x',
+                },
+              ],
+            },
+          }),
+        })
+      }
+      if (hash === txUpdate || hash === txProve) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: payload?.id ?? 1,
+            result: { transactionHash: hash, status: '0x1', logs: [] },
+          }),
+        })
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: null }),
+      })
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: null }),
+    })
+  })
 
   await page.exposeFunction('mockWalletSignTypedData', async (from: string, json: string) => {
     if (from.toLowerCase() !== account.address.toLowerCase()) {
@@ -74,6 +138,14 @@ test('repro bug: download from commit content widget', async ({
             return (window as any).mockWalletSignTypedData(from, typedDataJson)
           }
 
+          case 'eth_sendTransaction': {
+            // Return deterministic tx hashes for: create, update, prove.
+            w.__nil_tx_idx = (w.__nil_tx_idx || 0) + 1
+            if (w.__nil_tx_idx === 1) return '0x' + '11'.repeat(32)
+            if (w.__nil_tx_idx === 2) return '0x' + '22'.repeat(32)
+            return '0x' + '33'.repeat(32)
+          }
+
           default:
             console.warn(`MockWallet: unsupported method ${method}`)
             throw new Error(`E2E wallet does not support method: ${method}`)
@@ -98,10 +170,11 @@ test('repro bug: download from commit content widget', async ({
   });
 
   // Mock faucet request
-  await page.route('**/nilchain/nilchain/v1/faucet', async route => {
+  await page.route('**/faucet', async route => {
       await route.fulfill({
           status: 200,
           contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({
               tx_hash: "0xfaucetmocktx"
           })
@@ -139,6 +212,7 @@ test('repro bug: download from commit content widget', async ({
       await route.fulfill({
           status: 200,
           contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({
               cid: '0x' + 'a'.repeat(96),
               size_bytes: 17,
@@ -148,20 +222,70 @@ test('repro bug: download from commit content widget', async ({
       });
   });
 
-  // Mock commit success
-  await page.route('**/gateway/update-deal-content-evm', async route => {
-      await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ tx_hash: '0xmocktxhash' })
-      });
-  });
+  // Mock receipt nonce (unsigned proof tx path uses chain nonce state).
+  await page.route('**/nilchain/nilchain/v1/deals/*/receipt-nonce*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ last_nonce: 0 }),
+    })
+  })
+
+  // Mock gateway fetch (Range + proof headers) to avoid requiring a real slab.
+  await page.route('**/gateway/fetch/*', async (route) => {
+    const req = route.request()
+    if (req.method() === 'OPTIONS') {
+      return route.fulfill({
+        status: 204,
+        headers: {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, OPTIONS',
+          'access-control-allow-headers': 'Range, Content-Type',
+          'access-control-expose-headers':
+            'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
+        },
+        body: '',
+      })
+    }
+    const body = Buffer.from('repro bug content', 'utf8')
+    const proofDetails = {
+      mdu_index: 0,
+      mdu_root_fr: Buffer.alloc(32).toString('base64'),
+      manifest_opening: Buffer.alloc(48).toString('base64'),
+      blob_commitment: Buffer.alloc(48).toString('base64'),
+      merkle_path: [Buffer.alloc(32).toString('base64')],
+      blob_index: 0,
+      z_value: Buffer.alloc(32).toString('base64'),
+      y_value: Buffer.alloc(32).toString('base64'),
+      kzg_opening_proof: Buffer.alloc(48).toString('base64'),
+    }
+    const proofJsonB64 = Buffer.from(JSON.stringify({ proof_details: proofDetails }), 'utf8').toString('base64')
+    return route.fulfill({
+      status: 206,
+      contentType: 'application/octet-stream',
+      headers: {
+        'access-control-allow-origin': '*',
+        'access-control-expose-headers':
+          'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
+        'x-nil-provider': 'nil1mockprovideraddress0000000000000000000000',
+        'x-nil-proof-json': proofJsonB64,
+        'x-nil-range-start': '0',
+        'x-nil-range-len': String(body.length),
+        'accept-ranges': 'bytes',
+        'content-range': `bytes 0-${body.length - 1}/${body.length}`,
+        'content-length': String(body.length),
+      },
+      body,
+    })
+  })
 
   // Mock slab layout
   await page.route('**/gateway/slab/*', async route => {
       await route.fulfill({
           status: 200,
           contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({
              total_mdus: 1,
              witness_mdus: 0,
@@ -180,6 +304,7 @@ test('repro bug: download from commit content widget', async ({
       await route.fulfill({
           status: 200,
           contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({
               files: [
                   { path: 'repro.txt', size_bytes: 17, start_offset: 0 }
@@ -289,14 +414,7 @@ test('repro bug: download from commit content widget', async ({
       console.log('Download timed out or failed to start')
   }
 
-  // Check for error message
-  console.log('Slab section text:', await slabSection.textContent())
-  const errorMsg = slabSection.locator('text=Receipt failed: dealId must be a positive integer')
-  const isVisible = await errorMsg.isVisible()
-  
-  if (isVisible) {
-      throw new Error('Reproduction successful: Found error message "Receipt failed: dealId must be a positive integer"')
-  } else {
-      console.log('Error message NOT found.')
-  }
+  // Ensure we did not surface any dealId normalization errors in the receipt status UI.
+  const errMsg = slabSection.locator('text=/dealId must be/')
+  await expect(errMsg).toHaveCount(0)
 })
