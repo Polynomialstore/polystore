@@ -11,6 +11,9 @@ export const TestnetDocs = () => {
         <p className="text-xl text-muted-foreground">
           Welcome to "Store Wars". This guide covers everything you need to participate: installing the release binaries, getting testnet funds, and running your first deal.
         </p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          For the multi-provider devnet join flow, see <a className="text-primary underline" href="/#/devnet">Devnet Join</a>.
+        </p>
       </div>
 
       <div className="grid gap-12">

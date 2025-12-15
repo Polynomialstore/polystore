@@ -20,6 +20,7 @@ import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
 import { ThemeProvider } from "./context/ThemeContext";
 import { Dashboard } from "./components/Dashboard";
+import { Devnet } from "./pages/Devnet";
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="devnet" element={<Devnet />} />
               <Route path="testnet" element={<TestnetDocs />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="performance" element={<PerformanceReport />} />
