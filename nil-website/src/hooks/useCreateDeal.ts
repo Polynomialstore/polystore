@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
-import { buildCreateDealTypedData, CreateDealIntent } from '../lib/eip712'
+import { encodeFunctionData, decodeEventLog, numberToHex, type Hex } from 'viem'
+import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { waitForTransactionReceipt } from '../lib/evmRpc'
 
 export interface CreateDealInput {
   creator: string
@@ -18,62 +20,51 @@ export function useCreateDeal() {
     setLoading(true)
     setLastTx(null)
     try {
-      const isEvm = input.creator.startsWith('0x')
-      const evmAddress = isEvm ? input.creator : ''
-      if (!isEvm) {
-        throw new Error('EVM address required for EVM-bridged deal creation')
-      }
+      const evmAddress = String(input.creator || '')
+      if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
       const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
       const serviceHint = `General:replicas=${replicas}`
-
-      // Build EvmCreateDealIntent payload.
-      const nonceKey = `nilstore:evmNonces:${evmAddress.toLowerCase()}`
-      const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
-      const nextNonce = currentNonce + 1
-      window.localStorage.setItem(nonceKey, String(nextNonce))
-
-      const intent: CreateDealIntent = {
-        creator_evm: evmAddress,
-        duration_blocks: input.duration,
-        service_hint: serviceHint,
-        initial_escrow: input.initialEscrow,
-        max_monthly_spend: input.maxMonthlySpend,
-        nonce: nextNonce,
-      }
-
-      const typedData = buildCreateDealTypedData(intent, appConfig.chainId)
 
       const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
 
-      const signature = (await ethereum.request({
-        method: 'eth_signTypedData_v4',
-        params: [evmAddress, JSON.stringify(typedData)],
-      })) as string
-
-      // Construct the Intent object for the Gateway (must match protobuf/backend expectation)
-      // Backend expects chain_id as string in the intent JSON.
-      const gatewayIntent = { ...intent, chain_id: appConfig.cosmosChainId }
-
-      const response = await fetch(`${appConfig.gatewayBase}/gateway/create-deal-evm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intent: gatewayIntent,
-          evm_signature: signature,
-        }),
+      const data = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'createDeal',
+        args: [
+          BigInt(Math.max(1, Number(input.duration) || 0)),
+          serviceHint,
+          BigInt(String(input.initialEscrow || '0')),
+          BigInt(String(input.maxMonthlySpend || '0')),
+        ],
       })
 
-      if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(errText || 'Deal submission failed')
-      }
+      const txHash = (await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(5_000_000) }],
+      })) as Hex
+      setLastTx(txHash)
 
-      const json = await response.json().catch(() => ({}))
-      if (json.tx_hash) setLastTx(json.tx_hash)
-      return json
+      const receipt = await waitForTransactionReceipt(txHash)
+      const logs = receipt.logs || []
+      for (const log of logs) {
+        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
+        try {
+          const decoded = decodeEventLog({
+            abi: NILSTORE_PRECOMPILE_ABI,
+            eventName: 'DealCreated',
+            topics: log.topics,
+            data: log.data,
+          })
+          const dealId = (decoded.args as { dealId: bigint }).dealId
+          return { status: 'success', tx_hash: txHash, deal_id: String(dealId) }
+        } catch {
+          continue
+        }
+      }
+      throw new Error('createDeal tx confirmed but DealCreated event not found')
     } finally {
       setLoading(false)
     }

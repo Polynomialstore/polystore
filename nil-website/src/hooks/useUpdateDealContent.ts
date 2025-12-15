@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { appConfig } from '../config'
-import { buildUpdateContentTypedData, UpdateContentIntent } from '../lib/eip712'
+import { encodeFunctionData, numberToHex, type Hex } from 'viem'
+import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { waitForTransactionReceipt } from '../lib/evmRpc'
 
 export interface UpdateDealContentInput {
   creator: string
@@ -17,58 +19,26 @@ export function useUpdateDealContent() {
     setLoading(true)
     setLastTx(null)
     try {
-      const isEvm = input.creator.startsWith('0x')
-      const evmAddress = isEvm ? input.creator : ''
-      if (!isEvm) {
-        throw new Error('EVM address required for EVM-bridged update')
-      }
-
-      // Build Intent
-      const nonceKey = `nilstore:evmNonces:${evmAddress.toLowerCase()}`
-      const currentNonce = Number(window.localStorage.getItem(nonceKey) || '0') || 0
-      const nextNonce = currentNonce + 1
-      window.localStorage.setItem(nonceKey, String(nextNonce))
-
-      const intent: UpdateContentIntent = {
-        creator_evm: evmAddress,
-        deal_id: input.dealId,
-        cid: input.cid,
-        size_bytes: input.sizeBytes,
-        nonce: nextNonce,
-      }
-
-      const typedData = buildUpdateContentTypedData(intent, appConfig.chainId)
-
+      const evmAddress = String(input.creator || '')
+      if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
       const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
-
-      const signature = (await ethereum.request({
-        method: 'eth_signTypedData_v4',
-        params: [evmAddress, JSON.stringify(typedData)],
-      })) as string
-
-      // Construct intent for backend
-      const gatewayIntent = { ...intent, chain_id: appConfig.cosmosChainId }
-
-      const response = await fetch(`${appConfig.gatewayBase}/gateway/update-deal-content-evm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intent: gatewayIntent,
-          evm_signature: signature,
-        }),
+      const manifestRoot = String(input.cid || '').trim() as Hex
+      const data = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'updateDealContent',
+        args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes)],
       })
 
-      if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(errText || 'Update content submission failed')
-      }
-
-      const json = await response.json().catch(() => ({}))
-      if (json.tx_hash) setLastTx(json.tx_hash)
-      return json
+      const txHash = (await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(3_000_000) }],
+      })) as Hex
+      setLastTx(txHash)
+      await waitForTransactionReceipt(txHash)
+      return { status: 'success', tx_hash: txHash }
     } finally {
       setLoading(false)
     }

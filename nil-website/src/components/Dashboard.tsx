@@ -436,7 +436,7 @@ export function Dashboard() {
         })
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
-        if (nilAddress) await refreshDealsAfterCreate(nilAddress, targetDealId)
+        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, manifestRoot.trim())
     } catch (e) {
         setStatusTone('error')
         setStatusMsg('Content commit failed. Check gateway + chain logs.')
@@ -451,6 +451,18 @@ export function Dashboard() {
         return
       }
       await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+  }
+
+  async function refreshDealsAfterContentCommit(owner: string, dealId: string, expectedCid: string) {
+    const maxAttempts = 20
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const list = await fetchDeals(owner)
+      const found = list.find((d) => d.id === dealId)
+      if (found && String(found.cid || '').trim() === expectedCid) {
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
   }
 

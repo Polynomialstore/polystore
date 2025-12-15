@@ -44,9 +44,10 @@ export function useFaucet() {
   }
 
   async function pollTx(txHash: string) {
+    const normalized = String(txHash || '').replace(/^0x/i, '')
     for (let i = 0; i < 30; i++) {
         try {
-            const res = await fetch(`${appConfig.lcdBase}/cosmos/tx/v1beta1/txs/${txHash}`)
+            const res = await fetch(`${appConfig.lcdBase}/cosmos/tx/v1beta1/txs/${normalized}`)
             if (res.ok) {
                 const json = await res.json()
                 const code = json?.tx_response?.code

@@ -1,6 +1,5 @@
-import { numberToHex } from 'viem'
+import { createWalletClient, http, numberToHex, type Chain, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import type { Hex } from 'viem'
 
 import { appConfig } from '../config'
 
@@ -23,6 +22,13 @@ export function installE2eWallet() {
   const privKey = (import.meta.env.VITE_E2E_PK || DEFAULT_E2E_PK) as Hex
   const account = privateKeyToAccount(privKey)
   const chainIdHex = numberToHex(appConfig.chainId)
+  const chain: Chain = {
+    id: appConfig.chainId,
+    name: 'NilChain E2E',
+    nativeCurrency: { name: 'atom', symbol: 'atom', decimals: 18 },
+    rpcUrls: { default: { http: [appConfig.evmRpc] } },
+  }
+  const walletClient = createWalletClient({ account, chain, transport: http(appConfig.evmRpc) })
 
   const listeners = new Map<string, Set<Listener>>()
   const on = (event: string, listener: Listener) => {
@@ -88,6 +94,22 @@ export function installE2eWallet() {
           return account.signTypedData(viemTypedData)
         }
 
+        case 'eth_sendTransaction': {
+          const [tx] = (params as Array<Record<string, unknown>>) ?? []
+          const from = String(tx?.from || '')
+          if (!from || from.toLowerCase() !== account.address.toLowerCase()) {
+            throw new Error(`unknown signer ${from}`)
+          }
+          const to = String(tx?.to || '') as Hex
+          if (!to || !to.startsWith('0x')) throw new Error('tx.to is required')
+          const data = (String(tx?.data || '0x') as Hex) || '0x'
+          const valueHex = String(tx?.value || '0x0')
+          const value = valueHex && valueHex !== '0x' ? BigInt(valueHex) : 0n
+          const gasHex = String(tx?.gas || '')
+          const gas = gasHex && gasHex !== '0x' ? BigInt(gasHex) : undefined
+          return walletClient.sendTransaction({ to, data, value, gas })
+        }
+
         default:
           throw new Error(`E2E wallet does not support method: ${method}`)
       }
@@ -96,4 +118,3 @@ export function installE2eWallet() {
   } as any // Cast to any to bypass exact shape check if needed, or better, match interface.
   // I'll cast to any for assignment to allow extra props like isNilStoreE2E without modifying vite-env again.
 }
-
