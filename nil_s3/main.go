@@ -447,7 +447,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(dealIDStr) != "" {
-		// Append path: load existing slab by on-chain manifest root, then append.
 		dealID, err := strconv.ParseUint(strings.TrimSpace(dealIDStr), 10, 64)
 		if err != nil {
 			http.Error(w, "invalid deal_id", http.StatusBadRequest)
@@ -460,36 +459,86 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to fetch deal state", http.StatusInternalServerError)
 			return
 		}
-		if chainCID == "" {
-			http.Error(w, "deal has no committed manifest_root yet", http.StatusBadRequest)
-			return
-		}
 		if owner != "" && chainOwner != "" && owner != chainOwner {
 			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
 			return
 		}
 
-		if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-			http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
-			return
-		}
+		if chainCID == "" {
+			// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
+			// assigned provider before the first content commit.
+			switch {
+			case os.Getenv("NIL_FAKE_INGEST") == "1":
+				var err error
+				cid, size, allocatedLength, err = fastShardQuick(path)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				fileSize = size
 
-		b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				http.Error(w, err.Error(), http.StatusRequestTimeout)
+			case os.Getenv("NIL_FAST_INGEST") == "1":
+				b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				cid = manifestRoot
+				allocatedLength = allocLen
+				if info, err := os.Stat(path); err == nil {
+					fileSize = uint64(info.Size())
+				}
+				if b != nil {
+					size = totalSizeBytesFromMdu0(b)
+				}
+
+			default:
+				b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				cid = manifestRoot
+				allocatedLength = allocLen
+				if info, err := os.Stat(path); err == nil {
+					fileSize = uint64(info.Size())
+				}
+				if b != nil {
+					size = totalSizeBytesFromMdu0(b)
+				}
+			}
+		} else {
+			// Append path: load existing slab by on-chain manifest root, then append.
+			if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+				http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
 				return
 			}
-			http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		cid = manifestRoot
-		allocatedLength = allocLen
-		if info, err := os.Stat(path); err == nil {
-			fileSize = uint64(info.Size())
-		}
-		if b != nil {
-			size = totalSizeBytesFromMdu0(b)
+
+			b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					http.Error(w, err.Error(), http.StatusRequestTimeout)
+					return
+				}
+				http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+			cid = manifestRoot
+			allocatedLength = allocLen
+			if info, err := os.Stat(path); err == nil {
+				fileSize = uint64(info.Size())
+			}
+			if b != nil {
+				size = totalSizeBytesFromMdu0(b)
+			}
 		}
 	} else {
 		switch {
