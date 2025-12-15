@@ -264,25 +264,29 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func main() {
+	routerMode := isGatewayRouterMode()
+
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
 	}
 
-	if err := initSessionDB(sessionDBPath); err != nil {
-		log.Fatalf("failed to open session db %s: %v", sessionDBPath, err)
-	}
+	if !routerMode {
+		if err := initSessionDB(sessionDBPath); err != nil {
+			log.Fatalf("failed to open session db %s: %v", sessionDBPath, err)
+		}
 
-	// Initialize KZG (load trusted setup once)
-	log.Printf("Initializing KZG from %s...", trustedSetup)
-	if err := crypto_ffi.Init(trustedSetup); err != nil {
-		log.Fatalf("Failed to initialize KZG: %v. Check path.", err)
-	}
+		// Initialize KZG (load trusted setup once)
+		log.Printf("Initializing KZG from %s...", trustedSetup)
+		if err := crypto_ffi.Init(trustedSetup); err != nil {
+			log.Fatalf("Failed to initialize KZG: %v. Check path.", err)
+		}
 
-	// Best-effort warmups to keep the first browser fetch fast.
-	go func() {
-		_ = cachedProviderAddress(context.Background())
-	}()
+		// Best-effort warmups to keep the first browser fetch fast.
+		go func() {
+			_ = cachedProviderAddress(context.Background())
+		}()
+	}
 
 	r := mux.NewRouter()
 	// Legacy S3-style interface
@@ -290,24 +294,38 @@ func main() {
 	r.HandleFunc("/api/v1/object/{key}", GetObject).Methods("GET")
 
 	// Gateway endpoints used by the web UI
-	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
-	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
-	r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
-	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
-	r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
+
+	if routerMode {
+		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/manifest-info/{cid}", RouterGatewayManifestInfo).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", RouterGatewayMduKzg).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/receipt", RouterGatewaySubmitReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+	} else {
+		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
+	}
 
 	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
@@ -1468,10 +1486,10 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 // and records a short-lived session so the provider can later submit MsgProveLiveness.
 //
 // Modes:
-// - Per-chunk receipts: validates a signed RetrievalRequest (req_sig), creates a one-time fetch_session,
-//   and returns `X-Nil-Fetch-Session` for receipt submission.
-// - Bundled download sessions: accepts a `download_session` created by GatewayOpenSession and records
-//   chunk proofs server-side; the client later submits a single DownloadSessionReceipt.
+//   - Per-chunk receipts: validates a signed RetrievalRequest (req_sig), creates a one-time fetch_session,
+//     and returns `X-Nil-Fetch-Session` for receipt submission.
+//   - Bundled download sessions: accepts a `download_session` created by GatewayOpenSession and records
+//     chunk proofs server-side; the client later submits a single DownloadSessionReceipt.
 func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -2921,7 +2939,7 @@ type SignedReceiptBatchEnvelope struct {
 }
 
 type SignedSessionReceiptEnvelope struct {
-	DownloadSession string                    `json:"download_session"`
+	DownloadSession string                       `json:"download_session"`
 	Receipt         types.DownloadSessionReceipt `json:"receipt"`
 }
 
