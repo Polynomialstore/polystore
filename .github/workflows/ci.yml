@@ -27,7 +27,13 @@ jobs:
 
       - name: Test ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
-        run: go test ./... -v
+        run: |
+          if [ "${{ matrix.service }}" == "nilchain" ]; then
+            echo "Reconstructing vendor for nilchain..."
+            go mod vendor
+            git checkout vendor
+          fi
+          go test ./... -v
 
   # ------------------------------------------------------------------
   # RUST CRATES (Core, CLI, P2P, Mock L1)
