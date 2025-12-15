@@ -27,6 +27,7 @@ interface Provider {
   used_storage: string
   status: string
   reputation_score: string
+  endpoints?: string[]
 }
 
 interface DealHeatState {
@@ -995,6 +996,7 @@ export function Dashboard() {
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
                       </tr>
@@ -1029,7 +1031,13 @@ export function Dashboard() {
                                       </span>
                                   )}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
+                                {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
+                              </td>
+                              <td
+                                className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
+                                data-testid={`deal-retrievals-${deal.id}`}
+                              >
                                 {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1057,6 +1065,7 @@ export function Dashboard() {
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
                     <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
                   </tr>
                 </thead>
@@ -1071,6 +1080,13 @@ export function Dashboard() {
                         <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                           {p.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
+                        {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
+                          <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
+                        ) : (
+                          <span className="italic">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-right text-muted-foreground">
                         {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}

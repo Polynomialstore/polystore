@@ -22,9 +22,16 @@ interface HeatState {
     successful_retrievals_total?: string
 }
 
+interface ProviderInfo {
+  address: string
+  endpoints?: string[]
+  status?: string
+}
+
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [heat, setHeat] = useState<HeatState | null>(null)
+  const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
@@ -45,6 +52,44 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
+
+  useEffect(() => {
+    if (!deal.providers || deal.providers.length === 0) {
+      setProvidersByAddr({})
+      return
+    }
+
+    let cancelled = false
+    async function loadProviders() {
+      try {
+        const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+        if (!res.ok) return
+        const json = await res.json().catch(() => null)
+        const list = Array.isArray((json as { providers?: unknown[] } | null)?.providers) ? (json as { providers: unknown[] }).providers : []
+
+        const next: Record<string, ProviderInfo> = {}
+        for (const raw of list) {
+          const p = raw as { address?: unknown; endpoints?: unknown; status?: unknown }
+          const addr = typeof p.address === 'string' ? p.address : ''
+          if (!addr) continue
+          next[addr] = {
+            address: addr,
+            status: typeof p.status === 'string' ? p.status : undefined,
+            endpoints: Array.isArray(p.endpoints) ? (p.endpoints.filter((e) => typeof e === 'string') as string[]) : undefined,
+          }
+        }
+
+        if (!cancelled) setProvidersByAddr(next)
+      } catch {
+        // ignore
+      }
+    }
+
+    loadProviders()
+    return () => {
+      cancelled = true
+    }
+  }, [deal.providers?.join('|')])
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
@@ -257,9 +302,19 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                     {deal.providers && deal.providers.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {deal.providers.map((p: string) => (
-                            <div key={p} className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                            <div key={p} className="space-y-1">
+                              <div className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                                 <Server className="w-3 h-3" />
                                 {p}
+                                {providersByAddr[p]?.status && (
+                                  <span className="text-muted-foreground">({providersByAddr[p]?.status})</span>
+                                )}
+                              </div>
+                              {providersByAddr[p]?.endpoints && providersByAddr[p].endpoints!.length > 0 && (
+                                <div className="font-mono text-[10px] text-muted-foreground break-all">
+                                  {providersByAddr[p].endpoints![0]}
+                                </div>
+                              )}
                             </div>
                           ))}
                       </div>
