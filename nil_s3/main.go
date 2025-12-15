@@ -327,8 +327,9 @@ func main() {
 		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 	}
 
-	log.Println("Starting NilStore Gateway/S3 Adapter on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
+	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
 
 func PutObject(w http.ResponseWriter, r *http.Request) {
