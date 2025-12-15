@@ -12,7 +12,6 @@ import { useFetch } from '../hooks/useFetch'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
-import { BridgeStatus } from './BridgeStatus'
 import { FileSharder } from './FileSharder'
 import { injectedConnector } from '../context/Web3Provider'
 import { formatUnits } from 'viem'
@@ -444,7 +443,6 @@ export function Dashboard() {
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
-      <BridgeStatus />
       
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
