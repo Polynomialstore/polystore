@@ -74,6 +74,7 @@ register_demo_provider() {
   for i in $(seq 1 "$attempts"); do
     "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
       --from faucet \
+      --endpoint "/ip4/127.0.0.1/tcp/8080/http" \
       --chain-id "$CHAIN_ID" \
       --yes \
       --home "$CHAIN_HOME" \

@@ -1,0 +1,324 @@
+#!/usr/bin/env bash
+# Devnet Alpha multi-provider stack runner.
+# Starts:
+# - nilchaind (CometBFT + LCD + JSON-RPC)
+# - nil_faucet
+# - N provider daemons (nil_s3, provider mode) on ports 8091+
+# - 1 gateway router (nil_s3, router mode) on :8080
+# - nil-website (optional, default on)
+#
+# Usage:
+#   ./scripts/run_devnet_alpha_multi_sp.sh start
+#   ./scripts/run_devnet_alpha_multi_sp.sh stop
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp"
+PID_DIR="$LOG_DIR/pids"
+
+CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data_devnet_alpha}"
+CHAIN_ID="${CHAIN_ID:-31337}"
+EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
+RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
+EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
+GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
+DENOM="${NIL_DENOM:-stake}"
+
+NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
+TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
+GO_BIN="${GO_BIN:-$(command -v go)}"
+
+PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
+PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
+
+START_WEB="${START_WEB:-1}"
+
+# Shared secret between the gateway router and all providers.
+NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+
+FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
+
+mkdir -p "$LOG_DIR" "$PID_DIR"
+
+banner() { printf '\n=== %s ===\n' "$*"; }
+
+wait_for_http() {
+  local name="$1"
+  local url="$2"
+  local max_attempts="${3:-60}"
+  local delay_secs="${4:-1}"
+
+  echo "==> Waiting for $name at $url ..."
+  for attempt in $(seq 1 "$max_attempts"); do
+    local code
+    code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || true)
+    code="${code:-000}"
+    if [ "$code" != "000" ]; then
+      echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
+      return 0
+    fi
+    sleep "$delay_secs"
+  done
+
+  echo "ERROR: $name at $url not reachable" >&2
+  return 1
+}
+
+ensure_nilchaind() {
+  banner "Building nilchaind (via $GO_BIN)"
+  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
+}
+
+ensure_nil_cli() {
+  banner "Building nil_cli (release)"
+  (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+}
+
+gen_provider_key() {
+  local name="$1"
+  "$NILCHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+  "$NILCHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
+}
+
+init_chain() {
+  rm -rf "$CHAIN_HOME"
+  banner "Initializing chain at $CHAIN_HOME"
+  "$NILCHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
+
+  printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+
+  # Create provider keys and pre-fund them in genesis so they can register.
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    addr="$(gen_provider_key "provider$i")"
+    "$NILCHAIND_BIN" genesis add-genesis-account "$addr" "1000000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  done
+
+  # Fund faucet + create validator
+  "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
+  "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
+
+  APP_TOML="$CHAIN_HOME/config/app.toml"
+  perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
+  perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
+  perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
+  perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
+  perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
+  perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
+}
+
+start_chain() {
+  banner "Starting nilchaind"
+  nohup "$NILCHAIND_BIN" start \
+    --home "$CHAIN_HOME" \
+    --rpc.laddr "$RPC_ADDR" \
+    --minimum-gas-prices "$GAS_PRICE" \
+    --api.enable \
+    >"$LOG_DIR/nilchaind.log" 2>&1 &
+  echo $! >"$PID_DIR/nilchaind.pid"
+  sleep 1
+  if ! kill -0 "$(cat "$PID_DIR/nilchaind.pid")" 2>/dev/null; then
+    echo "nilchaind failed to start; check $LOG_DIR/nilchaind.log"
+    tail -n 40 "$LOG_DIR/nilchaind.log" || true
+    exit 1
+  fi
+  echo "nilchaind pid $(cat "$PID_DIR/nilchaind.pid"), logs: $LOG_DIR/nilchaind.log"
+}
+
+start_faucet() {
+  banner "Starting faucet service"
+  (
+    cd "$ROOT_DIR/nil_faucet"
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="1000000000000000000aatom,100000000stake" NIL_GAS_PRICES="$GAS_PRICE" \
+      "$GO_BIN" run . \
+      >"$LOG_DIR/faucet.log" 2>&1 &
+    echo $! >"$PID_DIR/faucet.pid"
+  )
+  sleep 0.5
+  if ! kill -0 "$(cat "$PID_DIR/faucet.pid")" 2>/dev/null; then
+    echo "faucet failed to start; check $LOG_DIR/faucet.log"
+    tail -n 40 "$LOG_DIR/faucet.log" || true
+    exit 1
+  fi
+  echo "faucet pid $(cat "$PID_DIR/faucet.pid"), logs: $LOG_DIR/faucet.log"
+}
+
+register_provider() {
+  local key="$1"
+  local endpoint="$2"
+  "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+    --endpoint "$endpoint" \
+    --from "$key" \
+    --chain-id "$CHAIN_ID" \
+    --yes \
+    --home "$CHAIN_HOME" \
+    --keyring-backend test \
+    --gas-prices "$GAS_PRICE" >/dev/null
+}
+
+register_provider_retry() {
+  local key="$1"
+  local endpoint="$2"
+  local attempts=20
+  for i in $(seq 1 "$attempts"); do
+    if register_provider "$key" "$endpoint" >/dev/null 2>&1; then
+      echo "Registered $key ($endpoint)"
+      return 0
+    fi
+    echo "register-provider failed for $key (attempt $i/$attempts); retrying in 2s..."
+    sleep 2
+  done
+  echo "ERROR: register-provider failed for $key after $attempts attempts" >&2
+  return 1
+}
+
+start_provider() {
+  local i="$1"
+  local key="provider$i"
+  local port="$((PROVIDER_PORT_BASE + i - 1))"
+  local dir="$LOG_DIR/providers/$key"
+  mkdir -p "$dir"
+  (
+    cd "$ROOT_DIR/nil_s3"
+    nohup env \
+      NIL_LISTEN_ADDR=":$port" \
+      NIL_CHAIN_ID="$CHAIN_ID" \
+      NIL_HOME="$CHAIN_HOME" \
+      NIL_UPLOAD_DIR="$dir" \
+      NIL_CLI_BIN="$NIL_CLI_BIN" \
+      NIL_TRUSTED_SETUP="$TRUSTED_SETUP" \
+      NILCHAIND_BIN="$NILCHAIND_BIN" \
+      NIL_PROVIDER_KEY="$key" \
+      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+      "$GO_BIN" run . \
+      >"$LOG_DIR/$key.log" 2>&1 &
+    echo $! >"$PID_DIR/$key.pid"
+  )
+  echo "$key pid $(cat "$PID_DIR/$key.pid"), logs: $LOG_DIR/$key.log"
+}
+
+start_router() {
+  banner "Starting gateway router (nil_s3)"
+  (
+    cd "$ROOT_DIR/nil_s3"
+    nohup env \
+      NIL_GATEWAY_ROUTER="1" \
+      NIL_CHAIN_ID="$CHAIN_ID" \
+      NIL_HOME="$CHAIN_HOME" \
+      NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
+      NILCHAIND_BIN="$NILCHAIND_BIN" \
+      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+      "$GO_BIN" run . \
+      >"$LOG_DIR/router.log" 2>&1 &
+    echo $! >"$PID_DIR/router.pid"
+  )
+  echo "router pid $(cat "$PID_DIR/router.pid"), logs: $LOG_DIR/router.log"
+}
+
+start_web() {
+  banner "Starting web (Vite dev server)"
+  (
+    cd "$ROOT_DIR/nil-website"
+    if [ ! -d node_modules ]; then npm install >/dev/null; fi
+    VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
+    VITE_CHAIN_ID="$EVM_CHAIN_ID" \
+    nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
+    echo $! >"$PID_DIR/website.pid"
+  )
+  echo "website pid $(cat "$PID_DIR/website.pid"), logs: $LOG_DIR/website.log"
+}
+
+stop_all() {
+  banner "Stopping processes"
+  for svc in nilchaind faucet router website; do
+    pid_file="$PID_DIR/$svc.pid"
+    if [ -f "$pid_file" ]; then
+      pid=$(cat "$pid_file")
+      kill "$pid" 2>/dev/null || true
+      rm -f "$pid_file"
+    fi
+  done
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    pid_file="$PID_DIR/provider$i.pid"
+    if [ -f "$pid_file" ]; then
+      pid=$(cat "$pid_file")
+      kill "$pid" 2>/dev/null || true
+      rm -f "$pid_file"
+    fi
+  done
+
+  # Best-effort kill by port in case go run spawned children.
+  local ports=(26657 26656 1317 "$EVM_RPC_PORT" 8080 8081 5173)
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    ports+=("$((PROVIDER_PORT_BASE + i - 1))")
+  done
+  for port in "${ports[@]}"; do
+    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      kill $pids 2>/dev/null || true
+    fi
+  done
+}
+
+start_all() {
+  stop_all
+  rm -rf "$LOG_DIR/providers" "$LOG_DIR/router_tmp"
+
+  if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+    else
+      NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+    fi
+  fi
+
+  ensure_nilchaind
+  ensure_nil_cli
+  init_chain
+  start_chain
+  start_faucet
+
+  wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" 60 1
+  wait_for_http "faucet" "http://localhost:8081/faucet" 60 1
+
+  banner "Registering providers"
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    port="$((PROVIDER_PORT_BASE + i - 1))"
+    register_provider_retry "provider$i" "/ip4/127.0.0.1/tcp/$port/http"
+  done
+
+  banner "Starting providers"
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    start_provider "$i"
+  done
+
+  start_router
+
+  if [ "$START_WEB" = "1" ]; then
+    start_web
+  fi
+
+  banner "Devnet Alpha multi-SP stack ready"
+  cat <<EOF
+RPC:         http://localhost:26657
+REST/LCD:    http://localhost:1317
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (Chain ID $CHAIN_ID / 31337)
+Faucet:      http://localhost:8081/faucet
+Gateway:     http://localhost:8080/gateway/upload
+Web UI:      http://localhost:5173/#/dashboard
+Providers:   $PROVIDER_COUNT (ports starting at $PROVIDER_PORT_BASE)
+Home:        $CHAIN_HOME
+EOF
+}
+
+case "${1:-start}" in
+  start) start_all ;;
+  stop) stop_all ;;
+  *)
+    echo "Usage: $0 [start|stop]" >&2
+    exit 1
+    ;;
+esac
