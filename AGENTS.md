@@ -560,6 +560,26 @@ This sprint turns the current “single-machine” gateway/provider implementati
 - [x] Add a smoke script: register providers (with Multiaddrs) → create deal (replicas=1) → upload/commit → fetch → submit session receipt.
 - **Pass gate:** single command stands up a 3-provider devnet and runs the smoke.
 
+### 11.1.2 Devnet Beta (Multi-Provider Onboarding, 5 Participants)
+
+This sprint makes it practical for ~5 external participants to run Storage Providers (SPs) and exchange files on a shared devnet:
+
+- [ ] **Goal 1: Provider “signup” workflow (CLI + docs).**
+    - **Change:** Document a clean “new SP joins the devnet” flow: create provider key → fund → register provider endpoints → start provider gateway.
+    - **Pass gate:** A new developer can join and appear in `Query/ListProviders` with correct endpoints.
+
+- [ ] **Goal 2: Provider-only stack launcher.**
+    - **Change:** Add a script to start only the provider processes (no chain), parameterized by chain RPC/LCD/EVM endpoints and provider ports/storage dir.
+    - **Pass gate:** A provider can run on a separate machine and serve `/gateway/fetch` + session receipts.
+
+- [ ] **Goal 3: Shared devnet “hub” stack launcher.**
+    - **Change:** Add a script to start the shared components (chain + LCD + router + web), with clear console output for participants to join.
+    - **Pass gate:** One person runs the hub; multiple providers connect from other machines.
+
+- [ ] **Goal 4: UI clarity for multiple providers.**
+    - **Change:** Show the deal’s assigned provider + endpoint(s) in the web UI (dashboard + deal detail), and expose which provider served a retrieval session.
+    - **Pass gate:** Users can see “where” their deal is routed and which SP served their download.
+
 ### 11.0.1 Completed Goals (Previous Sprint)
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
