@@ -54,6 +54,7 @@ export function Dashboard() {
   const { upload, loading: uploadLoading } = useUpload()
   const { switchNetwork } = useNetwork()
   const [deals, setDeals] = useState<Deal[]>([])
+  const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
@@ -147,7 +148,7 @@ export function Dashboard() {
   const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
 
   useEffect(() => {
-    if (deals.length === 0) {
+    if (allDeals.length === 0) {
       setDealHeatById({})
       return
     }
@@ -157,7 +158,7 @@ export function Dashboard() {
     async function refreshHeat() {
       const next: Record<string, DealHeatState> = {}
       await Promise.all(
-        deals.map(async (deal) => {
+        allDeals.map(async (deal) => {
           try {
             const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(deal.id)}/heat`)
             if (!res.ok) return
@@ -179,7 +180,7 @@ export function Dashboard() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [deals])
+  }, [allDeals])
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -286,6 +287,7 @@ export function Dashboard() {
       fetchProviders()
     } else {
         setDeals([])
+        setAllDeals([])
         setProviders([])
     }
   }, [address])
@@ -294,6 +296,7 @@ export function Dashboard() {
     setLoading(true)
     try {
         const all = await lcdFetchDeals(appConfig.lcdBase)
+        setAllDeals(all)
         let filtered = owner ? all.filter((d) => d.owner === owner) : all
         if (owner && filtered.length === 0 && all.length > 0) {
           filtered = all
@@ -302,6 +305,7 @@ export function Dashboard() {
         return filtered
     } catch (e) {
         console.error("Failed to fetch deals", e)
+        setAllDeals([])
     } finally {
         setLoading(false)
     }
@@ -343,6 +347,41 @@ export function Dashboard() {
       console.error('Failed to fetch providers', e)
     }
   }
+
+  function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
+    let idx = 0
+    let value = bytes
+    while (value >= 1024 && idx < units.length - 1) {
+      value /= 1024
+      idx++
+    }
+    return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
+  }
+
+  const providerStatsByAddress = useMemo(() => {
+    const byProvider = new Map<string, { assignedDeals: number; activeDeals: number; retrievals: number; bytesServed: number }>()
+
+    for (const deal of allDeals) {
+      for (const providerAddr of deal.providers || []) {
+        const entry = byProvider.get(providerAddr) ?? {
+          assignedDeals: 0,
+          activeDeals: 0,
+          retrievals: 0,
+          bytesServed: 0,
+        }
+        entry.assignedDeals += 1
+        if (String(deal.cid || '').trim().startsWith('0x')) entry.activeDeals += 1
+        const heat = dealHeatById[deal.id]
+        entry.retrievals += Number(heat?.successful_retrievals_total || 0) || 0
+        entry.bytesServed += Number(heat?.bytes_served_total || 0) || 0
+        byProvider.set(providerAddr, entry)
+      }
+    }
+
+    return byProvider
+  }, [allDeals, dealHeatById])
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -985,6 +1024,72 @@ export function Dashboard() {
         </div>
       </div>
 
+      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Providers (Deals &amp; Retrievals)
+        </div>
+        <table className="min-w-full divide-y divide-border text-xs" data-testid="providers-table">
+          <thead className="bg-muted/30">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deals</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Active</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Bytes Served</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {providers.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-6 py-6 text-sm text-muted-foreground">
+                  No providers found.
+                </td>
+              </tr>
+            ) : (
+              providers.map((p) => {
+                const stats = providerStatsByAddress.get(p.address) ?? {
+                  assignedDeals: 0,
+                  activeDeals: 0,
+                  retrievals: 0,
+                  bytesServed: 0,
+                }
+                return (
+                  <tr key={p.address} className="hover:bg-muted/50 transition-colors">
+                    <td className="px-4 py-2 font-mono text-[11px] text-primary" title={p.address}>
+                      {p.address.slice(0, 12)}...{p.address.slice(-6)}
+                    </td>
+                    <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
+                    <td className="px-4 py-2">
+                      <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
+                      {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
+                        <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
+                      ) : (
+                        <span className="italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.assignedDeals}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.activeDeals}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.retrievals}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{formatBytes(stats.bytesServed)}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {loading ? (
         <div className="text-center py-24">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -1065,50 +1170,6 @@ export function Dashboard() {
                   </tbody>
               </table>
           </div>
-
-          {providers.length > 0 && (
-            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Active Providers
-              </div>
-              <table className="min-w-full divide-y divide-border text-xs">
-                <thead className="bg-muted/30">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
-                    <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {providers.map((p) => (
-                    <tr key={p.address} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-4 py-2 font-mono text-[11px] text-primary">
-                        {p.address.slice(0, 12)}...{p.address.slice(-6)}
-                      </td>
-                      <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
-                      <td className="px-4 py-2">
-                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
-                        {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
-                          <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
-                        ) : (
-                          <span className="italic">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           {/* Deal Details */}
           {selectedDeal && (
