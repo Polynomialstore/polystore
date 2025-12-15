@@ -153,8 +153,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   // Verify Retrieval Count increment (one proof per chunk)
   await page.getByTestId('deal-detail-close').click()
-  // Retrievals column is the 5th column (index 4)
-  const retrievalsCell = page.getByTestId(`deal-row-${dealId}`).locator('td').nth(4)
+  const retrievalsCell = page.getByTestId(`deal-retrievals-${dealId}`)
   await expect(retrievalsCell).toHaveText(String(expectedChunks), { timeout: 120_000 })
 
   // Verify on-chain DealHeatState incremented (successful_retrievals_total + bytes_served_total)
