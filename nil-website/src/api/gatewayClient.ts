@@ -25,8 +25,12 @@ export async function gatewayUpload(
   if (input.dealId) form.append('deal_id', String(input.dealId))
   if (input.maxUserMdus) form.append('max_user_mdus', String(input.maxUserMdus))
 
+  const q = new URLSearchParams()
+  if (input.dealId) q.set('deal_id', String(input.dealId))
+  const url = q.size > 0 ? `${gatewayBase}/gateway/upload?${q.toString()}` : `${gatewayBase}/gateway/upload`
+
   const res = await fetchWithTimeout(
-    `${gatewayBase}/gateway/upload`,
+    url,
     { method: 'POST', body: form },
     60_000,
   )

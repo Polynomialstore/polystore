@@ -64,8 +64,9 @@ test(
     const form = new FormData()
     form.append('file', new Blob([content]), 'hello.txt')
     form.append('owner', ownerNil)
+    form.append('deal_id', dealId)
 
-    const uploadRes = await fetch(`${gatewayBase}/gateway/upload`, {
+    const uploadRes = await fetch(`${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`, {
       method: 'POST',
       body: form,
     })
