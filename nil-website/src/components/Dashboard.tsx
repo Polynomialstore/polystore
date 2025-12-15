@@ -29,6 +29,11 @@ interface Provider {
   reputation_score: string
 }
 
+interface DealHeatState {
+  successful_retrievals_total?: string
+  bytes_served_total?: string
+}
+
 type StagedUpload = {
   cid: string
   sizeBytes: number
@@ -138,14 +143,52 @@ export function Dashboard() {
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
 
+  const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
+
+  useEffect(() => {
+    if (deals.length === 0) {
+      setDealHeatById({})
+      return
+    }
+
+    let cancelled = false
+
+    async function refreshHeat() {
+      const next: Record<string, DealHeatState> = {}
+      await Promise.all(
+        deals.map(async (deal) => {
+          try {
+            const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(deal.id)}/heat`)
+            if (!res.ok) return
+            const json = await res.json().catch(() => null)
+            const heat = (json as { heat?: DealHeatState } | null)?.heat
+            if (!heat) return
+            next[deal.id] = heat
+          } catch {
+            // ignore
+          }
+        }),
+      )
+      if (!cancelled) setDealHeatById(next)
+    }
+
+    refreshHeat()
+    const interval = window.setInterval(refreshHeat, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [deals])
+
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
-    for (const p of proofs) {
-      if (!p.dealId) continue
-      counts[p.dealId] = (counts[p.dealId] ?? 0) + 1
+    for (const deal of deals) {
+      const heat = dealHeatById[deal.id]
+      const raw = heat?.successful_retrievals_total
+      counts[deal.id] = raw ? Number(raw) || 0 : 0
     }
     return counts
-  }, [proofs])
+  }, [dealHeatById, deals])
 
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
@@ -311,11 +354,7 @@ export function Dashboard() {
       return
     }
     try {
-      const opts: { dealId?: string } = {}
-      if (targetDeal?.cid) {
-        // Only append once the deal already has a committed manifest root on-chain.
-        opts.dealId = targetDealId
-      }
+      const opts: { dealId?: string } = { dealId: targetDealId }
 
       const result = await upload(file, address, opts)
       setStagedUpload({
