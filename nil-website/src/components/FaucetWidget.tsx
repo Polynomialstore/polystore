@@ -3,7 +3,7 @@ import { useFaucet } from '../hooks/useFaucet'
 import { Coins, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
 import { useConnect } from 'wagmi'
-import { injectedConnector } from '../context/Web3Provider'
+import { injectedConnector } from '../lib/web3Config'
 
 export function FaucetWidget({ className = "" }: { className?: string }) {
   const { address, isConnected } = useAccount()

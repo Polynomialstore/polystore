@@ -9,7 +9,7 @@ import {
 import { createPublicClient, formatUnits, http } from 'viem'
 import { ArrowUpRight, Loader2, PlugZap } from 'lucide-react'
 import { appConfig } from '../config'
-import { injectedConnector, nilChain } from '../context/Web3Provider'
+import { injectedConnector, nilChain } from '../lib/web3Config'
 import { nilBridgeAbi } from '../abi/nilBridge'
 
 function randomBytes32(): `0x${string}` {

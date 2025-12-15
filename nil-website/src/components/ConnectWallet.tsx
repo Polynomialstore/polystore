@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect } from 'wagmi'
 import { Wallet, LogOut, RefreshCw, AlertTriangle } from 'lucide-react'
 import { appConfig } from '../config'
-import { injectedConnector } from '../context/Web3Provider'
+import { injectedConnector } from '../lib/web3Config'
 import { useNetwork } from '../hooks/useNetwork'
 import { formatUnits } from 'viem'
 

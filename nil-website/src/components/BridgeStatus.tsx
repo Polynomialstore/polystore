@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPublicClient, http } from 'viem'
 import { appConfig } from '../config'
-import { nilChain } from '../context/Web3Provider'
+import { nilChain } from '../lib/web3Config'
 import { nilBridgeAbi } from '../abi/nilBridge'
 
 export function BridgeStatus() {
