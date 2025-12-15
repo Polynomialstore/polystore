@@ -618,6 +618,15 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Remediation message should instruct clients to call `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` to discover valid `file_path` values.
     - **Risk hotspots:**
         - Fetch compatibility: legacy clients that relied on “single-file deal” defaults or `uploads/index.json` will now hard-fail; coordinate the web + scripts change before flipping the default.
+
+### 11.2 Sprint 3 (User-Signed TXs, No Gateway Keys)
+
+This sprint removes the devnet shortcut where the “provider” (currently `faucet`) pays gas and signs on-chain transactions for user actions. The gateway should behave like a user desktop daemon: it can compute/prepare proofs, but must not be a funded key holder.
+
+- [ ] **Goal 1: Remove provider/faucet as tx signer.**
+    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `nilchaind tx ... --from faucet` from the critical path for retrieval and deal lifecycle.
+    - **Target model:** All on-chain transactions are broadcast as user-signed transactions (MetaMask/EVM signer), with the gateway acting as a stateless helper/relayer (no private keys).
+    - **Pass gate:** A user can create deal → upload/commit → fetch → submit receipt with no gateway-held funded keys, and on-chain heat increments.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).
         - Root normalization: accepting both `0x` + mixed-case inputs but writing a single canonical directory key can surface duplicate-directory bugs; enforce canonicalization + explicit conflict errors.
