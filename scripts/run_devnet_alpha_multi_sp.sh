@@ -46,15 +46,16 @@ banner() { printf '\n=== %s ===\n' "$*"; }
 wait_for_http() {
   local name="$1"
   local url="$2"
-  local max_attempts="${3:-60}"
-  local delay_secs="${4:-1}"
+  local expect_codes="${3:-200}"
+  local max_attempts="${4:-60}"
+  local delay_secs="${5:-1}"
 
   echo "==> Waiting for $name at $url ..."
   for attempt in $(seq 1 "$max_attempts"); do
     local code
     code=$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || true)
     code="${code:-000}"
-    if [ "$code" != "000" ]; then
+    if echo ",$expect_codes," | grep -q ",$code,"; then
       echo "    $name reachable (HTTP $code) after $attempt attempt(s)."
       return 0
     fi
@@ -62,6 +63,62 @@ wait_for_http() {
   done
 
   echo "ERROR: $name at $url not reachable" >&2
+  return 1
+}
+
+wait_for_provider_count() {
+  local want="$1"
+  local attempts="${2:-60}"
+  local i
+  for i in $(seq 1 "$attempts"); do
+    local tmp code body
+    tmp="$(mktemp)"
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:1317/nilchain/nilchain/v1/providers" 2>/dev/null || true)
+    body="$(cat "$tmp" 2>/dev/null || true)"
+    rm -f "$tmp"
+    if [ "$code" = "200" ] && python3 - "$body" "$want" >/dev/null 2>&1 <<'PY'
+import json, sys
+data = json.loads(sys.argv[1])
+want = int(sys.argv[2])
+providers = data.get("providers") or []
+sys.exit(0 if len(providers) >= want else 1)
+PY
+    then
+      echo "Providers registered on LCD (>= $want)"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: expected >= $want providers on LCD" >&2
+  return 1
+}
+
+wait_for_provider_visible() {
+  local addr="$1"
+  local endpoint="$2"
+  local attempts="${3:-60}"
+  local i
+  for i in $(seq 1 "$attempts"); do
+    local tmp code body
+    tmp="$(mktemp)"
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:1317/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)
+    body="$(cat "$tmp" 2>/dev/null || true)"
+    rm -f "$tmp"
+    if [ "$code" = "200" ] && python3 - "$body" "$endpoint" >/dev/null 2>&1 <<'PY'
+import json, sys
+data = json.loads(sys.argv[1])
+want = sys.argv[2]
+provider = data.get("provider") or {}
+eps = provider.get("endpoints") or []
+sys.exit(0 if want in eps else 1)
+PY
+    then
+      echo "Provider $addr visible on LCD"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: provider $addr not visible on LCD" >&2
   return 1
 }
 
@@ -74,6 +131,46 @@ ensure_nilchaind() {
 ensure_nil_cli() {
   banner "Building nil_cli (release)"
   (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+}
+
+ensure_metadata() {
+  local genesis="$CHAIN_HOME/config/genesis.json"
+  if [ ! -f "$genesis" ]; then
+    return 0
+  fi
+  python3 - "$genesis" <<'PY' || true
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+bank = data.get("app_state", {}).get("bank", {})
+md = bank.get("denom_metadata", [])
+if not any(m.get("base") == "aatom" for m in md):
+    md.append({
+        "description": "EVM fee token metadata",
+        "denom_units": [
+            {"denom": "aatom", "exponent": 0, "aliases": ["uatom"]},
+            {"denom": "atom", "exponent": 18, "aliases": []},
+        ],
+        "base": "aatom",
+        "display": "atom",
+        "name": "",
+        "symbol": "",
+        "uri": "",
+        "uri_hash": ""
+    })
+    print("Injected aatom metadata into devnet alpha genesis")
+
+supply = bank.get("supply", [])
+present = {c.get("denom"): c for c in supply}
+for denom, amt in {"stake": 100000000000, "aatom": 1000000000000000000000}.items():
+    if denom not in present:
+        supply.append({"denom": denom, "amount": str(amt)})
+
+bank["denom_metadata"] = md
+bank["supply"] = supply
+data["app_state"]["bank"] = bank
+json.dump(data, open(path, "w"), indent=1)
+PY
 }
 
 gen_provider_key() {
@@ -99,6 +196,8 @@ init_chain() {
   "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
   "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
+
+  ensure_metadata
 
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
@@ -153,18 +252,28 @@ register_provider() {
     --endpoint "$endpoint" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \
+    --node "tcp://127.0.0.1:26657" \
     --yes \
     --home "$CHAIN_HOME" \
     --keyring-backend test \
-    --gas-prices "$GAS_PRICE" >/dev/null
+    --gas auto \
+    --gas-adjustment 1.6 \
+    --gas-prices "$GAS_PRICE" >/dev/null 2>&1
 }
 
 register_provider_retry() {
   local key="$1"
   local endpoint="$2"
   local attempts=20
+  local addr
+  addr="$("$NILCHAIND_BIN" keys show "$key" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)"
+  if [ -z "$addr" ]; then
+    echo "ERROR: failed to resolve $key address" >&2
+    return 1
+  fi
   for i in $(seq 1 "$attempts"); do
-    if register_provider "$key" "$endpoint" >/dev/null 2>&1; then
+    register_provider "$key" "$endpoint" || true
+    if wait_for_provider_visible "$addr" "$endpoint" 10 >/dev/null 2>&1; then
       echo "Registered $key ($endpoint)"
       return 0
     fi
@@ -281,8 +390,9 @@ start_all() {
   start_chain
   start_faucet
 
-  wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" 60 1
-  wait_for_http "faucet" "http://localhost:8081/faucet" 60 1
+  wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
+  wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
+  wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
 
   banner "Registering providers"
   for i in $(seq 1 "$PROVIDER_COUNT"); do
@@ -294,8 +404,13 @@ start_all() {
   for i in $(seq 1 "$PROVIDER_COUNT"); do
     start_provider "$i"
   done
+  for i in $(seq 1 "$PROVIDER_COUNT"); do
+    port="$((PROVIDER_PORT_BASE + i - 1))"
+    wait_for_http "provider$i" "http://localhost:$port/gateway/upload" "200,405" 60 1
+  done
 
   start_router
+  wait_for_http "router" "http://localhost:8080/gateway/upload" "200,405" 60 1
 
   if [ "$START_WEB" = "1" ]; then
     start_web
