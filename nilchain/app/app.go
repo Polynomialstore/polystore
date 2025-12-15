@@ -65,6 +65,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"nilchain/docs"
+	nilstoreprecompile "nilchain/precompiles/nilstore"
 	nilchainmodulekeeper "nilchain/x/nilchain/keeper"
 )
 
@@ -284,6 +285,7 @@ func New(
 			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
 		},
 	)
+	app.EVMKeeper.RegisterStaticPrecompile(nilstoreprecompile.Address, nilstoreprecompile.MustNew(&app.NilchainKeeper))
 
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)

@@ -172,6 +172,19 @@ for denom, amt in {"stake": 100000000000, "aatom": 1000000000000000000000}.items
 bank["denom_metadata"] = md
 bank["supply"] = supply
 data["app_state"]["bank"] = bank
+
+# Enable NilStore EVM precompile for MetaMask tx UX.
+evm = data.get("app_state", {}).get("evm", {})
+params = evm.get("params", {})
+pre = params.get("active_static_precompiles", []) or []
+addr = "0x0000000000000000000000000000000000000900"
+if addr not in pre:
+    pre.append(addr)
+pre = sorted(set(pre))
+params["active_static_precompiles"] = pre
+evm["params"] = params
+data["app_state"]["evm"] = evm
+
 json.dump(data, open(path, "w"), indent=1)
 PY
 }
@@ -337,6 +350,7 @@ start_web() {
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
+    VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! >"$PID_DIR/website.pid"
   )
