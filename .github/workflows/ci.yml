@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [nilchain, nil_faucet, nil_s3, nil_relayer]
+        service: [nilchain, nil_faucet, nil_gateway, nil_relayer]
     steps:
       - uses: actions/checkout@v4
 

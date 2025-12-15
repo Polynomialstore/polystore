@@ -44,11 +44,11 @@ echo ">>> Building nil_cli..."
     cp target/release/nil_cli ../dist/bin/
 )
 
-# 5. Build nil_s3 (Go)
-echo ">>> Building nil_s3..."
+# 5. Build nil_gateway (Go)
+echo ">>> Building nil_gateway..."
 (
-    cd nil_s3
-    go build -o ../dist/bin/nil_s3 .
+    cd nil_gateway
+    go build -o ../dist/bin/nil_gateway .
 )
 
 # 6. Build Faucet

@@ -262,7 +262,7 @@ start_gateway() {
   banner "Starting gateway service"
   ensure_nil_cli
   (
-    cd "$ROOT_DIR/nil_s3"
+    cd "$ROOT_DIR/nil_gateway"
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GO_BIN" run . \
       >"$LOG_DIR/gateway.log" 2>&1 &

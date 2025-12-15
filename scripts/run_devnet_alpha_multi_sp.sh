@@ -3,8 +3,8 @@
 # Starts:
 # - nilchaind (CometBFT + LCD + JSON-RPC)
 # - nil_faucet
-# - N provider daemons (nil_s3, provider mode) on ports 8091+
-# - 1 gateway router (nil_s3, router mode) on :8080
+# - N provider daemons (nil_gateway, provider mode) on ports 8091+
+# - 1 gateway router (nil_gateway, router mode) on :8080
 # - nil-website (optional, default on)
 #
 # Usage:
@@ -182,7 +182,7 @@ start_provider() {
   local dir="$LOG_DIR/providers/$key"
   mkdir -p "$dir"
   (
-    cd "$ROOT_DIR/nil_s3"
+    cd "$ROOT_DIR/nil_gateway"
     nohup env \
       NIL_LISTEN_ADDR=":$port" \
       NIL_CHAIN_ID="$CHAIN_ID" \
@@ -201,9 +201,9 @@ start_provider() {
 }
 
 start_router() {
-  banner "Starting gateway router (nil_s3)"
+  banner "Starting gateway router (nil_gateway)"
   (
-    cd "$ROOT_DIR/nil_s3"
+    cd "$ROOT_DIR/nil_gateway"
     nohup env \
       NIL_GATEWAY_ROUTER="1" \
       NIL_CHAIN_ID="$CHAIN_ID" \
