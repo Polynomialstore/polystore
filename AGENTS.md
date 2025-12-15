@@ -580,6 +580,41 @@ This sprint makes it practical for ~5 external participants to run Storage Provi
     - **Change:** Show the deal’s assigned provider + endpoint(s) in the web UI (dashboard + deal detail), and expose which provider served a retrieval session.
     - **Pass gate:** Users can see “where” their deal is routed and which SP served their download.
 
+### 11.1.3 Devnet Gamma (User-Wallet TXs + Optional Provider Selection)
+
+This sprint closes the biggest remaining UX/product gaps for multi-provider devnet testing:
+* A **non-technical** user should be able to “become an SP” from the web UI (at least: generate the exact commands and verify registration).
+* The “data user gateway” must hold **no funded keys**; user actions must be driven by the **user wallet** (MetaMask), not a faucet signer.
+* (Devnet-only) support **manual provider selection** to enable “send files to each other” demos without waiting on placement policy iteration.
+
+#### Goal 1: SP signup UX (Web wizard + validation)
+- [ ] Add a web “Become a Provider” wizard that:
+    - Detects the user’s `nil1...` address (derived from MetaMask `0x...`), and/or allows pasting a bech32 provider address.
+    - Validates endpoint(s) as Multiaddr strings.
+    - Outputs exact CLI commands to run `register-provider` + `run_devnet_provider.sh start`.
+    - Shows “registered / healthy” status by querying `Query/GetProvider` and probing the endpoint(s).
+- **Pass gate:** A new participant can follow the wizard and appear on `/nilchain/nilchain/v1/providers` with a reachable endpoint.
+
+#### Goal 2: Remove “faucet signs user actions” (MetaMask pays gas)
+- [ ] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
+- [ ] Replace retrieval “receipt submission” with a wallet-sent transaction path or a single wallet-sent “session open” tx (no `eth_signTypedData_v4` prompts).
+- **Implementation options (choose one):**
+    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally.
+    - **B:** Support EVM-signed Cosmos txs (EIP-712 sign mode) and broadcast directly from the browser to LCD (still “sign typed data”, not an EVM tx).
+- **Pass gate:** A user can create deal → commit content → download → finalize receipt with **zero gateway-held funded keys**.
+
+#### Goal 3 (Devnet-only): Manual provider selection at deal creation
+- [ ] Add a devnet feature flag / module param that allows the deal creator to specify a provider (or ordered provider list) at deal creation.
+    - Must be explicitly disabled by default on “real” networks (keeps anti-sybil placement intact).
+- [ ] Update web UI deal creation to offer “Auto (deterministic)” vs “Manual (devnet)” provider selection.
+- **Pass gate:** User can select “send this deal to Alice’s SP” and the router routes upload/fetch accordingly.
+
+#### Goal 4: Remote SP runbooks + hub ops docs
+- [ ] Expand `DEVNET_MULTI_PROVIDER.md` with:
+    - “Hub operator” checklist (ports, auth token, funding providers).
+    - “Provider operator” checklist (NAT/firewall, endpoint reachability test, logs to check).
+- **Pass gate:** Two laptops can run hub+SP and exchange a file with clear troubleshooting steps.
+
 ### 11.0.1 Completed Goals (Previous Sprint)
 
 This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
