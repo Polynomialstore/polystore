@@ -89,7 +89,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return () => {
       cancelled = true
     }
-  }, [deal.providers?.join('|')])
+  }, [deal.providers])
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
