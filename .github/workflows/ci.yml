@@ -47,6 +47,10 @@ jobs:
             go mod vendor
             git checkout vendor
           fi
+          
+          # Add nil_core release dir to LD_LIBRARY_PATH for nil_gateway/nilchain
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/nil_core/target/release
+          
           go test ./... -v
 
   # ------------------------------------------------------------------

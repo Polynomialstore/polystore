@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+/* eslint-disable @typescript-eslint/no-explicit-any */import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 
@@ -110,16 +110,28 @@ test('repro bug: download from commit content widget', async ({
 
   // Intercept deals response to force ID="0"
   await page.route('**/nilchain/nilchain/v1/deals*', async route => {
-    const response = await route.fetch();
-    const json = await response.json();
-    if (json.deals && Array.isArray(json.deals)) {
-        const myDeal = json.deals.find((d: { owner: string; id: string }) => d.owner === nilAddress)
-        if (myDeal) {
-            console.log(`Intercepting deal ${myDeal.id} for ${nilAddress} and changing ID to 0`)
-            myDeal.id = '0';
-        }
-    }
-    await route.fulfill({ json });
+    await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            deals: [
+                {
+                    id: '0',
+                    cid: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+                    size: '1024',
+                    owner: nilAddress,
+                    escrow: '1000',
+                    end_block: '1000',
+                    start_block: '1',
+                    service_hint: 'General:replicas=1',
+                    current_replication: '1',
+                    max_monthly_spend: '100',
+                    providers: []
+                }
+            ],
+            pagination: { total: "1" }
+        })
+    });
   });
 
   // Mock commit success

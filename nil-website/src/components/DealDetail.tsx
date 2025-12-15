@@ -7,9 +7,10 @@ import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
+import type { LcdDeal } from '../domain/lcd'
 
 interface DealDetailProps {
-  deal: any
+  deal: LcdDeal
   onClose: () => void
   nilAddress: string
 }

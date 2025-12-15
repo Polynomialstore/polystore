@@ -121,8 +121,8 @@ export function BridgeActions() {
         chainId: nilChain.id,
       })
       setStatus(`Sent tx ${tx}`)
-    } catch (e: any) {
-      setError(e?.message || 'Bridge transaction failed')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e) || 'Bridge transaction failed')
     }
   }
 

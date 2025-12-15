@@ -51,7 +51,17 @@ export const BenchmarkSection = () => {
   );
 };
 
-const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, percentage }: any) => (
+interface BenchmarkCardProps {
+  title: string
+  value: string
+  subtitle: string
+  description: string
+  icon: React.ReactNode
+  barColor: string
+  percentage: number
+}
+
+const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, percentage }: BenchmarkCardProps) => (
   <motion.div 
     initial={{ opacity: 0, x: -20 }}
     whileInView={{ opacity: 1, x: 0 }}

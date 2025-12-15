@@ -61,7 +61,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   const active = location.pathname === item.path;
                   
                   // Wrapper to handle external vs internal link logic
-                  const Wrapper = ({ children, className }: any) => 
+                  const Wrapper = ({ children, className }: { children: React.ReactNode; className: string }) => 
                     item.external ? (
                         <a href={item.path} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>
                     ) : (

@@ -11,6 +11,7 @@ export function decodeBase64ToBytes(input: string): Uint8Array {
     return bytes
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buf = (globalThis as any).Buffer
   if (buf?.from) {
     return Uint8Array.from(buf.from(trimmed, 'base64'))

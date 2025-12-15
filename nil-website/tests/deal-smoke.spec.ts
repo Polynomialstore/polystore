@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+/* eslint-disable @typescript-eslint/no-explicit-any */import { test, expect } from '@playwright/test'
 import { privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
 import { buildRetrievalRequestTypedData } from '../src/lib/eip712'

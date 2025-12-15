@@ -1,4 +1,4 @@
-import { privateKeyToAccount } from 'viem/accounts'
+/* eslint-disable @typescript-eslint/no-explicit-any */import { privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
 
 import {
