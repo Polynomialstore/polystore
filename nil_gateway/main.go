@@ -1354,10 +1354,11 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
 		return
 	}
-	manifestRoot, err := parseManifestRoot(rawManifestRoot)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
-		return
+	manifestRootFromPath := false
+	var manifestRoot ManifestRoot
+	if parsed, err := parseManifestRoot(rawManifestRoot); err == nil {
+		manifestRootFromPath = true
+		manifestRoot = parsed
 	}
 
 	q := r.URL.Query()
@@ -1456,7 +1457,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
 		return
 	}
-	if dealRoot.Canonical != manifestRoot.Canonical {
+	if manifestRootFromPath && dealRoot.Canonical != manifestRoot.Canonical {
 		writeJSONError(
 			w,
 			http.StatusConflict,
@@ -1465,6 +1466,8 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	rawManifestRoot = dealRoot.Canonical
+	manifestRoot = dealRoot
 
 	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {
@@ -1555,10 +1558,11 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
 		return
 	}
-	manifestRoot, err := parseManifestRoot(rawManifestRoot)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
-		return
+	manifestRootFromPath := false
+	var manifestRoot ManifestRoot
+	if parsed, err := parseManifestRoot(rawManifestRoot); err == nil {
+		manifestRootFromPath = true
+		manifestRoot = parsed
 	}
 
 	q := r.URL.Query()
@@ -1600,7 +1604,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			w,
 			http.StatusBadRequest,
 			"invalid file_path",
-			fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%s&owner=%s", manifestRoot.Canonical, dealIDStr, owner),
+			"List files via GET /gateway/list-files/<manifest_root>?deal_id=<id>&owner=<owner>",
 		)
 		return
 	}
@@ -1680,7 +1684,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
 		return
 	}
-	if dealRoot.Canonical != manifestRoot.Canonical {
+	if manifestRootFromPath && dealRoot.Canonical != manifestRoot.Canonical {
 		writeJSONError(
 			w,
 			http.StatusConflict,
@@ -1689,6 +1693,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	rawManifestRoot = dealRoot.Canonical
+	manifestRoot = dealRoot
 
 	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {

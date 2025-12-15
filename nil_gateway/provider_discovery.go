@@ -32,6 +32,25 @@ var (
 	errNoHTTPMultiaddr = errors.New("no supported http multiaddr")
 )
 
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+func isRetryableLCDStatus(code int) bool {
+	return code == http.StatusTooManyRequests ||
+		code == http.StatusBadGateway ||
+		code == http.StatusServiceUnavailable ||
+		code == http.StatusGatewayTimeout ||
+		code == http.StatusInternalServerError
+}
+
 func httpBaseURLFromMultiaddr(endpoint string) (string, error) {
 	ep := strings.TrimSpace(endpoint)
 	if ep == "" {
@@ -92,73 +111,97 @@ func httpBaseURLFromMultiaddr(endpoint string) (string, error) {
 
 func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	resp, err := lcdHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("LCD request failed: %w", err)
-	}
-	defer resp.Body.Close()
+	var lastBody string
+	for attempt := 1; attempt <= 10; attempt++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := lcdHTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("LCD request failed: %w", err)
+		}
 
-	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		lastBody = strings.TrimSpace(string(bodyBytes))
+
+		if resp.StatusCode == http.StatusOK {
+			var payload struct {
+				Deal struct {
+					Providers []string `json:"providers"`
+				} `json:"deal"`
+			}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				return nil, fmt.Errorf("failed to decode LCD response: %w", err)
+			}
+
+			out := make([]string, 0, len(payload.Deal.Providers))
+			for _, p := range payload.Deal.Providers {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				out = append(out, p)
+			}
+			return out, nil
+		}
+
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, ErrDealNotFound
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var payload struct {
-		Deal struct {
-			Providers []string `json:"providers"`
-		} `json:"deal"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("failed to decode LCD response: %w", err)
-	}
-
-	out := make([]string, 0, len(payload.Deal.Providers))
-	for _, p := range payload.Deal.Providers {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
+		if !isRetryableLCDStatus(resp.StatusCode) || attempt == 10 {
+			return nil, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, lastBody)
 		}
-		out = append(out, p)
+
+		if err := sleepWithContext(ctx, time.Duration(attempt)*150*time.Millisecond); err != nil {
+			return nil, err
+		}
 	}
-	return out, nil
+	return nil, fmt.Errorf("LCD returned 500: %s", lastBody)
 }
 
 func fetchProviderEndpointsFromLCD(ctx context.Context, providerAddr string) ([]string, error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/providers/%s", lcdBase, providerAddr)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	resp, err := lcdHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("LCD request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var payload struct {
-		Provider struct {
-			Endpoints []string `json:"endpoints"`
-		} `json:"provider"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("failed to decode LCD response: %w", err)
-	}
-
-	out := make([]string, 0, len(payload.Provider.Endpoints))
-	for _, ep := range payload.Provider.Endpoints {
-		ep = strings.TrimSpace(ep)
-		if ep == "" {
-			continue
+	var lastBody string
+	for attempt := 1; attempt <= 10; attempt++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := lcdHTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("LCD request failed: %w", err)
 		}
-		out = append(out, ep)
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		lastBody = strings.TrimSpace(string(bodyBytes))
+
+		if resp.StatusCode == http.StatusOK {
+			var payload struct {
+				Provider struct {
+					Endpoints []string `json:"endpoints"`
+				} `json:"provider"`
+			}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				return nil, fmt.Errorf("failed to decode LCD response: %w", err)
+			}
+
+			out := make([]string, 0, len(payload.Provider.Endpoints))
+			for _, ep := range payload.Provider.Endpoints {
+				ep = strings.TrimSpace(ep)
+				if ep == "" {
+					continue
+				}
+				out = append(out, ep)
+			}
+			return out, nil
+		}
+
+		if !isRetryableLCDStatus(resp.StatusCode) || attempt == 10 {
+			return nil, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, lastBody)
+		}
+
+		if err := sleepWithContext(ctx, time.Duration(attempt)*150*time.Millisecond); err != nil {
+			return nil, err
+		}
 	}
-	return out, nil
+	return nil, fmt.Errorf("LCD returned 500: %s", lastBody)
 }
 
 func resolveDealAssignedProvider(ctx context.Context, dealID uint64) (string, error) {
@@ -169,9 +212,19 @@ func resolveDealAssignedProvider(ctx context.Context, dealID uint64) (string, er
 		}
 	}
 
-	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
-	if err != nil {
-		return "", err
+	var providers []string
+	var err error
+	for attempt := 1; attempt <= 60; attempt++ {
+		providers, err = fetchDealProvidersFromLCD(ctx, dealID)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, ErrDealNotFound) || attempt == 60 {
+			return "", err
+		}
+		if err := sleepWithContext(ctx, 250*time.Millisecond); err != nil {
+			return "", err
+		}
 	}
 	if len(providers) == 0 {
 		return "", fmt.Errorf("deal %d has no assigned providers", dealID)
