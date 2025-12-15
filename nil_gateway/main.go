@@ -43,6 +43,7 @@ var (
 	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../nilchain/trusted_setup.txt")
 	nilchaindBin    = envDefault("NILCHAIND_BIN", "nilchaind")
 	chainID         = envDefault("NIL_CHAIN_ID", "test-1")
+	nodeAddr        = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
 	homeDir         = envDefault("NIL_HOME", "../_artifacts/nilchain_data")
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
@@ -210,11 +211,28 @@ func deriveNilchaindDir() string {
 }
 
 func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
+	args = maybeWithNodeArg(args)
 	cmd := execCommandContext(ctx, nilchaindBin, args...)
 	if dir := deriveNilchaindDir(); dir != "" {
 		cmd.Dir = dir
 	}
 	return cmd
+}
+
+func maybeWithNodeArg(args []string) []string {
+	if strings.TrimSpace(nodeAddr) == "" || len(args) == 0 {
+		return args
+	}
+	// Only attach for tx/query subcommands.
+	if args[0] != "tx" && args[0] != "query" {
+		return args
+	}
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--node" {
+			return args
+		}
+	}
+	return append(args, "--node", nodeAddr)
 }
 
 func execNilCli(ctx context.Context, args ...string) *exec.Cmd {
