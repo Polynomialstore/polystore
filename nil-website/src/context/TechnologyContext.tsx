@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+/* eslint-disable react-refresh/only-export-components */import { createContext, useContext, useState, ReactNode } from "react";
 
 interface TechnologyContextType {
   highlightedPath: string | null;

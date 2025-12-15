@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 type WorkerStatus = 'idle' | 'initializing' | 'ready' | 'processing' | 'error';
 
@@ -29,7 +29,7 @@ export function useFileSharder() {
         return () => worker.terminate();
     }, []);
 
-    const initWasm = async (trustedSetupUrl: string) => {
+    const initWasm = useCallback(async (trustedSetupUrl: string) => {
         if (status !== 'idle') return;
         setStatus('initializing');
         
@@ -44,9 +44,9 @@ export function useFileSharder() {
             setStatus('error');
             setError(e instanceof Error ? e.message : String(e));
         }
-    };
+    }, [status]);
 
-    const expandMdu = (data: Uint8Array): Promise<unknown> => {
+    const expandMdu = useCallback((data: Uint8Array): Promise<unknown> => {
         return new Promise((resolve, reject) => {
             if (status !== 'ready' || !workerRef.current) {
                 reject(new Error('Worker not ready'));
@@ -71,7 +71,7 @@ export function useFileSharder() {
             workerRef.current.addEventListener('message', handler);
             workerRef.current.postMessage({ type: 'EXPAND', payload: data });
         });
-    };
+    }, [status]);
 
     return { status, error, initWasm, expandMdu };
 }

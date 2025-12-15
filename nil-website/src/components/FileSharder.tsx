@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
-import { injectedConnector } from '../context/Web3Provider';
+import { injectedConnector } from '../lib/web3Config';
 import { useFileSharder } from '../hooks/useFileSharder';
 import { FileJson, Cpu } from 'lucide-react';
 
@@ -22,9 +22,9 @@ export function FileSharder() {
 
   useEffect(() => {
       initWasm('/trusted_setup.txt');
-  }, []);
+  }, [initWasm]);
 
-  const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
+  const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes < 0) return '—';
@@ -40,17 +40,7 @@ export function FileSharder() {
     return `${(ms / 1000).toFixed(2)}s`;
   };
 
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setIsDragging(true);
-    } else if (e.type === 'dragleave') {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const processFile = async (file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!isConnected) {
         alert("Connect wallet first");
         return;
@@ -110,9 +100,9 @@ export function FileSharder() {
             addLog(`> MDU #${i} expanded. ${commitments.length} commitments generated.`);
             addLog(`> Root: ${commitments[0].slice(0,10)}...`);
             
-        } catch (e: any) {
+        } catch (e) {
             console.error(e);
-            addLog(`Error expanding MDU #${i}: ${e.message}`);
+            addLog(`Error expanding MDU #${i}: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
     
@@ -126,7 +116,7 @@ export function FileSharder() {
         file.size,
       )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
     );
-  };
+  }, [isConnected, wasmStatus, wasmError, expandMdu, addLog]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -135,7 +125,7 @@ export function FileSharder() {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       processFile(e.dataTransfer.files[0]);
     }
-  }, [wasmStatus, isConnected]); // Deps needed for closure to see current state?
+  }, [processFile]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

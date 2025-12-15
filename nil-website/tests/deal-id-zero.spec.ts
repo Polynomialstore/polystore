@@ -134,6 +134,20 @@ test('repro bug: download from commit content widget', async ({
     });
   });
 
+  // Mock upload
+  await page.route('**/gateway/upload*', async route => {
+      await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+              cid: '0x' + 'a'.repeat(96),
+              size_bytes: 17,
+              file_size_bytes: 17,
+              filename: 'repro.txt'
+          })
+      });
+  });
+
   // Mock commit success
   await page.route('**/gateway/update-deal-content-evm', async route => {
       await route.fulfill({
