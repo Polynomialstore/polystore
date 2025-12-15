@@ -40,6 +40,16 @@ export function FileSharder() {
     return `${(ms / 1000).toFixed(2)}s`;
   };
 
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIsDragging(true);
+    } else if (e.type === 'dragleave') {
+      setIsDragging(false);
+    }
+  }, []);
+
   const processFile = useCallback(async (file: File) => {
     if (!isConnected) {
         alert("Connect wallet first");
