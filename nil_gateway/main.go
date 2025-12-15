@@ -57,6 +57,10 @@ var (
 	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 60))) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
+	// Devnet UX: allow unsigned range fetches (MetaMask-only txs) by default.
+	// When enabled, clients must provide EIP-712 request headers and the gateway
+	// enforces them before serving byte ranges.
+	requireRetrievalReqSig = envDefault("NIL_REQUIRE_RETRIEVAL_REQ_SIG", "0") == "1"
 
 	execCommandContext = exec.CommandContext
 )
@@ -1418,25 +1422,47 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
 		return
 	}
-	reqNonce, err := strconv.ParseUint(reqNonceStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
-		return
-	}
-	reqExpiresAt, err := strconv.ParseUint(reqExpiresStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
-		return
-	}
-	reqRangeStart, err := strconv.ParseUint(reqRangeStartStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
-		return
-	}
-	reqRangeLen, err := strconv.ParseUint(reqRangeLenStr, 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
-		return
+	var reqNonce uint64
+	var reqExpiresAt uint64
+	var reqRangeStart uint64
+	var reqRangeLen uint64
+	if requireRetrievalReqSig {
+		if strings.TrimSpace(reqSig) == "" {
+			writeJSONError(w, http.StatusBadRequest, "req_sig is required", "")
+			return
+		}
+		reqNonce, err = strconv.ParseUint(reqNonceStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
+			return
+		}
+		reqExpiresAt, err = strconv.ParseUint(reqExpiresStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
+			return
+		}
+		reqRangeStart, err = strconv.ParseUint(reqRangeStartStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
+			return
+		}
+		reqRangeLen, err = strconv.ParseUint(reqRangeLenStr, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
+			return
+		}
+	} else {
+		// Best-effort parse optional range hints for logging/session metadata only.
+		if strings.TrimSpace(reqRangeStartStr) != "" {
+			if v, perr := strconv.ParseUint(reqRangeStartStr, 10, 64); perr == nil {
+				reqRangeStart = v
+			}
+		}
+		if strings.TrimSpace(reqRangeLenStr) != "" {
+			if v, perr := strconv.ParseUint(reqRangeLenStr, 10, 64); perr == nil {
+				reqRangeLen = v
+			}
+		}
 	}
 
 	// Guard: ensure the caller's owner matches the on-chain Deal owner.
@@ -1455,10 +1481,12 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Guard: ensure the caller has an EIP-712 signature authorizing this session.
-	if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
-		writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
-		return
+	// Guard: ensure the caller has an EIP-712 signature authorizing this session (if enabled).
+	if requireRetrievalReqSig {
+		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
+			return
+		}
 	}
 
 	if strings.TrimSpace(dealCID) == "" {
@@ -1637,7 +1665,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	var reqExpiresAt uint64
 	var reqRangeStart uint64
 	var reqRangeLen uint64
-	if !isDownloadSession {
+	if !isDownloadSession && requireRetrievalReqSig {
 		reqNonce, err = strconv.ParseUint(reqNonceStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
@@ -1682,7 +1710,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
 	// For download sessions, this check is done once in GatewayOpenSession.
-	if !isDownloadSession {
+	if !isDownloadSession && requireRetrievalReqSig {
 		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
 			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
 			return
@@ -1801,14 +1829,43 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		if rangeHeader != "" && reqRangeLen == 0 {
-			writeJSONError(w, http.StatusBadRequest, "range must be signed", "include range_start/range_len in the signed retrieval request")
-			return
-		}
-		if reqRangeLen > 0 && rangeHeader != "" {
-			if rangeHeaderStart != reqRangeStart || rangeHeaderLen != reqRangeLen {
-				writeJSONError(w, http.StatusBadRequest, "range mismatch", "Range header must match signed request")
+		if requireRetrievalReqSig {
+			if rangeHeader != "" && reqRangeLen == 0 {
+				writeJSONError(w, http.StatusBadRequest, "range must be signed", "include range_start/range_len in the signed retrieval request")
 				return
+			}
+			if reqRangeLen > 0 && rangeHeader != "" {
+				if rangeHeaderStart != reqRangeStart || rangeHeaderLen != reqRangeLen {
+					writeJSONError(w, http.StatusBadRequest, "range mismatch", "Range header must match signed request")
+					return
+				}
+			}
+		} else {
+			// MetaMask-only tx mode: require a standard HTTP Range header (no request signatures).
+			if rangeHeader == "" {
+				// Allow non-range fetches only if the file fits within a single blob; otherwise
+				// require chunking so we can provide a single per-blob proof header.
+				if entry, eerr := loadSlabIndex(dealDir); eerr == nil {
+					if info, ok := entry.files[filePath]; ok {
+						if info.Length > uint64(types.BLOB_SIZE) {
+							writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
+							return
+						}
+					}
+				}
+				reqRangeStart = 0
+				reqRangeLen = 0
+			} else {
+				if rangeHeaderLen == 0 {
+					writeJSONError(w, http.StatusBadRequest, "invalid Range header", "range length must be non-zero")
+					return
+				}
+				if rangeHeaderLen > uint64(types.BLOB_SIZE) {
+					writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("range must be <= %d", types.BLOB_SIZE))
+					return
+				}
+				reqRangeStart = rangeHeaderStart
+				reqRangeLen = rangeHeaderLen
 			}
 		}
 	}
@@ -1832,6 +1889,15 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	if servedLen == 0 {
 		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
 		return
+	}
+	implicitRange := !requireRetrievalReqSig && !isDownloadSession && rangeHeader == ""
+	// If this was a non-range fetch in unsigned mode, only allow it when the
+	// full response fits within a single blob; otherwise require chunking.
+	if implicitRange {
+		if servedLen > uint64(types.BLOB_SIZE) {
+			writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
+			return
+		}
 	}
 
 	// Resolve Provider Address for the Header (for Client-Side Signing)
@@ -1857,7 +1923,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		blobIndex = 0
 	}
 	// Range requests must stay within a single physical MDU and blob for now.
-	if reqRangeLen > 0 {
+	if reqRangeLen > 0 || implicitRange {
 		endAbs := absOffset + servedLen - 1
 		if absOffset/RawMduCapacity != endAbs/RawMduCapacity {
 			writeJSONError(w, http.StatusBadRequest, "range crosses MDU boundary", "split into multiple requests")
@@ -1906,32 +1972,34 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Anti-replay: only consume the request nonce once we've fully validated the deal state
-		// and successfully generated the proof/segment.
-		if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
-			writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
-			return
-		}
+		if requireRetrievalReqSig {
+			// Anti-replay: only consume the request nonce once we've fully validated the deal state
+			// and successfully generated the proof/segment.
+			if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+				writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
+				return
+			}
 
-		sessionID, serr := storeFetchSession(fetchSession{
-			DealID:      dealID,
-			EpochID:     1,
-			Owner:       owner,
-			Provider:    providerAddr,
-			FilePath:    filePath,
-			RangeStart:  reqRangeStart,
-			RangeLen:    servedLen,
-			BytesServed: servedLen,
-			ProofHash:   proofHash,
-			ReqNonce:    reqNonce,
-			ReqExpires:  reqExpiresAt,
-			ExpiresAt:   time.Now().Add(10 * time.Minute),
-		})
-		if serr != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
-			return
+			sessionID, serr := storeFetchSession(fetchSession{
+				DealID:      dealID,
+				EpochID:     1,
+				Owner:       owner,
+				Provider:    providerAddr,
+				FilePath:    filePath,
+				RangeStart:  reqRangeStart,
+				RangeLen:    servedLen,
+				BytesServed: servedLen,
+				ProofHash:   proofHash,
+				ReqNonce:    reqNonce,
+				ReqExpires:  reqExpiresAt,
+				ExpiresAt:   time.Now().Add(10 * time.Minute),
+			})
+			if serr != nil {
+				writeJSONError(w, http.StatusInternalServerError, "failed to create fetch session", serr.Error())
+				return
+			}
+			fetchSessionID = sessionID
 		}
-		fetchSessionID = sessionID
 	}
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
@@ -1947,7 +2015,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	if isDownloadSession {
 		w.Header().Set("X-Nil-Download-Session", downloadSessionID)
 	} else {
-		w.Header().Set("X-Nil-Fetch-Session", fetchSessionID)
+		if fetchSessionID != "" {
+			w.Header().Set("X-Nil-Fetch-Session", fetchSessionID)
+		}
 	}
 	if proofHash != "" {
 		w.Header().Set("X-Nil-Proof-Hash", proofHash)
