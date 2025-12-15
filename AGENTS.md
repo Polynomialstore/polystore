@@ -507,7 +507,7 @@ This is the **canonical execution checklist** for the next sprint, focused on re
     - **Change:** Extend retrieval receipts (and/or session leaf commitment) to bind `(range_start, range_len)` and enforce `bytes_served == range_len`.
     - **Pass gate:** Attempts to submit a receipt with mismatched `bytes_served` and `range_len` must fail.
 
-- [ ] **Goal 5: UI controls and progress.**
+- [x] **Goal 5: UI controls and progress.**
     - **Change:** Add “Download range (start/len)”, chunk progress, “receipts submitted N/M”, and prominently show `bytes_served_total` + escrow remaining.
     - **Pass gate:** Deal Explorer clearly shows download progress and the post-download heat/escrow changes.
 

@@ -28,6 +28,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [downloadRangeStart, setDownloadRangeStart] = useState<number>(0)
+  const [downloadRangeLen, setDownloadRangeLen] = useState<number>(0)
   const [manifestInfo, setManifestInfo] = useState<ManifestInfoData | null>(null)
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
@@ -39,7 +41,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -240,7 +242,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                   <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
                   <div className="grid grid-cols-2 gap-2">
                       <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
-                          <span className="text-muted-foreground block text-[10px]">Escrow</span>
+                          <span className="text-muted-foreground block text-[10px]">Escrow Remaining</span>
                           <span className="text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</span>
                       </div>
                       <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
@@ -281,6 +283,75 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                           )}
                         </div>
                       )}
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                          <div className="text-[10px] text-muted-foreground uppercase">Bytes Served</div>
+                          <div className="font-mono text-foreground">
+                            {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
+                          </div>
+                        </div>
+                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                          <div className="text-[10px] text-muted-foreground uppercase">Escrow Remaining</div>
+                          <div className="font-mono text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</div>
+                        </div>
+                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                          <div className="text-[10px] text-muted-foreground uppercase">Chunks</div>
+                          <div className="font-mono text-foreground">
+                            {progress.phase === 'idle' ? '—' : `${progress.chunksFetched}/${progress.chunkCount || 0}`}
+                          </div>
+                        </div>
+                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                          <div className="text-[10px] text-muted-foreground uppercase">Receipt</div>
+                          <div className="font-mono text-foreground">
+                            {progress.phase === 'idle'
+                              ? '—'
+                              : `${progress.receiptsSubmitted}/${progress.receiptsTotal || 0}`}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-secondary/50 border border-border rounded p-3 text-[11px] space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-muted-foreground uppercase font-semibold">Download Range</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            Len=0 downloads to EOF
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground uppercase">Start</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={downloadRangeStart}
+                              onChange={(e) => setDownloadRangeStart(Math.max(0, Number(e.target.value || 0) || 0))}
+                              className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground uppercase">Len</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={downloadRangeLen}
+                              onChange={(e) => setDownloadRangeLen(Math.max(0, Number(e.target.value || 0) || 0))}
+                              className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                            />
+                          </label>
+                        </div>
+                        {progress.phase !== 'idle' ? (
+                          <div className="text-[10px] text-muted-foreground">
+                            {progress.filePath ? `${progress.filePath} • ` : ''}
+                            {progress.phase}
+                            {progress.bytesTotal
+                              ? ` • ${(progress.bytesFetched / 1024).toFixed(1)} KiB / ${(progress.bytesTotal / 1024).toFixed(1)} KiB`
+                              : ''}
+                            {progress.message ? ` • ${progress.message}` : ''}
+                          </div>
+                        ) : null}
+                      </div>
+
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
@@ -303,13 +374,15 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                 </div>
                                 <button
                                   onClick={async () => {
+                                    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                     const url = await fetchFile({
                                       dealId: String(deal.id),
                                       manifestRoot: deal.cid,
                                       owner: nilAddress,
                                       filePath: f.path,
-                                      rangeStart: 0,
-                                      rangeLen: f.size_bytes,
+                                      rangeStart: safeStart,
+                                      rangeLen: safeLen,
                                       fileStartOffset: f.start_offset,
                                       fileSizeBytes: f.size_bytes,
                                       mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,

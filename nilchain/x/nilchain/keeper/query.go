@@ -56,9 +56,6 @@ func (q queryServer) GetReceiptNonce(goCtx context.Context, req *types.QueryGetR
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
-	if req.DealId == 0 {
-		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
-	}
 	filePath := strings.TrimSpace(req.FilePath)
 	if filePath == "" {
 		return nil, status.Error(codes.InvalidArgument, "file_path is required")

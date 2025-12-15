@@ -27,12 +27,44 @@ export interface FetchInput {
   blobSizeBytes?: number
 }
 
+export type FetchPhase =
+  | 'idle'
+  | 'sign_request'
+  | 'opening_session'
+  | 'fetching'
+  | 'sign_receipt'
+  | 'submitting_receipt'
+  | 'done'
+  | 'error'
+
+export interface FetchProgress {
+  phase: FetchPhase
+  filePath: string
+  chunksFetched: number
+  chunkCount: number
+  bytesFetched: number
+  bytesTotal: number
+  receiptsSubmitted: number
+  receiptsTotal: number
+  message?: string
+}
+
 export function useFetch() {
   const { address } = useAccount()
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
   const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<FetchProgress>({
+    phase: 'idle',
+    filePath: '',
+    chunksFetched: 0,
+    chunkCount: 0,
+    bytesFetched: 0,
+    bytesTotal: 0,
+    receiptsSubmitted: 0,
+    receiptsTotal: 0,
+  })
 
   function decodeHttpError(bodyText: string): string {
     const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
@@ -59,6 +91,16 @@ export function useFetch() {
     setDownloadUrl(null)
     setReceiptStatus('idle')
     setReceiptError(null)
+    setProgress({
+      phase: 'idle',
+      filePath: String(input.filePath || ''),
+      chunksFetched: 0,
+      chunkCount: 0,
+      bytesFetched: 0,
+      bytesTotal: 0,
+      receiptsSubmitted: 0,
+      receiptsTotal: 0,
+    })
     try {
       const dealId = normalizeDealId(input.dealId)
       const owner = String(input.owner ?? '').trim()
@@ -136,6 +178,15 @@ export function useFetch() {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
+      setProgress((p) => ({
+        ...p,
+        phase: 'sign_request',
+        filePath: String(input.filePath || ''),
+        chunkCount: chunks.length,
+        bytesTotal: effectiveRangeLen,
+        receiptsTotal: 1,
+      }))
+
       const fetchOneRange = async (rangeStart: number, rangeLen: number): Promise<Uint8Array<ArrayBuffer>> => {
         // 0) Sign Retrieval Request (authorizes the fetch; does NOT count as receipt)
         const expiresAt = Math.floor(Date.now() / 1000) + 120
@@ -195,6 +246,12 @@ export function useFetch() {
         const hFetchSession = response.headers.get('X-Nil-Fetch-Session')
 
         const buf = new Uint8Array(await response.arrayBuffer())
+        setProgress((p) => ({
+          ...p,
+          phase: 'fetching',
+          chunksFetched: Math.min(p.chunkCount || 1, 1),
+          bytesFetched: Math.min(p.bytesTotal || buf.byteLength, buf.byteLength),
+        }))
 
         if (
           !hDealId ||
@@ -229,6 +286,8 @@ export function useFetch() {
           setReceiptError('Gateway did not provide proof_details; refusing to submit unsigned/unenforced receipt.')
           return buf
         }
+
+        setProgress((p) => ({ ...p, phase: 'sign_receipt' }))
 
         const bytesServed = Number(hBytes)
         const rStart = Number(hRangeStart)
@@ -278,6 +337,7 @@ export function useFetch() {
           },
         }
 
+        setProgress((p) => ({ ...p, phase: 'submitting_receipt' }))
         const submitRes = await fetch(`${appConfig.gatewayBase}/gateway/receipt`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -287,15 +347,23 @@ export function useFetch() {
           const text = await submitRes.text()
           setReceiptStatus('failed')
           setReceiptError(text || `receipt submission failed (${submitRes.status})`)
+          setProgress((p) => ({
+            ...p,
+            phase: 'error',
+            receiptsSubmitted: 0,
+            message: text || `receipt submission failed (${submitRes.status})`,
+          }))
         } else {
           setReceiptStatus('submitted')
           setReceiptError(null)
+          setProgress((p) => ({ ...p, phase: 'done', receiptsSubmitted: 1 }))
         }
 
         return buf
       }
 
       if (chunks.length <= 1) {
+        setProgress((p) => ({ ...p, phase: 'fetching' }))
         const blobBytes = await fetchOneRange(chunks[0].rangeStart, chunks[0].rangeLen)
         const blob = new Blob([blobBytes], { type: 'application/octet-stream' })
         const url = window.URL.createObjectURL(blob)
@@ -304,6 +372,7 @@ export function useFetch() {
       }
 
       // Bundled receipt flow: sign once, fetch many chunks, then sign one DownloadSessionReceipt.
+      setProgress((p) => ({ ...p, phase: 'opening_session' }))
       const sessionExpiresAt = Math.floor(Date.now() / 1000) + 120
       const sessionReqNonce = randUint32()
       const sessionReqIntent: RetrievalRequestIntent = {
@@ -355,7 +424,10 @@ export function useFetch() {
       const leaves: Uint8Array[] = []
       let totalBytes = 0
 
-      for (const c of chunks) {
+      setProgress((p) => ({ ...p, phase: 'fetching' }))
+
+      for (let idx = 0; idx < chunks.length; idx++) {
+        const c = chunks[idx]
         const end = c.rangeStart + c.rangeLen - 1
         const res = await fetch(fetchUrl, {
           headers: {
@@ -388,10 +460,18 @@ export function useFetch() {
         }
         totalBytes += servedLen
         leaves.push(hashSessionLeafBytes(hChunkStart, servedLen, hProofHash))
+        setProgress((p) => ({
+          ...p,
+          phase: 'fetching',
+          chunksFetched: Math.min(p.chunkCount || chunks.length, idx + 1),
+          bytesFetched: Math.min(p.bytesTotal || totalBytes, totalBytes),
+        }))
       }
 
       const rootBytes = keccakMerkleRootBytes(leaves)
       const rootHex = bytesToHex(rootBytes)
+
+      setProgress((p) => ({ ...p, phase: 'sign_receipt' }))
 
       const sessionReceiptIntent: DownloadSessionReceiptIntent = {
         deal_id: Number(dealId),
@@ -429,6 +509,7 @@ export function useFetch() {
         },
       }
 
+      setProgress((p) => ({ ...p, phase: 'submitting_receipt' }))
       const submitRes = await fetch(`${appConfig.gatewayBase}/gateway/session-receipt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -438,9 +519,16 @@ export function useFetch() {
         const text = await submitRes.text().catch(() => '')
         setReceiptStatus('failed')
         setReceiptError(decodeHttpError(text) || `session receipt submission failed (${submitRes.status})`)
+        setProgress((p) => ({
+          ...p,
+          phase: 'error',
+          receiptsSubmitted: 0,
+          message: decodeHttpError(text) || `session receipt submission failed (${submitRes.status})`,
+        }))
       } else {
         setReceiptStatus('submitted')
         setReceiptError(null)
+        setProgress((p) => ({ ...p, phase: 'done', receiptsSubmitted: 1 }))
       }
 
       const full = new Blob(parts, { type: 'application/octet-stream' })
@@ -451,13 +539,14 @@ export function useFetch() {
       const msg = e instanceof Error ? e.message : String(e)
       setReceiptStatus('failed')
       setReceiptError(msg)
+      setProgress((p) => ({ ...p, phase: 'error', message: msg }))
       return null
     } finally {
       setLoading(false)
     }
   }
 
-  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError }
+  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress }
 }
 
 function randUint32(): number {
