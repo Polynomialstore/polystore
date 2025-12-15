@@ -6,7 +6,7 @@ export const S3AdapterDocs = () => {
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4 text-foreground">S3 Adapter & Web2 Gateway</h1>
         <p className="text-xl text-muted-foreground">
-          NilStore provides a native Go-based adapter (`nil_s3`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
+          NilStore provides a native Go-based adapter (`nil_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
         </p>
       </div>
 
@@ -73,14 +73,14 @@ export const S3AdapterDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Running the Adapter</h2>
           <div className="bg-card p-6 rounded-xl font-mono text-sm text-muted-foreground border border-border">
             <p className="text-muted-foreground"># 1. Build the S3 Service</p>
-            <p>$ cd nil_s3</p>
+            <p>$ cd nil_gateway</p>
             <p>$ go build</p>
             <br/>
             <p className="text-muted-foreground"># 2. Ensure dependencies (CLI & Trusted Setup)</p>
             <p>$ cd ../nil_cli && cargo build</p>
             <br/>
             <p className="text-muted-foreground"># 3. Run</p>
-            <p>$ ./nil_s3</p>
+            <p>$ ./nil_gateway</p>
           </div>
         </section>
       </div>

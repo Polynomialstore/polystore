@@ -9,7 +9,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
   - `UpdateDealContentFromEvm` works with EIP‑712 signatures; gateway retries txs on sequence mismatch.
   - Local EVM bridge deploy remains stable and writes `_artifacts/bridge_address.txt` for the web UI.
 
-- **Gateway (`nil_s3`) — Canonical NilFS Upload (Option D / A1 DONE):**
+- **Gateway (`nil_gateway`) — Canonical NilFS Upload (Option D / A1 DONE):**
   - `/gateway/upload` now defaults to **canonical ingest** (`IngestNewDeal`): builds a full slab (MDU #0 + Witness MDUs + User MDUs) and returns a real `manifest_root`.
   - **Option D / A2 DONE:** If `deal_id` is supplied, `/gateway/upload` appends into the existing slab and returns a new `manifest_root` (multi‑file deals supported).
   - Fake modes are still available only behind explicit env flags:
@@ -39,8 +39,8 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 ## 4. Key Files
 
 - Roadmap/context: `AGENTS.md` §11.6.
-- Canonical ingest: `nil_s3/ingest.go`, `nil_s3/main.go` (`GatewayUpload`, `shardFile`).
-- NilFS structs/builders: `nil_s3/pkg/layout/*`, `nil_s3/pkg/builder/*`.
+- Canonical ingest: `nil_gateway/ingest.go`, `nil_gateway/main.go` (`GatewayUpload`, `shardFile`).
+- NilFS structs/builders: `nil_gateway/pkg/layout/*`, `nil_gateway/pkg/builder/*`.
 - WASM path: `nil_core/src/wasm/*`, `nil-website/src/workers/mduWorker.ts`.
 
 ## 5. How to Run

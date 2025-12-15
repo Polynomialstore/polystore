@@ -8,7 +8,7 @@ You are working in `nilcoin2`. Prompt 1 created/updated an “Immediate Goals”
    - Identify any risky parts (e.g., fetch path compatibility, EIP-712 breaking changes, browser wallet automation).
 2. Update specs/docs so they match the intended end state of the TODO plan:
    - Protocol/architecture: `spec.md`, `notes/triple-proof.md` (and any other referenced notes).
-   - Gateway/API: `nil_s3/nil-s3-spec.md` (or other gateway docs).
+   - Gateway/API: `nil_gateway/nil-gateway-spec.md` (or other gateway docs).
    - Web: `nil-website/website-spec.md` and relevant pages/docs if the flow changes.
 3. Ensure the specs are consistent about:
    - “No tiers / thin provisioning” semantics.

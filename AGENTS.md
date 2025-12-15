@@ -91,7 +91,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 **Goal:** Real money, real data, "Training Wheels" on.
 
 *   **Build:**
-    *   **S3 Adapter:** [x] `nil_s3` Go service implemented (PUT/GET -> Shard -> Chain).
+    *   **S3 Adapter:** [x] `nil_gateway` Go service implemented (PUT/GET -> Shard -> Chain).
     *   **Governance:** [x] Emergency Council setup (`x/group`) & Mainnet Params configured.
     *   **Adversarial Simulation:** [x] End-to-End attack simulation & visualization.
     *   Production-grade Audits (Security).
@@ -264,7 +264,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 
 Future agents utilizing this documentation must be aware of the following architectural divergence detected during the review of `@spec.md` and `@nil-website/**`:
 
-- **Triple Proof Model:** The frontend **does not** currently implement the Triple Proof verification logic described in `@notes/triple-proof.md`. It relies on the Gateway (`nil_gateway` / `nil_s3`) to perform these checks.
+- **Triple Proof Model:** The frontend **does not** currently implement the Triple Proof verification logic described in `@notes/triple-proof.md`. It relies on the Gateway (`nil_gateway` / `nil_gateway`) to perform these checks.
 - **MDU Packing:** The frontend **does not** pack files into MDUs (as defined in `@spec.md`). It streams raw bytes to the Gateway via `useUpload`.
 - **Simulation vs. Reality:** The `FileSharder.tsx` component is a visual simulation using SHA-256 and is **not** part of the actual transaction pipeline.
 - **Action Item:** Future work involves compiling the Rust `nil_core` crate to Wasm to enable true "Thick Client" functionality (Local KZG generation, MDU packing, and autonomous SP negotiation) directly in the browser.
@@ -290,17 +290,17 @@ We have finalized the design for **Mode 2 (StripeReplica)** and the **NilFS Layo
     *   **Decision:** Deferred to Mainnet.
     *   **Reference:** `notes/triple-proof-review.md`.
 
-## 10. `nil_s3` Refactor: Implementing Filesystem on Slab (TDD Plan)
+## 10. `nil_gateway` Refactor: Implementing Filesystem on Slab (TDD Plan)
 
-This section outlines the Test-Driven Development (TDD) plan for refactoring the `nil_s3` Gateway to implement the "Filesystem on Slab" architecture. Each step includes specific tests to pass before considering the task complete.
+This section outlines the Test-Driven Development (TDD) plan for refactoring the `nil_gateway` Gateway to implement the "Filesystem on Slab" architecture. Each step includes specific tests to pass before considering the task complete.
 
 ### 10.1 Task 1: Define Go Structs for MDU #0 Layout (V1 Schema)
 
 **Status:** [x] COMPLETED
 
-**Description:** Define Go structs (`FileTableHeader`, `FileRecordV1`) for the MDU #0 Super-Manifest layout in a new package `nil_s3/pkg/layout`. This includes bit-packing logic for `length_and_flags`.
+**Description:** Define Go structs (`FileTableHeader`, `FileRecordV1`) for the MDU #0 Super-Manifest layout in a new package `nil_gateway/pkg/layout`. This includes bit-packing logic for `length_and_flags`.
 
-**TDD Plan:** Create `nil_s3/pkg/layout/layout_test.go` first.
+**TDD Plan:** Create `nil_gateway/pkg/layout/layout_test.go` first.
 
 1.  **`TestBitPacking`**:
     *   **Input:** A `length` value (e.g., 100), and specific `flags` (e.g., `Encrypted | Gzip`).
@@ -324,7 +324,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Description:** Develop a `Mdu0Builder` module responsible for initializing, modifying, and serializing the 8MB MDU #0 buffer. This builder must account for the Root Table containing roots for MDU #0 itself, **Witness MDUs**, and User Data MDUs.
 
-**TDD Plan:** Create `nil_s3/pkg/builder/builder_test.go` first.
+**TDD Plan:** Create `nil_gateway/pkg/builder/builder_test.go` first.
 
 1.  **`TestInitEmptyMdu0`**:
     *   Create a new `Mdu0Builder` instance with `max_user_mdus` (e.g., 65536).
@@ -361,15 +361,15 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Status:** [x] COMPLETED
 
-**Description:** Modify the `GatewayUpload` handler (`nil_s3/main.go`) to utilize the `Mdu0Builder` and the new "Filesystem on Slab" logic, including the generation and storage of **Witness MDUs**.
+**Description:** Modify the `GatewayUpload` handler (`nil_gateway/main.go`) to utilize the `Mdu0Builder` and the new "Filesystem on Slab" logic, including the generation and storage of **Witness MDUs**.
 
-**TDD Plan:** Create `nil_s3/main_test.go` (or a dedicated integration test package for handlers).
+**TDD Plan:** Create `nil_gateway/main_test.go` (or a dedicated integration test package for handlers).
 
 1.  **`TestUploadNewDealLifecycle`**:
     *   Mock `nil_cli` `shardFile` call to return dummy MDUs and roots for user data.
     *   Call `GatewayUpload` for "file_A.txt" (no `deal_id` provided, `max_user_mdus` specified).
     *   **Assert:** The response includes a *newly generated* `deal_id` (simulated) and the initial `manifest_root` for MDU #0.
-    *   **Crucial:** `nil_s3` must now:
+    *   **Crucial:** `nil_gateway` must now:
         *   Generate the actual content for MDU #0 (empty FAT, roots for Witness and User Data MDUs set to zeros/dummies).
         *   Generate **Witness MDUs** (filled with zeros initially).
         *   Store these `(1 + W)` initial MDUs to disk.
@@ -378,7 +378,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
     *   Pre-populate deal state: an existing `deal_id` on chain, and on-disk representations for MDU #0, Witness MDUs, and existing User Data MDUs.
     *   Call `GatewayUpload` for "file_B.txt", providing the `deal_id`.
     *   **Assert:** The response contains the `manifest_root` reflecting "file_B.txt" appended to the File Table, and the new `allocated_length`.
-    *   **Verification:** `nil_s3` must:
+    *   **Verification:** `nil_gateway` must:
         *   Read the existing MDU #0 and Witness MDUs.
         *   Pack "file_B.txt" into new User Data MDUs.
         *   Generate/update corresponding roots in MDU #0.
@@ -401,7 +401,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Description:** Update the `GatewayFetch` handler to resolve files by their path within a Deal, rather than requiring a direct CID for a single file. This involves reading MDU #0 and retrieving Blob Commitments from Witness MDUs for proof generation.
 
-**TDD Plan:** Extend `nil_s3/main_test.go` (or a dedicated integration test package for handlers).
+**TDD Plan:** Extend `nil_gateway/main_test.go` (or a dedicated integration test package for handlers).
 
 1.  **`TestFetchByExistingPath`**:
     *   Setup deal state (MDU #0, Witness MDUs, User Data MDUs) with "video.mp4" via `Mdu0Builder`.
@@ -425,12 +425,12 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 **Status:** [x] COMPLETED
 
-**Description:** Modify `GatewayUpdateDealContentFromEvm` (and potentially `GatewayUpdateDealContent`) to properly handle the `allocated_length` field and ensure the on-chain representation matches the `nil_s3`'s understanding of the Deal's state.
+**Description:** Modify `GatewayUpdateDealContentFromEvm` (and potentially `GatewayUpdateDealContent`) to properly handle the `allocated_length` field and ensure the on-chain representation matches the `nil_gateway`'s understanding of the Deal's state.
 
 **TDD Plan:** Create an integration test script (`test_lifecycle.sh`) that orchestrates chain operations.
 
 1.  **`TestFullDealLifecycle_E2E`**:
-    *   **Phase 1: Setup:** Start local `nilchaind` and `nil_s3`.
+    *   **Phase 1: Setup:** Start local `nilchaind` and `nil_gateway`.
     *   **Phase 2: Create Deal:** Use `GatewayCreateDealFromEvm` to establish a **thin‑provisioned** container Deal (`manifest_root` empty, `size = 0`).
         *   **Assertion:** Verify on-chain `manifest_root` is empty and `total_mdus`/`allocated_length` is `0` until the first `GatewayUpdateDealContent*` commit (no implicit “metadata preallocation” during `CreateDeal*`).
         *   **Note:** `max_user_mdus` is a devnet sizing hint used by the gateway for local slab/Witness layout; it MUST NOT change `Deal.total_mdus` before a content commit.
@@ -458,16 +458,16 @@ This section tracks the currently active TODOs for the AI agent working in this 
 This is the **canonical execution checklist** for the "NilGateway Refactor" sprint. The goal is to separate the "User Daemon" (Gateway) from the "Storage Provider" (SP) logic, enabling true client-side signing of retrieval receipts.
 
 - [x] **Goal 1: Define Architecture & Specs (Phase 1).**
-    - **Steps:** Create `nil_s3/gateway-provider-split.md`; update `AGENTS.md`.
+    - **Steps:** Create `nil_gateway/gateway-provider-split.md`; update `AGENTS.md`.
     - **Deliverable:** Clear separation of roles (`nil_gateway` vs `nil_provider`) and the Interactive Retrieval Protocol flow.
 
 - [x] **Goal 2: Implement Storage Provider Receipt Logic (`nil_provider`).**
     - **Steps:**
-        1.  Add `POST /sp/receipt` endpoint to `nil_s3` (acting as SP).
+        1.  Add `POST /sp/receipt` endpoint to `nil_gateway` (acting as SP).
         2.  Implement validation logic: Verify `user_signature` matches on-chain Deal Owner.
         3.  Implement submission logic: Batch or direct submit `MsgProveLiveness` using Provider Key.
     - **Pass gate:** `curl POST /sp/receipt` with a valid signed payload results in a successful on-chain transaction.
-    - **Test gate:** Unit tests in `nil_s3` + Manual curl test.
+    - **Test gate:** Unit tests in `nil_gateway` + Manual curl test.
 
 - [x] **Goal 3: Refactor Gateway Fetch for Interactive Flow (`nil_gateway`).**
     - **Steps:**
@@ -543,7 +543,7 @@ This sprint turns the current “single-machine” gateway/provider implementati
 - [ ] **Gateway:** Implement provider selection using `Deal.providers[]` and provider endpoints from chain; pick an HTTP Multiaddr and convert to URL.
 - [ ] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-Nil-*`).
 - **Pass gate:** UI fetch/download works when gateway has no deal bytes on disk.
-- **Test gate:** `cd nil_s3 && go test ./...`
+- **Test gate:** `cd nil_gateway && go test ./...`
 
 #### Goal 3: Provider is the serving/proving party (source of bytes + proof headers)
 - [ ] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-Nil-Proof-*` headers and session IDs.
@@ -566,7 +566,7 @@ This is the **canonical execution checklist** for the next development sprint. E
 
 - [x] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
-    - **Key files:** `nil_s3/main.go`, `nil_s3/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
+    - **Key files:** `nil_gateway/main.go`, `nil_gateway/resolve.go`, `scripts/e2e_lifecycle.sh`, `e2e_gateway_retrieval.sh`
     - **API changes (target end state):**
         - `GET /gateway/fetch/{manifest_root}` **MUST** require query params: `deal_id`, `owner`, `file_path`.
             - Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback, no “default to only file” behavior).
@@ -630,7 +630,7 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Unit: missing/invalid `deal_id` returns `400`; unknown deal returns `404`; owner mismatch returns `403`; stale root returns `409`.
         - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
+    - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
 
 - [x] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
@@ -649,7 +649,7 @@ This is the **canonical execution checklist** for the next development sprint. E
         - Unit: shared EIP-712 golden vectors (CreateDealV2 + UpdateContent) match between the chain verifier and the web signer.
         - Integration: `create-deal-from-evm` succeeds with an intent that omits `size_tier` (and legacy intent support is explicit if kept during transition).
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
-    - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
 
 - [x] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
@@ -701,7 +701,7 @@ This is the **canonical execution checklist** for the next development sprint. E
 - [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_s3 nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
     - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to both remotes.
 
 - [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
@@ -718,7 +718,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
 - [x] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
     - **Fixed:** Speed up KZG commitments in `nil_core` and ensure gateway ingest propagates cancellation/timeouts into `nil_cli` subprocesses.
-    - **Tests:** Go unit tests for `nil_s3` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `nil-website` (AbortController timeout).
+    - **Tests:** Go unit tests for `nil_gateway` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `nil-website` (AbortController timeout).
     - **E2E:** `scripts/e2e_lifecycle.sh` upload timeout reduced to `<=60s`.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
@@ -779,7 +779,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Change:** Replace `fastShardQuick` / `IngestNewDealFast` as the default with `IngestNewDeal` (full NilFS slab build: MDU #0 + Witness MDUs + User MDUs + ManifestRoot).
     - **Keep fake modes only behind explicit env:** e.g. `NIL_FAKE_INGEST=1` for simulations.
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes with *no* ingest env flags set, and the returned `manifest_root` matches the on‑chain `Deal.manifest_root` after commit.
-    - **Commit gate:** After pass, commit `feat(nil_s3): default to canonical ingest` and push to both remotes.
+    - **Commit gate:** After pass, commit `feat(nil_gateway): default to canonical ingest` and push to both remotes.
 
 - [x] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
     - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root_key>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
@@ -787,35 +787,35 @@ This is the **canonical execution checklist** for the next development sprint. E
         1. `allocated_length` only grows if new User MDUs are needed,
         2. `FileTableHeader.record_count` increases,
         3. both files fetch correctly by path.
-    - **Commit gate:** After pass, commit `feat(nil_s3): NilFS append upload` and push.
+    - **Commit gate:** After pass, commit `feat(nil_gateway): NilFS append upload` and push.
 
 - [x] **A3.0 Add “restart safety” coverage to E2E (prove NilFS is the source of truth).**
     - **Files:** `scripts/e2e_lifecycle.sh`, `scripts/run_local_stack.sh`
-    - **Change:** Restart `nil_s3` (or the full stack) between upload/commit and fetch, asserting the gateway derives file state from the on-disk slab (MDU #0 + Witness/User MDUs).
+    - **Change:** Restart `nil_gateway` (or the full stack) between upload/commit and fetch, asserting the gateway derives file state from the on-disk slab (MDU #0 + Witness/User MDUs).
     - **Pass gate:** E2E flow passes with a restart in the middle; no dependency on `uploads/index.json`.
     - **Test gate:** `./scripts/e2e_lifecycle.sh`
     - **Commit gate:** After pass, commit `test(scripts): restart coverage for NilFS SSoT` and push.
 
 - [x] **A3.1 GatewayFetch: make `file_path` mandatory (no CID/index fallback).**
-    - **Files:** `nil_s3/main.go` (`GatewayFetch`), `nil_s3/resolve.go`, `nil_s3/fetch_test.go`
+    - **Files:** `nil_gateway/main.go` (`GatewayFetch`), `nil_gateway/resolve.go`, `nil_gateway/fetch_test.go`
     - **Change:** Remove `uploads/index.json`-backed fallback branches; only resolve via NilFS (`MDU #0` File Table + slab roots).
     - **Pass gate:** Fetch by `file_path` works after restart (state derived from slab on disk); requesting fetch without `file_path` returns a clear non-200 (no hidden legacy behavior).
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh`
-    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only fetch (require file_path)` and push.
+    - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `refactor(nil_gateway): NilFS-only fetch (require file_path)` and push.
 
 - [x] **A3.2 GatewayProveRetrieval: stop looking up file paths in `uploads/index.json`.**
-    - **Files:** `nil_s3/main.go` (`GatewayProveRetrieval`), `nil_s3/resolve.go`, `e2e_gateway_retrieval.sh`
+    - **Files:** `nil_gateway/main.go` (`GatewayProveRetrieval`), `nil_gateway/resolve.go`, `e2e_gateway_retrieval.sh`
     - **Change:** Accept/require `file_path` (and/or slab indices) and derive all proof inputs from the slab + chain state; remove `lookupFileInIndex` usage.
     - **Pass gate:** Retrieval proof submission works using only `(deal_id, manifest_root, file_path)` and still succeeds after a gateway restart.
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
-    - **Commit gate:** After pass, commit `refactor(nil_s3): NilFS-only retrieval proof (no index)` and push.
+    - **Test gate:** `cd nil_gateway && go test ./...` and `./e2e_gateway_retrieval.sh` (updated to use `file_path`)
+    - **Commit gate:** After pass, commit `refactor(nil_gateway): NilFS-only retrieval proof (no index)` and push.
 
 - [x] **A3.3 Delete legacy `index.json` helpers (and deprecate `/gateway/manifest`).**
-    - **Files:** `nil_s3/main.go` (`lookupFileInIndex` + helpers, `GatewayManifest`), `nil_s3/nil-s3-spec.md`
+    - **Files:** `nil_gateway/main.go` (`lookupFileInIndex` + helpers, `GatewayManifest`), `nil_gateway/nil-gateway-spec.md`
     - **Change:** Remove the index file format and any handlers that depend on it (or refactor them to serve slab-derived data only).
-    - **Pass gate:** A clean `nil_s3` data dir without `uploads/index.json` still supports upload → commit → fetch by `file_path`; legacy CID-only flows return a clear non-200 error.
-    - **Test gate:** `cd nil_s3 && go test ./...` and `./scripts/e2e_lifecycle.sh`
-    - **Commit gate:** After pass, commit `refactor(nil_s3): delete index.json legacy flows` and push.
+    - **Pass gate:** A clean `nil_gateway` data dir without `uploads/index.json` still supports upload → commit → fetch by `file_path`; legacy CID-only flows return a clear non-200 error.
+    - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Commit gate:** After pass, commit `refactor(nil_gateway): delete index.json legacy flows` and push.
 
 - [x] **A4. Update Commit‑Content UI to be NilFS‑aware.**
     - **Change:** “Commit Content” tab shows a per‑deal file list from NilFS, supports multiple uploads into one deal, and uses returned `manifest_root` + `allocated_length` for `update-deal-content-evm`.
@@ -843,4 +843,4 @@ This is the **canonical execution checklist** for the next development sprint. E
 - [ ] **B3. (Deferred) Integrate client‑side pre‑sharding into gateway.**
     - **Change:** Add an optional gateway endpoint to accept pre‑expanded MDUs + Witness data from browser (Mode 2), but keep Gateway‑first flow as default until stable.
     - **Pass gate:** Feature flag works end‑to‑end on localhost without breaking Mode 1.
-    - **Commit gate:** After pass, commit `feat(nil_s3,nil-website): pre-sharded upload path` and push.
+    - **Commit gate:** After pass, commit `feat(nil_gateway,nil-website): pre-sharded upload path` and push.

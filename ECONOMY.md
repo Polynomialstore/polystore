@@ -59,6 +59,6 @@ Providers earn tokens via:
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `nil_s3` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `nil_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.
