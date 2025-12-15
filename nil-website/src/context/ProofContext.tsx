@@ -1,4 +1,5 @@
-/* eslint-disable react-refresh/only-export-components */import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 interface Proof {
   id: string;
