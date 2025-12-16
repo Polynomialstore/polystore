@@ -15,8 +15,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
 )
 
 type manifestInfoResponse struct {
@@ -45,10 +44,17 @@ type mduKzgResponse struct {
 
 type slabMeta struct {
 	dealDir     string
-	builder     *builder.Mdu0Builder
+	builder     *crypto_ffi.Mdu0Builder
 	totalMdus   uint64
 	witnessMdus uint64
 	userMdus    uint64
+}
+
+func (s *slabMeta) Close() {
+	if s.builder != nil {
+		s.builder.Free()
+		s.builder = nil
+	}
 }
 
 func loadSlabMeta(dealDir string) (*slabMeta, error) {
@@ -58,15 +64,19 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 		return nil, err
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		return nil, err
 	}
 
 	var maxEnd uint64
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		end := rec.StartOffset + length
 		if end > maxEnd {
 			maxEnd = end
@@ -80,6 +90,7 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 
 	entries, err := os.ReadDir(dealDir)
 	if err != nil {
+		b.Free()
 		return nil, err
 	}
 
@@ -102,17 +113,21 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 	}
 
 	if len(idxSet) == 0 {
+		b.Free()
 		return nil, os.ErrNotExist
 	}
 	if _, ok := idxSet[0]; !ok {
+		b.Free()
 		return nil, fmt.Errorf("invalid slab layout: mdu_0.bin missing")
 	}
 
 	totalMdus := maxIdx + 1
 	if uint64(len(idxSet)) != totalMdus {
+		b.Free()
 		return nil, fmt.Errorf("invalid slab layout: non-contiguous mdu files")
 	}
 	if totalMdus-1 < userMdus {
+		b.Free()
 		return nil, fmt.Errorf("invalid slab layout: file table exceeds user mdus")
 	}
 
@@ -267,7 +282,11 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 
 	for i := uint64(1); i < meta.totalMdus; i++ {
 		rootIdx := i - 1
-		rootBytes := meta.builder.GetRoot(rootIdx)
+		rootBytes, err := meta.builder.GetRoot(rootIdx)
+		if err != nil {
+			log.Printf("GatewayManifestInfo: GetRoot error: %v", err)
+			continue
+		}
 		rootHex := "0x" + hex.EncodeToString(rootBytes[:])
 
 		kind := "user"

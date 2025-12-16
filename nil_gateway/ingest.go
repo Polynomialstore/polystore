@@ -7,14 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
 )
 
 const RawMduCapacity = 8126464
 
 // IngestNewDeal creates a new Deal Slab.
-func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -31,10 +30,8 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 	}
 
 	// 2. Initialize Builder
-	b, err := builder.NewMdu0Builder(maxUserMdus)
-	if err != nil {
-		return nil, "", 0, fmt.Errorf("NewMdu0Builder failed: %w", err)
-	}
+	b := crypto_ffi.NewMdu0Builder(maxUserMdus)
+	// No error check for NewMdu0Builder as it returns pointer
 
 	// 3. Collect ALL Roots for Aggregation
 	var allRoots []string
@@ -58,6 +55,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 		for _, blobHex := range mdu.Blobs {
 			blobBytes, err := decodeHex(blobHex)
 			if err != nil {
+				b.Free()
 				return nil, "", 0, err
 			}
 			witnessBuf.Write(blobBytes)
@@ -67,11 +65,13 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 
 	// 5. Create and Shard Witness MDUs
 	witnessRoots := []string{}
+	witnessMduCount := b.GetWitnessCount()
 	// We need to track paths for moving
-	witnessMduPaths := make([]string, b.WitnessMduCount)
+	witnessMduPaths := make([]string, witnessMduCount)
 
-	for i := uint64(0); i < b.WitnessMduCount; i++ {
+	for i := uint64(0); i < witnessMduCount; i++ {
 		if err := ctx.Err(); err != nil {
+			b.Free()
 			return nil, "", 0, err
 		}
 
@@ -95,6 +95,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 		witnessPrefix := tmpName + ".shard"
 		wOut, err := shardFile(ctx, tmpName, false, witnessPrefix)
 		if err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to shard witness MDU %d: %w", i, err)
 		}
 		os.Remove(tmpName)
@@ -103,11 +104,13 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 		if _, err := os.Stat(generatedMdu); err == nil {
 			witnessMduPaths[i] = generatedMdu
 		} else {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("witness MDU file not found: %s", generatedMdu)
 		}
 
 		// Store Root
 		if len(wOut.Mdus) == 0 {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("witness MDU %d produced no MDUs", i)
 		}
 		wRoot := wOut.Mdus[0].RootHex
@@ -117,39 +120,43 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 		rootBytes, _ := decodeHex(wRoot)
 		var root [32]byte
 		copy(root[:], rootBytes)
-		if err := b.SetRoot(i, root); err != nil {
+		if err := b.SetRoot(i, root[:]); err != nil {
+			b.Free()
 			return nil, "", 0, err
 		}
 	}
 
 	// 6. Set User Roots in MDU #0
 	userRoots := []string{}
-	baseIdx := b.WitnessMduCount
+	baseIdx := witnessMduCount
 	for _, mdu := range shardOut.Mdus {
 		userRoots = append(userRoots, mdu.RootHex)
 		rootBytes, _ := decodeHex(mdu.RootHex)
 		var root [32]byte
 		copy(root[:], rootBytes)
-		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root); err != nil {
+		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root[:]); err != nil {
+			b.Free()
 			return nil, "", 0, err
 		}
 	}
 
 	// 7. Append File Record
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
-		Timestamp:      0,
-	}
 	baseName := filepath.Base(filePath)
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	copy(rec.Path[:], baseName)
-	b.AppendFileRecord(rec)
+	if err := b.AppendFile(baseName, shardOut.FileSize, 0); err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 
 	// 8. Shard MDU #0
-	mdu0Bytes := b.Bytes()
+	mdu0Bytes, err := b.Bytes()
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	
 	tmp0, _ := os.CreateTemp(uploadDir, "mdu0-*.bin")
 	tmp0.Write(mdu0Bytes)
 	tmp0Name := tmp0.Name()
@@ -158,12 +165,14 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 	mdu0Prefix := tmp0Name + ".shard"
 	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
 	}
 	os.Remove(tmp0Name)
 
 	// 9. Aggregate Roots -> Manifest
 	if len(mdu0Out.Mdus) == 0 {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
 	}
 	allRoots = append(allRoots, mdu0Out.Mdus[0].RootHex) // MDU #0 is Index 0
@@ -172,17 +181,20 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 
 	manifestRoot, manifestBlobHex, err := aggregateRootsWithContext(ctx, allRoots)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
 
 	parsedRoot, err := parseManifestRoot(manifestRoot)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
 	// 10. Commit to Storage
 	dealDir := filepath.Join(uploadDir, parsedRoot.Key)
 	if err := os.MkdirAll(dealDir, 0755); err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
@@ -197,6 +209,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 	for i, path := range witnessMduPaths {
 		dest := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+i))
 		if err := os.Rename(path, dest); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move Witness MDU %d: %w", i, err)
 		}
 	}
@@ -204,12 +217,17 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*b
 	// Move User Data MDUs
 	for _, mdu := range shardOut.Mdus {
 		src := fmt.Sprintf("%s.mdu.%d.bin", userMduPrefix, mdu.Index)
-		dest := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+b.WitnessMduCount+uint64(mdu.Index)))
+		dest := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", 1+witnessMduCount+uint64(mdu.Index)))
 		if err := os.Rename(src, dest); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move User MDU %d: %w", mdu.Index, err)
 		}
 	}
 
 	allocatedLength := uint64(len(allRoots))
+	// b is returned, caller must Free it?
+	// The original code returned b.
+	// But in Rust FFI, b needs explicit Free.
+	// If I return it, caller owns it.
 	return b, parsedRoot.Canonical, allocatedLength, nil
 }

@@ -2,6 +2,8 @@ use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
+use crate::builder::Mdu0Builder;
+use crate::layout::{FileRecordV1, pack_length_and_flags};
 
 static KZG_CTX: OnceLock<KzgContext> = OnceLock::new();
 
@@ -530,3 +532,160 @@ pub extern "C" fn nil_verify_chained_proof(
         }
     }
 }
+
+// --- Layout FFI ---
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_new(max_user_mdus: u64) -> *mut Mdu0Builder {
+    let builder = Mdu0Builder::new(max_user_mdus);
+    Box::into_raw(Box::new(builder))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_free(ptr: *mut Mdu0Builder) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = Box::from_raw(ptr);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_load(data_ptr: *const u8, len: usize, max_user_mdus: u64) -> *mut Mdu0Builder {
+    if data_ptr.is_null() || len != crate::builder::MDU_SIZE {
+        return std::ptr::null_mut();
+    }
+    let slice = unsafe { std::slice::from_raw_parts(data_ptr, len) };
+    match Mdu0Builder::load(slice, max_user_mdus) {
+        Ok(builder) => Box::into_raw(Box::new(builder)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_bytes(ptr: *mut Mdu0Builder, out_ptr: *mut u8, out_len: usize) -> c_int {
+    if ptr.is_null() || out_ptr.is_null() || out_len != crate::builder::MDU_SIZE {
+        return -1;
+    }
+    let builder = unsafe { &mut *ptr };
+    let bytes = builder.bytes();
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, crate::builder::MDU_SIZE);
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_append_file(
+    ptr: *mut Mdu0Builder,
+    path_ptr: *const c_char,
+    size: u64,
+    start_offset: u64,
+) -> c_int {
+    if ptr.is_null() || path_ptr.is_null() {
+        return -1;
+    }
+    let builder = unsafe { &mut *ptr };
+    
+    let c_str = unsafe { CStr::from_ptr(path_ptr) };
+    let path_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return -2,
+    };
+    
+    let mut path_bytes = [0u8; 40];
+    let bytes = path_str.as_bytes();
+    if bytes.len() > 40 {
+        return -3; // Path too long
+    }
+    path_bytes[..bytes.len()].copy_from_slice(bytes);
+
+    let rec = FileRecordV1 {
+        start_offset,
+        length_and_flags: pack_length_and_flags(size, 0),
+        timestamp: 0,
+        path: path_bytes,
+    };
+
+    match builder.append_file_record(rec) {
+        Ok(_) => 0,
+        Err(_) => -4,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_set_root(
+    ptr: *mut Mdu0Builder,
+    index: u64,
+    root_ptr: *const u8,
+) -> c_int {
+    if ptr.is_null() || root_ptr.is_null() {
+        return -1;
+    }
+    let builder = unsafe { &mut *ptr };
+    let root_slice = unsafe { std::slice::from_raw_parts(root_ptr, 32) };
+    let mut root = [0u8; 32];
+    root.copy_from_slice(root_slice);
+
+    match builder.set_root(index, root) {
+        Ok(_) => 0,
+        Err(_) => -2,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_get_root(
+    ptr: *mut Mdu0Builder,
+    index: u64,
+    root_ptr: *mut u8,
+) -> c_int {
+    if ptr.is_null() || root_ptr.is_null() {
+        return -1;
+    }
+    let builder = unsafe { &mut *ptr };
+    // Check bounds (65536 roots max)
+    if index >= 65536 {
+        return -2;
+    }
+    let root = builder.get_root(index);
+    unsafe {
+        std::ptr::copy_nonoverlapping(root.as_ptr(), root_ptr, 32);
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_get_witness_count(ptr: *mut Mdu0Builder) -> u64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let builder = unsafe { &*ptr };
+    builder.witness_mdu_count
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let builder = unsafe { &*ptr };
+    builder.header.record_count
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_get_record(ptr: *mut Mdu0Builder, index: u32, out_rec: *mut FileRecordV1) -> c_int {
+    if ptr.is_null() || out_rec.is_null() {
+        return -1;
+    }
+    let builder = unsafe { &*ptr };
+    if index >= builder.header.record_count {
+        return -2;
+    }
+    let rec = builder.get_file_record(index);
+    unsafe {
+        *out_rec = rec;
+    }
+    0
+}
+

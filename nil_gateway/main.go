@@ -29,9 +29,6 @@ import (
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
-
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
 )
 
 // Configurable paths & chain settings (overridable via env).
@@ -657,18 +654,22 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func totalSizeBytesFromMdu0(b *builder.Mdu0Builder) uint64 {
+func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
 	if b == nil {
 		return 0
 	}
 	var total uint64
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		// Path[0]==0 marks a tombstone in NilFS V1.
 		if rec.Path[0] == 0 {
 			continue
 		}
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		total += length
 	}
 	return total
@@ -2410,22 +2411,27 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		log.Printf("GatewayListFiles: failed to parse MDU #0: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to parse slab", "")
 		return
 	}
+	defer b.Free()
 
-	latest := make(map[string]nilfsFileEntry, b.Header.RecordCount)
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	count := b.GetRecordCount()
+	latest := make(map[string]nilfsFileEntry, count)
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		// Tombstone slot.
 		if rec.Path[0] == 0 {
 			continue
 		}
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
-		length, flags := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		length, flags := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		latest[name] = nilfsFileEntry{
 			Path:        name,
 			SizeBytes:   length,
@@ -2553,19 +2559,24 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		log.Printf("GatewaySlab: failed to parse MDU #0: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to parse slab", "")
 		return
 	}
+	defer b.Free()
 
 	var fileCount uint32
 	var totalSize uint64
 	var maxEnd uint64
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		end := rec.StartOffset + length
 		if end > maxEnd {
 			maxEnd = end
@@ -2633,23 +2644,23 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	witnessMdus := (totalMdus - 1) - userMdus
 
 	segments := []slabSegment{
-		{Kind: "mdu0", StartIndex: 0, Count: 1, SizeBytes: builder.MduSize},
+		{Kind: "mdu0", StartIndex: 0, Count: 1, SizeBytes: types.MDU_SIZE},
 	}
 	if witnessMdus > 0 {
-		segments = append(segments, slabSegment{Kind: "witness", StartIndex: 1, Count: witnessMdus, SizeBytes: builder.MduSize})
+		segments = append(segments, slabSegment{Kind: "witness", StartIndex: 1, Count: witnessMdus, SizeBytes: types.MDU_SIZE})
 	}
 	if userMdus > 0 {
-		segments = append(segments, slabSegment{Kind: "user", StartIndex: 1 + witnessMdus, Count: userMdus, SizeBytes: builder.MduSize})
+		segments = append(segments, slabSegment{Kind: "user", StartIndex: 1 + witnessMdus, Count: userMdus, SizeBytes: types.MDU_SIZE})
 	}
 
 	resp := slabLayoutResponse{
 		ManifestRoot:   manifestRoot.Canonical,
-		MduSizeBytes:   builder.MduSize,
-		BlobSizeBytes:  builder.BlobSize,
+		MduSizeBytes:   types.MDU_SIZE,
+		BlobSizeBytes:  types.BLOB_SIZE,
 		TotalMdus:      totalMdus,
 		WitnessMdus:    witnessMdus,
 		UserMdus:       userMdus,
-		FileRecords:    b.Header.RecordCount,
+		FileRecords:    b.GetRecordCount(),
 		FileCount:      fileCount,
 		TotalSizeBytes: totalSize,
 		Segments:       segments,

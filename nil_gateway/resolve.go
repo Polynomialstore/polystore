@@ -9,14 +9,14 @@ import (
 	"strconv"
 	"strings"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 const (
 	nilfsScalarBytes        = 32
 	nilfsScalarPayloadBytes = 31
-	nilfsScalarsPerMdu      = builder.MduSize / nilfsScalarBytes
+	nilfsScalarsPerMdu      = types.MDU_SIZE / nilfsScalarBytes
 )
 
 type nilfsDecodedReader struct {
@@ -210,17 +210,22 @@ func ResolveFileByPath(dealDir string, filePath string) (io.ReadCloser, uint64, 
 
 	// Use builder to parse file records. MaxUserMdus is not needed for FileTable parsing here,
 	// so we pass a small placeholder; Witness count is inferred from on-disk slab.
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to parse MDU #0: %w", err)
 	}
+	defer b.Free()
 
 	// 3. Find Record
-	var targetRec *layout.FileRecordV1
+	var targetRec *crypto_ffi.FileRecordV1
 	targetPath := filePath
 
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		// Decode path
 		if rec.Path[0] == 0 {
 			continue
@@ -235,7 +240,7 @@ func ResolveFileByPath(dealDir string, filePath string) (io.ReadCloser, uint64, 
 		return nil, 0, os.ErrNotExist
 	}
 
-	length, _ := layout.UnpackLengthAndFlags(targetRec.LengthAndFlags)
+	length, _ := crypto_ffi.UnpackLengthAndFlags(targetRec.LengthAndFlags)
 	startOffset := targetRec.StartOffset
 
 	witnessCount, err := inferWitnessCount(dealDir, b)
@@ -261,15 +266,20 @@ func GetFileLocation(dealDir, filePath string) (mduIndex uint64, mduPath string,
 		return 0, "", 0, fmt.Errorf("failed to read MDU #0: %w", err)
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		return 0, "", 0, fmt.Errorf("failed to parse MDU #0: %w", err)
 	}
+	defer b.Free()
 
 	targetPath := filePath
-	var targetRec *layout.FileRecordV1
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	var targetRec *crypto_ffi.FileRecordV1
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		if rec.Path[0] == 0 {
 			continue
 		}
@@ -283,7 +293,7 @@ func GetFileLocation(dealDir, filePath string) (mduIndex uint64, mduPath string,
 		return 0, "", 0, os.ErrNotExist
 	}
 
-	length, _ = layout.UnpackLengthAndFlags(targetRec.LengthAndFlags)
+	length, _ = crypto_ffi.UnpackLengthAndFlags(targetRec.LengthAndFlags)
 	startOffset := targetRec.StartOffset
 
 	witnessCount, err := inferWitnessCount(dealDir, b)
@@ -306,15 +316,20 @@ func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uin
 		return 0, 0, 0, fmt.Errorf("failed to read MDU #0: %w", err)
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to parse MDU #0: %w", err)
 	}
+	defer b.Free()
 
 	targetPath := filePath
-	var targetRec *layout.FileRecordV1
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	var targetRec *crypto_ffi.FileRecordV1
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		if rec.Path[0] == 0 {
 			continue
 		}
@@ -327,7 +342,7 @@ func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uin
 		return 0, 0, 0, os.ErrNotExist
 	}
 
-	length, _ = layout.UnpackLengthAndFlags(targetRec.LengthAndFlags)
+	length, _ = crypto_ffi.UnpackLengthAndFlags(targetRec.LengthAndFlags)
 	startOffset = targetRec.StartOffset
 
 	witnessCount, err = inferWitnessCount(dealDir, b)
@@ -339,15 +354,19 @@ func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uin
 
 // inferWitnessCount derives W for a slab by counting on-disk MDUs and
 // computing the current user-data high water mark from FileRecords.
-func inferWitnessCount(dealDir string, b *builder.Mdu0Builder) (uint64, error) {
+func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error) {
 	// Compute user-data MDU count from FileRecords (ceil(maxEnd / 8MiB)).
 	var maxEnd uint64
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	count := b.GetRecordCount()
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		if rec.Path[0] == 0 {
 			continue
 		}
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		end := rec.StartOffset + length
 		if end > maxEnd {
 			maxEnd = end

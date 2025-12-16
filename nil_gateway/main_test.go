@@ -26,10 +26,8 @@ import (
 
 	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 
+	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
-
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
 )
 
 func useTempUploadDir(t *testing.T) string {
@@ -49,9 +47,6 @@ func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name
 	mockCombinedOutput = mockFn
 	t.Cleanup(func() { mockCombinedOutput = oldMock })
 }
-
-
-
 
 func deterministicManifestRootHex(tag string) string {
 	sum := sha256.Sum256([]byte(tag))
@@ -77,7 +72,7 @@ func encodeRawToMdu(raw []byte) []byte {
 	if len(raw) > RawMduCapacity {
 		raw = raw[:RawMduCapacity]
 	}
-	encoded := make([]byte, builder.MduSize)
+	encoded := make([]byte, types.MDU_SIZE)
 	scalarIdx := 0
 	for i := 0; i < len(raw) && scalarIdx < nilfsScalarsPerMdu; i += nilfsScalarPayloadBytes {
 		end := i + nilfsScalarPayloadBytes
@@ -636,14 +631,12 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	}
 
 	// Create MDU #0 (File Table)
-	b, _ := builder.NewMdu0Builder(1)
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(uint64(len(fileContent)), 0),
-	}
-	copy(rec.Path[:], "deal0_test.txt")
-	b.AppendFileRecord(rec)
-	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644)
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile("deal0_test.txt", uint64(len(fileContent)), 0)
+	
+	mdu0Bytes, _ := b.Bytes()
+	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644)
 
 	// Create manifest.bin (128KB dummy)
 	manifestBlob := make([]byte, 128*1024)

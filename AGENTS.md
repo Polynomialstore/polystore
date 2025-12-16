@@ -457,27 +457,35 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Move the NilFS layout logic (`Mdu0Builder`) from Go (`nil_gateway/pkg/builder`) to Rust (`nil_core`) to enable a shared implementation for both the Go Gateway (via CGO) and the Browser (via WASM).
 
-- [ ] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
+- [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
     - **Step 1:** Define `FileRecordV1` and `FileTableHeader` structs in Rust (matching `nil_gateway/pkg/layout`).
     - **Step 2:** Implement `Mdu0Builder` struct and methods (`add_file`, `finalize`, etc.) in Rust.
     - **Step 3:** Implement serialization tests ensuring byte-for-byte parity with the Go implementation.
     - **Test gate:** `cargo test -p nil_core`
 
-- [ ] **Goal 2: Expose Layout Logic via WASM.**
+- [x] **Goal 2: Expose Layout Logic via WASM.**
     - **Step 1:** Add `wasm-bindgen` exports for `Mdu0Builder`.
     - **Step 2:** Create a TS test case using the WASM build to verify it generates valid MDU #0 bytes for a sample input.
     - **Test gate:** `cd nil-website && npm run test:unit`
 
-- [ ] **Goal 3: Expose Layout Logic via C-FFI (CGO).**
+- [x] **Goal 3: Expose Layout Logic via C-FFI (CGO).**
     - **Step 1:** Add `extern "C"` functions in `nil_core` (e.g., `nil_mdu0_create`, `nil_mdu0_add_file`).
     - **Step 2:** Update `nilchain/x/crypto_ffi` (or create a new `layout_ffi` package) to bind to these functions.
     - **Test gate:** Go unit test calling Rust FFI.
 
-- [ ] **Goal 4: Refactor `nil_gateway` to use Rust Core.**
+- [x] **Goal 4: Refactor `nil_gateway` to use Rust Core.**
     - **Step 1:** Update `nil_gateway` to import the FFI package instead of `pkg/builder`.
     - **Step 2:** Verify `GatewayUpload` still produces correct roots/slabs using the Rust backend.
     - **Step 3:** Delete `nil_gateway/pkg/builder` and `nil_gateway/pkg/layout`.
     - **Test gate:** `./scripts/e2e_lifecycle.sh` (Full regression test).
+
+### 11.1 Next Sprint: Devnet Gamma-2 (The Thick Client)
+
+**Objective:** Implement the browser-side storage adapter and "Green Dot" logic to enable offline file staging and optional gateway acceleration.
+
+- [ ] **Goal 1: Implement OPFS Storage Adapter.**
+- [ ] **Goal 2: Implement "Green Dot" Gateway Detection.**
+- [ ] **Goal 3: Unified "My Drives" Dashboard.**
 
 ---
 

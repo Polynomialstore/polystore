@@ -5,3 +5,5 @@ pub mod kzg;
 pub mod utils;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+pub mod layout;
+pub mod builder;

@@ -10,8 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
 )
 
 func TestGatewaySlab_Basic(t *testing.T) {
@@ -24,22 +23,15 @@ func TestGatewaySlab_Basic(t *testing.T) {
 	}
 	defer os.RemoveAll(dealDir)
 
-	b, err := builder.NewMdu0Builder(1)
-	if err != nil {
-		t.Fatalf("NewMdu0Builder: %v", err)
-	}
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
 
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(5, 0),
-		Timestamp:      0,
-	}
-	copy(rec.Path[:], "a.txt")
-	if err := b.AppendFileRecord(rec); err != nil {
+	if err := b.AppendFile("a.txt", 5, 0); err != nil {
 		t.Fatalf("AppendFileRecord: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
@@ -106,11 +98,10 @@ func TestGatewaySlab_WithOwnerCheck(t *testing.T) {
 	}
 	defer os.RemoveAll(dealDir)
 
-	b, err := builder.NewMdu0Builder(1)
-	if err != nil {
-		t.Fatalf("NewMdu0Builder: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), []byte{0}, 0o644); err != nil {

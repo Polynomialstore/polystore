@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 func TestGatewayManifestInfo_Basic(t *testing.T) {
@@ -40,37 +40,31 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 		t.Fatalf("write manifest.bin: %v", err)
 	}
 
-	b, err := builder.NewMdu0Builder(256)
-	if err != nil {
-		t.Fatalf("NewMdu0Builder: %v", err)
-	}
+	b := crypto_ffi.NewMdu0Builder(256)
+	defer b.Free()
 
 	var root1, root2 [32]byte
 	for i := 0; i < 32; i++ {
 		root1[i] = 0x11
 		root2[i] = 0x22
 	}
-	if err := b.SetRoot(0, root1); err != nil {
+	if err := b.SetRoot(0, root1[:]); err != nil {
 		t.Fatalf("SetRoot 0: %v", err)
 	}
-	if err := b.SetRoot(1, root2); err != nil {
+	if err := b.SetRoot(1, root2[:]); err != nil {
 		t.Fatalf("SetRoot 1: %v", err)
 	}
 
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(100, 0),
-	}
-	copy(rec.Path[:], []byte("file.txt"))
-	if err := b.AppendFileRecord(rec); err != nil {
+	if err := b.AppendFile("file.txt", 100, 0); err != nil {
 		t.Fatalf("AppendFileRecord: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	zeros := make([]byte, builder.MduSize)
+	zeros := make([]byte, types.MDU_SIZE)
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), zeros, 0o644); err != nil {
 		t.Fatalf("write mdu_1.bin: %v", err)
 	}
@@ -152,23 +146,17 @@ func TestGatewayMduKzg_Basic(t *testing.T) {
 		t.Fatalf("write manifest.bin: %v", err)
 	}
 
-	b, err := builder.NewMdu0Builder(256)
-	if err != nil {
-		t.Fatalf("NewMdu0Builder: %v", err)
-	}
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(100, 0),
-	}
-	copy(rec.Path[:], []byte("file.txt"))
-	if err := b.AppendFileRecord(rec); err != nil {
+	b := crypto_ffi.NewMdu0Builder(256)
+	defer b.Free()
+	if err := b.AppendFile("file.txt", 100, 0); err != nil {
 		t.Fatalf("AppendFileRecord: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	zeros := make([]byte, builder.MduSize)
+	zeros := make([]byte, types.MDU_SIZE)
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), zeros, 0o644); err != nil {
 		t.Fatalf("write mdu_1.bin: %v", err)
 	}

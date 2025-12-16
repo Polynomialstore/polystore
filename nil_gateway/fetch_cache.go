@@ -11,8 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
 )
 
 type slabFileInfo struct {
@@ -48,19 +47,24 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 		return nil, err
 	}
 
-	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, 1)
 	if err != nil {
 		return nil, err
 	}
+	defer b.Free()
 
-	files := make(map[string]slabFileInfo, b.Header.RecordCount)
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
+	count := b.GetRecordCount()
+	files := make(map[string]slabFileInfo, count)
+	for i := uint32(0); i < count; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
 		if rec.Path[0] == 0 {
 			continue
 		}
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		files[name] = slabFileInfo{
 			StartOffset: rec.StartOffset,
 			Length:      length,

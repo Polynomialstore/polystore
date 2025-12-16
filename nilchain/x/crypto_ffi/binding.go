@@ -60,6 +60,26 @@ int nil_verify_chained_proof(
     const unsigned char* blob_y,
     const unsigned char* blob_proof
 );
+
+typedef void* Mdu0BuilderPtr;
+Mdu0BuilderPtr nil_mdu0_builder_new(unsigned long long max_user_mdus);
+void nil_mdu0_builder_free(Mdu0BuilderPtr ptr);
+Mdu0BuilderPtr nil_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
+int nil_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
+int nil_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
+int nil_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
+int nil_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
+unsigned long long nil_mdu0_get_witness_count(Mdu0BuilderPtr ptr);
+unsigned int nil_mdu0_get_record_count(Mdu0BuilderPtr ptr);
+
+typedef struct {
+    unsigned long long start_offset;
+    unsigned long long length_and_flags;
+    unsigned long long timestamp;
+    unsigned char path[40];
+} FileRecordV1;
+
+int nil_mdu0_get_record(Mdu0BuilderPtr ptr, unsigned int index, FileRecordV1* out_rec);
 */
 import "C"
 import (
@@ -70,6 +90,112 @@ import (
 
 	"nilchain/x/nilchain/types" // Import types for MDU_SIZE
 )
+
+// --- Layout FFI Wrappers ---
+
+type FileRecordV1 struct {
+	StartOffset    uint64
+	LengthAndFlags uint64
+	Timestamp      uint64
+	Path           [40]byte
+}
+
+func PackLengthAndFlags(length uint64, flags uint8) uint64 {
+	// Clear top 8 bits of length just in case
+	cleanLength := length & 0x00FFFFFFFFFFFFFF
+	// Shift flags to top
+	packedFlags := uint64(flags) << 56
+	return packedFlags | cleanLength
+}
+
+func UnpackLengthAndFlags(val uint64) (length uint64, flags uint8) {
+	length = val & 0x00FFFFFFFFFFFFFF
+	flags = uint8(val >> 56)
+	return length, flags
+}
+
+type Mdu0Builder struct {
+	ptr C.Mdu0BuilderPtr
+}
+
+func NewMdu0Builder(maxUserMdus uint64) *Mdu0Builder {
+	ptr := C.nil_mdu0_builder_new(C.ulonglong(maxUserMdus))
+	return &Mdu0Builder{ptr: ptr}
+}
+
+func LoadMdu0Builder(data []byte, maxUserMdus uint64) (*Mdu0Builder, error) {
+	if len(data) != types.MDU_SIZE {
+		return nil, errors.New("invalid size")
+	}
+	ptr := C.nil_mdu0_builder_load((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus))
+	if ptr == nil {
+		return nil, errors.New("failed to load builder")
+	}
+	return &Mdu0Builder{ptr: ptr}, nil
+}
+
+func (b *Mdu0Builder) Free() {
+	if b.ptr != nil {
+		C.nil_mdu0_builder_free(b.ptr)
+		b.ptr = nil
+	}
+}
+
+func (b *Mdu0Builder) Bytes() ([]byte, error) {
+	out := make([]byte, types.MDU_SIZE)
+	res := C.nil_mdu0_builder_bytes(b.ptr, (*C.uchar)(unsafe.Pointer(&out[0])), C.size_t(len(out)))
+	if res != 0 {
+		return nil, errors.New("failed to get bytes")
+	}
+	return out, nil
+}
+
+func (b *Mdu0Builder) AppendFile(path string, size uint64, startOffset uint64) error {
+	cPath := C.CString(path)
+	defer C.free(unsafe.Pointer(cPath))
+	res := C.nil_mdu0_append_file(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset))
+	if res != 0 {
+		return fmt.Errorf("append failed: %d", res)
+	}
+	return nil
+}
+
+func (b *Mdu0Builder) SetRoot(index uint64, root []byte) error {
+	if len(root) != 32 {
+		return errors.New("invalid root length")
+    }
+	res := C.nil_mdu0_set_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&root[0])))
+	if res != 0 {
+		return fmt.Errorf("set root failed: %d", res)
+	}
+	return nil
+}
+
+func (b *Mdu0Builder) GetRoot(index uint64) ([]byte, error) {
+	out := make([]byte, 32)
+	res := C.nil_mdu0_get_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&out[0])))
+	if res != 0 {
+		return nil, fmt.Errorf("get root failed: %d", res)
+	}
+	return out, nil
+}
+
+func (b *Mdu0Builder) GetWitnessCount() uint64 {
+	return uint64(C.nil_mdu0_get_witness_count(b.ptr))
+}
+
+func (b *Mdu0Builder) GetRecordCount() uint32 {
+	return uint32(C.nil_mdu0_get_record_count(b.ptr))
+}
+
+func (b *Mdu0Builder) GetRecord(index uint32) (FileRecordV1, error) {
+	var rec FileRecordV1
+	res := C.nil_mdu0_get_record(b.ptr, C.uint(index), (*C.FileRecordV1)(unsafe.Pointer(&rec)))
+	if res != 0 {
+		return FileRecordV1{}, fmt.Errorf("failed to get record: %d", res)
+	}
+	return rec, nil
+}
 
 // Init loads the trusted setup from the given path.
 func Init(path string) error {

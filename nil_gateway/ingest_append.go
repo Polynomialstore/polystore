@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
+	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 // IngestAppendToDeal appends a new file into an existing deal slab.
@@ -19,7 +19,7 @@ import (
 //
 // NOTE: Mode 1 append currently uses naive MDU-boundary packing:
 // each appended file starts at the next 8 MiB User-Data MDU boundary.
-func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64) (*builder.Mdu0Builder, string, uint64, error) {
+func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -42,16 +42,20 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Parse existing MDU #0.
-	b, err := builder.LoadMdu0Builder(mdu0Data, maxUserMdus)
+	b, err := crypto_ffi.LoadMdu0Builder(mdu0Data, maxUserMdus)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("failed to parse existing MDU #0: %w", err)
 	}
 
 	// Determine current high-water mark for User Data (in raw NilFS bytes).
 	var maxEnd uint64
-	for i := uint32(0); i < b.Header.RecordCount; i++ {
-		rec := b.GetFileRecord(i)
-		length, _ := layout.UnpackLengthAndFlags(rec.LengthAndFlags)
+	recordCount := b.GetRecordCount()
+	for i := uint32(0); i < recordCount; i++ {
+		rec, err := b.GetRecord(i)
+		if err != nil {
+			continue
+		}
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		end := rec.StartOffset + length
 		if end > maxEnd {
 			maxEnd = end
@@ -66,28 +70,25 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	userMduPrefix := filePath + ".data"
 	shardOut, err := shardFile(ctx, filePath, false, userMduPrefix)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("shardFile failed: %w", err)
 	}
 
 	// Append a new file record starting at next MDU boundary.
-	rec := layout.FileRecordV1{
-		StartOffset:    oldUserCount * RawMduCapacity,
-		LengthAndFlags: layout.PackLengthAndFlags(shardOut.FileSize, 0),
-		Timestamp:      0,
-	}
 	baseName := filepath.Base(filePath)
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	copy(rec.Path[:], baseName)
-	if err := b.AppendFileRecord(rec); err != nil {
+	if err := b.AppendFile(baseName, shardOut.FileSize, oldUserCount * RawMduCapacity); err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)
 	}
 
 	// Collect existing + new user MDU paths in slab order.
+	witnessMduCount := b.GetWitnessCount()
 	userMduPaths := make([]string, 0, oldUserCount+uint64(len(shardOut.Mdus)))
 	for i := uint64(0); i < oldUserCount; i++ {
-		slabIdx := 1 + b.WitnessMduCount + i
+		slabIdx := 1 + witnessMduCount + i
 		userMduPaths = append(userMduPaths, filepath.Join(oldDir, fmt.Sprintf("mdu_%d.bin", slabIdx)))
 	}
 	for _, mdu := range shardOut.Mdus {
@@ -98,12 +99,14 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	// Recompute User roots + Witness data (blob commitments) from the encoded User MDUs.
 	userRoots, witnessData, err := computeUserRootsAndWitnessData(ctx, userMduPaths)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
 	// Rebuild Witness MDUs from full witnessData.
-	witnessRoots, witnessMduPaths, err := buildWitnessMdusFromData(ctx, witnessData, b.WitnessMduCount)
+	witnessRoots, witnessMduPaths, err := buildWitnessMdusFromData(ctx, witnessData, witnessMduCount)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
@@ -111,37 +114,48 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	for i, wRoot := range witnessRoots {
 		rootBytes, err := decodeHex(wRoot)
 		if err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("invalid witness root %q: %w", wRoot, err)
 		}
-		var rootArr [32]byte
-		copy(rootArr[:], rootBytes)
-		if err := b.SetRoot(uint64(i), rootArr); err != nil {
+		var root [32]byte
+		copy(root[:], rootBytes)
+		if err := b.SetRoot(uint64(i), root[:]); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (witness %d) failed: %w", i, err)
 		}
 	}
 
 	// Update User roots in MDU #0 (starting at index W).
-	baseIdx := b.WitnessMduCount
+	baseIdx := witnessMduCount
 	for i, uRoot := range userRoots {
 		rootBytes, err := decodeHex(uRoot)
 		if err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("invalid user root %q: %w", uRoot, err)
 		}
-		var rootArr [32]byte
-		copy(rootArr[:], rootBytes)
-		if err := b.SetRoot(baseIdx+uint64(i), rootArr); err != nil {
+		var root [32]byte
+		copy(root[:], rootBytes)
+		if err := b.SetRoot(baseIdx+uint64(i), root[:]); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (user %d) failed: %w", i, err)
 		}
 	}
 
 	// Shard MDU #0 to derive its root for manifest aggregation.
-	mdu0Bytes := b.Bytes()
+	mdu0Bytes, err := b.Bytes()
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	
 	tmp0, err := os.CreateTemp(uploadDir, "mdu0-append-*.bin")
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 	if _, err := tmp0.Write(mdu0Bytes); err != nil {
 		tmp0.Close()
+		b.Free()
 		return nil, "", 0, err
 	}
 	tmp0Name := tmp0.Name()
@@ -151,9 +165,11 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
 	os.Remove(tmp0Name)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
 	}
 	if len(mdu0Out.Mdus) == 0 {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
 	}
 
@@ -164,28 +180,34 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 
 	manifestRoot, manifestBlobHex, err := aggregateRootsWithContext(ctx, allRoots)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
 	}
 
 	parsedNewRoot, err := parseManifestRoot(manifestRoot)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
 	// Commit new slab to storage under uploads/<manifestRoot>.
 	newDir := filepath.Join(uploadDir, parsedNewRoot.Key)
 	if err := os.MkdirAll(newDir, 0o755); err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
 	manifestBlob, err := decodeHex(manifestBlobHex)
 	if err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 	if err := os.WriteFile(filepath.Join(newDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 	if err := os.WriteFile(filepath.Join(newDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		b.Free()
 		return nil, "", 0, err
 	}
 
@@ -193,16 +215,18 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	for i, path := range witnessMduPaths {
 		dest := filepath.Join(newDir, fmt.Sprintf("mdu_%d.bin", 1+i))
 		if err := os.Rename(path, dest); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move Witness MDU %d: %w", i, err)
 		}
 	}
 
 	// Copy old User MDUs into new slab directory.
 	for i := uint64(0); i < oldUserCount; i++ {
-		slabIdx := 1 + b.WitnessMduCount + i
+		slabIdx := 1 + witnessMduCount + i
 		src := filepath.Join(oldDir, fmt.Sprintf("mdu_%d.bin", slabIdx))
 		dest := filepath.Join(newDir, fmt.Sprintf("mdu_%d.bin", slabIdx))
 		if err := copyFile(src, dest); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to copy User MDU %d: %w", i, err)
 		}
 	}
@@ -210,9 +234,10 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	// Move new User Data MDUs into new slab directory after oldUserCount.
 	for _, mdu := range shardOut.Mdus {
 		src := fmt.Sprintf("%s.mdu.%d.bin", userMduPrefix, mdu.Index)
-		destIdx := 1 + b.WitnessMduCount + oldUserCount + uint64(mdu.Index)
+		destIdx := 1 + witnessMduCount + oldUserCount + uint64(mdu.Index)
 		dest := filepath.Join(newDir, fmt.Sprintf("mdu_%d.bin", destIdx))
 		if err := os.Rename(src, dest); err != nil {
+			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move new User MDU %d: %w", mdu.Index, err)
 		}
 	}
@@ -244,7 +269,7 @@ func computeUserRootsAndWitnessData(ctx context.Context, userMduPaths []string) 
 			tmp.Close()
 			return nil, nil, fmt.Errorf("failed to read user mdu %s: %w", p, err)
 		}
-		if len(data) != builder.MduSize {
+		if len(data) != types.MDU_SIZE { // Was builder.MduSize
 			// Keep going but surface a clear error.
 			tmp.Close()
 			return nil, nil, fmt.Errorf("user mdu %s has unexpected size %d", p, len(data))

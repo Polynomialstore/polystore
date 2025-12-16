@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/blake2s"
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
 	"nilchain/x/crypto_ffi"
 	niltypes "nilchain/x/nilchain/types"
 )
@@ -63,17 +61,13 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	defer os.RemoveAll(dealDir)
 
 	// Create MDU #0
-	b, _ := builder.NewMdu0Builder(1)
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
 
 	// Add File Record
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(uint64(len(fileContent)), 0),
-	}
-	copy(rec.Path[:], "video.mp4")
-	b.AppendFileRecord(rec)
+	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
 
-	mdu0Data := b.Bytes()
+	mdu0Data, _ := b.Bytes()
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0644)
 
 	// manifest.bin must exist for proof generation.

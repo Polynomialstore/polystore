@@ -9,9 +9,6 @@ import (
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
-
-	"nil_gateway/pkg/builder"
-	"nil_gateway/pkg/layout"
 )
 
 func TestBenchmarkProofGen(t *testing.T) {
@@ -31,25 +28,18 @@ func TestBenchmarkProofGen(t *testing.T) {
 	// - mdu_0.bin (valid NilFS header + one file record so userCount=1)
 	// - mdu_1.bin (witness, zero-filled)
 	// - mdu_2.bin (user, zero-filled)
-	b, err := builder.NewMdu0Builder(1)
-	if err != nil {
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+
+	if err := b.AppendFile("bench.bin", 1, 0); err != nil {
 		t.Fatal(err)
 	}
-	var pathBuf [40]byte
-	copy(pathBuf[:], []byte("bench.bin"))
-	rec := layout.FileRecordV1{
-		StartOffset:    0,
-		LengthAndFlags: layout.PackLengthAndFlags(1, 0),
-		Path:           pathBuf,
-	}
-	if err := b.AppendFileRecord(rec); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_0.bin"), b.Bytes(), 0o644); err != nil {
+	mdu0Data, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	zeroMdu := make([]byte, builder.MduSize)
+	zeroMdu := make([]byte, types.MDU_SIZE)
 	if err := os.WriteFile(filepath.Join(tmpDir, "mdu_1.bin"), zeroMdu, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +55,7 @@ func TestBenchmarkProofGen(t *testing.T) {
 	mduPath := filepath.Join(tmpDir, "mdu_2.bin")
 
 	start := time.Now()
-	_, _, err = generateProofHeaderJSON(context.Background(), 1, 1, 2, mduPath, manifestPath, 0, 0)
+	_, _, err := generateProofHeaderJSON(context.Background(), 1, 1, 2, mduPath, manifestPath, 0, 0)
 	if err != nil {
 		t.Fatalf("generateProofHeaderJSON failed: %v", err)
 	}
