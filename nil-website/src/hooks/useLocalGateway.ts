@@ -38,10 +38,10 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
         const err = e as Error;
         if (err.name === 'AbortError') {
             setError('Connection timed out');
-        } else if (e.message.includes('Failed to fetch')) { // Common error for connection refused/unreachable
+        } else if (err.message && err.message.includes('Failed to fetch')) { // Common error for connection refused/unreachable
             setError('Could not connect to local gateway');
         } else {
-            setError(e.message || 'Unknown error during connection');
+            setError(err.message || 'Unknown error during connection');
         }
       }
     };

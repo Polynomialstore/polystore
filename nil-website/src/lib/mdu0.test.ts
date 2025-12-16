@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// @ts-expect-error: WASM module import
+
 import init, { WasmMdu0Builder } from '../../public/wasm/nil_core.js';
 
 const __filename = fileURLToPath(import.meta.url);

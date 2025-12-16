@@ -29,7 +29,7 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
     const fileName = `mdu_${mduIndex}.bin`;
     const fileHandle = await dealDir.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(data);
+    await writable.write(data as any);
     await writable.close();
 }
 
