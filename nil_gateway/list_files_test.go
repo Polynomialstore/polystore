@@ -43,7 +43,9 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
+	srv := dynamicMockDealServer(map[uint64]struct{ Owner string; CID string }{
+		1: {Owner: "nil1owner", CID: manifestRoot.Canonical},
+	})
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -101,7 +103,9 @@ func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	srv := mockDealServer("nil1owner", manifestRoot.Canonical)
+	srv := dynamicMockDealServer(map[uint64]struct{ Owner string; CID string }{
+		1: {Owner: "nil1owner", CID: manifestRoot.Canonical},
+	})
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL

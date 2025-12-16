@@ -86,7 +86,10 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0644)
 
 	// Mock LCD for owner check
-	srv := mockDealServer(owner, manifestRoot.Canonical)
+	dealStates := map[uint64]struct{ Owner string; CID string }{
+		dealID: {Owner: owner, CID: manifestRoot.Canonical},
+	}
+	srv := dynamicMockDealServer(dealStates)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL

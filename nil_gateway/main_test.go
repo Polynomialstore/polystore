@@ -155,21 +155,7 @@ func TestGatewayFetch_MissingParams(t *testing.T) {
 	}
 }
 
-// mockDealServer returns a simple LCD-like handler that serves a single deal
-// with given owner and cid values.
-func mockDealServer(owner, cid string) *httptest.Server {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := map[string]any{
-			"deal": map[string]any{
-				"owner": owner,
-				"cid":   cid,
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	})
-	return httptest.NewServer(handler)
-}
+
 
 func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	r := testRouter()
@@ -177,7 +163,10 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	// Stub LCD so fetchDealOwnerAndCID returns a specific owner/cid.
 	root := mustTestManifestRoot(t, "owner-mismatch")
 	realOwner := testDealOwner(t)
-	srv := mockDealServer(realOwner, root.Canonical)
+	dealStates := map[uint64]struct{ Owner string; CID string }{
+		1: {Owner: realOwner, CID: root.Canonical},
+	}
+	srv := dynamicMockDealServer(dealStates)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -209,7 +198,10 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	rootReq := mustTestManifestRoot(t, "cid-mismatch-req")
 	rootChain := mustTestManifestRoot(t, "cid-mismatch-chain")
 	owner := testDealOwner(t)
-	srv := mockDealServer(owner, rootChain.Canonical)
+	dealStates := map[uint64]struct{ Owner string; CID string }{
+		2: {Owner: owner, CID: rootChain.Canonical},
+	}
+	srv := dynamicMockDealServer(dealStates)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
@@ -489,5 +481,122 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(uploadDir, parsed.Key)); err != nil {
 		t.Fatalf("expected deal dir to exist: %v", err)
+	}
+}
+
+func TestGatewayFetch_DealIDZero(t *testing.T) {
+	useTempUploadDir(t)
+	mockExecCommandContext(t)
+	r := testRouter()
+
+	// 1. Prepare a file and mock nil-cli to "shard" it
+	testFileName := "deal0_test.txt"
+	testFileContent := "This is some test data for Deal ID 0."
+	testFilePath := filepath.Join(uploadDir, testFileName)
+	if err := os.WriteFile(testFilePath, []byte(testFileContent), 0o644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	mockedManifestRoot := deterministicManifestRootHex("deal0-content")
+	mockedFileSize := uint64(len(testFileContent))
+	
+	// Override the helper process output for shard command
+	oldExecCommandContext := execCommandContext
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		if name == nilCliPath && len(args) > 0 && args[0] == "shard" {
+			// Simulate nil-cli shard output
+			outPath := ""
+			for i, arg := range args {
+				if arg == "--out" && i+1 < len(args) {
+					outPath = args[i+1]
+					break
+				}
+			}
+			if outPath == "" {
+				return oldExecCommandContext(ctx, name, args...)
+			}
+			
+			output := NilCliOutput{
+				ManifestRootHex: mockedManifestRoot,
+				ManifestBlobHex: "0xdeadbeef",
+				FileSize:        mockedFileSize,
+				Mdus: []MduData{
+					{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}},
+				},
+			}
+			data, _ := json.Marshal(output)
+			_ = os.WriteFile(outPath, data, 0o644)
+			
+			// Return a cmd that does nothing and exits successfully
+			cmd := exec.CommandContext(ctx, "true")
+			cmd.Env = os.Environ()
+			return cmd
+		}
+		return oldExecCommandContext(ctx, name, args...)
+	}
+	t.Cleanup(func() { execCommandContext = oldExecCommandContext })
+
+	// 2. Mock LCD to serve Deal ID 0 with the test owner and *empty* CID initially.
+	dealID := uint64(0)
+	owner := testDealOwner(t)
+	dealStates := map[uint64]struct{ Owner string; CID string }{
+		dealID: {Owner: owner, CID: ""}, // Initially empty CID for thin provisioning
+	}
+	srv := dynamicMockDealServer(dealStates)
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	// 3. Upload the file to the gateway for Deal ID 0
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", testFileName)
+	part.Write([]byte(testFileContent))
+	writer.WriteField("owner", owner)
+	writer.WriteField("deal_id", strconv.FormatUint(dealID, 10))
+	writer.Close()
+
+	uploadReq := httptest.NewRequest("POST", "/gateway/upload", body)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadW := httptest.NewRecorder()
+	r.ServeHTTP(uploadW, uploadReq)
+
+	if uploadW.Code != http.StatusOK {
+		t.Fatalf("GatewayUpload for Deal 0 failed: %d, body: %s", uploadW.Code, uploadW.Body.String())
+	}
+	
+	var uploadResp map[string]any
+	json.Unmarshal(uploadW.Body.Bytes(), &uploadResp)
+	if s := uploadResp["manifest_root"].(string); s != mockedManifestRoot {
+		t.Fatalf("Expected uploaded manifest_root to be %s, got %s", mockedManifestRoot, s)
+	}
+
+	// 4. Update deal content for Deal ID 0 (mock this as successful)
+	// This usually happens after upload to commit the new manifestRoot.
+	// For this test, we just ensure the Gateway allows it.
+	// No direct call, as the LCD mock is enough for later fetch.
+
+	// 5. Fetch the file for Deal ID 0
+	fetchURL := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=%s", mockedManifestRoot, dealID, owner, testFileName)
+	nonce := uint64(1)
+	expiresAt := uint64(time.Now().Unix()) + 120
+	fetchReq := httptest.NewRequest("GET", fetchURL, nil)
+	fetchReq.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, dealID, testFileName, 0, 0, nonce, expiresAt))
+	fetchReq.Header.Set("X-Nil-Req-Nonce", strconv.FormatUint(nonce, 10))
+	fetchReq.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
+	fetchReq.Header.Set("X-Nil-Req-Range-Start", "0")
+	fetchReq.Header.Set("X-Nil-Req-Range-Len", "0")
+	fetchW := httptest.NewRecorder()
+
+	r.ServeHTTP(fetchW, fetchReq)
+
+	if fetchW.Code != http.StatusOK {
+		t.Fatalf("GatewayFetch for Deal 0 failed: %d, body: %s", fetchW.Code, fetchW.Body.String())
+	}
+
+	fetchedContent, _ := io.ReadAll(fetchW.Body)
+	if string(fetchedContent) != testFileContent {
+		t.Fatalf("Fetched content mismatch. Expected: %q, Got: %q", testFileContent, string(fetchedContent))
 	}
 }
