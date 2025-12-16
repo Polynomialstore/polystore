@@ -60,6 +60,29 @@ export const NILSTORE_PRECOMPILE_ABI = [
     outputs: [{ name: 'ok', type: 'bool' }],
   },
   {
+    type: 'function',
+    name: 'openRetrievalSession',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'dealId', type: 'uint64' },
+      { name: 'provider', type: 'string' },
+      { name: 'manifestRoot', type: 'bytes' },
+      { name: 'startMduIndex', type: 'uint64' },
+      { name: 'startBlobIndex', type: 'uint32' },
+      { name: 'blobCount', type: 'uint64' },
+      { name: 'nonce', type: 'uint64' },
+      { name: 'expiresAt', type: 'uint64' },
+    ],
+    outputs: [{ name: 'sessionId', type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'confirmRetrievalSession',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionId', type: 'bytes32' }],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
     type: 'event',
     name: 'DealCreated',
     inputs: [
@@ -88,5 +111,22 @@ export const NILSTORE_PRECOMPILE_ABI = [
       { name: 'nonce', type: 'uint64', indexed: false },
     ],
   },
+  {
+    type: 'event',
+    name: 'RetrievalSessionOpened',
+    inputs: [
+      { name: 'dealId', type: 'uint64', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'provider', type: 'string', indexed: false },
+      { name: 'sessionId', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'RetrievalSessionConfirmed',
+    inputs: [
+      { name: 'sessionId', type: 'bytes32', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+    ],
+  },
 ] as const satisfies Abi
-

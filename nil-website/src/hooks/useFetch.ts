@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
-import { encodeFunctionData, numberToHex, toHex, type Hex } from 'viem'
+import { decodeEventLog, encodeFunctionData, numberToHex, type Hex } from 'viem'
 
 import { appConfig } from '../config'
 import { normalizeDealId } from '../lib/dealId'
@@ -21,7 +21,14 @@ export interface FetchInput {
   blobSizeBytes?: number
 }
 
-export type FetchPhase = 'idle' | 'fetching' | 'submitting_proof_tx' | 'done' | 'error'
+export type FetchPhase =
+  | 'idle'
+  | 'opening_session_tx'
+  | 'fetching'
+  | 'confirming_session_tx'
+  | 'submitting_proof_request'
+  | 'done'
+  | 'error'
 
 export interface FetchProgress {
   phase: FetchPhase
@@ -33,45 +40,6 @@ export interface FetchProgress {
   receiptsSubmitted: number
   receiptsTotal: number
   message?: string
-}
-
-type ProofDetailsJson = {
-  mdu_index: number
-  mdu_root_fr: string
-  manifest_opening: string
-  blob_commitment: string
-  merkle_path: string[]
-  blob_index: number
-  z_value: string
-  y_value: string
-  kzg_opening_proof: string
-}
-
-type ProofChunk = {
-  rangeStart: bigint
-  rangeLen: bigint
-  proof: {
-    mduIndex: bigint
-    mduRootFr: Hex
-    manifestOpening: Hex
-    blobCommitment: Hex
-    merklePath: Hex[]
-    blobIndex: number
-    zValue: Hex
-    yValue: Hex
-    kzgOpeningProof: Hex
-  }
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(String(b64 || ''))
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
-}
-
-function base64ToHex(b64: string): Hex {
-  return toHex(base64ToBytes(b64)) as Hex
 }
 
 function decodeHttpError(bodyText: string): string {
@@ -140,6 +108,9 @@ export function useFetch() {
       const filePath = String(input.filePath || '').trim()
       if (!filePath) throw new Error('filePath is required')
 
+      const manifestRoot = String(input.manifestRoot || '').trim() as Hex
+      if (!manifestRoot.startsWith('0x')) throw new Error('manifestRoot must be 0x-prefixed hex bytes')
+
       const blobSizeBytes = Number(input.blobSizeBytes || 128 * 1024)
       const wantRangeStart = Math.max(0, Number(input.rangeStart ?? 0))
       const wantRangeLen = Math.max(0, Number(input.rangeLen ?? 0))
@@ -174,72 +145,107 @@ export function useFetch() {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
+      const planParams = new URLSearchParams({
+        deal_id: dealId,
+        owner,
+        file_path: filePath,
+        range_start: String(wantRangeStart),
+        range_len: String(effectiveRangeLen),
+      })
+      const planUrl = `${appConfig.gatewayBase}/gateway/plan-retrieval-session/${manifestRoot}?${planParams.toString()}`
+
+      const planRes = await fetch(planUrl)
+      if (!planRes.ok) {
+        const text = await planRes.text().catch(() => '')
+        throw new Error(decodeHttpError(text) || `plan retrieval session failed (${planRes.status})`)
+      }
+      const planJson = (await planRes.json()) as {
+        provider?: string
+        start_mdu_index?: number
+        start_blob_index?: number
+        blob_count?: number
+        manifest_root?: string
+      }
+      const provider = String(planJson.provider || '').trim()
+      if (!provider) throw new Error('gateway plan did not return provider')
+      const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
+      const startBlobIndex = Number(planJson.start_blob_index || 0)
+      const blobCount = BigInt(Number(planJson.blob_count || 0))
+      if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
+      if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
+      if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+
+      setProgress((p) => ({ ...p, phase: 'opening_session_tx', receiptsSubmitted: 0, receiptsTotal: 2 }))
+
+      const openNonce = BigInt(Date.now())
+      const openExpiresAt = 0n
+      const openTxData = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'openRetrievalSession',
+        args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
+      })
+      const openTxHash = (await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
+      })) as Hex
+
+      const openReceipt = await waitForTransactionReceipt(openTxHash)
+      let sessionId: Hex | null = null
+      for (const log of openReceipt.logs || []) {
+        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
+        try {
+          const decoded = decodeEventLog({
+            abi: NILSTORE_PRECOMPILE_ABI,
+            eventName: 'RetrievalSessionOpened',
+            topics: log.topics,
+            data: log.data,
+          })
+          const sid = (decoded.args as { sessionId: Hex }).sessionId
+          if (sid) {
+            sessionId = sid
+            break
+          }
+        } catch {
+          continue
+        }
+      }
+      if (!sessionId) throw new Error('openRetrievalSession tx confirmed but RetrievalSessionOpened event not found')
+
       setProgress((p) => ({
         ...p,
         phase: 'fetching',
         filePath,
         chunkCount: chunks.length,
         bytesTotal: effectiveRangeLen,
-        receiptsTotal: 1,
+        receiptsTotal: 2,
       }))
 
       const fetchParams = new URLSearchParams({ deal_id: dealId, owner, file_path: filePath })
-      const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${input.manifestRoot}?${fetchParams.toString()}`
+      const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${manifestRoot}?${fetchParams.toString()}`
 
       const parts: Uint8Array[] = []
-      const proofChunks: ProofChunk[] = []
       let bytesFetched = 0
-      let provider: string | null = null
+      let observedProvider: string | null = null
 
       for (let idx = 0; idx < chunks.length; idx++) {
         const c = chunks[idx]
         const end = c.rangeStart + c.rangeLen - 1
 
-        const res = await fetch(fetchUrl, { headers: { Range: `bytes=${c.rangeStart}-${end}` } })
+        const res = await fetch(fetchUrl, { headers: { Range: `bytes=${c.rangeStart}-${end}`, 'X-Nil-Session-Id': sessionId } })
         if (!res.ok) {
           const text = await res.text().catch(() => '')
           throw new Error(decodeHttpError(text) || `fetch failed (${res.status})`)
         }
 
         const hProvider = String(res.headers.get('X-Nil-Provider') || '')
-        const hProofJson = String(res.headers.get('X-Nil-Proof-JSON') || '')
-        const hRangeStart = Number(res.headers.get('X-Nil-Range-Start') || c.rangeStart)
-        const hRangeLen = Number(res.headers.get('X-Nil-Range-Len') || c.rangeLen)
-
         if (!hProvider) throw new Error('gateway did not provide X-Nil-Provider')
-        if (!hProofJson) throw new Error('gateway did not provide X-Nil-Proof-JSON')
-        if (!provider) provider = hProvider
-        if (provider !== hProvider) throw new Error(`provider mismatch during download: ${provider} vs ${hProvider}`)
+        if (!observedProvider) observedProvider = hProvider
+        if (observedProvider !== hProvider) throw new Error(`provider mismatch during download: ${observedProvider} vs ${hProvider}`)
+        if (provider !== hProvider) throw new Error(`provider mismatch during download: expected ${provider} got ${hProvider}`)
 
         const buf = new Uint8Array(await res.arrayBuffer())
         parts.push(buf)
         bytesFetched += buf.byteLength
-
-        let proofDetails: ProofDetailsJson | null = null
-        try {
-          const jsonStr = atob(hProofJson)
-          const wrapper = JSON.parse(jsonStr) as { proof_details?: ProofDetailsJson }
-          proofDetails = wrapper.proof_details || null
-        } catch (e) {
-          void e
-        }
-        if (!proofDetails) throw new Error('failed to parse proof_details from X-Nil-Proof-JSON')
-
-        proofChunks.push({
-          rangeStart: BigInt(hRangeStart),
-          rangeLen: BigInt(hRangeLen),
-          proof: {
-            mduIndex: BigInt(proofDetails.mdu_index),
-            mduRootFr: base64ToHex(proofDetails.mdu_root_fr),
-            manifestOpening: base64ToHex(proofDetails.manifest_opening),
-            blobCommitment: base64ToHex(proofDetails.blob_commitment),
-            merklePath: (proofDetails.merkle_path || []).map(base64ToHex),
-            blobIndex: Number(proofDetails.blob_index || 0),
-            zValue: base64ToHex(proofDetails.z_value),
-            yValue: base64ToHex(proofDetails.y_value),
-            kzgOpeningProof: base64ToHex(proofDetails.kzg_opening_proof),
-          },
-        })
 
         setProgress((p) => ({
           ...p,
@@ -253,43 +259,33 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 
-      if (!provider) throw new Error('provider missing after download')
-
       try {
-        setProgress((p) => ({ ...p, phase: 'submitting_proof_tx', receiptsSubmitted: 0, receiptsTotal: 1 }))
+        setProgress((p) => ({ ...p, phase: 'confirming_session_tx', receiptsSubmitted: 1, receiptsTotal: 2 }))
 
-        // Fetch next nonce from chain state.
-        let lastReceiptNonce = 0
-        try {
-          const nonceRes = await fetch(
-            `${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(dealId)}/receipt-nonce?file_path=${encodeURIComponent(
-              filePath,
-            )}`,
-          )
-          if (nonceRes.ok) {
-            const json = await nonceRes.json()
-            lastReceiptNonce = Number(json.last_nonce || 0) || 0
-          }
-        } catch (e) {
-          void e
-        }
-        const nextNonce = lastReceiptNonce + 1
-
-        const txData = encodeFunctionData({
+        const confirmTxData = encodeFunctionData({
           abi: NILSTORE_PRECOMPILE_ABI,
-          functionName: 'proveRetrievalBatch',
-          args: [BigInt(dealId), provider, filePath, BigInt(nextNonce), proofChunks],
+          functionName: 'confirmRetrievalSession',
+          args: [sessionId],
         })
-
-        const txHash = (await ethereum.request({
+        const confirmTxHash = (await ethereum.request({
           method: 'eth_sendTransaction',
-          params: [{ from: address, to: appConfig.nilstorePrecompile, data: txData, gas: numberToHex(25_000_000) }],
+          params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(2_000_000) }],
         })) as Hex
+        await waitForTransactionReceipt(confirmTxHash)
 
-        await waitForTransactionReceipt(txHash as Hex)
+        setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))
+        const proofRes = await fetch(`${appConfig.gatewayBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        })
+        if (!proofRes.ok) {
+          const text = await proofRes.text().catch(() => '')
+          throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+        }
 
         setReceiptStatus('submitted')
-        setProgress((p) => ({ ...p, phase: 'done', receiptsSubmitted: 1, receiptsTotal: 1 }))
+        setProgress((p) => ({ ...p, phase: 'done', receiptsSubmitted: 2, receiptsTotal: 2 }))
       } catch (e) {
         console.error(e)
         setProgress((p) => ({ ...p, phase: 'error', message: (e as Error).message }))

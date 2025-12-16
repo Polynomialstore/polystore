@@ -52,9 +52,11 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
+  const dealProviders = deal.providers || []
+  const dealProvidersKey = dealProviders.join(',')
 
   useEffect(() => {
-    if (!deal.providers || deal.providers.length === 0) {
+    if (!dealProvidersKey) {
       setProvidersByAddr({})
       return
     }
@@ -89,7 +91,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return () => {
       cancelled = true
     }
-  }, [deal.providers])
+  }, [dealProvidersKey])
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
