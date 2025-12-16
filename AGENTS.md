@@ -678,10 +678,10 @@ This is the **canonical execution checklist** for the next development sprint. E
 
 This sprint removes the devnet shortcut where the “provider” (currently `faucet`) pays gas and signs on-chain transactions for user actions. The gateway should behave like a user desktop daemon: it can compute/prepare proofs, but must not be a funded key holder.
 
-- [ ] **Goal 1: Remove provider/faucet as tx signer.**
-    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `nilchaind tx ... --from faucet` from the critical path for retrieval and deal lifecycle.
-    - **Target model:** All on-chain transactions are broadcast as user-signed transactions (MetaMask/EVM signer), with the gateway acting as a stateless helper/relayer (no private keys).
-    - **Pass gate:** A user can create deal → upload/commit → fetch → submit receipt with no gateway-held funded keys, and on-chain heat increments.
+- [x] **Goal 1: Remove provider/faucet as tx signer.**
+    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `nilchaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
+    - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the NilStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
+    - **Pass gate:** A user can create deal → upload/commit → fetch → submit retrieval proof with no gateway-held funded keys, and on-chain heat increments.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).
         - Root normalization: accepting both `0x` + mixed-case inputs but writing a single canonical directory key can surface duplicate-directory bugs; enforce canonicalization + explicit conflict errors.
@@ -694,7 +694,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - Unit: missing/invalid `deal_id` returns `400`; unknown deal returns `404`; owner mismatch returns `403`; stale root returns `409`.
         - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
-    - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_lifecycle.sh` and `./e2e_gateway_retrieval.sh`
+    - **Test gate:** `cd nil_gateway && go test ./...` and `cd nil-website && npm run lint` and `./scripts/e2e_lifecycle.sh` and `./scripts/e2e_browser_smoke.sh` and `./e2e_gateway_retrieval.sh`
 
 - [x] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
@@ -736,6 +736,45 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 **Deprioritized:**
 - Native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
+
+### 11.7 Sprint 4 (Retrieval Sessions: On-Chain Session State + User Completion)
+
+**Objective:** Harden retrievals against grief modes by requiring on-chain evidence of (a) a user-authorized retrieval request and (b) a user-confirmed successful completion, while keeping the session definition aligned to NilFS + Triple Proof and **blob/MDU units** (not file chunks).
+
+- [ ] **Goal 1: Chain: define `RetrievalSession` state + status enum.**
+    - **Session unit:** contiguous **blobs** (128 KiB) that may span MDUs; `total_bytes = blob_count * 131072` and must be a multiple of 128 KiB.
+    - **Session identity:** `session_id = keccak256(encode({deal_id, owner, provider, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}))` (canonical encoding, documented + test-vectored).
+    - **State machine:** `OPEN` → (`PROOF_SUBMITTED` and/or `USER_CONFIRMED`) → `COMPLETED`; `EXPIRED` terminal if past `expires_at` and not completed; optional `CANCELED`.
+    - **Validation:** provider must be one of `Deal.providers`; `start_blob_index < BLOBS_PER_MDU`; `blob_count > 0`; `manifest_root` matches current deal content at open time (pin to prevent “proof against old root” ambiguity).
+    - **Files:** `nilchain/proto/nilchain/nilchain/v1/types.proto`, `nilchain/proto/nilchain/nilchain/v1/tx.proto`, `nilchain/proto/nilchain/nilchain/v1/query.proto`, keeper collections + indexes, generated pb.go.
+    - **Test gate:** `cd nilchain && make proto-gen && go test ./x/nilchain/keeper -run RetrievalSession`
+
+- [ ] **Goal 2: Chain: add txs + queries for sessions (owner/provider/deal views).**
+    - **Msgs (minimum):**
+        - `MsgOpenRetrievalSession` (signer: user): creates `OPEN` session; rejects nonce replay.
+        - `MsgConfirmRetrievalSession` (signer: user): sets `USER_CONFIRMED`.
+        - `MsgSubmitRetrievalSessionProof` (signer: provider): submits proof-of-retrieval (triple proof(s)) and sets `PROOF_SUBMITTED`.
+    - **Queries (minimum):** `GetRetrievalSession`, `ListRetrievalSessionsByOwner`, `ListRetrievalSessionsByProvider` (and optionally by `deal_id`).
+    - **Pass gate:** session tables are queryable from LCD and status transitions are enforced.
+    - **Test gate:** `cd nilchain && go test ./...`
+
+- [ ] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
+    - **ABI (minimum):** `openRetrievalSession(...) returns (bytes32 sessionId)` and `confirmRetrievalSession(bytes32 sessionId)`.
+    - **Pass gate:** browser sees only “Confirm transaction” prompts (no `eth_signTypedData_v4`) for session open/confirm.
+    - **Test gate:** `cd nil-website && npm run test:e2e`
+
+- [ ] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
+    - **Fetch contract:** remote fetches require `X-Nil-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
+    - **Range contract:** each HTTP range maps to exactly one blob; session covers `{start_mdu_index,start_blob_index}+blob_count` contiguous blobs (gateway may choose chunking).
+    - **Proof assembly:** gateway records one `ChainedProof` per served blob under `session_id` (restart-safe).
+    - **Provider submission:** provider submits `MsgSubmitRetrievalSessionProof(session_id, proofs...)`; chain marks `PROOF_SUBMITTED` and only increments “successful retrievals” once `COMPLETED`.
+    - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_browser_smoke.sh`
+
+- [ ] **Goal 5: Web: “My Retrieval Sessions” widget + download flow integration.**
+    - **UI:** Add a straightforward table (no pagination) showing `session_id`, `deal_id`, `provider`, `start_mdu/blob`, `blob_count`, `total_bytes`, `status`, `expires_at`.
+    - **Flow:** “Download” triggers `openRetrievalSession` tx → fetches blobs → triggers `confirmRetrievalSession` tx; provider submission can be async.
+    - **Pass gate:** user can see sessions + statuses update; retries are idempotent via nonce.
+    - **Test gate:** `cd nil-website && npm run lint && npm run test:e2e`
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
