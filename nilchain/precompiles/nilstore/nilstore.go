@@ -75,9 +75,34 @@ const nilstoreABIJSON = `[
     ],
     "outputs":[{"name":"ok","type":"bool"}]
   },
+  {
+    "type":"function",
+    "name":"openRetrievalSession",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},
+      {"name":"provider","type":"string"},
+      {"name":"manifestRoot","type":"bytes"},
+      {"name":"startMduIndex","type":"uint64"},
+      {"name":"startBlobIndex","type":"uint32"},
+      {"name":"blobCount","type":"uint64"},
+      {"name":"nonce","type":"uint64"},
+      {"name":"expiresAt","type":"uint64"}
+    ],
+    "outputs":[{"name":"sessionId","type":"bytes32"}]
+  },
+  {
+    "type":"function",
+    "name":"confirmRetrievalSession",
+    "stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionId","type":"bytes32"}],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
   {"type":"event","name":"DealCreated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true}]},
   {"type":"event","name":"DealContentUpdated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"manifestRoot","type":"bytes","indexed":false},{"name":"sizeBytes","type":"uint64","indexed":false}]},
-  {"type":"event","name":"RetrievalProved","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"filePath","type":"string","indexed":false},{"name":"bytesServed","type":"uint64","indexed":false},{"name":"nonce","type":"uint64","indexed":false}]}
+  {"type":"event","name":"RetrievalProved","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"filePath","type":"string","indexed":false},{"name":"bytesServed","type":"uint64","indexed":false},{"name":"nonce","type":"uint64","indexed":false}]},
+  {"type":"event","name":"RetrievalSessionOpened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"sessionId","type":"bytes32","indexed":false}]},
+  {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]}
 ]`
 
 type sdkContextGetter interface {
@@ -147,9 +172,118 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
 	case "proveRetrievalBatch":
 		return p.runProveRetrievalBatch(ctx, evm, contract, method, input[4:])
+	case "openRetrievalSession":
+		return p.runOpenRetrievalSession(ctx, evm, contract, method, input[4:])
+	case "confirmRetrievalSession":
+		return p.runConfirmRetrievalSession(ctx, evm, contract, method, input[4:])
 	default:
 		return nil, fmt.Errorf("nilstore precompile: unsupported method %q", method.Name)
 	}
+}
+
+func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("openRetrievalSession: failed to unpack args: %w", err)
+	}
+
+	dealID, err := asUint64(args["dealId"])
+	if err != nil {
+		return nil, errors.New("openRetrievalSession: invalid dealId")
+	}
+	provider, err := asString(args["provider"])
+	if err != nil || strings.TrimSpace(provider) == "" {
+		return nil, errors.New("openRetrievalSession: invalid provider")
+	}
+	manifestRoot, err := asBytes(args["manifestRoot"])
+	if err != nil || len(manifestRoot) != 48 {
+		return nil, errors.New("openRetrievalSession: manifestRoot must be 48 bytes")
+	}
+	startMduIndex, err := asUint64(args["startMduIndex"])
+	if err != nil {
+		return nil, errors.New("openRetrievalSession: invalid startMduIndex")
+	}
+	startBlobIndexU64, err := asUint64(args["startBlobIndex"])
+	if err != nil || startBlobIndexU64 > uint64(^uint32(0)) {
+		return nil, errors.New("openRetrievalSession: invalid startBlobIndex")
+	}
+	startBlobIndex := uint32(startBlobIndexU64)
+	blobCount, err := asUint64(args["blobCount"])
+	if err != nil || blobCount == 0 {
+		return nil, errors.New("openRetrievalSession: blobCount must be > 0")
+	}
+	nonce, err := asUint64(args["nonce"])
+	if err != nil {
+		return nil, errors.New("openRetrievalSession: invalid nonce")
+	}
+	expiresAt, err := asUint64(args["expiresAt"])
+	if err != nil {
+		return nil, errors.New("openRetrievalSession: invalid expiresAt")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	res, err := msgServer.OpenRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSession{
+		Creator:        creator,
+		DealId:         dealID,
+		Provider:       strings.TrimSpace(provider),
+		ManifestRoot:   manifestRoot,
+		StartMduIndex:  startMduIndex,
+		StartBlobIndex: startBlobIndex,
+		BlobCount:      blobCount,
+		Nonce:          nonce,
+		ExpiresAt:      expiresAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(res.SessionId) != 32 {
+		return nil, errors.New("openRetrievalSession: invalid session id")
+	}
+
+	var sid [32]byte
+	copy(sid[:], res.SessionId)
+	p.emitEventRetrievalSessionOpened(evm, dealID, caller, strings.TrimSpace(provider), sid)
+
+	out, err := method.Outputs.Pack(sid)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSession: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runConfirmRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("confirmRetrievalSession: failed to unpack args: %w", err)
+	}
+
+	sessionID, err := asBytes32(args["sessionId"])
+	if err != nil {
+		return nil, errors.New("confirmRetrievalSession: invalid sessionId")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	_, err = msgServer.ConfirmRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgConfirmRetrievalSession{
+		Creator:   creator,
+		SessionId: sessionID[:],
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	p.emitEventRetrievalSessionConfirmed(evm, sessionID, caller)
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("confirmRetrievalSession: failed to pack outputs: %w", err)
+	}
+	return out, nil
 }
 
 func (p *Precompile) runCreateDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
@@ -551,6 +685,38 @@ func (p *Precompile) emitEventRetrievalProved(evm *vm.EVM, dealID uint64, owner 
 	})
 }
 
+func (p *Precompile) emitEventRetrievalSessionOpened(evm *vm.EVM, dealID uint64, owner common.Address, provider string, sessionID [32]byte) {
+	ev, ok := p.abi.Events["RetrievalSessionOpened"]
+	if !ok {
+		return
+	}
+	data, err := ev.Inputs.NonIndexed().Pack(provider, sessionID)
+	if err != nil {
+		return
+	}
+	evm.StateDB.AddLog(&ethtypes.Log{
+		Address: p.Address(),
+		Topics:  []common.Hash{ev.ID, common.BigToHash(new(big.Int).SetUint64(dealID)), common.BytesToHash(owner.Bytes())},
+		Data:    data,
+	})
+}
+
+func (p *Precompile) emitEventRetrievalSessionConfirmed(evm *vm.EVM, sessionID [32]byte, owner common.Address) {
+	ev, ok := p.abi.Events["RetrievalSessionConfirmed"]
+	if !ok {
+		return
+	}
+	data, err := ev.Inputs.NonIndexed().Pack()
+	if err != nil {
+		return
+	}
+	evm.StateDB.AddLog(&ethtypes.Log{
+		Address: p.Address(),
+		Topics:  []common.Hash{ev.ID, common.BytesToHash(sessionID[:]), common.BytesToHash(owner.Bytes())},
+		Data:    data,
+	})
+}
+
 func asUint64(v any) (uint64, error) {
 	switch t := v.(type) {
 	case uint64:
@@ -589,6 +755,22 @@ func asBytes(v any) ([]byte, error) {
 		return b, nil
 	default:
 		return nil, fmt.Errorf("not bytes: %T", v)
+	}
+}
+
+func asBytes32(v any) ([32]byte, error) {
+	var out [32]byte
+	switch t := v.(type) {
+	case [32]byte:
+		return t, nil
+	case []byte:
+		if len(t) != 32 {
+			return out, fmt.Errorf("expected 32 bytes, got %d", len(t))
+		}
+		copy(out[:], t)
+		return out, nil
+	default:
+		return out, fmt.Errorf("not bytes32: %T", v)
 	}
 }
 
