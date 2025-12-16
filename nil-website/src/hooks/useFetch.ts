@@ -197,7 +197,7 @@ export function useFetch() {
           const decoded = decodeEventLog({
             abi: NILSTORE_PRECOMPILE_ABI,
             eventName: 'RetrievalSessionOpened',
-            topics: log.topics,
+            topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
             data: log.data,
           })
           const sid = (decoded.args as { sessionId: Hex }).sessionId
@@ -255,7 +255,7 @@ export function useFetch() {
         }))
       }
 
-      const blob = new Blob(parts, { type: 'application/octet-stream' })
+      const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 

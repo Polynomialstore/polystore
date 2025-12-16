@@ -55,7 +55,7 @@ export function useCreateDeal() {
           const decoded = decodeEventLog({
             abi: NILSTORE_PRECOMPILE_ABI,
             eventName: 'DealCreated',
-            topics: log.topics,
+            topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
             data: log.data,
           })
           const dealId = (decoded.args as { dealId: bigint }).dealId
