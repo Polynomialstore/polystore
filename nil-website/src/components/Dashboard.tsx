@@ -19,6 +19,7 @@ import { lcdFetchDeals } from '../api/lcdClient'
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import type { LcdDeal as Deal } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import { toHexFromBase64OrHex } from '../domain/hex'
 
 interface Provider {
   address: string
@@ -146,6 +147,9 @@ export function Dashboard() {
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
 
   const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
+  const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
+  const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
+  const [retrievalSessionsError, setRetrievalSessionsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (allDeals.length === 0) {
@@ -181,6 +185,47 @@ export function Dashboard() {
       window.clearInterval(interval)
     }
   }, [allDeals])
+
+  useEffect(() => {
+    if (!nilAddress) {
+      setRetrievalSessions([])
+      setRetrievalSessionsError(null)
+      setRetrievalSessionsLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function refreshSessions() {
+      if (cancelled) return
+      setRetrievalSessionsLoading(true)
+      try {
+        const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/retrieval-sessions/by-owner/${encodeURIComponent(
+          nilAddress,
+        )}?pagination.limit=1000`
+        const res = await fetch(url)
+        if (!res.ok) {
+          const text = await res.text().catch(() => '')
+          throw new Error(text || `status ${res.status}`)
+        }
+        const json = (await res.json().catch(() => null)) as { sessions?: unknown[] } | null
+        const sessions = Array.isArray(json?.sessions) ? json!.sessions : []
+        if (!cancelled) setRetrievalSessions(sessions as Record<string, unknown>[])
+        if (!cancelled) setRetrievalSessionsError(null)
+      } catch (e) {
+        if (!cancelled) setRetrievalSessionsError(e instanceof Error ? e.message : 'Failed to fetch retrieval sessions')
+      } finally {
+        if (!cancelled) setRetrievalSessionsLoading(false)
+      }
+    }
+
+    refreshSessions()
+    const interval = window.setInterval(refreshSessions, 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [nilAddress])
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -358,6 +403,55 @@ export function Dashboard() {
       idx++
     }
     return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
+  }
+
+  function parseUint64(v: unknown): bigint {
+    if (typeof v === 'bigint') return v
+    if (typeof v === 'number') return BigInt(Math.max(0, Math.floor(v)))
+    if (typeof v === 'string') {
+      const trimmed = v.trim()
+      if (!trimmed) return 0n
+      if (trimmed.startsWith('0x')) {
+        try {
+          return BigInt(trimmed)
+        } catch {
+          return 0n
+        }
+      }
+      try {
+        return BigInt(trimmed)
+      } catch {
+        return 0n
+      }
+    }
+    return 0n
+  }
+
+  function formatBytesU64(v: unknown): string {
+    const b = parseUint64(v)
+    if (b <= BigInt(Number.MAX_SAFE_INTEGER)) return formatBytes(Number(b))
+    return `${b.toString()} B`
+  }
+
+  function formatSessionStatus(v: unknown): string {
+    if (typeof v === 'number') {
+      const map: Record<number, string> = {
+        0: 'UNSPECIFIED',
+        1: 'OPEN',
+        2: 'PROOF_SUBMITTED',
+        3: 'USER_CONFIRMED',
+        4: 'COMPLETED',
+        5: 'EXPIRED',
+        6: 'CANCELED',
+      }
+      return map[v] || String(v)
+    }
+    if (typeof v === 'string') {
+      const trimmed = v.trim()
+      if (!trimmed) return '—'
+      return trimmed.replace('RETRIEVAL_SESSION_STATUS_', '')
+    }
+    return '—'
   }
 
   const providerStatsByAddress = useMemo(() => {
@@ -1082,6 +1176,73 @@ export function Dashboard() {
                     <td className="px-4 py-2 text-right text-muted-foreground">
                       {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}
                     </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          My Retrieval Sessions
+        </div>
+        <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
+          <thead className="bg-muted/30">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
+              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {!nilAddress ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                  Connect a wallet to view retrieval sessions.
+                </td>
+              </tr>
+            ) : retrievalSessionsLoading ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                  Loading sessions…
+                </td>
+              </tr>
+            ) : retrievalSessions.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                  No retrieval sessions found.
+                  {retrievalSessionsError ? (
+                    <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
+                  ) : null}
+                </td>
+              </tr>
+            ) : (
+              retrievalSessions.map((raw) => {
+                const s = raw as Record<string, unknown>
+                const dealId = String(s['deal_id'] ?? '')
+                const provider = String(s['provider'] ?? '')
+                const status = formatSessionStatus(s['status'])
+                const updatedHeight = String(s['updated_height'] ?? '')
+                const totalBytes = formatBytesU64(s['total_bytes'])
+                const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
+                const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
+                return (
+                  <tr key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`} className="hover:bg-muted/50 transition-colors">
+                    <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
+                      {shortSession}
+                    </td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
+                      {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">{status}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
                   </tr>
                 )
               })
