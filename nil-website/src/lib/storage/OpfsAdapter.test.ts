@@ -112,11 +112,15 @@ class MockFileSystemDirectoryHandle {
 const mockRootDirectoryHandle = new MockFileSystemDirectoryHandle('root-opfs');
 
 // Mock navigator.storage.getDirectory
-(global as any).navigator = {
-    storage: {
-        getDirectory: async () => mockRootDirectoryHandle,
+Object.defineProperty(global, 'navigator', {
+    value: {
+        storage: {
+            getDirectory: async () => mockRootDirectoryHandle,
+        },
     },
-};
+    configurable: true,
+    writable: true,
+});
 
 // Reset mock before each test
 test.beforeEach(() => {
