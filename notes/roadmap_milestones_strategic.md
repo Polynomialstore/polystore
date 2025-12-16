@@ -16,13 +16,32 @@ This document outlines the milestones required to execute this transition.
 ---
 
 ## Milestone 1: Devnet Gamma (The "Trustless" Pivot)
-**Goal:** Eliminate the "Faucet/Provider-Pays" model. Users must pay for their own storage and retrieval using their own wallets (MetaMask).
+**Goal:** Eliminate the "Faucet/Provider-Pays" model and establish the long-term "Hybrid Client" architecture.
 
-*   **Consulting Analysis:** Currently, the Gateway signs transactions on behalf of users or the faucet. This masks gas costs and creates a central point of failure/custody. Before scaling, the system must prove it works when the *user* holds the keys and pays the gas.
+### Execution Strategy: The "One Core" Migration
+To enable the Browser Gateway without creating protocol drift, we must unify the core logic.
+*   **Current State:** Cryptography is in Rust (`nil_core`), but Filesystem Layout (`Mdu0Builder`) is in Go.
+*   **Target State:** All "Thinking" (Crypto + Layout) moves to `nil_core` (Rust).
+*   **Bindings:**
+    *   **Browser:** Calls `nil_core` via WASM.
+    *   **Go Gateway:** Calls `nil_core` via CGO (FFI).
+*   **Result:** A single source of truth for the NilFS format, preventing bugs where the browser and gateway produce different roots for the same file.
+
+*   **Consulting Analysis:** Currently, the Gateway signs transactions on behalf of users. This masks gas costs and creates a central point of failure. We must shift to a model where the Browser is the primary "User Agent" (Thick Client), capable of operating independently via WASM, while optionally delegating heavy compute to a local Gateway. Simultaneously, we must deploy the real economic logic so users pay for what they use.
 *   **Key Deliverables:**
-    *   **User-Signed Uploads:** Update the Web UI to use the `createDeal` and `updateDealContent` EVM precompiles directly. The Gateway becomes a "dumb pipe" for bytes, not a transaction signer.
-    *   **User-Signed Retrievals:** Fully integrate `openRetrievalSession` and `confirmRetrievalSession` into the frontend. The browser initiates the session transaction, not the gateway.
-    *   **"Become a Provider" UX:** A self-service web flow for onboarding new SPs without manual CLI intervention (generating keys, registering endpoints).
+    *   **User-Signed Uploads:** Update the Web UI to use the `createDeal` and `updateDealContent` EVM precompiles directly. The Gateway becomes a "dumb pipe" for bytes.
+    *   **Hybrid Client Architecture (Gamma-2 Scope):**
+        *   **"Green Dot" Integration:** UI widget to detect optional local Gateway.
+        *   **Unified Namespace:** A single file explorer view aggregating files from the Network (On-Chain), Local Gateway (OS), and Browser (OPFS).
+        *   **Sync Logic:** Mechanism to synchronize metadata (`MDU #0`) between the browser's IndexedDB and the Gateway's local DB to ensure a consistent view.
+        *   **Visual Indicators:** Badges/Icons to show where data physically resides (e.g., "Local Only", "Synced", "Gateway Cached").
+        *   **WASM Core:** Port `Mdu0Builder` logic to Rust/WASM to enable pure-browser file sharding and slab creation.
+        *   **Tiered Storage:** Implement `OPFS -> Local Gateway -> Network` resolution for data retrieval.
+        *   **Review Gate:** *Critical:* A full UX and Technical Architecture review must be conducted before executing the frontend implementation of the Hybrid Client (Gamma-2).
+    *   **Economic Model V1 (Lock-in):**
+        *   **Term Deposits:** Implement the "Pay-at-Ingest" logic where `UpdateDealContent` deducts storage rent immediately to set `end_block` (Market-Rate Lock-in).
+        *   **Retrieval Credits:** Implement `Deal.retrieval_credit` accrual and consumption logic.
+    *   **"Become a Provider" UX:** A self-service web flow for onboarding new SPs without manual CLI intervention.
 
 ## Milestone 2: The "Velocity" Upgrade (GPU & WASM)
 **Goal:** Reduce 512GB upload times from ~18 hours (CPU) to <40 minutes to make the "Wholesale" proposition viable.

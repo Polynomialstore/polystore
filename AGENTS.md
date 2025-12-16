@@ -453,38 +453,45 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
-### 11.0 Immediate Goals (Retrieval Separation & NilGateway)
+### 11.0 Immediate Goals: Devnet Gamma-1 (The "One Core" Port)
 
-This is the **canonical execution checklist** for the "NilGateway Refactor" sprint. The goal is to separate the "User Daemon" (Gateway) from the "Storage Provider" (SP) logic, enabling true client-side signing of retrieval receipts.
+**Objective:** Move the NilFS layout logic (`Mdu0Builder`) from Go (`nil_gateway/pkg/builder`) to Rust (`nil_core`) to enable a shared implementation for both the Go Gateway (via CGO) and the Browser (via WASM).
 
-- [x] **Goal 1: Define Architecture & Specs (Phase 1).**
-    - **Steps:** Create `nil_gateway/gateway-provider-split.md`; update `AGENTS.md`.
-    - **Deliverable:** Clear separation of roles (`nil_gateway` vs `nil_provider`) and the Interactive Retrieval Protocol flow.
+- [ ] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
+    - **Step 1:** Define `FileRecordV1` and `FileTableHeader` structs in Rust (matching `nil_gateway/pkg/layout`).
+    - **Step 2:** Implement `Mdu0Builder` struct and methods (`add_file`, `finalize`, etc.) in Rust.
+    - **Step 3:** Implement serialization tests ensuring byte-for-byte parity with the Go implementation.
+    - **Test gate:** `cargo test -p nil_core`
 
-- [x] **Goal 2: Implement Storage Provider Receipt Logic (`nil_provider`).**
-    - **Steps:**
-        1.  Add `POST /sp/receipt` endpoint to `nil_gateway` (acting as SP).
-        2.  Implement validation logic: Verify `user_signature` matches on-chain Deal Owner.
-        3.  Implement submission logic: Batch or direct submit `MsgProveLiveness` using Provider Key.
-    - **Pass gate:** `curl POST /sp/receipt` with a valid signed payload results in a successful on-chain transaction.
-    - **Test gate:** Unit tests in `nil_gateway` + Manual curl test.
+- [ ] **Goal 2: Expose Layout Logic via WASM.**
+    - **Step 1:** Add `wasm-bindgen` exports for `Mdu0Builder`.
+    - **Step 2:** Create a TS test case using the WASM build to verify it generates valid MDU #0 bytes for a sample input.
+    - **Test gate:** `cd nil-website && npm run test:unit`
 
-- [x] **Goal 3: Refactor Gateway Fetch for Interactive Flow (`nil_gateway`).**
-    - **Steps:**
-        1.  Update `GatewayFetch` to **stop** calling `submitRetrievalProof`.
-        2.  Update `GatewayFetch` to set response headers: `X-Nil-Deal-ID`, `X-Nil-Epoch`, `X-Nil-Provider`, `X-Nil-Bytes-Served`.
-    - **Pass gate:** `curl -I /gateway/fetch/...` returns the correct headers; no new `MsgProveLiveness` tx is seen on chain.
-    - **Test gate:** Integration test ensuring headers are present.
+- [ ] **Goal 3: Expose Layout Logic via C-FFI (CGO).**
+    - **Step 1:** Add `extern "C"` functions in `nil_core` (e.g., `nil_mdu0_create`, `nil_mdu0_add_file`).
+    - **Step 2:** Update `nilchain/x/crypto_ffi` (or create a new `layout_ffi` package) to bind to these functions.
+    - **Test gate:** Go unit test calling Rust FFI.
 
-- [x] **Goal 4: Implement Client-Side Signing (Frontend & Chain).**
-    - **Steps:**
-        1.  **Chain:** Update `nilchain` EIP-712 types to include `RetrievalReceipt` (excluding complex proof details from the signature).
-        2.  **Chain:** Update `MsgProveLiveness` to verify EIP-712 signatures.
-        3.  **Frontend:** Update `useFetch` (or download logic) to inspect headers.
-        4.  **Frontend:** Trigger EIP-712 signature request (MetaMask) for `RetrievalReceipt`.
-        5.  **Frontend:** POST the signed receipt to `/gateway/receipt` (which proxies to `/sp/receipt`).
-    - **Pass gate:** "Download" button triggers wallet signature -> File downloads -> Receipt is submitted on-chain.
-    - **Test gate:** Browser E2E smoke test (`scripts/e2e_browser_smoke.sh` updated).
+- [ ] **Goal 4: Refactor `nil_gateway` to use Rust Core.**
+    - **Step 1:** Update `nil_gateway` to import the FFI package instead of `pkg/builder`.
+    - **Step 2:** Verify `GatewayUpload` still produces correct roots/slabs using the Rust backend.
+    - **Step 3:** Delete `nil_gateway/pkg/builder` and `nil_gateway/pkg/layout`.
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` (Full regression test).
+
+---
+
+### 11.1 Completed Sprint 4 (Retrieval Sessions)
+
+- [x] **Goal 1: Chain: define `RetrievalSession` state + status enum.**
+- [x] **Goal 2: Chain: add txs + queries for sessions.**
+- [x] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
+- [x] **Goal 4: Gateway/SP: enforce session-bound fetch.**
+- [x] **Goal 5: Web: “My Retrieval Sessions” widget.**
+
+---
+
+### 11.2 (Deferred) Legacy Devnet Gamma Goals
 
 ### 11.1 Sprint 2 (Bundled Receipts, Batching, Nonce Scoping)
 
@@ -588,12 +595,7 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 * (Devnet-only) support **manual provider selection** to enable “send files to each other” demos without waiting on placement policy iteration.
 
 #### Goal 1: SP signup UX (Web wizard + validation)
-- [ ] Add a web “Become a Provider” wizard that:
-    - Detects the user’s `nil1...` address (derived from MetaMask `0x...`), and/or allows pasting a bech32 provider address.
-    - Validates endpoint(s) as Multiaddr strings.
-    - Outputs exact CLI commands to run `register-provider` + `run_devnet_provider.sh start`.
-    - Shows “registered / healthy” status by querying `Query/GetProvider` and probing the endpoint(s).
-- **Pass gate:** A new participant can follow the wizard and appear on `/nilchain/nilchain/v1/providers` with a reachable endpoint.
+- [ ] DEFERRED (CLI preferred for provider onboarding)
 
 #### Goal 2: Remove “faucet signs user actions” (MetaMask pays gas)
 - [x] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
@@ -604,10 +606,7 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 - **Pass gate:** A user can create deal → commit content → download → finalize receipt with **zero gateway-held funded keys**.
 
 #### Goal 3 (Devnet-only): Manual provider selection at deal creation
-- [ ] Add a devnet feature flag / module param that allows the deal creator to specify a provider (or ordered provider list) at deal creation.
-    - Must be explicitly disabled by default on “real” networks (keeps anti-sybil placement intact).
-- [ ] Update web UI deal creation to offer “Auto (deterministic)” vs “Manual (devnet)” provider selection.
-- **Pass gate:** User can select “send this deal to Alice’s SP” and the router routes upload/fetch accordingly.
+- [ ] DEFERRED (Current deterministic placement is sufficient)
 
 #### Goal 4: Remote SP runbooks + hub ops docs
 - [ ] Expand `DEVNET_MULTI_PROVIDER.md` with:
