@@ -1,10 +1,10 @@
-# TODO: Retrieval Sessions (Blob-Indexed, Provider-Bound, User Completion Signature)
+# TODO: Retrieval Sessions (Blob-Indexed, Provider-Bound, User Completion Tx)
 
 ## Goal
 Close the devnet/alpha grief mode where an SP can serve bytes but the user never submits an on-chain proof/receipt. The SP must be able to prove on-chain that:
 1) the user authorized a retrieval of a specific contiguous blob interval (provider-bound), and
 2) the SP served correct data for that interval (cryptographic proof), and
-3) the user confirmed completion (user signature).
+3) the user confirmed completion (on-chain confirmation).
 
 This is mandated for now; later optimizations may reduce prompts/payloads.
 
@@ -39,7 +39,7 @@ User opens a retrieval session on-chain, binding the authorization to:
 Chain stores `RetrievalSession` with `status=OPEN`.
 
 Session ID:
-- `session_id = H(owner, deal_id, provider, start_blob, blob_count, nonce, expires_at)`
+- `session_id = H(owner, deal_id, provider, manifest_root, start_blob, blob_count, nonce, expires_at)`
 
 Expose via an EVM precompile method (preferred) so it’s a single “Confirm transaction” prompt:
 - `openRetrievalSession(dealId, provider, startBlob, blobCount, expiresAt, nonce) -> sessionId`
@@ -55,20 +55,18 @@ Expose via an EVM precompile method (preferred) so it’s a single “Confirm tr
   - (optional) `owner` match derived from `session`
 - Provider serves the blob interval (as one or multiple HTTP Range requests), generating proof metadata per blob.
 
-### 3) Completion Receipt (User → Signature)
-After the gateway completes the download, the user signs a completion receipt:
-- `CompletionReceipt = { session_id, status: COMPLETED }` (optionally include bytes/interval redundantly)
+### 3) Completion Confirm (User → Chain, MetaMask tx)
+After the gateway completes the download, the user submits an on-chain confirmation bound to `session_id`:
+- `confirmRetrievalSession(session_id)`
 
-This is the “proof of validation” that the user claims the retrieval completed successfully.
+This is the protocol’s “proof of validation” that the user claims the retrieval completed successfully (and keeps the UX as a normal MetaMask “Confirm transaction” prompt, not `eth_signTypedData_v4`).
 
-### 4) SP Submission (Provider → Chain, must include both)
-Provider submits:
-1) **Proof of Retrieval**: the cryptographic proofs for the exact blob interval.
-2) **Proof of Validation**: the user’s `CompletionReceipt` signature.
+### 4) SP Submission (Provider → Chain)
+Provider submits **Proof of Retrieval**: the cryptographic proofs for the exact blob interval (keyed by `session_id`).
 
-These can arrive in either order; chain transitions status when both are present:
+The user confirmation and provider proof can arrive in either order; chain transitions status when both are present:
 - `OPEN -> PROOF_SUBMITTED` (after proofs)
-- `OPEN -> USER_CONFIRMED` (after user receipt sig)
+- `OPEN -> USER_CONFIRMED` (after user confirmation tx)
 - `*_ -> COMPLETED` only once both are present and match the session.
 
 ## On-Chain Data Model (Sketch)
@@ -83,21 +81,19 @@ These can arrive in either order; chain transitions status when both are present
   - `expires_height` (u64)
   - `status` (enum)
   - `proof_submitted` (bool) + metadata (bytes served, proof commitment)
-  - `user_confirmed` (bool) + `user_sig` (bytes)
+  - `user_confirmed` (bool)
 
 ## Gateway / Provider Responsibilities
 - Gateway (user side):
   - derives blob interval from file intent when needed
   - opens session via wallet tx (precompile)
   - performs the fetch (router → provider)
-  - prompts user signature for completion receipt
-  - POSTs receipt to provider (or routes to provider endpoint)
+  - prompts user confirmation tx for session completion
 
 - Provider:
   - refuses serving without valid `session_id`
   - serves bytes + generates proofs
-  - accepts user completion receipt (HTTP)
-  - submits both proofs + user signature on-chain
+  - submits proof-of-retrieval on-chain (session completes once the user confirmation tx is also present)
 
 ## UI
 - Add a dashboard widget: “My Retrieval Sessions”
@@ -106,4 +102,3 @@ These can arrive in either order; chain transitions status when both are present
 
 ## Notes / Future Optimization
 Once stable, we can optimize toward the “happy path” where the SP may only need the user completion signature (or only one on-chain submission), but for now both are mandated.
-

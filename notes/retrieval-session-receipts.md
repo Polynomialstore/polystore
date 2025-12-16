@@ -3,6 +3,8 @@
 **Status:** Implemented (Devnet)  
 **Goal:** Reduce wallet prompts and on-chain TX count by moving from “sign per chunk” to “sign once per download session”, while improving auditability (range binding) and operability (batch submission, durable sessions).
 
+**Note:** This document describes the legacy *receipt-based* session path. The current protocol direction is the on-chain Retrieval Session model (tx-only open + tx-only completion confirmation) described in `spec.md` §7.2.
+
 ---
 
 ## 1. What changes (high level)
