@@ -160,7 +160,9 @@ jobs:
         run: cd nil_core && cargo build --release
 
       - name: Run E2E Lifecycle Script
-        run: scripts/e2e_lifecycle.sh
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          scripts/e2e_lifecycle.sh
 
   # ------------------------------------------------------------------
   # SMART CONTRACTS (Foundry)
