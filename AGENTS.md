@@ -457,30 +457,35 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Implement the browser-side storage adapter (OPFS), the Web Worker harness for WASM offloading, and the "Green Dot" local gateway detection to enable the "Hybrid Client" architecture.
 
-- [ ] **Goal 1: Implement OPFS Storage Adapter (`nil-website`).**
+- [x] **Goal 1: Implement OPFS Storage Adapter (`nil-website`).**
     - **Step 1:** Create `src/lib/storage/OpfsAdapter.ts`. Implement `writeMdu`, `readMdu`, `listFiles`.
     - **Step 2:** Add unit tests using a mock FileSystem API.
     - **Test gate:** `npm run test:unit`
 
-- [ ] **Goal 2: Implement WASM Worker Harness.**
+- [x] **Goal 2: Implement WASM Worker Harness.**
     - **Step 1:** Create `src/workers/gateway.worker.ts` importing `nil_core`.
     - **Step 2:** Implement message passing for `ShardFile` (chunked) and `ComputeCommitments`.
     - **Step 3:** Update `FileSharder.tsx` or create `useThickClient` hook to use the worker.
     - **Test gate:** Browser E2E smoke test (ensure no UI freeze on large file).
 
-- [ ] **Goal 3: Implement "Green Dot" Gateway Detection.**
+- [x] **Goal 3: Implement "Green Dot" Gateway Detection.**
     - **Step 1:** Create `useLocalGateway` hook polling `http://localhost:8080/health`.
     - **Step 2:** Create `GatewayStatusWidget.tsx` (The Green Dot).
     - **Test gate:** Manual verification / Unit test mocking fetch.
 
-- [ ] **Goal 4: Unified "Staging" Manager.**
+- [x] **Goal 4: Unified "Staging" Manager.**
     - **Step 1:** Create `StagingContext` backed by IndexedDB (`idb`).
     - **Step 2:** Track files waiting to be synced (pointing to OPFS paths).
     - **Test gate:** Unit tests for persistence (reload page, file still staged).
 
----
+### 11.2 Next Sprint: Devnet Gamma-3 (Economic Upgrade)
 
-### 11.1 Completed Sprint: Gamma-1 (Rust Core Port)
+**Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
+
+- [ ] **Goal 1: Chain Params & Fees.**
+- [ ] **Goal 2: Refactor `CreateDeal` (Creation Fee).**
+- [ ] **Goal 3: Refactor `UpdateDealContent` (Term Deposit).**
+- [ ] **Goal 4: Retrieval Credits.**
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**
