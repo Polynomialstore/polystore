@@ -4,7 +4,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// @ts-expect-error
 import init, { Mdu0 } from '../../public/wasm/nil_core.js';
 
 const __filename = fileURLToPath(import.meta.url);
