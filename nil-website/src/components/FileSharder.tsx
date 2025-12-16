@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
@@ -7,7 +7,7 @@ import { workerClient } from '../lib/worker-client';
 interface ShardItem {
   id: number;
   commitments: string[]; // Hex strings from witness
-  status: 'pending' | 'processing' | 'expanded';
+  status: 'pending' | 'processing' | 'expanded' | 'error';
 }
 
 type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
@@ -122,7 +122,7 @@ export function FileSharder() {
 
         try {
             // Call WASM worker's expand_file
-            const result = (await workerClient.shardFile(chunk)) as { witness: number[][] };
+            const result = (await workerClient.shardFile(chunk)) as unknown as { witness: number[][] };
             
             const commitments = result.witness.map((w) => 
                 '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')

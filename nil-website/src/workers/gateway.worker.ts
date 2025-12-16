@@ -11,20 +11,6 @@ let wasmInitialized = false;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
 let nilWasmInstance: NilWasm | null = null;
 
-// Unique ID counter for messages
-let nextMessageId = 0;
-const pendingMessages = new Map<number, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
-
-// Function to send messages to the worker and await a response
-function postWorkerMessage(worker: Worker, type: string, payload: any, transferables?: Transferable[]): Promise<any> {
-    const id = nextMessageId++;
-    return new Promise((resolve, reject) => {
-        pendingMessages.set(id, { resolve, reject });
-        worker.postMessage({ id, type, payload }, transferables || []);
-    });
-}
-
-
 async function initializeWasm() {
     if (!wasmInitialized) {
         // Assume nil_core_bg.wasm is in the same directory as nil_core.js
@@ -93,7 +79,9 @@ self.onmessage = async (event) => {
                 throw new Error(`Unknown message type: ${type}`);
         }
         // If the result is a Uint8Array, transfer its buffer to avoid copying
-        self.postMessage({ id, type: 'result', payload: result }, result instanceof Uint8Array ? [result.buffer] : undefined);
+        const transferList = result instanceof Uint8Array ? [result.buffer] : [];
+        // @ts-expect-error - TS definition for postMessage in worker might be ambiguous
+        self.postMessage({ id, type: 'result', payload: result }, transferList);
     } catch (error: any) {
         self.postMessage({ id, type: 'error', payload: error.message || 'Unknown worker error' });
     }

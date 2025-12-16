@@ -6,7 +6,6 @@ import * as OpfsAdapter from './OpfsAdapter';
 // Mock the FileSystem API for Node.js environment
 // This mock simulates the behavior of FileSystemDirectoryHandle and FileSystemFileHandle
 // and stores content in a simple in-memory map.
-const mockFileContent: { [dealId: string]: { [fileName: string]: Uint8Array } } = {};
 
 class MockFileSystemFileHandle {
     name: string;

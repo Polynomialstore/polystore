@@ -4,7 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import init, { Mdu0 } from '../../public/wasm/nil_core.js';
+// @ts-ignore
+import init, { WasmMdu0Builder } from '../../public/wasm/nil_core.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,7 +18,7 @@ test('Mdu0Builder WASM', async () => {
     await init(wasmBuffer);
 
     const maxUserMdus = 100n;
-    const mdu = new Mdu0(maxUserMdus);
+    const mdu = new WasmMdu0Builder(maxUserMdus);
 
     // Test append
     const fileName = "test.txt";

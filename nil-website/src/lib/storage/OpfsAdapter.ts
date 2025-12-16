@@ -29,7 +29,7 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
     const fileName = `mdu_${mduIndex}.bin`;
     const fileHandle = await dealDir.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(data);
+    await writable.write(data as any);
     await writable.close();
 }
 
@@ -64,6 +64,7 @@ export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Ar
 export async function listDealFiles(dealId: string): Promise<string[]> {
     const dealDir = await getDealDirectory(dealId);
     const fileNames: string[] = [];
+    // @ts-expect-error - FileSystemDirectoryHandle is iterable
     for await (const entry of dealDir.values()) {
         if (entry.kind === 'file') {
             fileNames.push(entry.name);

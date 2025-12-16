@@ -30,15 +30,15 @@ impl NilWasm {
 }
 
 #[wasm_bindgen]
-pub struct Mdu0 {
+pub struct WasmMdu0Builder {
     inner: Mdu0Builder,
 }
 
 #[wasm_bindgen]
-impl Mdu0 {
+impl WasmMdu0Builder {
     #[wasm_bindgen(constructor)]
-    pub fn new(max_user_mdus: u64) -> Mdu0 {
-        Mdu0 { inner: Mdu0Builder::new(max_user_mdus) }
+    pub fn new(max_user_mdus: u64) -> WasmMdu0Builder {
+        WasmMdu0Builder { inner: Mdu0Builder::new(max_user_mdus) }
     }
 
     pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {
@@ -62,12 +62,30 @@ impl Mdu0 {
         self.inner.bytes().to_vec()
     }
     
-    pub fn set_root(&mut self, index: u64, root: &[u8]) -> Result<(), JsValue> {
-        if root.len() != 32 {
-            return Err(JsValue::from_str("root must be 32 bytes"));
+        pub fn set_root(&mut self, index: u64, root: &[u8]) -> Result<(), JsValue> {
+    
+            if root.len() != 32 {
+    
+                return Err(JsValue::from_str("root must be 32 bytes"));
+    
+            }
+    
+            let mut r = [0u8; 32];
+    
+            r.copy_from_slice(root);
+    
+            self.inner.set_root(index, r).map_err(|e| JsValue::from_str(&e))
+    
         }
-        let mut r = [0u8; 32];
-        r.copy_from_slice(root);
-        self.inner.set_root(index, r).map_err(|e| JsValue::from_str(&e))
+    
+    
+    
+        pub fn get_witness_count(&self) -> u64 {
+    
+            self.inner.witness_mdu_count
+    
+        }
+    
     }
-}
+    
+    

@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
 interface StagedFile {
+  key: string; // Composite key: dealId + '::' + path
   path: string; // Relative path in the deal
   size: number;
   lastModified: number;
@@ -59,6 +60,7 @@ export function StagingProvider({ children }: { children: React.ReactNode }) {
     const key = `${dealId}::${filePath}`;
     
     const stagedFile: StagedFile = {
+      key,
       path: filePath,
       size: file.size,
       lastModified: file.lastModified,
@@ -66,7 +68,7 @@ export function StagingProvider({ children }: { children: React.ReactNode }) {
       status: 'staged',
     };
 
-    await db.put('files', { ...stagedFile, key });
+    await db.put('files', stagedFile);
     setStagedFiles(prev => {
         const filtered = prev.filter(f => f.dealId !== dealId || f.path !== filePath);
         return [...filtered, stagedFile];
@@ -82,7 +84,7 @@ export function StagingProvider({ children }: { children: React.ReactNode }) {
     const record = await store.get(key);
     if (!record) return; // Should we throw?
 
-    const updated = { ...record.value, status, error };
+    const updated = { ...record, status, error };
     await store.put({ ...updated, key });
     await tx.done;
 
