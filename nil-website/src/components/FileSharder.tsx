@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
-import { useFileSharder } from '../hooks/useFileSharder';
 import { FileJson, Cpu } from 'lucide-react';
+import { workerClient } from '../lib/worker-client';
 
 interface ShardItem {
   id: number;
@@ -10,21 +10,47 @@ interface ShardItem {
   status: 'pending' | 'processing' | 'expanded';
 }
 
+type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
+
 export function FileSharder() {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
-  const { status: wasmStatus, error: wasmError, initWasm, expandMdu } = useFileSharder();
   
+  const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
+  const [wasmError, setWasmError] = useState<string | null>(null);
+
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
-  useEffect(() => {
-      initWasm('/trusted_setup.txt');
-  }, [initWasm]);
-
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  useEffect(() => {
+    // Initialize WASM in the worker
+    async function initWasmInWorker() {
+      if (wasmStatus !== 'idle') return;
+      setWasmStatus('initializing');
+      try {
+        const response = await fetch('/trusted_setup.txt');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch trusted setup: ${response.statusText}`);
+        }
+        const buffer = await response.arrayBuffer();
+        const trustedSetupBytes = new Uint8Array(buffer);
+        
+        await workerClient.initNilWasm(trustedSetupBytes);
+        setWasmStatus('ready');
+        addLog('WASM and KZG context initialized in worker.');
+      } catch (e: any) {
+        setWasmError(e.message);
+        setWasmStatus('error');
+        addLog(`Error initializing WASM in worker: ${e.message}`);
+        console.error('WASM Worker Init Error:', e);
+      }
+    }
+    initWasmInWorker();
+  }, [addLog, wasmStatus]);
 
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes < 0) return '—';
@@ -56,7 +82,7 @@ export function FileSharder() {
         return;
     }
     if (wasmStatus !== 'ready') {
-        alert("WASM not ready. " + (wasmError || "Initializing..."));
+        alert("WASM worker not ready. " + (wasmError || "Initializing..."));
         return;
     }
 
@@ -95,24 +121,23 @@ export function FileSharder() {
         addLog(`> Expanding MDU #${i} (KZG)...`);
 
         try {
-            // Call WASM
-            const result = (await expandMdu(chunk)) as { witness: number[][] };
-            // result = { witness: [ [u8;48]... ], shards: [...] }
+            // Call WASM worker's expand_file
+            const result = (await workerClient.shardFile(chunk)) as { witness: number[][] };
             
-            // Convert witness to hex for display
-            // The witness is Vec<Vec<u8>> from serde
-            const witness: number[][] = result.witness;
-            const commitments = witness.map((w) => 
+            const commitments = result.witness.map((w) => 
                 '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')
             );
 
             setShards(prev => prev.map((s, idx) => idx === i ? { ...s, commitments, status: 'expanded' } : s));
             addLog(`> MDU #${i} expanded. ${commitments.length} commitments generated.`);
-            addLog(`> Root: ${commitments[0].slice(0,10)}...`);
+            if (commitments.length > 0) {
+              addLog(`> Root: ${commitments[0].slice(0,10)}...`);
+            }
             
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
             addLog(`Error expanding MDU #${i}: ${e instanceof Error ? e.message : String(e)}`);
+            setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'error' } : s));
         }
     }
     
@@ -126,7 +151,7 @@ export function FileSharder() {
         file.size,
       )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
     );
-  }, [isConnected, wasmStatus, wasmError, expandMdu, addLog]);
+  }, [isConnected, wasmStatus, wasmError, addLog]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -162,7 +187,7 @@ export function FileSharder() {
           </div>
           <div className="flex items-center gap-2 text-xs">
              <span className={`px-2 py-0.5 rounded-full border ${
-                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : wasmStatus === 'initializing' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
              }`}>
                  WASM: {wasmStatus}
              </span>
