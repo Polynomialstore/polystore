@@ -166,6 +166,18 @@ wait_for_ports_clear() {
 
 ensure_nilchaind() {
   banner "Building and installing nilchaind (via $GO_BIN)"
+  
+  # Reconstruct vendor directory to handle partial vendoring strategy
+  (
+    cd "$ROOT_DIR/nilchain"
+    echo "Reconstructing vendor for nilchain..."
+    "$GO_BIN" mod vendor
+    # Restore tracked vendor files (if any) to preserve patches/partial vendoring
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git checkout vendor 2>/dev/null || true
+    fi
+  )
+
   (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$ROOT_DIR/nilchain/nilchaind" ./cmd/nilchaind)
   # Also install to GOPATH/bin to ensure it's in PATH for arbitrary shell calls
   (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
