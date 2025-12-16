@@ -35,6 +35,7 @@ var (
 	fetchSessionsBucket    = []byte("fetch_sessions")
 	requestReplaysBucket   = []byte("request_replays")
 	downloadSessionsBucket = []byte("download_sessions")
+	onChainSessionProofsBucket = []byte("onchain_session_proofs")
 )
 
 func initSessionDB(path string) error {
@@ -55,6 +56,9 @@ func initSessionDB(path string) error {
 			return err
 		}
 		if _, err := tx.CreateBucketIfNotExists(downloadSessionsBucket); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists(onChainSessionProofsBucket); err != nil {
 			return err
 		}
 		return nil

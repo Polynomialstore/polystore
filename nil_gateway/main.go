@@ -1767,23 +1767,57 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dlSession downloadSession
-	if isDownloadSession && !isOnchainSession {
-		dlSession, err = loadDownloadSession(downloadSessionID)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid download_session", err.Error())
-			return
-		}
-		if dlSession.DealID != dealID {
-			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "deal_id mismatch")
-			return
-		}
-		if strings.TrimSpace(dlSession.Owner) != strings.TrimSpace(owner) {
-			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "owner mismatch")
-			return
-		}
-		if strings.TrimSpace(dlSession.FilePath) != strings.TrimSpace(filePath) {
-			writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "file_path mismatch")
-			return
+	if isDownloadSession {
+		if isOnchainSession {
+			// Verify on-chain session state
+			onchainSession, err := fetchRetrievalSession(onchainSessionID)
+			if err != nil {
+				if errors.Is(err, ErrSessionNotFound) {
+					writeJSONError(w, http.StatusNotFound, "retrieval session not found on chain", "")
+					return
+				}
+				writeJSONError(w, http.StatusInternalServerError, "failed to fetch retrieval session", err.Error())
+				return
+			}
+
+			// Validation
+			if onchainSession.DealId != dealID {
+				writeJSONError(w, http.StatusBadRequest, "session deal_id mismatch", "")
+				return
+			}
+			if onchainSession.Owner != owner {
+				writeJSONError(w, http.StatusForbidden, "session owner mismatch", "")
+				return
+			}
+			providerAddr := cachedProviderAddress(r.Context())
+			if strings.TrimSpace(onchainSession.Provider) != strings.TrimSpace(providerAddr) {
+				writeJSONError(w, http.StatusForbidden, "session provider mismatch", fmt.Sprintf("expected %s, got %s", onchainSession.Provider, providerAddr))
+				return
+			}
+			if onchainSession.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
+				writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", onchainSession.Status))
+				return
+			}
+			// Note: We don't strictly enforce blob range here in the fetch handler yet,
+			// but the proof submission will fail if we serve/prove outside the opened session.
+		} else {
+			dlSession, err = loadDownloadSession(downloadSessionID)
+			if err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid download_session", err.Error())
+				return
+			}
+			if dlSession.DealID != dealID {
+				writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "deal_id mismatch")
+				return
+			}
+			if strings.TrimSpace(dlSession.Owner) != strings.TrimSpace(owner) {
+				writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "owner mismatch")
+				return
+			}
+			if strings.TrimSpace(dlSession.FilePath) != strings.TrimSpace(filePath) {
+				writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "file_path mismatch")
+				return
+			}
 		}
 	}
 
@@ -1977,21 +2011,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 		var err error
 		if isOnchainSession {
-			err = appendDownloadChunkToSessionOrCreate(downloadSessionID, downloadSession{
-				DealID:     dealID,
-				EpochID:    1,
-				Owner:      owner,
-				Provider:   providerAddr,
-				FilePath:   filePath,
-				RangeStart: 0,
-				RangeLen:   0,
-				CreatedAt:  time.Now(),
-				ExpiresAt:  time.Now().Add(30 * time.Minute),
-			}, downloadChunk{
-				RangeStart:   reqRangeStart,
-				RangeLen:     servedLen,
-				ProofDetails: chained,
-			})
+			err = storeOnChainSessionProof(onchainSessionID, chained)
 		} else {
 			err = appendDownloadChunkToSession(downloadSessionID, downloadChunk{
 				RangeStart:   reqRangeStart,
@@ -3962,39 +3982,47 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s, err := loadDownloadSession(sessionKey)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
-		return
-	}
-	if strings.TrimSpace(s.Provider) != "" && strings.TrimSpace(s.Provider) != strings.TrimSpace(localProviderAddr) {
-		writeJSONError(w, http.StatusForbidden, "session provider mismatch", "")
-		return
-	}
-	if len(s.Chunks) == 0 {
-		writeJSONError(w, http.StatusBadRequest, "session has no recorded chunks", "fetch at least one blob chunk before submitting proofs")
-		return
+	// Try loading from on-chain proof bucket first
+	var proofs []types.ChainedProof
+	onChainProofs, err := loadOnChainSessionProofs(sessionKey)
+	if err == nil && len(onChainProofs) > 0 {
+		proofs = onChainProofs
+	} else {
+		// Fallback to off-chain download session
+		s, err := loadDownloadSession(sessionKey)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
+			return
+		}
+		if strings.TrimSpace(s.Provider) != "" && strings.TrimSpace(s.Provider) != strings.TrimSpace(localProviderAddr) {
+			writeJSONError(w, http.StatusForbidden, "session provider mismatch", "")
+			return
+		}
+		if len(s.Chunks) == 0 {
+			writeJSONError(w, http.StatusBadRequest, "session has no recorded chunks", "fetch at least one blob chunk before submitting proofs")
+			return
+		}
+
+		chunks := make([]downloadChunk, len(s.Chunks))
+		copy(chunks, s.Chunks)
+		sort.Slice(chunks, func(i, j int) bool {
+			if chunks[i].ProofDetails.MduIndex != chunks[j].ProofDetails.MduIndex {
+				return chunks[i].ProofDetails.MduIndex < chunks[j].ProofDetails.MduIndex
+			}
+			return chunks[i].ProofDetails.BlobIndex < chunks[j].ProofDetails.BlobIndex
+		})
+
+		seen := make(map[uint64]struct{}, len(chunks))
+		for _, c := range chunks {
+			key := c.ProofDetails.MduIndex*uint64(types.BLOBS_PER_MDU) + uint64(c.ProofDetails.BlobIndex)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			proofs = append(proofs, c.ProofDetails)
+		}
 	}
 
-	chunks := make([]downloadChunk, len(s.Chunks))
-	copy(chunks, s.Chunks)
-	sort.Slice(chunks, func(i, j int) bool {
-		if chunks[i].ProofDetails.MduIndex != chunks[j].ProofDetails.MduIndex {
-			return chunks[i].ProofDetails.MduIndex < chunks[j].ProofDetails.MduIndex
-		}
-		return chunks[i].ProofDetails.BlobIndex < chunks[j].ProofDetails.BlobIndex
-	})
-
-	proofs := make([]types.ChainedProof, 0, len(chunks))
-	seen := make(map[uint64]struct{}, len(chunks))
-	for _, c := range chunks {
-		key := c.ProofDetails.MduIndex*uint64(types.BLOBS_PER_MDU) + uint64(c.ProofDetails.BlobIndex)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		proofs = append(proofs, c.ProofDetails)
-	}
 	if len(proofs) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "session has no usable proofs", "")
 		return
@@ -4046,6 +4074,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = takeDownloadSession(sessionKey)
+	_ = deleteOnChainSessionProofs(sessionKey)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{

@@ -741,7 +741,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 **Objective:** Harden retrievals against grief modes by requiring on-chain evidence of (a) a user-authorized retrieval request and (b) a user-confirmed successful completion, while keeping the session definition aligned to NilFS + Triple Proof and **blob/MDU units** (not file chunks).
 
-- [ ] **Goal 1: Chain: define `RetrievalSession` state + status enum.**
+- [x] **Goal 1: Chain: define `RetrievalSession` state + status enum.**
     - **Session unit:** contiguous **blobs** (128 KiB) that may span MDUs; `total_bytes = blob_count * 131072` and must be a multiple of 128 KiB.
     - **Session identity:** `session_id = keccak256(encode({deal_id, owner, provider, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}))` (canonical encoding, documented + test-vectored).
     - **State machine:** `OPEN` → (`PROOF_SUBMITTED` and/or `USER_CONFIRMED`) → `COMPLETED`; `EXPIRED` terminal if past `expires_at` and not completed; optional `CANCELED`.
@@ -749,7 +749,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Files:** `nilchain/proto/nilchain/nilchain/v1/types.proto`, `nilchain/proto/nilchain/nilchain/v1/tx.proto`, `nilchain/proto/nilchain/nilchain/v1/query.proto`, keeper collections + indexes, generated pb.go.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./x/nilchain/keeper -run RetrievalSession`
 
-- [ ] **Goal 2: Chain: add txs + queries for sessions (owner/provider/deal views).**
+- [x] **Goal 2: Chain: add txs + queries for sessions (owner/provider/deal views).**
     - **Msgs (minimum):**
         - `MsgOpenRetrievalSession` (signer: user): creates `OPEN` session; rejects nonce replay.
         - `MsgConfirmRetrievalSession` (signer: user): sets `USER_CONFIRMED`.
@@ -758,19 +758,19 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Pass gate:** session tables are queryable from LCD and status transitions are enforced.
     - **Test gate:** `cd nilchain && go test ./...`
 
-- [ ] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
+- [x] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
     - **ABI (minimum):** `openRetrievalSession(...) returns (bytes32 sessionId)` and `confirmRetrievalSession(bytes32 sessionId)`.
     - **Pass gate:** browser sees only “Confirm transaction” prompts (no `eth_signTypedData_v4`) for session open/confirm.
     - **Test gate:** `cd nil-website && npm run test:e2e`
 
-- [ ] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
+- [x] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
     - **Fetch contract:** remote fetches require `X-Nil-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
     - **Range contract:** each HTTP range maps to exactly one blob; session covers `{start_mdu_index,start_blob_index}+blob_count` contiguous blobs (gateway may choose chunking).
     - **Proof assembly:** gateway records one `ChainedProof` per served blob under `session_id` (restart-safe).
     - **Provider submission:** provider submits `MsgSubmitRetrievalSessionProof(session_id, proofs...)`; chain marks `PROOF_SUBMITTED` and only increments “successful retrievals” once `COMPLETED`.
     - **Test gate:** `cd nil_gateway && go test ./...` and `./scripts/e2e_browser_smoke.sh`
 
-- [ ] **Goal 5: Web: “My Retrieval Sessions” widget + download flow integration.**
+- [x] **Goal 5: Web: “My Retrieval Sessions” widget + download flow integration.**
     - **UI:** Add a straightforward table (no pagination) showing `session_id`, `deal_id`, `provider`, `start_mdu/blob`, `blob_count`, `total_bytes`, `status`, `expires_at`.
     - **Flow:** “Download” triggers `openRetrievalSession` tx → fetches blobs → triggers `confirmRetrievalSession` tx; provider submission can be async.
     - **Pass gate:** user can see sessions + statuses update; retries are idempotent via nonce.
