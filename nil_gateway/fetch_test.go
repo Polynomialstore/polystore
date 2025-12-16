@@ -86,6 +86,7 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0644)
 
 	// Mock LCD for owner check
+	const dealID = 1
 	dealStates := map[uint64]struct{ Owner string; CID string }{
 		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
@@ -98,7 +99,6 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	r := testRouter()
 
 	// Request
-	const dealID = 1
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
 	reqSig := signRetrievalRequest(t, dealID, "video.mp4", 0, 0, nonce, expiresAt)

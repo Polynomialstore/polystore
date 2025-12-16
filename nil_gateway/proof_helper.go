@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -65,7 +64,8 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	// 4. Sign Receipt
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	signCmd := execNilchaind(
+	
+	signOut, err := execNilchaind(
 		signCtx,
 		"tx", "nilchain", "sign-retrieval-receipt",
 		dealIDStr,
@@ -81,15 +81,11 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		"--offline",
 	)
 
-	signOut, err := signCmd.Output()
 	if errors.Is(signCtx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("sign-retrieval-receipt timed out after %s", cmdTimeout)
 	}
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
-		}
-		return "", fmt.Errorf("sign-retrieval-receipt failed: %w", err)
+		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (output: %s)", err, string(signOut))
 	}
 
 	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")

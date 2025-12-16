@@ -39,7 +39,7 @@ func aggregateRootsWithContext(ctx context.Context, roots []string) (string, str
 
 	execCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	cmd := execNilCli(
+	out, err := execNilCli(
 		execCtx,
 		"--trusted-setup", trustedSetup,
 		"aggregate",
@@ -47,7 +47,7 @@ func aggregateRootsWithContext(ctx context.Context, roots []string) (string, str
 		"--out", tmpOut,
 	)
 
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if err != nil {
 		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 			return "", "", fmt.Errorf("nil_cli aggregate timed out after %s: %w", cmdTimeout, execCtx.Err())
 		}

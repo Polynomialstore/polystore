@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -15,7 +16,19 @@ import (
 
 func TestGatewayManifestInfo_Basic(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath && hasArg(args, "shard") {
+			output := NilCliOutput{
+				ManifestRootHex: deterministicManifestRootHex("ingest-raw"), // unused by manifest-info but part of struct
+				ManifestBlobHex: "0x0102",
+				FileSize:        100,
+				Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
+			}
+			data, _ := json.Marshal(output)
+			return data, nil
+		}
+		return []byte{}, nil
+	})
 
 	cid := mustTestManifestRoot(t, "manifest-info-basic")
 	dealDir := filepath.Join(uploadDir, cid.Key)
@@ -115,7 +128,19 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 
 func TestGatewayMduKzg_Basic(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath && hasArg(args, "shard") {
+			output := NilCliOutput{
+				ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
+				ManifestBlobHex: "0xdeadbeef",
+				FileSize:        100,
+				Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
+			}
+			data, _ := json.Marshal(output)
+			return data, nil
+		}
+		return []byte{}, nil
+	})
 
 	cid := mustTestManifestRoot(t, "mdu-kzg-basic")
 	dealDir := filepath.Join(uploadDir, cid.Key)

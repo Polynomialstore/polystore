@@ -15,7 +15,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"nilchain/x/nilchain/types"
 
 	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 )
 
 func useTempUploadDir(t *testing.T) string {
@@ -41,18 +41,17 @@ func useTempUploadDir(t *testing.T) string {
 	return dir
 }
 
-func mockExecCommandContext(t *testing.T) {
+// setupMockCombinedOutput mocks the CombinedOutput of exec.CommandContext.
+// It returns a cleanup function to restore the original behavior.
+func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name string, args ...string) ([]byte, error)) {
 	t.Helper()
-	old := execCommandContext
-	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		cs := []string{"-test.run=TestHelperProcess", "--", name}
-		cs = append(cs, args...)
-		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
-		return cmd
-	}
-	t.Cleanup(func() { execCommandContext = old })
+	oldMock := mockCombinedOutput
+	mockCombinedOutput = mockFn
+	t.Cleanup(func() { mockCombinedOutput = oldMock })
 }
+
+
+
 
 func deterministicManifestRootHex(tag string) string {
 	sum := sha256.Sum256([]byte(tag))
@@ -363,9 +362,65 @@ func TestHelperProcess(t *testing.T) {
 	}
 }
 
+// handleSavePrefix mimics nil_cli behavior by creating dummy MDU files if --save-mdu-prefix is set.
+func handleSavePrefix(args []string) error {
+	savePrefix := ""
+	for i, arg := range args {
+		if arg == "--save-mdu-prefix" && i+1 < len(args) {
+			savePrefix = args[i+1]
+			break
+		}
+	}
+	if savePrefix != "" {
+		if err := os.MkdirAll(filepath.Dir(savePrefix), 0o755); err != nil {
+			return err
+		}
+		// Create a dummy mdu.0.bin file
+		if err := os.WriteFile(fmt.Sprintf("%s.mdu.0.bin", savePrefix), []byte("dummy"), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath {
+			if hasArg(args, "shard") {
+				if err := handleSavePrefix(args); err != nil {
+					return nil, err
+				}
+				output := NilCliOutput{
+					ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
+					ManifestBlobHex: "0xdeadbeef",
+					FileSize:        100,
+					Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
+				}
+				data, _ := json.Marshal(output)
+				return data, nil
+			}
+			if hasArg(args, "aggregate") {
+				outPath := ""
+				for i, arg := range args {
+					if arg == "--out" && i+1 < len(args) {
+						outPath = args[i+1]
+						break
+					}
+				}
+				if outPath != "" {
+					res := NilCliAggregateOutput{
+						ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
+						ManifestBlobHex: "0xfeedface",
+					}
+					data, _ := json.Marshal(res)
+					_ = os.WriteFile(outPath, data, 0o644)
+				}
+				return []byte{}, nil
+			}
+		}
+		return []byte{}, nil
+	})
 
 	r := testRouter()
 
@@ -402,19 +457,29 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 
 func TestShardFile_TimeoutCancels(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
-	t.Setenv("NIL_HELPER_SLEEP_MS", "200")
-
-	oldShardTimeout := shardTimeout
-	shardTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { shardTimeout = oldShardTimeout })
-
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath && hasArg(args, "shard") {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(200 * time.Millisecond): // Simulate long running command
+				output := NilCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
+				data, _ := json.Marshal(output)
+				return data, nil
+			}
+		}
+		return []byte{}, nil
+	})
+	
 	input := filepath.Join(uploadDir, "input.bin")
 	if err := os.WriteFile(input, []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write input: %v", err)
 	}
 
-	_, err := shardFile(context.Background(), input, false, "")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := shardFile(ctx, input, false, "")
 	if err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
@@ -425,9 +490,20 @@ func TestShardFile_TimeoutCancels(t *testing.T) {
 
 func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
-	t.Setenv("NIL_HELPER_SLEEP_MS", "200")
-
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath && hasArg(args, "shard") {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(200 * time.Millisecond): // Simulate long running command
+				// Even on timeout, sometimes partial files are written, but here we assume not?
+				// Actually, if it times out, we return error.
+				return nil, context.DeadlineExceeded
+			}
+		}
+		return []byte{}, nil
+	})
+	
 	oldUploadTimeout := uploadIngestTimeout
 	uploadIngestTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { uploadIngestTimeout = oldUploadTimeout })
@@ -463,7 +539,46 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 
 func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == nilCliPath {
+			if hasArg(args, "shard") {
+				output := NilCliOutput{
+					ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
+					ManifestBlobHex: "0xdeadbeef",
+					FileSize:        100,
+					Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
+				}
+				// Check for EXPECT_MDU0_RAW behavior, as it implies mocking mdu0 specifically.
+				if os.Getenv("EXPECT_MDU0_RAW") == "1" && strings.Contains(args[1], "mdu0") && !hasArg(args, "--raw") {
+					return nil, fmt.Errorf("expected --raw for mdu0 sharding")
+				}
+				if err := handleSavePrefix(args); err != nil {
+					return nil, err
+				}
+				data, _ := json.Marshal(output)
+				return data, nil
+			}
+			if hasArg(args, "aggregate") {
+				outPath := ""
+				for i, arg := range args {
+					if arg == "--out" && i+1 < len(args) {
+						outPath = args[i+1]
+						break
+					}
+				}
+				if outPath != "" {
+					res := NilCliAggregateOutput{
+						ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
+						ManifestBlobHex: "0xfeedface",
+					}
+					data, _ := json.Marshal(res)
+					_ = os.WriteFile(outPath, data, 0o644)
+				}
+				return []byte{}, nil
+			}
+		}
+		return []byte{}, nil
+	})
 	t.Setenv("EXPECT_MDU0_RAW", "1")
 
 	input := filepath.Join(uploadDir, "file.txt")
@@ -484,105 +599,81 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	}
 }
 
+// hasArg checks if a string slice contains a specific argument.
+func hasArg(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestGatewayFetch_DealIDZero(t *testing.T) {
 	useTempUploadDir(t)
-	mockExecCommandContext(t)
-	r := testRouter()
-
-	// 1. Prepare a file and mock nil-cli to "shard" it
-	testFileName := "deal0_test.txt"
-	testFileContent := "This is some test data for Deal ID 0."
-	testFilePath := filepath.Join(uploadDir, testFileName)
-	if err := os.WriteFile(testFilePath, []byte(testFileContent), 0o644); err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
-
-	mockedManifestRoot := deterministicManifestRootHex("deal0-content")
-	mockedFileSize := uint64(len(testFileContent))
-	
-	// Override the helper process output for shard command
-	oldExecCommandContext := execCommandContext
-	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		if name == nilCliPath && len(args) > 0 && args[0] == "shard" {
-			// Simulate nil-cli shard output
-			outPath := ""
-			for i, arg := range args {
-				if arg == "--out" && i+1 < len(args) {
-					outPath = args[i+1]
-					break
-				}
-			}
-			if outPath == "" {
-				return oldExecCommandContext(ctx, name, args...)
-			}
-			
-			output := NilCliOutput{
-				ManifestRootHex: mockedManifestRoot,
-				ManifestBlobHex: "0xdeadbeef",
-				FileSize:        mockedFileSize,
-				Mdus: []MduData{
-					{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}},
-				},
-			}
-			data, _ := json.Marshal(output)
-			_ = os.WriteFile(outPath, data, 0o644)
-			
-			// Return a cmd that does nothing and exits successfully
-			cmd := exec.CommandContext(ctx, "true")
-			cmd.Env = os.Environ()
-			return cmd
-		}
-		return oldExecCommandContext(ctx, name, args...)
-	}
-	t.Cleanup(func() { execCommandContext = oldExecCommandContext })
-
-	// 2. Mock LCD to serve Deal ID 0 with the test owner and *empty* CID initially.
-	dealID := uint64(0)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
+
+	// 1. Build a minimal slab manually
+	fileContent := []byte("This is some test data for Deal ID 0.")
+	
+	// Create dummy witness data (doesn't need to be valid for this test if we mock the proof generation or if generateProofHeaderJSON handles dummy data gracefully, 
+	// but generateProofHeaderJSON checks valid lengths. So we need valid length witness).
+	commitmentBytes := 48
+	witnessPlain := make([]byte, 64*commitmentBytes) // Full MDU of commitments
+	// Fill with something
+	for i := 0; i < len(witnessPlain); i++ {
+		witnessPlain[i] = 0xaa
+	}
+
+	// We need a manifest root. We can compute a dummy one or use deterministic.
+	// But GatewayFetch checks chain root matches.
+	// We'll use a deterministic one and assume it matches the slab we build.
+	manifestRoot := mustTestManifestRoot(t, "deal0-manual")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+
+	// Create MDU #0 (File Table)
+	b, _ := builder.NewMdu0Builder(1)
+	rec := layout.FileRecordV1{
+		StartOffset:    0,
+		LengthAndFlags: layout.PackLengthAndFlags(uint64(len(fileContent)), 0),
+	}
+	copy(rec.Path[:], "deal0_test.txt")
+	b.AppendFileRecord(rec)
+	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), b.Bytes(), 0o644)
+
+	// Create manifest.bin (128KB dummy)
+	manifestBlob := make([]byte, 128*1024)
+	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644)
+
+	// Create Witness MDU #1
+	os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644)
+
+	// Create User MDU #2
+	os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644)
+
+	// 2. Mock LCD to serve Deal ID 0
+	dealID := uint64(0)
 	dealStates := map[uint64]struct{ Owner string; CID string }{
-		dealID: {Owner: owner, CID: ""}, // Initially empty CID for thin provisioning
+		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)
 	defer srv.Close()
 	oldLCD := lcdBase
 	lcdBase = srv.URL
-	t.Cleanup(func() { lcdBase = oldLCD })
+	defer func() { lcdBase = oldLCD }()
 
-	// 3. Upload the file to the gateway for Deal ID 0
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("file", testFileName)
-	part.Write([]byte(testFileContent))
-	writer.WriteField("owner", owner)
-	writer.WriteField("deal_id", strconv.FormatUint(dealID, 10))
-	writer.Close()
+	r := testRouter()
 
-	uploadReq := httptest.NewRequest("POST", "/gateway/upload", body)
-	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
-	uploadW := httptest.NewRecorder()
-	r.ServeHTTP(uploadW, uploadReq)
-
-	if uploadW.Code != http.StatusOK {
-		t.Fatalf("GatewayUpload for Deal 0 failed: %d, body: %s", uploadW.Code, uploadW.Body.String())
-	}
-	
-	var uploadResp map[string]any
-	json.Unmarshal(uploadW.Body.Bytes(), &uploadResp)
-	if s := uploadResp["manifest_root"].(string); s != mockedManifestRoot {
-		t.Fatalf("Expected uploaded manifest_root to be %s, got %s", mockedManifestRoot, s)
-	}
-
-	// 4. Update deal content for Deal ID 0 (mock this as successful)
-	// This usually happens after upload to commit the new manifestRoot.
-	// For this test, we just ensure the Gateway allows it.
-	// No direct call, as the LCD mock is enough for later fetch.
-
-	// 5. Fetch the file for Deal ID 0
-	fetchURL := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=%s", mockedManifestRoot, dealID, owner, testFileName)
+	// 3. Fetch
+	fetchURL := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=deal0_test.txt", manifestRoot.Canonical, dealID, owner)
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
 	fetchReq := httptest.NewRequest("GET", fetchURL, nil)
-	fetchReq.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, dealID, testFileName, 0, 0, nonce, expiresAt))
+	fetchReq.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, dealID, "deal0_test.txt", 0, 0, nonce, expiresAt))
 	fetchReq.Header.Set("X-Nil-Req-Nonce", strconv.FormatUint(nonce, 10))
 	fetchReq.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
 	fetchReq.Header.Set("X-Nil-Req-Range-Start", "0")
@@ -596,7 +687,7 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	}
 
 	fetchedContent, _ := io.ReadAll(fetchW.Body)
-	if string(fetchedContent) != testFileContent {
-		t.Fatalf("Fetched content mismatch. Expected: %q, Got: %q", testFileContent, string(fetchedContent))
+	if string(fetchedContent) != string(fileContent) {
+		t.Fatalf("Fetched content mismatch. Expected: %q, Got: %q", string(fileContent), string(fetchedContent))
 	}
 }

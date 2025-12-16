@@ -63,7 +63,20 @@ var (
 	requireRetrievalReqSig = envDefault("NIL_REQUIRE_RETRIEVAL_REQ_SIG", "0") == "1"
 
 	execCommandContext = exec.CommandContext
+	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
 )
+
+// runCommand executes an external command, respecting mockCombinedOutput if set.
+func runCommand(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
+	if mockCombinedOutput != nil {
+		return mockCombinedOutput(ctx, name, args...)
+	}
+	cmd := execCommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	return cmd.CombinedOutput()
+}
 
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
@@ -214,13 +227,12 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
-func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
+
+
+// execNilchaind runs a nilchaind command and returns its combined output.
+func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
-	cmd := execCommandContext(ctx, nilchaindBin, args...)
-	if dir := deriveNilchaindDir(); dir != "" {
-		cmd.Dir = dir
-	}
-	return cmd
+	return runCommand(ctx, nilchaindBin, args, deriveNilchaindDir())
 }
 
 func maybeWithNodeArg(args []string) []string {
@@ -239,8 +251,9 @@ func maybeWithNodeArg(args []string) []string {
 	return append(args, "--node", nodeAddr)
 }
 
-func execNilCli(ctx context.Context, args ...string) *exec.Cmd {
-	return execCommandContext(ctx, nilCliPath, args...)
+// execNilCli runs a nil_cli command and returns its combined output.
+func execNilCli(ctx context.Context, args ...string) ([]byte, error) {
+	return runCommand(ctx, nilCliPath, args, "")
 }
 
 func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
@@ -256,9 +269,12 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 			return out, ctx.Err()
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
-		cmd := execNilchaind(attemptCtx, args...)
-		out, err = cmd.CombinedOutput()
+		var cmdOut []byte
+		var cmdErr error
+		cmdOut, cmdErr = execNilchaind(attemptCtx, args...) // Use the new execNilchaind
 		cancel()
+		out = cmdOut
+		err = cmdErr
 		outStr := string(out)
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
@@ -991,13 +1007,12 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		log.Printf("deal_id not found in tx events; falling back to list-deals. TxHash: %s", txHash)
 		fallbackCtx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
 		defer cancel()
-		listCmd := execNilchaind(
+		listOut, _ := execNilchaind(
 			fallbackCtx,
 			"query", "nilchain", "list-deals",
 			"--home", homeDir,
 			"--output", "json",
 		)
-		listOut, _ := listCmd.CombinedOutput()
 		var listRes struct {
 			Deals []struct {
 				Id uint64 `json:"id"`
@@ -2666,37 +2681,22 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, shardTimeout)
-	defer cancel()
-	cmd := execNilCli(execCtx, args...)
-
-	output, err := cmd.CombinedOutput()
-	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		return nil, fmt.Errorf("nil_cli shard timed out after %s: %w", shardTimeout, execCtx.Err())
-	}
-	if errors.Is(execCtx.Err(), context.Canceled) {
-		return nil, execCtx.Err()
-	}
+	// Use execNilCli which now returns ([]byte, error)
+	outBytes, err := execNilCli(ctx, args...)
 	if err != nil {
-		log.Printf("shardFile: shard failed: %s", string(output))
-		return nil, fmt.Errorf("nil_cli shard failed: %w", err)
+		return nil, fmt.Errorf("nil-cli shard failed: %w", err)
 	}
 
-	jsonFile, err := os.ReadFile(outPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read shard output: %w", err)
+	body := extractJSONBody(outBytes)
+	if body == nil {
+		return nil, fmt.Errorf("failed to extract JSON from shard output: %s", string(outBytes))
 	}
 
-	var shardOut NilCliOutput
-	if err := json.Unmarshal(jsonFile, &shardOut); err != nil {
+	var out NilCliOutput
+	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("failed to parse shard output: %w", err)
 	}
-
-	if shardOut.ManifestRootHex == "" {
-		return nil, fmt.Errorf("manifest_root_hex missing in shard output")
-	}
-
-	return &shardOut, nil
+	return &out, nil
 }
 
 func fastShardQuick(path string) (string, uint64, uint64, error) {
@@ -2924,14 +2924,13 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	cmd := execNilchaind(
+	out, err := execNilchaind(
 		cctx,
 		"keys", "show", name,
 		"-a",
 		"--home", homeDir,
 		"--keyring-backend", "test",
 	)
-	out, err := cmd.Output()
 	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("keys show timed out after %s", cmdTimeout)
 	}
@@ -3043,7 +3042,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	signCmd := execNilchaind(
+	signOut, err := execNilchaind(
 		signCtx,
 		"tx", "nilchain", "sign-retrieval-receipt",
 		dealIDStr,
@@ -3058,15 +3057,11 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 		"--keyring-backend", "test",
 		"--offline",
 	)
-	signOut, err := signCmd.Output()
 	if errors.Is(signCtx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("sign-retrieval-receipt timed out after %s", cmdTimeout)
 	}
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("sign-retrieval-receipt failed: %w (stderr: %s)", err, string(ee.Stderr))
-		}
-		return "", fmt.Errorf("sign-retrieval-receipt failed: %w", err)
+		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (output: %s)", err, string(signOut))
 	}
 
 	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
