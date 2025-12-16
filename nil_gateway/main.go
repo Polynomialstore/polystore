@@ -2698,9 +2698,24 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		return nil, fmt.Errorf("nil-cli shard failed: %w", err)
 	}
 
+	// nil_cli with --out writes to file, but might print logs to stdout.
+	// We should read the file if it exists.
+	if _, err := os.Stat(outPath); err == nil {
+		data, err := os.ReadFile(outPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read shard output file: %w", err)
+		}
+		var out NilCliOutput
+		if err := json.Unmarshal(data, &out); err != nil {
+			return nil, fmt.Errorf("failed to parse shard output file: %w", err)
+		}
+		return &out, nil
+	}
+
+	// Fallback to parsing stdout if file doesn't exist (though --out was passed)
 	body := extractJSONBody(outBytes)
 	if body == nil {
-		return nil, fmt.Errorf("failed to extract JSON from shard output: %s", string(outBytes))
+		return nil, fmt.Errorf("failed to extract JSON from shard output (and output file missing): %s", string(outBytes))
 	}
 
 	var out NilCliOutput
@@ -3263,41 +3278,24 @@ func ensureMduFileForProof(origPath string) (string, bool, error) {
 }
 
 func decodeHex(s string) ([]byte, error) {
+
 	if strings.HasPrefix(s, "0x") {
+
 		s = s[2:]
-	}
-	// simple manual decode or use encoding/hex
-	// Since we didn't import encoding/hex in existing imports, we can use simple loop or add import.
-	// Adding import is better but requires context replacement or robust replace.
-	// Let's implement simple.
 
-	src := []byte(s)
-	dst := make([]byte, len(src)/2)
-	for i := 0; i < len(src)/2; i++ {
-		h, ok1 := fromHexChar(src[i*2])
-		l, ok2 := fromHexChar(src[i*2+1])
-		if !ok1 || !ok2 {
-			return nil, fmt.Errorf("invalid hex char")
-		}
-		dst[i] = (h << 4) | l
 	}
-	return dst, nil
-}
 
-func fromHexChar(c byte) (byte, bool) {
-	switch {
-	case '0' <= c && c <= '9':
-		return c - '0', true
-	case 'a' <= c && c <= 'f':
-		return c - 'a' + 10, true
-	case 'A' <= c && c <= 'F':
-		return c - 'A' + 10, true
-	}
-	return 0, false
-}
+				return hex.DecodeString(s)
 
-// RetrievalReceipt represents the JSON payload signed by the client.
-type RetrievalReceipt struct {
+			}
+
+			
+
+			// RetrievalReceipt represents the JSON payload signed by the client.
+
+			type RetrievalReceipt struct {
+
+			
 	DealId        uint64          `json:"deal_id"`
 	EpochId       uint64          `json:"epoch_id"`
 	Provider      string          `json:"provider"`
