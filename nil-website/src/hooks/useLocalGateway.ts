@@ -18,8 +18,6 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
   const pollIntervalRef = useRef<number>(pollInterval); // Use ref for stable poll interval
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
     const checkGatewayStatus = async () => {
       setStatus('connecting');
       setError(null); // Clear previous errors
@@ -35,9 +33,10 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
           setStatus('disconnected');
           setError(`Gateway responded with status: ${response.status}`);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         setStatus('disconnected');
-        if (e.name === 'AbortError') {
+        const err = e as Error;
+        if (err.name === 'AbortError') {
             setError('Connection timed out');
         } else if (e.message.includes('Failed to fetch')) { // Common error for connection refused/unreachable
             setError('Could not connect to local gateway');
@@ -51,7 +50,7 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
     checkGatewayStatus();
 
     // Set up polling
-    intervalId = setInterval(checkGatewayStatus, pollIntervalRef.current);
+    const intervalId = setInterval(checkGatewayStatus, pollIntervalRef.current);
 
     // Cleanup
     return () => clearInterval(intervalId);

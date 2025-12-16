@@ -109,6 +109,7 @@ export function StagingProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useStaging() {
   const context = useContext(StagingContext);
   if (context === undefined) {

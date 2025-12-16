@@ -9,7 +9,7 @@ const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.ur
 });
 
 // Map to store pending worker messages (promises)
-const pendingWorkerMessages = new Map<number, { resolve: (value: any) => void; reject: (reason?: any) => void }>();
+const pendingWorkerMessages = new Map<number, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
 let nextWorkerMessageId = 0;
 
 // Handle messages coming back from the worker
@@ -38,7 +38,7 @@ worker.onerror = (error) => {
 };
 
 // Function to send messages to the worker and await a response
-function sendMessageToWorker(type: string, payload: any, transferables?: Transferable[]): Promise<any> {
+function sendMessageToWorker(type: string, payload: unknown, transferables?: Transferable[]): Promise<unknown> {
   const id = nextWorkerMessageId++;
   return new Promise((resolve, reject) => {
     pendingWorkerMessages.set(id, { resolve, reject });
@@ -51,37 +51,37 @@ function sendMessageToWorker(type: string, payload: any, transferables?: Transfe
 export const workerClient = {
   // Initialize the WASM module inside the worker, including KzgContext
   async initNilWasm(trustedSetupBytes: Uint8Array): Promise<string> {
-    return sendMessageToWorker('initNilWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]);
+    return sendMessageToWorker('initNilWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as Promise<string>;
   },
 
   // Initialize Mdu0Builder within the worker
   async initMdu0Builder(maxUserMdus: number): Promise<string> {
-    return sendMessageToWorker('initMdu0Builder', { maxUserMdus });
+    return sendMessageToWorker('initMdu0Builder', { maxUserMdus }) as Promise<string>;
   },
 
   // Append a file entry to the MDU #0 builder in the worker
   async appendFileToMdu0(path: string, size: number, startOffset: number): Promise<string> {
-    return sendMessageToWorker('appendFileToMdu0', { path, size, startOffset });
+    return sendMessageToWorker('appendFileToMdu0', { path, size, startOffset }) as Promise<string>;
   },
 
   // Get the complete 8MB MDU #0 bytes from the worker
   async getMdu0Bytes(): Promise<Uint8Array> {
-    return sendMessageToWorker('getMdu0Bytes', {});
+    return sendMessageToWorker('getMdu0Bytes', {}) as Promise<Uint8Array>;
   },
 
   // Set a root in the MDU #0 builder
   async setMdu0Root(index: number, root: Uint8Array): Promise<string> {
-    return sendMessageToWorker('setMdu0Root', { index, root }, [root.buffer]);
+    return sendMessageToWorker('setMdu0Root', { index, root }, [root.buffer]) as Promise<string>;
   },
 
   // Get witness count from MDU #0 builder
   async getMdu0WitnessCount(): Promise<number> {
-    return sendMessageToWorker('getMdu0WitnessCount', {});
+    return sendMessageToWorker('getMdu0WitnessCount', {}) as Promise<number>;
   },
 
   // Shard a file (or part of it) using NilWasm
   // This will likely need to handle streaming of data in the future for large files.
-  async shardFile(data: Uint8Array): Promise<{ manifestRoot: string; mduData: any[] }> {
-    return sendMessageToWorker('shardFile', { data }, [data.buffer]);
+  async shardFile(data: Uint8Array): Promise<{ manifestRoot: string; mduData: unknown[] }> {
+    return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<{ manifestRoot: string; mduData: unknown[] }>;
   },
 };

@@ -82,7 +82,8 @@ self.onmessage = async (event) => {
         const transferList = result instanceof Uint8Array ? [result.buffer] : [];
         // @ts-expect-error - TS definition for postMessage in worker might be ambiguous
         self.postMessage({ id, type: 'result', payload: result }, transferList);
-    } catch (error: any) {
-        self.postMessage({ id, type: 'error', payload: error.message || 'Unknown worker error' });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        self.postMessage({ id, type: 'error', payload: message || 'Unknown worker error' });
     }
 };

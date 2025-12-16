@@ -29,7 +29,7 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
     const fileName = `mdu_${mduIndex}.bin`;
     const fileHandle = await dealDir.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(data as any);
+    await writable.write(data);
     await writable.close();
 }
 
@@ -47,9 +47,9 @@ export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Ar
         const file = await fileHandle.getFile();
         const buffer = await file.arrayBuffer();
         return new Uint8Array(buffer);
-    } catch (e: any) {
+    } catch (e: unknown) {
         // Return null if the file is not found, otherwise re-throw.
-        if (e.name === 'NotFoundError') {
+        if (e instanceof Error && e.name === 'NotFoundError') {
             return null;
         }
         throw e;
@@ -81,9 +81,9 @@ export async function deleteDealDirectory(dealId: string): Promise<void> {
     const root = await getOpfsRoot();
     try {
         await root.removeEntry(`deal-${dealId}`, { recursive: true });
-    } catch (e: any) {
+    } catch (e: unknown) {
         // If the directory doesn't exist, it's already "deleted", so just ignore the error.
-        if (e.name === 'NotFoundError') {
+        if (e instanceof Error && e.name === 'NotFoundError') {
             return;
         }
         throw e;

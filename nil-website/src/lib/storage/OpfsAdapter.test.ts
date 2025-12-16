@@ -9,7 +9,7 @@ import * as OpfsAdapter from './OpfsAdapter';
 
 class MockFileSystemFileHandle {
     name: string;
-    kind: 'file' = 'file';
+    readonly kind = 'file' as const;
     private content: Uint8Array | null = null;
 
     constructor(name: string, initialContent: Uint8Array | null = null) {
@@ -41,7 +41,7 @@ class MockFileSystemFileHandle {
 
 class MockFileSystemDirectoryHandle {
     name: string;
-    kind: 'directory' = 'directory';
+    readonly kind = 'directory' as const;
     entries: Map<string, MockFileSystemDirectoryHandle | MockFileSystemFileHandle>;
 
     constructor(name: string) {
@@ -158,13 +158,12 @@ test('OpfsAdapter: listDealFiles', async () => {
     assert.deepStrictEqual(files.sort(), ['mdu_0.bin', 'mdu_1.bin'].sort(), 'Should list all files in deal directory');
 });
 
-test('OpfsAdapter: deleteDealDirectory', async () => {
+    test('OpfsAdapter: deleteDealDirectory', async () => {
     const dealId = 'test-deal-delete';
     await OpfsAdapter.writeMdu(dealId, 0, new Uint8Array([100]));
     await OpfsAdapter.writeMdu(dealId, 1, new Uint8Array([200]));
 
-    let filesBeforeDelete = await OpfsAdapter.listDealFiles(dealId);
-    assert.strictEqual(filesBeforeDelete.length > 0, true, 'Directory should have files before deletion');
+    const filesBeforeDelete = await OpfsAdapter.listDealFiles(dealId);    assert.strictEqual(filesBeforeDelete.length > 0, true, 'Directory should have files before deletion');
 
     await OpfsAdapter.deleteDealDirectory(dealId);
 

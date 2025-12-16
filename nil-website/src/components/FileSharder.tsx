@@ -42,10 +42,11 @@ export function FileSharder() {
         await workerClient.initNilWasm(trustedSetupBytes);
         setWasmStatus('ready');
         addLog('WASM and KZG context initialized in worker.');
-      } catch (e: any) {
-        setWasmError(e.message);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        setWasmError(message);
         setWasmStatus('error');
-        addLog(`Error initializing WASM in worker: ${e.message}`);
+        addLog(`Error initializing WASM in worker: ${message}`);
         console.error('WASM Worker Init Error:', e);
       }
     }
@@ -134,7 +135,7 @@ export function FileSharder() {
               addLog(`> Root: ${commitments[0].slice(0,10)}...`);
             }
             
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
             addLog(`Error expanding MDU #${i}: ${e instanceof Error ? e.message : String(e)}`);
             setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'error' } : s));
