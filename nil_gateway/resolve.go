@@ -298,6 +298,45 @@ func GetFileLocation(dealDir, filePath string) (mduIndex uint64, mduPath string,
 	return mduIdx, mduPath, length, nil
 }
 
+func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uint64, witnessCount uint64, err error) {
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+
+	mdu0Data, err := os.ReadFile(mdu0Path)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to read MDU #0: %w", err)
+	}
+
+	b, err := builder.LoadMdu0Builder(mdu0Data, 1)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to parse MDU #0: %w", err)
+	}
+
+	targetPath := filePath
+	var targetRec *layout.FileRecordV1
+	for i := uint32(0); i < b.Header.RecordCount; i++ {
+		rec := b.GetFileRecord(i)
+		if rec.Path[0] == 0 {
+			continue
+		}
+		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
+		if name == targetPath {
+			targetRec = &rec
+		}
+	}
+	if targetRec == nil {
+		return 0, 0, 0, os.ErrNotExist
+	}
+
+	length, _ = layout.UnpackLengthAndFlags(targetRec.LengthAndFlags)
+	startOffset = targetRec.StartOffset
+
+	witnessCount, err = inferWitnessCount(dealDir, b)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to infer witness count: %w", err)
+	}
+	return startOffset, length, witnessCount, nil
+}
+
 // inferWitnessCount derives W for a slab by counting on-disk MDUs and
 // computing the current user-data high water mark from FileRecords.
 func inferWitnessCount(dealDir string, b *builder.Mdu0Builder) (uint64, error) {

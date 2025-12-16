@@ -85,6 +85,66 @@ func storeDownloadSession(s downloadSession) (string, error) {
 	return id, nil
 }
 
+func storeDownloadSessionWithID(id string, s downloadSession) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("download_session id is required")
+	}
+	if s.DealID == 0 {
+		return fmt.Errorf("deal_id is required")
+	}
+	if strings.TrimSpace(s.Owner) == "" {
+		return fmt.Errorf("owner is required")
+	}
+	if strings.TrimSpace(s.Provider) == "" {
+		return fmt.Errorf("provider is required")
+	}
+	if strings.TrimSpace(s.FilePath) == "" {
+		return fmt.Errorf("file_path is required")
+	}
+	if s.CreatedAt.IsZero() {
+		s.CreatedAt = time.Now()
+	}
+	if s.ExpiresAt.IsZero() {
+		s.ExpiresAt = time.Now().Add(30 * time.Minute)
+	}
+
+	downloadSessionCache.Store(id, s)
+	if sessionDB == nil {
+		return nil
+	}
+
+	bz, err := json.Marshal(s)
+	if err != nil {
+		downloadSessionCache.Delete(id)
+		return err
+	}
+	if err := sessionDB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(downloadSessionsBucket)
+		if b == nil {
+			return fmt.Errorf("download_sessions bucket missing")
+		}
+		return b.Put([]byte(id), bz)
+	}); err != nil {
+		downloadSessionCache.Delete(id)
+		return err
+	}
+	return nil
+}
+
+func appendDownloadChunkToSessionOrCreate(id string, initial downloadSession, chunk downloadChunk) error {
+	if _, err := loadDownloadSession(id); err != nil {
+		if errors.Is(err, errDownloadSessionNotFound) {
+			if err := storeDownloadSessionWithID(id, initial); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return appendDownloadChunkToSession(id, chunk)
+}
+
 func loadDownloadSession(id string) (downloadSession, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {

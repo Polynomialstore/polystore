@@ -120,6 +120,9 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
+func RouterGatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
+	RouterGatewayFetch(w, r)
+}
 func RouterGatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
@@ -310,6 +313,10 @@ func RouterGatewaySubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	forwardJSONToProviderBase(w, r, baseURL, "/sp/session-receipt", body)
+}
+
+func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	RouterGatewayFetch(w, r)
 }
 
 func isGatewayRouterMode() bool {

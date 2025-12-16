@@ -325,6 +325,7 @@ func main() {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/manifest-info/{cid}", RouterGatewayManifestInfo).Methods("GET", "OPTIONS")
@@ -332,10 +333,12 @@ func main() {
 		r.HandleFunc("/gateway/receipt", RouterGatewaySubmitReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-proof", RouterGatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
 	} else {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
@@ -344,9 +347,11 @@ func main() {
 		r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-proof", GatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
 	}
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
@@ -1636,9 +1641,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
 	}
 
+	onchainSessionID := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
 	downloadSessionID := strings.TrimSpace(r.Header.Get("X-Nil-Download-Session"))
 	if downloadSessionID == "" {
 		downloadSessionID = strings.TrimSpace(q.Get("download_session"))
+	}
+	isOnchainSession := onchainSessionID != ""
+	if isOnchainSession {
+		downloadSessionID = onchainSessionID
 	}
 	isDownloadSession := downloadSessionID != ""
 	if dealIDStr == "" || owner == "" {
@@ -1757,7 +1767,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dlSession downloadSession
-	if isDownloadSession {
+	if isDownloadSession && !isOnchainSession {
 		dlSession, err = loadDownloadSession(downloadSessionID)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid download_session", err.Error())
@@ -1807,25 +1817,27 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		reqRangeStart = rangeHeaderStart
 		reqRangeLen = rangeHeaderLen
 
-		// Enforce the signed session range (range_len == 0 means "until EOF").
-		if reqRangeStart < dlSession.RangeStart {
-			writeJSONError(w, http.StatusBadRequest, "range outside session", "range_start before session start")
-			return
-		}
-		if dlSession.RangeLen > 0 {
-			if reqRangeStart > reqRangeStart+reqRangeLen {
-				writeJSONError(w, http.StatusBadRequest, "range outside session", "range overflow")
+		if !isOnchainSession {
+			// Enforce the signed session range (range_len == 0 means "until EOF").
+			if reqRangeStart < dlSession.RangeStart {
+				writeJSONError(w, http.StatusBadRequest, "range outside session", "range_start before session start")
 				return
 			}
-			end := reqRangeStart + reqRangeLen
-			limit := dlSession.RangeStart + dlSession.RangeLen
-			if limit < dlSession.RangeStart {
-				writeJSONError(w, http.StatusBadRequest, "range outside session", "session range overflow")
-				return
-			}
-			if end > limit {
-				writeJSONError(w, http.StatusBadRequest, "range outside session", "range exceeds session limit")
-				return
+			if dlSession.RangeLen > 0 {
+				if reqRangeStart > reqRangeStart+reqRangeLen {
+					writeJSONError(w, http.StatusBadRequest, "range outside session", "range overflow")
+					return
+				}
+				end := reqRangeStart + reqRangeLen
+				limit := dlSession.RangeStart + dlSession.RangeLen
+				if limit < dlSession.RangeStart {
+					writeJSONError(w, http.StatusBadRequest, "range outside session", "session range overflow")
+					return
+				}
+				if end > limit {
+					writeJSONError(w, http.StatusBadRequest, "range outside session", "range exceeds session limit")
+					return
+				}
 			}
 		}
 	} else {
@@ -1963,11 +1975,31 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusInternalServerError, "failed to parse proof_details", err.Error())
 			return
 		}
-		if err := appendDownloadChunkToSession(downloadSessionID, downloadChunk{
-			RangeStart:   reqRangeStart,
-			RangeLen:     servedLen,
-			ProofDetails: chained,
-		}); err != nil {
+		var err error
+		if isOnchainSession {
+			err = appendDownloadChunkToSessionOrCreate(downloadSessionID, downloadSession{
+				DealID:     dealID,
+				EpochID:    1,
+				Owner:      owner,
+				Provider:   providerAddr,
+				FilePath:   filePath,
+				RangeStart: 0,
+				RangeLen:   0,
+				CreatedAt:  time.Now(),
+				ExpiresAt:  time.Now().Add(30 * time.Minute),
+			}, downloadChunk{
+				RangeStart:   reqRangeStart,
+				RangeLen:     servedLen,
+				ProofDetails: chained,
+			})
+		} else {
+			err = appendDownloadChunkToSession(downloadSessionID, downloadChunk{
+				RangeStart:   reqRangeStart,
+				RangeLen:     servedLen,
+				ProofDetails: chained,
+			})
+		}
+		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to record download session chunk", err.Error())
 			return
 		}
@@ -2039,6 +2071,184 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 	_, _ = io.Copy(w, content)
+}
+
+// GatewayPlanRetrievalSession plans an on-chain RetrievalSession for a file byte-range by
+// mapping it to a contiguous blob interval over the NilFS slab.
+func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	filePath, ferr := validateNilfsFilePath(q.Get("file_path"))
+	if dealIDStr == "" || owner == "" {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
+		return
+	}
+	if ferr != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid file_path", "List files via GET /gateway/list-files/<manifest_root>?deal_id=<id>&owner=<owner>")
+		return
+	}
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
+		return
+	}
+
+	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal", "")
+		return
+	}
+	if dealOwner == "" || dealOwner != owner {
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		return
+	}
+	if strings.TrimSpace(dealCID) == "" {
+		writeJSONError(w, http.StatusConflict, "deal has no committed manifest_root yet", "commit content before planning retrieval sessions")
+		return
+	}
+	dealRoot, err := parseManifestRoot(dealCID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+		return
+	}
+	if dealRoot.Canonical != manifestRoot.Canonical {
+		writeJSONError(w, http.StatusConflict, "stale manifest_root (does not match on-chain deal state)", fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical))
+		return
+	}
+
+	dealDir, err := resolveDealDir(dealRoot, dealRoot.Canonical)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	startOffset, fileLen, witnessCount, err := GetFileMetaByPath(dealDir, filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "file not found in deal", "")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file metadata", err.Error())
+		return
+	}
+
+	var rangeStart uint64
+	var rangeLen uint64
+	if raw := strings.TrimSpace(q.Get("range_start")); raw != "" {
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid range_start", "")
+			return
+		}
+		rangeStart = v
+	}
+	if raw := strings.TrimSpace(q.Get("range_len")); raw != "" {
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid range_len", "")
+			return
+		}
+		rangeLen = v
+	}
+	if fileLen == 0 {
+		writeJSONError(w, http.StatusConflict, "file has zero length", "")
+		return
+	}
+	if rangeStart >= fileLen {
+		writeJSONError(w, http.StatusBadRequest, "range_start beyond EOF", "")
+		return
+	}
+	if rangeLen == 0 || rangeLen > fileLen-rangeStart {
+		rangeLen = fileLen - rangeStart
+	}
+
+	absStart := startOffset + rangeStart
+	absEnd := absStart + rangeLen - 1
+
+	startMdu := uint64(1) + witnessCount + (absStart / RawMduCapacity)
+	endMdu := uint64(1) + witnessCount + (absEnd / RawMduCapacity)
+	startBlob, err := rawOffsetToEncodedBlobIndex(absStart % RawMduCapacity)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to map start blob", err.Error())
+		return
+	}
+	endBlob, err := rawOffsetToEncodedBlobIndex(absEnd % RawMduCapacity)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to map end blob", err.Error())
+		return
+	}
+
+	startGlobal := startMdu*uint64(types.BLOBS_PER_MDU) + uint64(startBlob)
+	endGlobal := endMdu*uint64(types.BLOBS_PER_MDU) + uint64(endBlob)
+	if endGlobal < startGlobal {
+		writeJSONError(w, http.StatusInternalServerError, "invalid blob mapping", "")
+		return
+	}
+	blobCount := endGlobal - startGlobal + 1
+
+	providerAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(providerAddr) == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
+		return
+	}
+
+	type response struct {
+		DealID         uint64 `json:"deal_id"`
+		Owner          string `json:"owner"`
+		Provider       string `json:"provider"`
+		ManifestRoot   string `json:"manifest_root"`
+		FilePath       string `json:"file_path"`
+		RangeStart     uint64 `json:"range_start"`
+		RangeLen       uint64 `json:"range_len"`
+		StartMduIndex  uint64 `json:"start_mdu_index"`
+		StartBlobIndex uint32 `json:"start_blob_index"`
+		BlobCount      uint64 `json:"blob_count"`
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response{
+		DealID:         dealID,
+		Owner:          owner,
+		Provider:       providerAddr,
+		ManifestRoot:   dealRoot.Canonical,
+		FilePath:       filePath,
+		RangeStart:     rangeStart,
+		RangeLen:       rangeLen,
+		StartMduIndex:  startMdu,
+		StartBlobIndex: startBlob,
+		BlobCount:      blobCount,
+	})
 }
 
 type nilfsFileEntry struct {
@@ -2498,7 +2708,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id")
 	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
@@ -3105,6 +3315,12 @@ func GatewaySubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 	forwardToProvider(w, r, "/sp/session-receipt")
 }
 
+// GatewaySubmitRetrievalSessionProof asks the provider to submit the on-chain proof for a
+// RetrievalSession once the client has finished downloading.
+func GatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	forwardToProvider(w, r, "/sp/session-proof")
+}
+
 // SpSubmitReceipt is the Storage Provider endpoint.
 // It accepts a signed receipt, validates it, and submits it to the chain.
 func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
@@ -3681,5 +3897,161 @@ func SpSubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 		"status":      "success",
 		"tx_hash":     txHash,
 		"chunk_count": len(chunks),
+	})
+}
+
+type RetrievalSessionProofEnvelope struct {
+	SessionID string `json:"session_id"`
+}
+
+func parseSessionIDHex(raw string) (string, []byte, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, fmt.Errorf("session_id is required")
+	}
+	s := raw
+	if strings.HasPrefix(s, "0x") {
+		s = s[2:]
+	}
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) != 64 {
+		return "", nil, fmt.Errorf("session_id must be 32 bytes hex (got %d chars)", len(s))
+	}
+	bz, err := hex.DecodeString(s)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid session_id hex: %w", err)
+	}
+	return "0x" + s, bz, nil
+}
+
+// SpSubmitRetrievalSessionProof submits proof-of-retrieval for an on-chain RetrievalSession.
+// It expects the gateway to have recorded per-blob ChainedProofs under the given session_id.
+func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
+	}
+
+	var env RetrievalSessionProofEnvelope
+	if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {session_id}")
+		return
+	}
+	sessionKey, sessionIDBytes, err := parseSessionIDHex(env.SessionID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
+		return
+	}
+
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	localProviderAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(localProviderAddr) == "" {
+		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
+			return
+		}
+	}
+	if strings.TrimSpace(localProviderAddr) == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
+		return
+	}
+
+	s, err := loadDownloadSession(sessionKey)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
+		return
+	}
+	if strings.TrimSpace(s.Provider) != "" && strings.TrimSpace(s.Provider) != strings.TrimSpace(localProviderAddr) {
+		writeJSONError(w, http.StatusForbidden, "session provider mismatch", "")
+		return
+	}
+	if len(s.Chunks) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "session has no recorded chunks", "fetch at least one blob chunk before submitting proofs")
+		return
+	}
+
+	chunks := make([]downloadChunk, len(s.Chunks))
+	copy(chunks, s.Chunks)
+	sort.Slice(chunks, func(i, j int) bool {
+		if chunks[i].ProofDetails.MduIndex != chunks[j].ProofDetails.MduIndex {
+			return chunks[i].ProofDetails.MduIndex < chunks[j].ProofDetails.MduIndex
+		}
+		return chunks[i].ProofDetails.BlobIndex < chunks[j].ProofDetails.BlobIndex
+	})
+
+	proofs := make([]types.ChainedProof, 0, len(chunks))
+	seen := make(map[uint64]struct{}, len(chunks))
+	for _, c := range chunks {
+		key := c.ProofDetails.MduIndex*uint64(types.BLOBS_PER_MDU) + uint64(c.ProofDetails.BlobIndex)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		proofs = append(proofs, c.ProofDetails)
+	}
+	if len(proofs) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "session has no usable proofs", "")
+		return
+	}
+
+	msg := types.MsgSubmitRetrievalSessionProof{
+		Creator:   localProviderAddr,
+		SessionId: sessionIDBytes,
+		Proofs:    proofs,
+	}
+
+	tmpFile, err := os.CreateTemp(uploadDir, "session-proof-v2-*.json")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to create temp file", err.Error())
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+
+	bz, err := json.Marshal(msg)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode session proof", err.Error())
+		return
+	}
+	if _, err := tmpFile.Write(bz); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
+		return
+	}
+	_ = tmpFile.Close()
+
+	txHash, err := submitTxAndWait(
+		r.Context(),
+		"tx", "nilchain", "submit-retrieval-proof",
+		tmpFile.Name(),
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas", "auto",
+		"--gas-adjustment", "1.6",
+		"--gas-prices", gasPrices,
+		"--broadcast-mode", "sync",
+		"--output", "json",
+	)
+	if err != nil {
+		log.Printf("SpSubmitRetrievalSessionProof: submit failed: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "submit session proof failed", err.Error())
+		return
+	}
+
+	_, _ = takeDownloadSession(sessionKey)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":      "success",
+		"tx_hash":     txHash,
+		"proof_count": len(proofs),
+		"session_id":  sessionKey,
 	})
 }
