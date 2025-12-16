@@ -201,6 +201,7 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 
 			// Dispatch based on top-level fields:
 			// - { "session_receipt": ..., "chunks": [...] } -> RetrievalSessionProof
+			// - { "session_id": ..., "proofs": [...] } -> MsgSubmitRetrievalSessionProof
 			// - { "receipts": [...] } -> RetrievalReceiptBatch
 			// - otherwise -> RetrievalReceipt
 			if _, ok := obj["session_receipt"]; ok {
@@ -217,6 +218,15 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 					},
 				}
 				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			}
+
+			if _, ok := obj["session_id"]; ok {
+				var sp types.MsgSubmitRetrievalSessionProof
+				if err := json.Unmarshal(bz, &sp); err != nil {
+					return err
+				}
+				sp.Creator = creator
+				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &sp)
 			}
 
 			if _, ok := obj["receipts"]; ok {
