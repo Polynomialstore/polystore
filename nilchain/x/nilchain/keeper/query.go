@@ -73,3 +73,84 @@ func (q queryServer) GetReceiptNonce(goCtx context.Context, req *types.QueryGetR
 
 	return &types.QueryGetReceiptNonceResponse{LastNonce: lastNonce}, nil
 }
+
+func (q queryServer) GetRetrievalSession(goCtx context.Context, req *types.QueryGetRetrievalSessionRequest) (*types.QueryGetRetrievalSessionResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if len(req.SessionId) != 32 {
+		return nil, status.Error(codes.InvalidArgument, "session_id must be 32 bytes")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	session, err := q.k.RetrievalSessions.Get(ctx, req.SessionId)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "retrieval session not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetRetrievalSessionResponse{Session: session}, nil
+}
+
+func (q queryServer) ListRetrievalSessionsByOwner(goCtx context.Context, req *types.QueryListRetrievalSessionsByOwnerRequest) (*types.QueryListRetrievalSessionsByOwnerResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	owner := strings.TrimSpace(req.Owner)
+	if owner == "" {
+		return nil, status.Error(codes.InvalidArgument, "owner is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	sessions := make([]types.RetrievalSession, 0)
+	err := q.k.RetrievalSessionsByOwner.Walk(ctx, nil, func(key collections.Pair[string, []byte], _ uint64) (stop bool, err error) {
+		if key.K1() != owner {
+			return false, nil
+		}
+		s, err := q.k.RetrievalSessions.Get(ctx, key.K2())
+		if err != nil {
+			return false, nil
+		}
+		sessions = append(sessions, s)
+		return false, nil
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListRetrievalSessionsByOwnerResponse{Sessions: sessions}, nil
+}
+
+func (q queryServer) ListRetrievalSessionsByProvider(goCtx context.Context, req *types.QueryListRetrievalSessionsByProviderRequest) (*types.QueryListRetrievalSessionsByProviderResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	provider := strings.TrimSpace(req.Provider)
+	if provider == "" {
+		return nil, status.Error(codes.InvalidArgument, "provider is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	sessions := make([]types.RetrievalSession, 0)
+	err := q.k.RetrievalSessionsByProvider.Walk(ctx, nil, func(key collections.Pair[string, []byte], _ uint64) (stop bool, err error) {
+		if key.K1() != provider {
+			return false, nil
+		}
+		s, err := q.k.RetrievalSessions.Get(ctx, key.K2())
+		if err != nil {
+			return false, nil
+		}
+		sessions = append(sessions, s)
+		return false, nil
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListRetrievalSessionsByProviderResponse{Sessions: sessions}, nil
+}

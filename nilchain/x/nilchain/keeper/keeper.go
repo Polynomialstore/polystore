@@ -42,6 +42,11 @@ type Keeper struct {
 	ReceiptNoncesByDealFile collections.Map[collections.Pair[uint64, string], uint64]
 	EvmNonces               collections.Map[string, uint64]
 	DealHeatStates          collections.Map[uint64, types.DealHeatState]
+
+	RetrievalSessions           collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner    collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 }
 
 func NewKeeper(
@@ -59,7 +64,7 @@ func NewKeeper(
 
 	sb := collections.NewSchemaBuilder(storeService)
 
-	k := Keeper{
+		k := Keeper{
 		storeService:  storeService,
 		cdc:           cdc,
 		addressCodec:  addressCodec,
@@ -77,11 +82,22 @@ func NewKeeper(
 		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		ProviderRewards:         collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
-		ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
-		ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
-		DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
-	}
+			ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
+			ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+			EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
+			DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+
+			RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
+			RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+			RetrievalSessionsByProvider: collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+			RetrievalSessionNonces: collections.NewMap(
+				sb,
+				types.RetrievalSessionNonceKey,
+				"retrieval_session_nonces",
+				collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
+				collections.Uint64Value,
+			),
+		}
 
 	schema, err := sb.Build()
 	if err != nil {

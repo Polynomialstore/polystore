@@ -52,6 +52,21 @@ service Query {
   rpc GetReceiptNonce(QueryGetReceiptNonceRequest) returns (QueryGetReceiptNonceResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/receipt-nonce";
   }
+
+  // Queries a RetrievalSession by id.
+  rpc GetRetrievalSession(QueryGetRetrievalSessionRequest) returns (QueryGetRetrievalSessionResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/retrieval-sessions/{session_id}";
+  }
+
+  // Lists RetrievalSessions for an owner.
+  rpc ListRetrievalSessionsByOwner(QueryListRetrievalSessionsByOwnerRequest) returns (QueryListRetrievalSessionsByOwnerResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/retrieval-sessions/by-owner/{owner}";
+  }
+
+  // Lists RetrievalSessions for a provider.
+  rpc ListRetrievalSessionsByProvider(QueryListRetrievalSessionsByProviderRequest) returns (QueryListRetrievalSessionsByProviderResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/retrieval-sessions/by-provider/{provider}";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -124,4 +139,32 @@ message QueryGetReceiptNonceRequest {
 
 message QueryGetReceiptNonceResponse {
   uint64 last_nonce = 1;
+}
+
+message QueryGetRetrievalSessionRequest {
+  bytes session_id = 1;
+}
+
+message QueryGetRetrievalSessionResponse {
+  RetrievalSession session = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryListRetrievalSessionsByOwnerRequest {
+  string owner = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+message QueryListRetrievalSessionsByOwnerResponse {
+  repeated RetrievalSession sessions = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryListRetrievalSessionsByProviderRequest {
+  string provider = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+message QueryListRetrievalSessionsByProviderResponse {
+  repeated RetrievalSession sessions = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

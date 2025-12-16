@@ -1374,6 +1374,304 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
 	return &types.MsgWithdrawRewardsResponse{AmountWithdrawn: rewards}, nil
 }
 
+func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpenRetrievalSession) (*types.MsgOpenRetrievalSessionResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.ManifestRoot) != 48 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	}
+	if msg.BlobCount == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
+	}
+	if msg.Creator != deal.Owner {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner may open retrieval sessions")
+	}
+	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
+	}
+
+	isAssignedProvider := false
+	for _, p := range deal.Providers {
+		if p == msg.Provider {
+			isAssignedProvider = true
+			break
+		}
+	}
+	if !isAssignedProvider {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Provider, msg.DealId)
+	}
+
+	if msg.StartBlobIndex >= uint32(types.BlobsPerMdu) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
+	}
+	startGlobal := msg.StartMduIndex*types.BlobsPerMdu + uint64(msg.StartBlobIndex)
+	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+	if deal.TotalMdus != 0 {
+		if msg.StartMduIndex >= deal.TotalMdus {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
+		}
+		maxGlobal := deal.TotalMdus * types.BlobsPerMdu
+		if endGlobal > maxGlobal {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
+		}
+	}
+
+	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
+	}
+
+	ownerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
+	}
+	providerAddr, err := sdk.AccAddressFromBech32(msg.Provider)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+	}
+
+	nonceKey := collections.Join(collections.Join(msg.Creator, msg.DealId), msg.Provider)
+	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+	if msg.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
+	}
+
+	sessionID, err := types.HashRetrievalSessionID(
+		ownerAddr.Bytes(),
+		msg.DealId,
+		providerAddr.Bytes(),
+		msg.ManifestRoot,
+		msg.StartMduIndex,
+		msg.StartBlobIndex,
+		msg.BlobCount,
+		msg.Nonce,
+		msg.ExpiresAt,
+	)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
+	}
+
+	session := types.RetrievalSession{
+		SessionId:       sessionID,
+		DealId:          msg.DealId,
+		Owner:           msg.Creator,
+		Provider:        msg.Provider,
+		ManifestRoot:    msg.ManifestRoot,
+		StartMduIndex:   msg.StartMduIndex,
+		StartBlobIndex:  msg.StartBlobIndex,
+		BlobCount:       msg.BlobCount,
+		TotalBytes:      totalBytes,
+		Nonce:           msg.Nonce,
+		ExpiresAt:       msg.ExpiresAt,
+		OpenedHeight:    ctx.BlockHeight(),
+		UpdatedHeight:   ctx.BlockHeight(),
+		Status:          types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+	}
+
+	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
+		return nil, fmt.Errorf("failed to store retrieval session: %w", err)
+	}
+	if err := k.RetrievalSessionsByOwner.Set(ctx, collections.Join(msg.Creator, sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by owner: %w", err)
+	}
+	if err := k.RetrievalSessionsByProvider.Set(ctx, collections.Join(msg.Provider, sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by provider: %w", err)
+	}
+	if err := k.RetrievalSessionNonces.Set(ctx, nonceKey, msg.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
+	}
+
+	return &types.MsgOpenRetrievalSessionResponse{SessionId: sessionID}, nil
+}
+
+func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.MsgConfirmRetrievalSession) (*types.MsgConfirmRetrievalSessionResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.SessionId) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+	}
+
+	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+	}
+	if msg.Creator != session.Owner {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only session owner may confirm completion")
+	}
+
+	if isSessionExpired(ctx, &session) {
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
+		session.UpdatedHeight = ctx.BlockHeight()
+		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
+	}
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
+	}
+
+	switch session.Status {
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED:
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
+	default:
+		// Allow idempotent confirmations.
+	}
+	session.UpdatedHeight = ctx.BlockHeight()
+
+	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
+		return nil, err
+	}
+
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		if err := k.IncrementHeat(ctx, session.DealId, session.TotalBytes, false); err != nil {
+			ctx.Logger().Error("failed to increment heat on session completion", "error", err)
+		}
+	}
+
+	return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
+}
+
+func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProof) (*types.MsgSubmitRetrievalSessionProofResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.SessionId) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+	}
+	if len(msg.Proofs) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("proofs are required")
+	}
+
+	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+	}
+	if msg.Creator != session.Provider {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only session provider may submit proofs")
+	}
+
+	if isSessionExpired(ctx, &session) {
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
+		session.UpdatedHeight = ctx.BlockHeight()
+		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
+	}
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
+	}
+
+	deal, err := k.Deals.Get(ctx, session.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", session.DealId)
+	}
+	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, session.ManifestRoot) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal manifest_root changed since session open")
+	}
+	if uint64(len(msg.Proofs)) != session.BlobCount {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof count mismatch for session blob_count")
+	}
+
+	startGlobal := session.StartMduIndex*types.BlobsPerMdu + uint64(session.StartBlobIndex)
+
+	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
+		if chainedProof == nil {
+			return false, nil
+		}
+		if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
+			len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
+			len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
+			return false, nil
+		}
+		if len(deal.ManifestRoot) != 48 {
+			return false, nil
+		}
+
+		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
+		for _, node := range chainedProof.MerklePath {
+			if len(node) != 32 {
+				return false, nil
+			}
+			flattenedMerkle = append(flattenedMerkle, node...)
+		}
+
+		v, err := crypto_ffi.VerifyChainedProof(
+			deal.ManifestRoot,
+			chainedProof.MduIndex,
+			chainedProof.ManifestOpening,
+			chainedProof.MduRootFr,
+			chainedProof.BlobCommitment,
+			uint64(chainedProof.BlobIndex),
+			flattenedMerkle,
+			chainedProof.ZValue,
+			chainedProof.YValue,
+			chainedProof.KzgOpeningProof,
+		)
+		if err != nil {
+			return false, err
+		}
+		return v, nil
+	}
+
+	for i := uint64(0); i < session.BlobCount; i++ {
+		p := msg.Proofs[int(i)]
+
+		expectedGlobal := startGlobal + i
+		expectedMdu := expectedGlobal / types.BlobsPerMdu
+		expectedBlob := expectedGlobal % types.BlobsPerMdu
+
+		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
+		}
+
+		ok, err := verifyChainedProof(&p)
+		if err != nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+		}
+		if !ok {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
+		}
+	}
+
+	switch session.Status {
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED:
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
+	default:
+		// Allow idempotent proofs.
+	}
+	session.UpdatedHeight = ctx.BlockHeight()
+
+	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
+		return nil, err
+	}
+
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		if err := k.IncrementHeat(ctx, session.DealId, session.TotalBytes, false); err != nil {
+			ctx.Logger().Error("failed to increment heat on session completion", "error", err)
+		}
+	}
+
+	return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
+}
+
 // recoverEvmAddressFromDigest recovers the EVM address from a signature over a digest.
 func recoverEvmAddressFromDigest(digest []byte, sig []byte) (gethCommon.Address, error) {
 	var zero gethCommon.Address
@@ -1393,4 +1691,39 @@ func recoverEvmAddressFromDigest(digest []byte, sig []byte) (gethCommon.Address,
 		return zero, err
 	}
 	return gethCrypto.PubkeyToAddress(*pubKey), nil
+}
+
+func isSessionExpired(ctx sdk.Context, session *types.RetrievalSession) bool {
+	if session == nil {
+		return true
+	}
+	if session.ExpiresAt == 0 {
+		return false
+	}
+	return uint64(ctx.BlockHeight()) > session.ExpiresAt
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func addUint64(a, b uint64) (uint64, bool) {
+	out := a + b
+	return out, out < a
+}
+
+func mulUint64(a, b uint64) (uint64, bool) {
+	if a == 0 || b == 0 {
+		return 0, false
+	}
+	out := a * b
+	return out, out/b != a
 }

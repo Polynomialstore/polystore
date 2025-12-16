@@ -32,4 +32,8 @@ var (
 	ReceiptNonceDealFileKey = collections.NewPrefix("ReceiptNonceDealFile/value/")
 	EvmNonceKey             = collections.NewPrefix("EvmNonce/value/")
 	DealHeatStateKey        = collections.NewPrefix("DealHeatState/value/")
+	RetrievalSessionsKey            = collections.NewPrefix("RetrievalSessions/value/")
+	RetrievalSessionsByOwnerKey     = collections.NewPrefix("RetrievalSessionsByOwner/value/")
+	RetrievalSessionsByProviderKey  = collections.NewPrefix("RetrievalSessionsByProvider/value/")
+	RetrievalSessionNonceKey        = collections.NewPrefix("RetrievalSessionNonce/value/")
 )

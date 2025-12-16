@@ -69,6 +69,39 @@ message ChainedProof {
   bytes kzg_opening_proof = 9;
 }
 
+// RetrievalSessionStatus is the on-chain lifecycle state for a retrieval session.
+enum RetrievalSessionStatus {
+  RETRIEVAL_SESSION_STATUS_UNSPECIFIED = 0;
+  RETRIEVAL_SESSION_STATUS_OPEN = 1;
+  RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED = 2;
+  RETRIEVAL_SESSION_STATUS_USER_CONFIRMED = 3;
+  RETRIEVAL_SESSION_STATUS_COMPLETED = 4;
+  RETRIEVAL_SESSION_STATUS_EXPIRED = 5;
+  RETRIEVAL_SESSION_STATUS_CANCELED = 6;
+}
+
+// RetrievalSession is an on-chain authorization + completion object for a blob-range retrieval.
+// It is provider-bound, deal-bound, and pins the current Deal.manifest_root to avoid ambiguity.
+message RetrievalSession {
+  bytes session_id = 1; // 32-byte keccak256 hash of canonical session fields
+  uint64 deal_id = 2;
+  string owner = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string provider = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes manifest_root = 5; // 48-byte KZG commitment pinned at session open
+
+  uint64 start_mdu_index = 6;
+  uint32 start_blob_index = 7;
+  uint64 blob_count = 8;
+  uint64 total_bytes = 9; // blob_count * 131072
+
+  uint64 nonce = 10; // strictly increasing per (owner, deal_id, provider)
+  uint64 expires_at = 11; // block height (0 = no expiry)
+
+  int64 opened_height = 12;
+  int64 updated_height = 13;
+  RetrievalSessionStatus status = 14;
+}
+
 // RetrievalReceipt represents a user's signed confirmation of data retrieval.
 message RetrievalReceipt {
   uint64 deal_id = 1;
