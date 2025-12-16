@@ -40,9 +40,6 @@ type downloadSession struct {
 var downloadSessionCache sync.Map // map[string]downloadSession
 
 func storeDownloadSession(s downloadSession) (string, error) {
-	if s.DealID == 0 {
-		return "", fmt.Errorf("deal_id is required")
-	}
 	if strings.TrimSpace(s.Owner) == "" {
 		return "", fmt.Errorf("owner is required")
 	}
@@ -89,9 +86,6 @@ func storeDownloadSessionWithID(id string, s downloadSession) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("download_session id is required")
-	}
-	if s.DealID == 0 {
-		return fmt.Errorf("deal_id is required")
 	}
 	if strings.TrimSpace(s.Owner) == "" {
 		return fmt.Errorf("owner is required")
