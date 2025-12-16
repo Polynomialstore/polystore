@@ -353,53 +353,47 @@ Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed 
 * **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
 * **Data caching:** cache reconstructed plaintext files (or reconstructed SP‑MDUs) behind an LRU keyed by `(deal_id, Deal.current_gen, file_path, byte_range)` to avoid repeated network fetches; revalidation can be performed by re-checking on-chain `Deal.manifest_root` and (optionally) re-verifying proofs on cache fill.
 
-### 7.2 Control Plane: Retrieval Receipts & On‑Chain State
+### 7.2 Control Plane: Retrieval Sessions, Proof-of-Retrieval, and Completion (Planned → Mandated)
 
-NilStore tracks retrieval events via **Retrieval Receipts** and the **Unified Liveness** handler:
+NilStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to NilFS + Triple Proof and the protocol’s atomic units:
 
-1.  **Receipt Construction (Client):**
-    *   After verifying the Triple Proof for a served byte-range, the Data Owner constructs a `RetrievalReceipt`:
-        *   `{deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_details (ChainedProof), user_signature}`.
-    *   The signed message MUST be bound to the exact `proof_details` via `proof_hash = keccak256(encode(ChainedProof))` and MUST cover `(deal_id, epoch_id, provider, file_path, range_start, range_len, bytes_served, nonce, expires_at, proof_hash)` so SPs cannot forge, inflate, or replay receipts.
-    *   `user_signature` is an EIP-712 typed-data signature under domain `{name: "NilStore", version: "1", chainId: Params.eip712_chain_id, verifyingContract: 0x0000000000000000000000000000000000000000}`. Devnet default is `eip712_chain_id = 31337`.
-    *   `nonce` is a strictly increasing 64‑bit sequence number scoped to `(deal_id, file_path)` for the Deal Owner (or payer), enabling parallel downloads of different files within the same deal. `expires_at` is a block height or timestamp after which the receipt is invalid.
-2.  **On‑Chain Submission (Provider):**
-    *   The Provider wraps the receipt in `MsgProveLiveness{ ProofType = UserReceipt }` and submits it to the chain.
-    *   The module verifies:
-        *   Provider is assigned in `Deal.providers[]`.
-        *   Receipt envelope consistency:
-            *   `receipt.deal_id == msg.deal_id`
-            *   `receipt.epoch_id == msg.epoch_id`
-            *   `receipt.provider == msg.creator`
-            *   `receipt.bytes_served == receipt.range_len` (range binding for accounting)
-        *   `expires_at` has not passed.
-        *   `nonce` is strictly greater than the last accepted nonce for `(deal_id, file_path)` (payer-scoped).
-        *   KZG proof is valid for the challenged MDU chunk.
-        *   `user_signature` matches the Deal Owner’s on‑chain key.
-    *   The module MUST maintain persistent state `LastReceiptNonce[(deal_id, file_path)]` (or equivalent) and reject any receipt with `nonce ≤ LastReceiptNonce[(deal_id, file_path)]` as a replay.
-3.  **Book‑Keeping & Rewards:**
-    *   The keeper computes the latency tier from inclusion height (Platinum/Gold/Silver/Fail) and updates `ProviderRewards`.
-    *   It debits `Deal.EscrowBalance` for the bandwidth component and records a lightweight `Proof` summary:
-        *   `commitment = "deal:<id>/epoch:<epoch>/tier:<tier>"`.
-    *   `Proof` entries are exposed via `Query/ListProofs` (LCD: `/nilchain/nilchain/v1/proofs`) for dashboards and analytics.
+* **Atomic unit:** 128 KiB **Blob** (`BLOB_SIZE`). All on-chain accounting is in blob counts / blob-aligned bytes.
+* **Session unit:** a contiguous sequence of blobs that may span MDUs (8 MiB = 64 blobs).
 
-In the current devnet, the CLI (`sign-retrieval-receipt` / `submit-retrieval-proof`) and the Web Gateway (`/gateway/fetch`, `/gateway/prove-retrieval`) MAY drive receipt/proof submission as a convenience “meta‑transaction” layer. Web downloads that do not trigger on‑chain receipts are **non‑normative** and expected to be phased out; the intended end state is that retrievals always produce verifiable on‑chain liveness evidence derived from NilFS (MDU #0 + on-disk slab) and the Deal’s on‑chain commitments.
+The intended end state is: a provider only gets credit for a retrieval once the chain has evidence of **both** (a) a user-authorized request and (b) a user-confirmed successful completion, plus the provider’s cryptographic proof-of-retrieval.
 
-#### 7.2.1 Bundled session receipts (Implemented, UX + throughput)
+1.  **Open a Retrieval Session (User, on-chain tx):**
+    *   The user opens a session bound to a specific `(deal_id, provider, manifest_root, blob-range)`:
+        *   `{deal_id, owner, provider, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}`.
+    *   Invariants:
+        *   Provider MUST be assigned in `Deal.providers[]`.
+        *   `manifest_root` MUST match the current on-chain `Deal.manifest_root` (pin content).
+        *   `start_blob_index < BLOBS_PER_MDU`, `blob_count > 0`.
+        *   `total_bytes = blob_count * 131072` and MUST be a multiple of 128 KiB (by construction).
+    *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
-To reduce wallet prompts and on-chain TX count, NilStore supports a session-level receipt that commits to many served chunks at once.
+2.  **Serve bytes (Provider, off-chain):**
+    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Each HTTP `Range` response MUST map to exactly one blob (bounded by blob boundaries); a session is satisfied by fetching the declared contiguous blob range (chunking is a client/gateway concern).
 
-* **Per-chunk leaf commitment (normative):**
-  * `proof_hash := keccak256(encode(ChainedProof))`
-  * `leaf_hash := keccak256(uint64_be(range_start) || uint64_be(range_len) || proof_hash)`
-* **Chunk root:** `chunk_leaf_root` is the Merkle root over `leaf_hash[i]` ordered by increasing `(range_start, range_len)` using duplicate-last padding (including the 1-leaf case) and `keccak256(left||right)` internal nodes.
-* **Session receipt:** the client signs a `DownloadSessionReceipt` committing to:
-  * `{deal_id, epoch_id, provider, file_path, total_bytes, chunk_count, chunk_leaf_root, nonce, expires_at}`
-* **On-chain submission:** a provider MAY submit a single on-chain message that carries:
-  * the signed `DownloadSessionReceipt`, and
-  * the `chunk_count` per-chunk `ChainedProof` objects plus Merkle membership paths showing each chunk’s `leaf_hash` is included in `chunk_leaf_root`.
+3.  **Submit proof-of-retrieval (Provider, on-chain tx):**
+    *   The provider submits `ChainedProof` objects for the served blobs referencing `session_id`.
+    *   v1 (devnet): one `ChainedProof` per blob in the session; later iterations may replace this with sampling and/or aggregated multi-openings.
 
-This preserves fair exchange (the user signs only after receiving bytes) while reducing signature prompts from `O(chunks)` to ~1 per download completion.
+4.  **Confirm completion (User, on-chain tx):**
+    *   After a successful download, the user submits a session confirmation transaction bound to `session_id`.
+    *   This is the protocol’s “proof-of-validation” that the user considers the retrieval complete.
+
+5.  **Completion + accounting (Chain):**
+    *   A session becomes `COMPLETED` once the chain has:
+        *   provider proof-of-retrieval for the declared blob range, and
+        *   user confirmation,
+        *   all before `expires_at`.
+    *   Only `COMPLETED` sessions increment `DealHeatState.successful_retrievals_total` and contribute to rewards/health.
+
+#### 7.2.1 Legacy: receipt-based liveness (devnet convenience, deprecated)
+
+Earlier devnet iterations used per-range user message signatures (`RetrievalReceipt`) and session message signatures (`DownloadSessionReceipt`) to avoid explicit on-chain session state. These remain useful as a reference and may exist as compatibility paths, but the long-lived protocol direction is the on-chain Retrieval Session model above (tx-only user actions, blob-range semantics, explicit status on-chain).
 
 ### 7.3 Data Commitment Binding (Normative: The Triple Proof)
 
@@ -458,16 +452,16 @@ NilStore recognizes several classes of evidence derived from retrievals and synt
         *   KZG opening is valid at `(eval_x, eval_y)`.
     *   A satisfied synthetic challenge contributes to storage rewards and positive health for `(D,P)`.
 2.  **Retrieval‑Based Proofs (Client‑Initiated):**
-    *   A `RetrievalReceipt` formed as in § 7.2, whose checkpoint matches `DeriveCheckPoint(…)`, MAY be submitted on‑chain as a `RetrievalProof`.
+    *   A provider-submitted proof-of-retrieval tied to an on-chain **Retrieval Session** (§ 7.2) MAY be submitted on‑chain as a `RetrievalProof`.
     *   Verification MUST:
         *   Recompute `DeriveCheckPoint` and match `(mdu_index, blob_index, eval_x)`,
         *   Verify Merkle + KZG against the Deal’s commitments,
-        *   Verify `user_signature` and anti‑replay checks (nonce, expiry),
-        *   Ensure `(mdu_index, blob_index) ∈ S_e(D,P)` if the receipt is to satisfy a synthetic challenge.
+        *   Verify the session binding (deal, provider, pinned `manifest_root`, blob-range) and anti‑replay checks (nonce, expiry),
+        *   Ensure `(mdu_index, blob_index) ∈ S_e(D,P)` if the retrieval proof is to satisfy a synthetic challenge.
     *   Successful retrieval proofs count equivalently to synthetic proofs for storage reward and health.
 3.  **Fraud Proofs (Wrong Data):**
     *   If a client or auditor receives a response whose KZG/Merkle proof fails against `root_cid(deal_id)`, they MAY construct a `FraudProof` that includes:
-        *   The offending `RetrievalReceipt` and, optionally, the Provider’s signed response.
+        *   The offending `session_id` plus the invalid proof material (and, optionally, the Provider’s signed response).
     *   On‑chain verification MUST:
         *   Re‑run Merkle/KZG checks and confirm failure relative to the stored commitments.
     *   A confirmed fraud proof MUST trigger slashing for the implicated `(deal_id, provider_id)` and degrade the Provider’s global health.
@@ -483,7 +477,7 @@ The protocol requires an explicit policy for **how often** providers must prove 
 
 This spec intentionally does not lock constants yet, but the target shape is:
 * For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.total_mdus` / `allocated_length`), `ServiceHint` (Hot/Cold), and recent receipt volume.
-* **Receipt credits:** Valid user retrieval receipts contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
+* **Receipt/session credits:** Completed retrieval sessions (and any legacy receipt paths) contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
 * **Synthetic fill:** If `credits < required_e(D,P)`, the chain derives and enforces `required_e(D,P) - credits` synthetic challenges for that epoch.
 * **Penalties:** Invalid proofs are slashable immediately; failure to meet quota SHOULD degrade reputation and eventually lead to eviction (a slower penalty path than invalid proof slashing).
 
@@ -495,8 +489,8 @@ NilStore anticipates a “Deputy” (proxy) pattern where a provider may delegat
 
 Normative intent:
 * **Accountability remains with the assigned Provider:** rewards, liveness, and slashing attach to the on-chain provider assignment, not to deputies.
-* **Client verification is mandatory:** clients MUST verify Merkle/KZG proof material before signing a `RetrievalReceipt`, preventing deputies from serving arbitrary bytes.
-* **Anti-griefing:** retrieval requests and receipts MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
+* **Client verification is mandatory:** clients MUST verify Merkle/KZG proof material before confirming completion of a Retrieval Session, preventing deputies from serving arbitrary bytes.
+* **Anti-griefing:** retrieval session opens and completion confirmations MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
 
 Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.4 and should be specified in a dedicated RFC.
 
