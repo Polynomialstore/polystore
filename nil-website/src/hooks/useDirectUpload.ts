@@ -60,7 +60,8 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream', // Important for raw binary body
           },
-          body: mdu.data,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([mdu.data as any]),
         });
 
         if (!response.ok) {

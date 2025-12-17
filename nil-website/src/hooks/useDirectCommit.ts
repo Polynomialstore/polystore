@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile';
 import { appConfig } from '../config';

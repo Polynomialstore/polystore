@@ -121,12 +121,9 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
             switch (method) {
 
-              case 'eth_requestAccounts':
-
+              case 'eth_requestAccounts': return [address]
               case 'eth_accounts': return [address]
-
               case 'eth_chainId': return chainIdHex
-
               case 'net_version': return String(parseInt(chainIdHex, 16))
 
               case 'eth_sendTransaction': {
