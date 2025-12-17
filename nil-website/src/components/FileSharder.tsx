@@ -42,6 +42,8 @@ export function FileSharder() {
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
+  const isUploadComplete = uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
   useEffect(() => {
     // Initialize WASM in the worker
     async function initWasmInWorker() {
@@ -296,13 +298,13 @@ export function FileSharder() {
         <div className="flex flex-col gap-2">
             <button
               onClick={() => uploadMdus(collectedMdus)}
-              disabled={isUploading || processing}
-              className="mt-4 inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-green-500 disabled:opacity-50"
+              disabled={isUploading || processing || isUploadComplete}
+              className={`mt-4 inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 ${isUploadComplete ? 'bg-green-600/50 text-white cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-primary-foreground'}`}
             >
-              {isUploading ? 'Uploading...' : `Upload ${collectedMdus.length} MDUs to SP`}
+              {isUploading ? 'Uploading...' : isUploadComplete ? 'Upload Complete' : `Upload ${collectedMdus.length} MDUs to SP`}
             </button>
 
-            {isUploading && uploadProgress.length > 0 && (
+            {(isUploading || isUploadComplete) && uploadProgress.length > 0 && (
               <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
                 <p className="mb-1 text-primary font-bold">Upload Progress:</p>
                 <div className="space-y-1 max-h-24 overflow-y-auto">
@@ -321,7 +323,7 @@ export function FileSharder() {
       )}
 
       {/* Commit to Chain Button */}
-      {currentManifestRoot && collectedMdus.length > 0 && (
+      {currentManifestRoot && isUploadComplete && (
         <div className="flex flex-col gap-2">
             <button
               onClick={() => {

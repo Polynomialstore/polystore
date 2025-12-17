@@ -2756,7 +2756,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index")
 	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
