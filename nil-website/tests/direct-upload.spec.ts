@@ -276,4 +276,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
+
+  // Regression: Manifest & MDUs tab should populate from local OPFS slab (even if gateway has no disk cache).
+  await page.getByTestId('deal-detail-tab-manifest').click()
+  await expect(page.getByText('Slab MDUs')).toBeVisible({ timeout: 60_000 })
 })
