@@ -46,6 +46,11 @@ function sendMessageToWorker(type: string, payload: unknown, transferables?: Tra
   });
 }
 
+interface ExpandedMdu {
+    witness: number[][]; // Vec<Vec<u8>> from Rust
+    shards: number[][]; // Vec<Vec<u8>> from Rust
+}
+
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
@@ -81,8 +86,8 @@ export const workerClient = {
 
   // Shard a file (or part of it) using NilWasm
   // This will likely need to handle streaming of data in the future for large files.
-  async shardFile(data: Uint8Array): Promise<{ manifestRoot: string; mduData: unknown[] }> {
-    return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<{ manifestRoot: string; mduData: unknown[] }>;
+  async shardFile(data: Uint8Array): Promise<ExpandedMdu> {
+    return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<ExpandedMdu>;
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
