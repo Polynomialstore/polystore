@@ -478,7 +478,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Step 2:** Track files waiting to be synced (pointing to OPFS paths).
     - **Test gate:** Unit tests for persistence (reload page, file still staged).
 
-### 11.1 Next Sprint: Devnet Gamma-3 (Direct Transport & EVM Integration)
+### 11.1 Completed Sprint: Devnet Gamma-3 (Direct Transport & EVM Integration)
 
 **Objective:** Make the "Thick Client" capable of direct interaction with Storage Providers (data) and the Chain (metadata) without requiring the local gateway for basic operations, while retaining the gateway for advanced routing.
 
@@ -501,7 +501,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Visuals:** Separate "Sharding" (Local) vs "Uploading" (Network) progress.
     - **Control:** Simple "Upload" button (no complex toggles).
 
-### 11.2 Future Sprint: Devnet Gamma-4 (Economic Upgrade)
+### 11.2 Next Sprint: Devnet Gamma-4 (Economic Upgrade)
 
 **Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 

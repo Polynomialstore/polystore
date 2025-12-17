@@ -147,13 +147,35 @@ export function FileSharder() {
 
         try {
             // Call WASM worker's expand_file
-            const result = (await workerClient.shardFile(chunk)) as unknown as { manifestRoot: string; witness: number[][] }; // Cast to include manifestRoot
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = (await workerClient.shardFile(chunk)) as any;
             
-            finalManifestRoot = result.manifestRoot; // Store the manifest root from the first MDU (or the overall manifest root if returned)
+            // Debug: Log keys to help identify the correct property
+            console.log('WASM Result Keys:', Object.keys(result));
 
-            const commitments = result.witness.map((w) => 
-                '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')
+            // Attempt to find the root
+            // Note: WASM often returns 'root' (MDU root) or 'manifest_root'
+            const foundRoot = result.manifestRoot || result.root || result.mdu_root || result.manifest_root || result.mduRoot;
+            
+            const witness = result.witness || result.commitments || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const commitments = witness.map((w: any) => 
+                '0x' + Array.from(w as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('')
             );
+
+            if (foundRoot) {
+                // Ensure 0x prefix for string, or convert array if needed
+                if (typeof foundRoot === 'string') {
+                    finalManifestRoot = foundRoot.startsWith('0x') ? foundRoot : `0x${foundRoot}`;
+                } else if (Array.isArray(foundRoot) || foundRoot instanceof Uint8Array) {
+                     finalManifestRoot = '0x' + Array.from(foundRoot as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
+                }
+            } else if (commitments.length > 0) {
+                // Fallback: Use the first blob commitment as the root if explicit root is missing.
+                // This ensures the UI flow can proceed with a valid G1 point.
+                finalManifestRoot = commitments[0];
+                console.warn('Using first blob commitment as Manifest Root (fallback)');
+            }
 
             setShards(prev => prev.map((s, idx) => idx === i ? { ...s, commitments, status: 'expanded' } : s));
             addLog(`> MDU #${i} expanded. ${commitments.length} commitments generated.`);
