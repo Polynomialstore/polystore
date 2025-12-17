@@ -3,6 +3,8 @@ import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
 import { workerClient } from '../lib/worker-client';
+import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import { appConfig } from '../config'; // New import
 
 interface ShardItem {
   id: number;
@@ -20,9 +22,19 @@ export function FileSharder() {
   const [wasmError, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
+  const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]); // New state
+  const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null); // New state
+
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+
+  // Use the direct upload hook
+  const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
+    dealId: "0", // For now, use a mock deal ID. Will be dynamic later.
+    manifestRoot: currentManifestRoot || "", // Use current manifest root
+    providerBaseUrl: appConfig.gatewayBase,
+  });
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -90,7 +102,10 @@ export function FileSharder() {
     const startTs = performance.now();
     setProcessing(true);
     setShards([]);
+    setCollectedMdus([]); // Clear collected MDUs
+    setCurrentManifestRoot(null); // Clear manifest root
     setLogs([]);
+    resetUpload(); // Reset upload state
     addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
 
     const buffer = await file.arrayBuffer();
@@ -98,6 +113,9 @@ export function FileSharder() {
     const chunkSize = 8 * 1024 * 1024; // 8 MiB
     const totalChunks = Math.ceil(bytes.length / chunkSize);
     
+    const tempCollectedMdus: { index: number; data: Uint8Array }[] = [];
+    let finalManifestRoot: string | null = null;
+
     // Create placeholders
     const newShards: ShardItem[] = Array.from({ length: totalChunks }, (_, i) => ({
         id: i,
@@ -118,13 +136,17 @@ export function FileSharder() {
             chunk = padded;
         }
 
+        tempCollectedMdus.push({ index: i, data: chunk }); // Collect chunk data
+
         setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'processing' } : s));
         addLog(`> Expanding MDU #${i} (KZG)...`);
 
         try {
             // Call WASM worker's expand_file
-            const result = (await workerClient.shardFile(chunk)) as unknown as { witness: number[][] };
+            const result = (await workerClient.shardFile(chunk)) as unknown as { manifestRoot: string; witness: number[][] }; // Cast to include manifestRoot
             
+            finalManifestRoot = result.manifestRoot; // Store the manifest root from the first MDU (or the overall manifest root if returned)
+
             const commitments = result.witness.map((w) => 
                 '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')
             );
@@ -143,6 +165,9 @@ export function FileSharder() {
     }
     
     setProcessing(false);
+    setCollectedMdus(tempCollectedMdus); // Set collected MDUs after loop
+    setCurrentManifestRoot(finalManifestRoot); // Set final manifest root
+
     const elapsedMs = performance.now() - startTs;
     const mib = file.size / (1024 * 1024);
     const seconds = elapsedMs / 1000;
@@ -152,7 +177,7 @@ export function FileSharder() {
         file.size,
       )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
     );
-  }, [isConnected, wasmStatus, wasmError, addLog]);
+  }, [isConnected, wasmStatus, wasmError, addLog, resetUpload]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -225,6 +250,35 @@ export function FileSharder() {
           </div>
         </div>
       </div>
+
+      {/* Upload to SP Button */}
+      {collectedMdus.length > 0 && currentManifestRoot && (
+        <div className="flex flex-col gap-2">
+            <button
+              onClick={() => uploadMdus(collectedMdus)}
+              disabled={isUploading || processing}
+              className="mt-4 inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-green-500 disabled:opacity-50"
+            >
+              {isUploading ? 'Uploading...' : `Upload ${collectedMdus.length} MDUs to SP`}
+            </button>
+
+            {isUploading && uploadProgress.length > 0 && (
+              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
+                <p className="mb-1 text-primary font-bold">Upload Progress:</p>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {uploadProgress.map((p, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span>MDU #{p.mduIndex}:</span>
+                      <span className={`font-bold ${p.status === 'complete' ? 'text-green-500' : p.status === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
+                        {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </div>
+      )}
 
       {/* Visualization Grid */}
       {shards.length > 0 && (
