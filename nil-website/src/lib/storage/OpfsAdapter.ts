@@ -18,6 +18,30 @@ async function getDealDirectory(dealId: string): Promise<FileSystemDirectoryHand
     return root.getDirectoryHandle(`deal-${dealId}`, { create: true });
 }
 
+async function writeBlob(dealId: string, name: string, data: BlobPart): Promise<void> {
+    const dealDir = await getDealDirectory(dealId);
+    const fileHandle = await dealDir.getFileHandle(name, { create: true });
+    const writable = await fileHandle.createWritable();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await writable.write(data as any);
+    await writable.close();
+}
+
+async function readBlob(dealId: string, name: string): Promise<Uint8Array | null> {
+    const dealDir = await getDealDirectory(dealId);
+    try {
+        const fileHandle = await dealDir.getFileHandle(name);
+        const file = await fileHandle.getFile();
+        const buffer = await file.arrayBuffer();
+        return new Uint8Array(buffer);
+    } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'NotFoundError') {
+            return null;
+        }
+        throw e;
+    }
+}
+
 /**
  * Writes MDU data to a file within a specific deal's OPFS directory.
  * @param dealId The ID of the deal.
@@ -25,13 +49,8 @@ async function getDealDirectory(dealId: string): Promise<FileSystemDirectoryHand
  * @param data The Uint8Array containing the MDU's binary data.
  */
 export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Array): Promise<void> {
-    const dealDir = await getDealDirectory(dealId);
     const fileName = `mdu_${mduIndex}.bin`;
-    const fileHandle = await dealDir.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await writable.write(data as any);
-    await writable.close();
+    await writeBlob(dealId, fileName, data);
 }
 
 /**
@@ -41,20 +60,8 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
  * @returns A Promise that resolves to the MDU data as Uint8Array, or null if not found.
  */
 export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Array | null> {
-    const dealDir = await getDealDirectory(dealId);
     const fileName = `mdu_${mduIndex}.bin`;
-    try {
-        const fileHandle = await dealDir.getFileHandle(fileName);
-        const file = await fileHandle.getFile();
-        const buffer = await file.arrayBuffer();
-        return new Uint8Array(buffer);
-    } catch (e: unknown) {
-        // Return null if the file is not found, otherwise re-throw.
-        if (e instanceof Error && e.name === 'NotFoundError') {
-            return null;
-        }
-        throw e;
-    }
+    return await readBlob(dealId, fileName);
 }
 
 /**
@@ -89,4 +96,17 @@ export async function deleteDealDirectory(dealId: string): Promise<void> {
         }
         throw e;
     }
+}
+
+export async function writeManifestRoot(dealId: string, manifestRoot: string): Promise<void> {
+    const normalized = String(manifestRoot || '').trim();
+    await writeBlob(dealId, 'manifest_root.txt', normalized);
+}
+
+export async function readManifestRoot(dealId: string): Promise<string | null> {
+    const bytes = await readBlob(dealId, 'manifest_root.txt');
+    if (!bytes) return null;
+    const txt = new TextDecoder().decode(bytes);
+    const trimmed = txt.trim();
+    return trimmed ? trimmed : null;
 }

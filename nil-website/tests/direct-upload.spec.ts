@@ -42,11 +42,27 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   })
 
   // Mock EVM RPC
-  await page.route('**://localhost:8545', async (route) => {
+  await page.route('**://localhost:8545/**', async (route) => {
     const req = route.request()
     const payload = JSON.parse(req.postData() || '{}') as any
     const method = payload?.method
     const params = payload?.params || []
+
+    if (method === 'eth_chainId') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: chainIdHex }),
+      })
+    }
+
+    if (method === 'eth_blockNumber') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x1' }),
+      })
+    }
 
     if (method === 'eth_sendTransaction') {
         // Assume this is the commit transaction
@@ -59,7 +75,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '')
-      if (hash === txCommit) {
+      if (hash.toLowerCase() === txCommit.toLowerCase()) {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -250,7 +266,14 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Clicking Commit to Chain...')
   await commitBtn.click()
 
-  // Wait for "Confirming..." (Validation passed if we got here)
-  await expect(page.getByRole('button', { name: 'Confirming...' })).toBeVisible({ timeout: 30000 })
-  console.log('Commit transaction sent (validation passed).')
+  // Wait for "Committed!" (ensures OPFS persistence hook ran)
+  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 30000 })
+  console.log('Commit confirmed.')
+  await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
+
+  // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
+  await page.getByTestId('deal-row-1').click()
+  await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
+  await expect(fileRow).toBeVisible({ timeout: 60_000 })
 })

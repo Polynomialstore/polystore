@@ -6,6 +6,7 @@ import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
+import { writeManifestRoot, writeMdu } from '../lib/storage/OpfsAdapter';
 
 interface ShardItem {
   id: number;
@@ -47,6 +48,32 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const isUploadComplete = uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
+  useEffect(() => {
+    let cancelled = false;
+    const persist = async () => {
+      if (!isCommitSuccess) return;
+      if (!currentManifestRoot) return;
+      if (collectedMdus.length === 0) return;
+
+      try {
+        addLog('> Saving committed slab to OPFS...');
+        await writeManifestRoot(dealId, currentManifestRoot);
+        for (const mdu of collectedMdus) {
+          if (cancelled) return;
+          await writeMdu(dealId, mdu.index, mdu.data);
+        }
+        addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        addLog(`> Failed to save MDUs locally: ${msg}`);
+      }
+    };
+    void persist();
+    return () => {
+      cancelled = true;
+    };
+  }, [addLog, collectedMdus, currentManifestRoot, dealId, isCommitSuccess]);
 
   useEffect(() => {
     // Initialize WASM in the worker

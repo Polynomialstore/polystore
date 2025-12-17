@@ -8,6 +8,8 @@ import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } fro
 import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
+import { readMdu, readManifestRoot } from '../lib/storage/OpfsAdapter'
+import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 
 interface DealDetailProps {
   deal: LcdDeal
@@ -99,11 +101,29 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       fetchFiles(deal.cid, deal.id, nilAddress)
       fetchManifestInfo(deal.cid, deal.id, nilAddress)
     } else {
-      setFiles(null)
+      fetchLocalFiles(deal.id)
       setManifestInfo(null)
     }
     fetchHeat(deal.id)
   }, [deal.cid, deal.id, nilAddress])
+
+  async function fetchLocalFiles(dealId: string) {
+    setLoadingFiles(true)
+    try {
+      const mdu0 = await readMdu(String(dealId), 0)
+      if (!mdu0) {
+        setFiles([])
+        return
+      }
+      const parsed = parseNilfsFilesFromMdu0(mdu0)
+      setFiles(parsed)
+    } catch (e) {
+      console.error('Failed to fetch local NilFS file list', e)
+      setFiles([])
+    } finally {
+      setLoadingFiles(false)
+    }
+  }
 
   useEffect(() => {
     if (receiptStatus !== 'submitted') return
@@ -143,10 +163,27 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     setLoadingFiles(true)
     try {
       const list = await gatewayListFiles(appConfig.gatewayBase, cid, { dealId, owner })
-      setFiles(list)
+      if (list.length > 0) {
+        setFiles(list)
+        return
+      }
+
+      const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+      if (localManifest && localManifest.trim() !== cid.trim()) {
+        // Local slab doesn't match chain; still show gateway result (empty) to avoid confusion.
+        setFiles(list)
+        return
+      }
+
+      const mdu0 = await readMdu(String(dealId), 0)
+      if (!mdu0) {
+        setFiles(list)
+        return
+      }
+      setFiles(parseNilfsFilesFromMdu0(mdu0))
     } catch (e) {
       console.error('Failed to fetch NilFS file list', e)
-      setFiles([])
+      await fetchLocalFiles(dealId)
     } finally {
       setLoadingFiles(false)
     }
@@ -326,9 +363,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                   </div>
                 </div>
                 
-                {deal.cid && (
+                {(deal.cid || loadingFiles || (files && files.length > 0)) && (
                     <div className="sm:col-span-2 mt-2 space-y-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      {!deal.cid && (
+                        <div className="text-[11px] text-muted-foreground">
+                          Showing local OPFS slab (not yet committed on-chain).
+                        </div>
+                      )}
                       {receiptStatus !== 'idle' && (
                         <div className="text-[11px]">
                           {receiptStatus === 'submitted' ? (
@@ -431,6 +473,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                 </div>
                                 <button
                                   onClick={async () => {
+                                    if (!deal.cid) return
                                     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
                                     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                     const url = await fetchFile({
@@ -454,13 +497,13 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                       setTimeout(() => window.URL.revokeObjectURL(url), 1000)
                                     }
                                   }}
-                                  disabled={downloading}
+                                  disabled={downloading || !deal.cid}
                                   data-testid="deal-detail-download"
                                   data-file-path={f.path}
                                   className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                 >
                                   <ArrowDownRight className="w-4 h-4" />
-                                  {downloading ? 'Signing...' : 'Download'}
+                                  {!deal.cid ? 'Commit required' : downloading ? 'Signing...' : 'Download'}
                                 </button>
                               </div>
                             )
