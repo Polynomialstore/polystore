@@ -1,5 +1,8 @@
 // nil-website/src/lib/storage/OpfsAdapter.ts
 
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
+
 /**
  * Returns a handle to the root of the origin's private file system.
  * This handle is persistent across sessions for the same origin.
@@ -41,6 +44,16 @@ async function readBlob(dealId: string, name: string): Promise<Uint8Array | null
         if (e instanceof Error && e.name === 'NotFoundError') {
             return null;
         }
+        throw e;
+    }
+}
+
+async function deleteDealFile(dealId: string, name: string): Promise<void> {
+    const dealDir = await getDealDirectory(dealId);
+    try {
+        await dealDir.removeEntry(name);
+    } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'NotFoundError') return;
         throw e;
     }
 }
@@ -112,4 +125,36 @@ export async function readManifestRoot(dealId: string): Promise<string | null> {
     const txt = new TextDecoder().decode(bytes);
     const trimmed = txt.trim();
     return trimmed ? trimmed : null;
+}
+
+export function cachedFileNameForPath(filePath: string): string {
+    const normalized = String(filePath ?? '')
+    const bytes = new TextEncoder().encode(normalized)
+    const digest = sha256(bytes)
+    return `filecache_${bytesToHex(digest)}.bin`
+}
+
+export async function writeCachedFile(dealId: string, filePath: string, data: Uint8Array): Promise<void> {
+    await writeBlob(dealId, cachedFileNameForPath(filePath), data)
+}
+
+export async function readCachedFile(dealId: string, filePath: string): Promise<Uint8Array | null> {
+    return await readBlob(dealId, cachedFileNameForPath(filePath))
+}
+
+export async function hasCachedFile(dealId: string, filePath: string): Promise<boolean> {
+    const bytes = await readCachedFile(dealId, filePath)
+    return !!bytes && bytes.byteLength > 0
+}
+
+export async function deleteCachedFile(dealId: string, filePath: string): Promise<void> {
+    await deleteDealFile(dealId, cachedFileNameForPath(filePath))
+}
+
+export async function clearCachedFiles(dealId: string): Promise<void> {
+    const files = await listDealFiles(dealId)
+    const targets = files.filter((f) => f.startsWith('filecache_') && f.endsWith('.bin'))
+    for (const name of targets) {
+        await deleteDealFile(dealId, name)
+    }
 }

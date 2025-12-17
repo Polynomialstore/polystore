@@ -180,3 +180,31 @@ test('OpfsAdapter: delete non-existent directory', async () => {
     await OpfsAdapter.deleteDealDirectory(dealId);
     assert.ok(true, 'Deleting a non-existent directory should not throw an error');
 });
+
+test('OpfsAdapter: cached file write/read/clear', async () => {
+    const dealId = 'test-deal-cache';
+    const filePathA = 'a.txt';
+    const filePathB = 'b.txt';
+    const dataA = new Uint8Array([1, 2, 3]);
+    const dataB = new Uint8Array([4, 5, 6, 7]);
+
+    assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathA), false);
+
+    await OpfsAdapter.writeCachedFile(dealId, filePathA, dataA);
+    await OpfsAdapter.writeCachedFile(dealId, filePathB, dataB);
+
+    assert.deepStrictEqual(await OpfsAdapter.readCachedFile(dealId, filePathA), dataA);
+    assert.deepStrictEqual(await OpfsAdapter.readCachedFile(dealId, filePathB), dataB);
+    assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathA), true);
+
+    await OpfsAdapter.deleteCachedFile(dealId, filePathA);
+    assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathA), false);
+    assert.deepStrictEqual(await OpfsAdapter.readCachedFile(dealId, filePathA), null);
+    assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathB), true);
+
+    // Cached file clearing should not delete MDUs.
+    await OpfsAdapter.writeMdu(dealId, 0, new Uint8Array([9]));
+    await OpfsAdapter.clearCachedFiles(dealId);
+    assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathB), false);
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([9]));
+});
