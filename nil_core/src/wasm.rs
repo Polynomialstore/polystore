@@ -13,6 +13,7 @@ pub struct NilWasm {
 impl NilWasm {
     #[wasm_bindgen(constructor)]
     pub fn new(trusted_setup_bytes: &[u8]) -> Result<NilWasm, JsValue> {
+        console_error_panic_hook::set_once();
         // Use std::io::Cursor to adapt bytes to Read trait
         let cursor = std::io::Cursor::new(trusted_setup_bytes);
         let ctx = KzgContext::load_from_reader(cursor)
