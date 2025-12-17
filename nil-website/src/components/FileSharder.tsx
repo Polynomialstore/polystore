@@ -4,6 +4,7 @@ import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config'; // New import
 
 interface ShardItem {
@@ -35,6 +36,9 @@ export function FileSharder() {
     manifestRoot: currentManifestRoot || "", // Use current manifest root
     providerBaseUrl: appConfig.gatewayBase,
   });
+
+  // Use the direct commit hook
+  const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -276,6 +280,37 @@ export function FileSharder() {
                   ))}
                 </div>
               </div>
+            )}
+        </div>
+      )}
+
+      {/* Commit to Chain Button */}
+      {currentManifestRoot && collectedMdus.length > 0 && (
+        <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                const totalSize = collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                commitContent({
+                    dealId: "0",
+                    manifestRoot: currentManifestRoot,
+                    fileSize: totalSize
+                });
+              }}
+              disabled={isCommitPending || isCommitConfirming || isCommitSuccess}
+              className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
+            >
+              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isCommitSuccess ? 'Committed!' : 'Commit to Chain'}
+            </button>
+            
+            {commitHash && (
+                <div className="text-xs text-muted-foreground truncate">
+                    Tx: {commitHash}
+                </div>
+            )}
+            {commitError && (
+                <div className="text-xs text-red-500">
+                    Error: {commitError.message}
+                </div>
             )}
         </div>
       )}
