@@ -478,7 +478,30 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Step 2:** Track files waiting to be synced (pointing to OPFS paths).
     - **Test gate:** Unit tests for persistence (reload page, file still staged).
 
-### 11.2 Next Sprint: Devnet Gamma-3 (Economic Upgrade)
+### 11.1 Next Sprint: Devnet Gamma-3 (Direct Transport & EVM Integration)
+
+**Objective:** Make the "Thick Client" capable of direct interaction with Storage Providers (data) and the Chain (metadata) without requiring the local gateway for basic operations, while retaining the gateway for advanced routing.
+
+- [ ] **Goal 1: Fix Thick Client JSON Serialization Bug.**
+    - **Issue:** `FileSharder.tsx` reports `[object Object] is not valid JSON` during MDU expansion.
+    - **Fix:** Debug `gateway.worker.ts` response handling (WASM return type).
+    - **Test gate:** FileSharder successfully expands a file and displays MDU visualizer.
+
+- [ ] **Goal 2: Direct-to-Provider Upload (Data Path).**
+    - **Backend:** Ensure `nil_gateway` (SP mode) exposes `POST /sp/upload` with correct CORS.
+    - **Frontend:** Create `useDirectUpload` hook to iterate MDUs and POST to SP.
+    - **Test gate:** Browser uploads file directly to SP; SP acknowledges receipt.
+
+- [ ] **Goal 3: Direct-to-Chain Commit (Metadata Path).**
+    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the NilStore Precompile (`0x...0900`) directly.
+    - **Frontend:** Implement ABI encoding for `updateDealContent(dealId, cid, size)`.
+    - **Test gate:** Browser commits content; `nilchaind q nilchain deal` shows updated `manifest_root`.
+
+- [ ] **Goal 4: UI/UX Minimal Polish.**
+    - **Visuals:** Separate "Sharding" (Local) vs "Uploading" (Network) progress.
+    - **Control:** Simple "Upload" button (no complex toggles).
+
+### 11.2 Future Sprint: Devnet Gamma-4 (Economic Upgrade)
 
 **Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 
