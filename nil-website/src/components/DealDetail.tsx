@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
@@ -98,20 +98,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
   }, [dealProvidersKey])
 
-  useEffect(() => {
-    if (deal.cid && deal.cid !== '') {
-      fetchSlab(deal.cid, deal.id, nilAddress)
-      fetchFiles(deal.cid, deal.id, nilAddress)
-      fetchManifestInfo(deal.cid, deal.id, nilAddress)
-    } else {
-      fetchLocalFiles(deal.id)
-      setManifestInfo(null)
-    }
-    setLocalDownloadError(null)
-    fetchHeat(deal.id)
-  }, [deal.cid, deal.id, nilAddress])
-
-  async function fetchLocalFiles(dealId: string) {
+  const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
     try {
       const mdu0 = await readMdu(String(dealId), 0)
@@ -127,7 +114,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (receiptStatus !== 'submitted') return
@@ -144,9 +131,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return () => {
       canceled = true
     }
-  }, [receiptStatus, deal.id])
+  }, [fetchHeat, receiptStatus, deal.id])
 
-  async function fetchSlab(cid: string, dealId?: string, owner?: string) {
+  const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
       const json = await gatewayFetchSlabLayout(
@@ -160,9 +147,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingSlab(false)
     }
-  }
+  }, [])
 
-  async function fetchFiles(cid: string, dealId: string, owner: string) {
+  const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
@@ -191,9 +178,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
-  }
+  }, [fetchLocalFiles])
 
-  async function fetchManifestInfo(cid: string, dealId?: string, owner?: string) {
+  const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
     setManifestInfoError(null)
     setMduRootMerkle(null)
@@ -212,7 +199,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingManifestInfo(false)
     }
-  }
+  }, [])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -240,7 +227,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return `${hex.slice(0, 2 + head)}…${hex.slice(-tail)}`
   }
 
-  async function fetchHeat(dealId: string) {
+  const fetchHeat = useCallback(async (dealId: string) => {
       try {
           const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${dealId}/heat`)
           if (res.ok) {
@@ -252,7 +239,20 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       } catch (e) {
           console.error("Failed to fetch heat", e)
       }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (deal.cid && deal.cid !== '') {
+      void fetchSlab(deal.cid, deal.id, nilAddress)
+      void fetchFiles(deal.cid, deal.id, nilAddress)
+      void fetchManifestInfo(deal.cid, deal.id, nilAddress)
+    } else {
+      void fetchLocalFiles(deal.id)
+      setManifestInfo(null)
+    }
+    setLocalDownloadError(null)
+    void fetchHeat(deal.id)
+  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
@@ -508,7 +508,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                         rangeLen: safeLen,
                                       })
 
-                                      const url = window.URL.createObjectURL(new Blob([bytes]))
+                                      const safeBuffer = new Uint8Array(bytes.byteLength)
+                                      safeBuffer.set(bytes)
+                                      const url = window.URL.createObjectURL(new Blob([safeBuffer.buffer]))
                                       const a = document.createElement('a')
                                       a.href = url
                                       a.download = f.path.split('/').pop() || 'download'

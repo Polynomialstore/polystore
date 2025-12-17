@@ -18,10 +18,13 @@ async function getDealDirectory(dealId: string): Promise<FileSystemDirectoryHand
     return root.getDirectoryHandle(`deal-${dealId}`, { create: true });
 }
 
-async function writeBlob(dealId: string, name: string, data: BlobPart): Promise<void> {
+async function writeBlob(dealId: string, name: string, data: BlobPart | Uint8Array<ArrayBufferLike>): Promise<void> {
     const dealDir = await getDealDirectory(dealId);
     const fileHandle = await dealDir.getFileHandle(name, { create: true });
     const writable = await fileHandle.createWritable();
+    // NOTE: Newer TS DOM lib defines `BlobPart` in a way that rejects `Uint8Array<ArrayBufferLike>`
+    // (because it might be backed by `SharedArrayBuffer`). For OPFS writes, we accept it and rely
+    // on runtime support; tests exercise the path.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await writable.write(data as any);
     await writable.close();
