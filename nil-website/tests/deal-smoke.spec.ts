@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test'
 import { planNilfsFileRangeChunks } from '../src/lib/rangeChunker'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
-import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
@@ -83,13 +82,15 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   await page.goto(path)
 
-  await page.getByTestId('connect-wallet').first().click({ force: true })
-  await expect(page.getByTestId('wallet-address')).toBeVisible()
+  console.log('Connecting wallet...')
+  if (await page.getByTestId('wallet-address').isVisible()) {
+    console.log('Wallet already connected (auto-connect).')
+  } else {
+    await page.getByTestId('connect-wallet').first().click({ force: true })
+    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    console.log('Wallet connected.')
+  }
   
-  // The dashboard shows truncated address or name?
-  // It shows 'nil1...' if mapped? Wait, wallet connects with ETH address.
-  // The dashboard converts it to nil address.
-  // We check for 'nil1' prefix.
   await expect(page.getByTestId('cosmos-identity')).toContainText('nil1')
   const owner = (await page.getByTestId('cosmos-identity').textContent())?.trim() || ''
   expect(owner).toMatch(/^nil1/i)
