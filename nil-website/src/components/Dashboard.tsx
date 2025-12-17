@@ -1047,7 +1047,7 @@ export function Dashboard() {
                                         </div>
                                         <button
                                           onClick={async () => {
-                                            const url = await fetchFile({
+                                            const result = await fetchFile({
                                               dealId: String(targetDealId),
                                               manifestRoot: contentManifestRoot,
                                               owner: nilAddress,
@@ -1059,14 +1059,14 @@ export function Dashboard() {
                                               mduSizeBytes: contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024,
                                               blobSizeBytes: contentSlab?.blob_size_bytes ?? 128 * 1024,
                                             })
-                                            if (url) {
+                                            if (result?.url) {
                                               const a = document.createElement('a')
-                                              a.href = url
+                                              a.href = result.url
                                               a.download = f.path.split('/').pop() || 'download'
                                               a.click()
-                                              setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                                              setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
                                             }
-                                          }}
+                                            }}
                                           disabled={downloading}
                                           className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                         >

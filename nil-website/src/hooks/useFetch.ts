@@ -42,6 +42,11 @@ export interface FetchProgress {
   message?: string
 }
 
+export interface FetchResult {
+  url: string
+  blob: Blob
+}
+
 function decodeHttpError(bodyText: string): string {
   const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
   if (!trimmed) return 'request failed'
@@ -79,7 +84,7 @@ export function useFetch() {
     receiptsTotal: 0,
   })
 
-  async function fetchFile(input: FetchInput): Promise<string | null> {
+  async function fetchFile(input: FetchInput): Promise<FetchResult | null> {
     setLoading(true)
     setDownloadUrl(null)
     setReceiptStatus('idle')
@@ -293,7 +298,7 @@ export function useFetch() {
         setReceiptError((e as Error).message)
       }
 
-      return url
+      return { url, blob }
     } catch (e) {
       console.error(e)
       setProgress((p) => ({ ...p, phase: 'error', message: (e as Error).message }))
