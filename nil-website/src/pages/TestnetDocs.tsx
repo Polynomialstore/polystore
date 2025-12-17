@@ -163,7 +163,7 @@ export const TestnetDocs = () => {
           <p className="text-muted-foreground">
             Experience the "Sharding & Binding" process directly in your browser. Upload any file to see how the NilStore protocol splits it into 8 MiB Data Units (DUs) and computes the cryptographic binding for each.
           </p>
-          <FileSharder />
+          <FileSharder dealId="0" />
         </section>
 
         {/* For Providers */}
