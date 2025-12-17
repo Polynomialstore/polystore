@@ -128,6 +128,8 @@ func testRouter() *mux.Router {
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	return r
 }
 
