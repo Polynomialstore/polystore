@@ -453,40 +453,71 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 
 This section tracks the currently active TODOs for the AI agent working in this repo. Items here should be updated, checked off, and committed as work is completed.
 
-### 11.0 Immediate Goals: Devnet Gamma-1 (The "One Core" Port)
+### 11.0 Immediate Goals: Devnet Gamma-2 (The Thick Client)
 
-**Objective:** Move the NilFS layout logic (`Mdu0Builder`) from Go (`nil_gateway/pkg/builder`) to Rust (`nil_core`) to enable a shared implementation for both the Go Gateway (via CGO) and the Browser (via WASM).
+**Objective:** Implement the browser-side storage adapter (OPFS), the Web Worker harness for WASM offloading, and the "Green Dot" local gateway detection to enable the "Hybrid Client" architecture.
+
+- [x] **Goal 1: Implement OPFS Storage Adapter (`nil-website`).**
+    - **Step 1:** Create `src/lib/storage/OpfsAdapter.ts`. Implement `writeMdu`, `readMdu`, `listFiles`.
+    - **Step 2:** Add unit tests using a mock FileSystem API.
+    - **Test gate:** `npm run test:unit`
+
+- [x] **Goal 2: Implement WASM Worker Harness.**
+    - **Step 1:** Create `src/workers/gateway.worker.ts` importing `nil_core`.
+    - **Step 2:** Implement message passing for `ShardFile` (chunked) and `ComputeCommitments`.
+    - **Step 3:** Update `FileSharder.tsx` or create `useThickClient` hook to use the worker.
+    - **Test gate:** Browser E2E smoke test (ensure no UI freeze on large file).
+
+- [x] **Goal 3: Implement "Green Dot" Gateway Detection.**
+    - **Step 1:** Create `useLocalGateway` hook polling `http://localhost:8080/health`.
+    - **Step 2:** Create `GatewayStatusWidget.tsx` (The Green Dot).
+    - **Test gate:** Manual verification / Unit test mocking fetch.
+
+- [x] **Goal 4: Unified "Staging" Manager.**
+    - **Step 1:** Create `StagingContext` backed by IndexedDB (`idb`).
+    - **Step 2:** Track files waiting to be synced (pointing to OPFS paths).
+    - **Test gate:** Unit tests for persistence (reload page, file still staged).
+
+### 11.1 Completed Sprint: Devnet Gamma-3 (Direct Transport & EVM Integration)
+
+**Objective:** Make the "Thick Client" capable of direct interaction with Storage Providers (data) and the Chain (metadata) without requiring the local gateway for basic operations, while retaining the gateway for advanced routing.
+
+- [x] **Goal 1: Fix Thick Client JSON Serialization Bug.**
+    - **Issue:** `FileSharder.tsx` reports `[object Object] is not valid JSON` during MDU expansion.
+    - **Fix:** Debug `gateway.worker.ts` response handling (WASM return type).
+    - **Test gate:** FileSharder successfully expands a file and displays MDU visualizer.
+
+- [x] **Goal 2: Direct-to-Provider Upload (Data Path).**
+    - **Backend:** Ensure `nil_gateway` (SP mode) exposes `POST /sp/upload` with correct CORS.
+    - **Frontend:** Create `useDirectUpload` hook to iterate MDUs and POST to SP.
+    - **Test gate:** Browser uploads file directly to SP; SP acknowledges receipt.
+
+- [x] **Goal 3: Direct-to-Chain Commit (Metadata Path).**
+    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the NilStore Precompile (`0x...0900`) directly.
+    - **Frontend:** Implement ABI encoding for `updateDealContent(dealId, cid, size)`.
+    - **Test gate:** Browser commits content; `nilchaind q nilchain deal` shows updated `manifest_root`.
+
+- [x] **Goal 4: UI/UX Minimal Polish.**
+    - **Visuals:** Separate "Sharding" (Local) vs "Uploading" (Network) progress.
+    - **Control:** Simple "Upload" button (no complex toggles).
+
+### 11.2 Next Sprint: Devnet Gamma-4 (Economic Upgrade)
+
+**Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
+
+- [ ] **Goal 1: Chain Params & Fees.**
+- [ ] **Goal 2: Refactor `CreateDeal` (Creation Fee).**
+- [ ] **Goal 3: Refactor `UpdateDealContent` (Term Deposit).**
+- [ ] **Goal 4: Retrieval Credits.**
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
-    - **Step 1:** Define `FileRecordV1` and `FileTableHeader` structs in Rust (matching `nil_gateway/pkg/layout`).
-    - **Step 2:** Implement `Mdu0Builder` struct and methods (`add_file`, `finalize`, etc.) in Rust.
-    - **Step 3:** Implement serialization tests ensuring byte-for-byte parity with the Go implementation.
-    - **Test gate:** `cargo test -p nil_core`
-
 - [x] **Goal 2: Expose Layout Logic via WASM.**
-    - **Step 1:** Add `wasm-bindgen` exports for `Mdu0Builder`.
-    - **Step 2:** Create a TS test case using the WASM build to verify it generates valid MDU #0 bytes for a sample input.
-    - **Test gate:** `cd nil-website && npm run test:unit`
-
 - [x] **Goal 3: Expose Layout Logic via C-FFI (CGO).**
-    - **Step 1:** Add `extern "C"` functions in `nil_core` (e.g., `nil_mdu0_create`, `nil_mdu0_add_file`).
-    - **Step 2:** Update `nilchain/x/crypto_ffi` (or create a new `layout_ffi` package) to bind to these functions.
-    - **Test gate:** Go unit test calling Rust FFI.
-
 - [x] **Goal 4: Refactor `nil_gateway` to use Rust Core.**
-    - **Step 1:** Update `nil_gateway` to import the FFI package instead of `pkg/builder`.
-    - **Step 2:** Verify `GatewayUpload` still produces correct roots/slabs using the Rust backend.
-    - **Step 3:** Delete `nil_gateway/pkg/builder` and `nil_gateway/pkg/layout`.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` (Full regression test).
 
-### 11.1 Next Sprint: Devnet Gamma-2 (The Thick Client)
+---
 
-**Objective:** Implement the browser-side storage adapter and "Green Dot" logic to enable offline file staging and optional gateway acceleration.
-
-- [ ] **Goal 1: Implement OPFS Storage Adapter.**
-- [ ] **Goal 2: Implement "Green Dot" Gateway Detection.**
-- [ ] **Goal 3: Unified "My Drives" Dashboard.**
-
+### 11.2 Legacy Devnet Gamma Goals (Deferred)
 ---
 
 ### 11.1 Completed Sprint 4 (Retrieval Sessions)

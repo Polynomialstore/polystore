@@ -1,30 +1,106 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
-import { useFileSharder } from '../hooks/useFileSharder';
 import { FileJson, Cpu } from 'lucide-react';
+import { workerClient } from '../lib/worker-client';
+import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
+import { appConfig } from '../config';
+import { writeManifestRoot, writeMdu } from '../lib/storage/OpfsAdapter';
 
 interface ShardItem {
   id: number;
   commitments: string[]; // Hex strings from witness
-  status: 'pending' | 'processing' | 'expanded';
+  status: 'pending' | 'processing' | 'expanded' | 'error';
 }
 
-export function FileSharder() {
+type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
+
+export interface FileSharderProps {
+  dealId: string;
+}
+
+export function FileSharder({ dealId }: FileSharderProps) {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
-  const { status: wasmStatus, error: wasmError, initWasm, expandMdu } = useFileSharder();
   
+  const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
+  const [wasmError, setWasmError] = useState<string | null>(null);
+
   const [shards, setShards] = useState<ShardItem[]>([]);
+  const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
+  const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
+
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
-  useEffect(() => {
-      initWasm('/trusted_setup.txt');
-  }, [initWasm]);
+  // Use the direct upload hook
+  const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
+    dealId, 
+    manifestRoot: currentManifestRoot || "",
+    providerBaseUrl: appConfig.spBase,
+  });
+
+  // Use the direct commit hook
+  const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  const isUploadComplete = uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
+  useEffect(() => {
+    let cancelled = false;
+    const persist = async () => {
+      if (!isCommitSuccess) return;
+      if (!currentManifestRoot) return;
+      if (collectedMdus.length === 0) return;
+
+      try {
+        addLog('> Saving committed slab to OPFS...');
+        await writeManifestRoot(dealId, currentManifestRoot);
+        for (const mdu of collectedMdus) {
+          if (cancelled) return;
+          await writeMdu(dealId, mdu.index, mdu.data);
+        }
+        addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        addLog(`> Failed to save MDUs locally: ${msg}`);
+      }
+    };
+    void persist();
+    return () => {
+      cancelled = true;
+    };
+  }, [addLog, collectedMdus, currentManifestRoot, dealId, isCommitSuccess]);
+
+  useEffect(() => {
+    // Initialize WASM in the worker
+    async function initWasmInWorker() {
+      if (wasmStatus !== 'idle') return;
+      setWasmStatus('initializing');
+      try {
+        const response = await fetch('/trusted_setup.txt');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch trusted setup: ${response.statusText}`);
+        }
+        const buffer = await response.arrayBuffer();
+        const trustedSetupBytes = new Uint8Array(buffer);
+        
+        await workerClient.initNilWasm(trustedSetupBytes);
+        setWasmStatus('ready');
+        addLog('WASM and KZG context initialized in worker.');
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        setWasmError(message);
+        setWasmStatus('error');
+        addLog(`Error initializing WASM in worker: ${message}`);
+        console.error('WASM Worker Init Error:', e);
+      }
+    }
+    initWasmInWorker();
+  }, [addLog, wasmStatus]);
 
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes < 0) return '—';
@@ -56,77 +132,174 @@ export function FileSharder() {
         return;
     }
     if (wasmStatus !== 'ready') {
-        alert("WASM not ready. " + (wasmError || "Initializing..."));
+        alert("WASM worker not ready. " + (wasmError || "Initializing..."));
         return;
     }
 
     const startTs = performance.now();
     setProcessing(true);
     setShards([]);
+    setCollectedMdus([]);
+    setCurrentManifestRoot(null);
     setLogs([]);
+    resetUpload();
     addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
 
     const buffer = await file.arrayBuffer();
+    console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
-    const chunkSize = 8 * 1024 * 1024; // 8 MiB
-    const totalChunks = Math.ceil(bytes.length / chunkSize);
-    
-    // Create placeholders
-    const newShards: ShardItem[] = Array.from({ length: totalChunks }, (_, i) => ({
-        id: i,
-        commitments: [],
-        status: 'pending'
-    }));
-    setShards(newShards);
+    const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
+    const totalUserChunks = Math.ceil(bytes.length / RawMduCapacity);
+    addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
 
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, bytes.length);
+    const toU8 = (v: Uint8Array | number[]): Uint8Array => (v instanceof Uint8Array ? v : new Uint8Array(v));
+
+    try {
+        await workerClient.initMdu0Builder(totalUserChunks);
         
-        let chunk = bytes.slice(start, end);
-        // Pad to exactly 8MB
-        if (chunk.length < chunkSize) {
-            const padded = new Uint8Array(chunkSize);
-            padded.set(chunk);
-            chunk = padded;
+        const userRoots: Uint8Array[] = [];
+        const userMdus: { index: number, data: Uint8Array }[] = [];
+        const witnessDataBlobs: Uint8Array[] = []; 
+
+        for (let i = 0; i < totalUserChunks; i++) {
+            const start = i * RawMduCapacity;
+            const end = Math.min(start + RawMduCapacity, bytes.length);
+            const rawChunk = bytes.slice(start, end);
+
+            const encodedMdu = encodeToMdu(rawChunk);
+            userMdus.push({ index: i, data: encodedMdu });
+
+            const chunkCopy = new Uint8Array(encodedMdu);
+            addLog(`> Sharding User MDU #${i}...`);
+            const result = await workerClient.shardFile(chunkCopy);
+
+            const rootBytes = toU8(result.mdu_root);
+            userRoots.push(rootBytes);
+            console.log(`[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`);
+
+            const witnessFlat = toU8(result.witness_flat);
+            witnessDataBlobs.push(witnessFlat);
         }
 
-        setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'processing' } : s));
-        addLog(`> Expanding MDU #${i} (KZG)...`);
-
-        try {
-            // Call WASM
-            const result = (await expandMdu(chunk)) as { witness: number[][] };
-            // result = { witness: [ [u8;48]... ], shards: [...] }
-            
-            // Convert witness to hex for display
-            // The witness is Vec<Vec<u8>> from serde
-            const witness: number[][] = result.witness;
-            const commitments = witness.map((w) => 
-                '0x' + Array.from(w).map(b => b.toString(16).padStart(2, '0')).join('')
-            );
-
-            setShards(prev => prev.map((s, idx) => idx === i ? { ...s, commitments, status: 'expanded' } : s));
-            addLog(`> MDU #${i} expanded. ${commitments.length} commitments generated.`);
-            addLog(`> Root: ${commitments[0].slice(0,10)}...`);
-            
-        } catch (e) {
-            console.error(e);
-            addLog(`Error expanding MDU #${i}: ${e instanceof Error ? e.message : String(e)}`);
+        const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
+        let offset = 0;
+        for (const b of witnessDataBlobs) {
+            fullWitnessData.set(b, offset);
+            offset += b.length;
         }
+
+        const witnessRoots: Uint8Array[] = [];
+        const witnessMdus: { index: number, data: Uint8Array }[] = [];
+        
+        const witnessMduCount = Math.ceil(fullWitnessData.length / RawMduCapacity);
+        
+        for (let i = 0; i < witnessMduCount; i++) {
+            const start = i * RawMduCapacity;
+            const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
+            const rawChunk = fullWitnessData.slice(start, end);
+            const witnessMduBytes = encodeToMdu(rawChunk);
+
+            addLog(`> Sharding Witness MDU #${i}...`);
+            console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
+            const chunkCopy = new Uint8Array(witnessMduBytes);
+            const result = await workerClient.shardFile(chunkCopy);
+
+            const rootBytes = toU8(result.mdu_root);
+            witnessRoots.push(rootBytes);
+            witnessMdus.push({ index: 1 + i, data: witnessMduBytes }); 
+            
+            await workerClient.setMdu0Root(i, rootBytes);
+        }
+
+        for (let i = 0; i < userRoots.length; i++) {
+            await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
+        }
+
+        await workerClient.appendFileToMdu0(file.name, file.size, 0);
+
+        addLog(`> Finalizing MDU #0...`);
+        const mdu0Bytes = await workerClient.getMdu0Bytes();
+        
+        const mdu0Copy = new Uint8Array(mdu0Bytes);
+        const mdu0Result = await workerClient.shardFile(mdu0Copy);
+        const mdu0Root = toU8(mdu0Result.mdu_root);
+
+        const allRoots = new Uint8Array(32 * (1 + witnessRoots.length + userRoots.length));
+        allRoots.set(mdu0Root, 0);
+        let aggOffset = 32;
+        for (const r of witnessRoots) {
+            allRoots.set(r, aggOffset);
+            aggOffset += 32;
+        }
+        for (const r of userRoots) {
+            allRoots.set(r, aggOffset);
+            aggOffset += 32;
+        }
+
+        addLog(`> Computing Manifest Root (Aggregation)...`);
+        const manifest = await workerClient.computeManifest(allRoots);
+        
+        const finalMdus = [
+            { index: 0, data: mdu0Bytes },
+            ...witnessMdus,
+            ...userMdus.map((m) => ({ index: 1 + witnessMduCount + m.index, data: m.data }))
+        ];
+
+        const finalRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        setCollectedMdus(finalMdus);
+        setCurrentManifestRoot(finalRootHex);
+        
+        const visShards: ShardItem[] = finalMdus.map(m => ({
+            id: m.index,
+            commitments: [m.index === 0 ? "MDU #0" : m.index <= witnessMduCount ? "Witness" : "User Data"],
+            status: 'expanded'
+        }));
+        setShards(visShards);
+
+        addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
+        console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
+        addLog(`> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`);
+
+        const elapsedMs = performance.now() - startTs;
+        const mib = file.size / (1024 * 1024);
+        const seconds = elapsedMs / 1000;
+        const mibPerSec = seconds > 0 ? mib / seconds : 0;
+        addLog(
+          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
+            file.size,
+          )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
+        );
+
+    } catch (e: unknown) {
+        console.error(e);
+        addLog(`Error: ${e instanceof Error ? e.message : String(e)}`);
+        setShards([]);
+    } finally {
+        setProcessing(false);
     }
-    
-    setProcessing(false);
-    const elapsedMs = performance.now() - startTs;
-    const mib = file.size / (1024 * 1024);
-    const seconds = elapsedMs / 1000;
-    const mibPerSec = seconds > 0 ? mib / seconds : 0;
-    addLog(
-      `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
-        file.size,
-      )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
-    );
-  }, [isConnected, wasmStatus, wasmError, expandMdu, addLog]);
+  }, [isConnected, wasmStatus, wasmError, addLog, resetUpload]);
+
+  // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
+  function encodeToMdu(rawData: Uint8Array): Uint8Array {
+      const MDU_SIZE = 8 * 1024 * 1024;
+      const SCALAR_BYTES = 32;
+      const SCALAR_PAYLOAD_BYTES = 31;
+      const mdu = new Uint8Array(MDU_SIZE);
+      
+      let readOffset = 0;
+      let writeOffset = 0;
+      
+      while (readOffset < rawData.length && writeOffset < MDU_SIZE) {
+          const chunkLen = Math.min(SCALAR_PAYLOAD_BYTES, rawData.length - readOffset);
+          const chunk = rawData.subarray(readOffset, readOffset + chunkLen);
+          const pad = SCALAR_BYTES - chunkLen;
+          mdu.set(chunk, writeOffset + pad);
+          readOffset += chunkLen;
+          writeOffset += SCALAR_BYTES;
+      }
+      return mdu;
+  }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -162,7 +335,7 @@ export function FileSharder() {
           </div>
           <div className="flex items-center gap-2 text-xs">
              <span className={`px-2 py-0.5 rounded-full border ${
-                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : wasmStatus === 'initializing' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
              }`}>
                  WASM: {wasmStatus}
              </span>
@@ -199,6 +372,80 @@ export function FileSharder() {
           </div>
         </div>
       </div>
+
+      {/* Processing Status */}
+      {(processing || isUploading) && (
+        <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
+          <p className="font-bold text-foreground mb-2">Current Activity:</p>
+          <div className="space-y-1">
+            {processing && <p className="flex items-center gap-2"><Cpu className="w-4 h-4 animate-spin text-blue-500" /> Sharding file locally via WASM...</p>}
+            {isUploading && <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-green-500" /> Uploading MDUs directly to Storage Provider...</p>}
+            {isCommitPending || isCommitConfirming ? (
+              <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...</p>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Upload to SP Button */}
+      {collectedMdus.length > 0 && currentManifestRoot && (
+        <div className="flex flex-col gap-2">
+            <button
+              onClick={() => uploadMdus(collectedMdus)}
+              disabled={isUploading || processing || isUploadComplete}
+              className={`mt-4 inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 ${isUploadComplete ? 'bg-green-600/50 text-white cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-primary-foreground'}`}
+            >
+              {isUploading ? 'Uploading...' : isUploadComplete ? 'Upload Complete' : `Upload ${collectedMdus.length} MDUs to SP`}
+            </button>
+
+            {(isUploading || isUploadComplete) && uploadProgress.length > 0 && (
+              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
+                <p className="mb-1 text-primary font-bold">Upload Progress:</p>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {uploadProgress.map((p, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span>MDU #{p.mduIndex}:</span>
+                      <span className={`font-bold ${p.status === 'complete' ? 'text-green-500' : p.status === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
+                        {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Commit to Chain Button */}
+      {currentManifestRoot && isUploadComplete && (
+        <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                const totalSize = collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                commitContent({
+                    dealId,
+                    manifestRoot: currentManifestRoot,
+                    fileSize: totalSize
+                });
+              }}
+              disabled={isCommitPending || isCommitConfirming || isCommitSuccess}
+              className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
+            >
+              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isCommitSuccess ? 'Committed!' : 'Commit to Chain'}
+            </button>
+            
+            {commitHash && (
+                <div className="text-xs text-muted-foreground truncate">
+                    Tx: {commitHash}
+                </div>
+            )}
+            {commitError && (
+                <div className="text-xs text-red-500">
+                    Error: {commitError.message}
+                </div>
+            )}
+        </div>
+      )}
 
       {/* Visualization Grid */}
       {shards.length > 0 && (

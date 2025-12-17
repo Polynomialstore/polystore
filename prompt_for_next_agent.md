@@ -1,49 +1,48 @@
-# Handoff State (December 12, 2025)
+# Handoff State (December 16, 2025)
 
 This file is the short brief for the next agent. The canonical, longer TODO list lives in `AGENTS.md` (see section **11. Active Agent Work Queue (Current)**).
 
 ## 1. High-Level State
 
-- **Chain & EVM:**
-  - `nilchaind` boots cleanly via `./scripts/run_local_stack.sh start`.
-  - `UpdateDealContentFromEvm` works with EIP‑712 signatures; gateway retries txs on sequence mismatch.
-  - Local EVM bridge deploy remains stable and writes `_artifacts/bridge_address.txt` for the web UI.
+- **Devnet Gamma-2 (Thick Client):** **COMPLETE**.
+- **Devnet Gamma-3 (Direct Transport & EVM Integration):** **COMPLETE & VERIFIED**.
+  - **Direct Upload:** Frontend shards files locally (WASM) and uploads MDUs directly to the Storage Provider (SP) on port 8082.
+  - **Direct Commit:** Frontend calls the NilStore EVM Precompile (`updateDealContent`) directly via MetaMask/Wagmi.
+  - **Verification:** `tests/direct-upload.spec.ts` passes, confirming the "Expand -> Upload -> Commit" flow and fixing the 0-byte upload regression.
+  - **Fixes:** `FileSharder.tsx` buffer detachment bug fixed. `direct-upload.spec.ts` hardened with `eth_sendTransaction` payload validation.
 
-- **Gateway (`nil_gateway`) — Canonical NilFS Upload (Option D / A1 DONE):**
-  - `/gateway/upload` now defaults to **canonical ingest** (`IngestNewDeal`): builds a full slab (MDU #0 + Witness MDUs + User MDUs) and returns a real `manifest_root`.
-  - **Option D / A2 DONE:** If `deal_id` is supplied, `/gateway/upload` appends into the existing slab and returns a new `manifest_root` (multi‑file deals supported).
-  - Fake modes are still available only behind explicit env flags:
-    - `NIL_FAKE_INGEST=1` → old SHA‑based `fastShardQuick` (dev/sim only).
-    - `NIL_FAST_INGEST=1` → `IngestNewDealFast` (no witness MDUs; not Triple‑Proof valid).
-  - **Timeout hardening:** `shardFile` uses `NIL_SHARD_TIMEOUT_SECONDS` (default 60s) so gateway doesn’t 30s‑timeout during canonical KZG sharding.
+## 2. Active Sprint: Devnet Gamma-4 (Economic Upgrade)
 
-- **E2E scripts:**
-  - All upload curls now use a finite but long timeout (`timeout 60s`) to avoid hangs during canonical ingest.
-  - `./scripts/e2e_lifecycle.sh` passes end‑to‑end with **no ingest env flags set** (Create Deal EVM → Upload → Commit Content EVM → Fetch).
+**Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 
-## 2. Known Issues / Open Threads
+- [ ] **Goal 1: Chain Params & Fees.** (Start Here)
+- [ ] **Goal 2: Refactor `CreateDeal` (Creation Fee).**
+- [ ] **Goal 3: Refactor `UpdateDealContent` (Term Deposit).**
+- [ ] **Goal 4: Retrieval Credits.**
 
-1. **Thick‑client WASM path:** “Invalid scalar” fixed by rebuilding the `nil_core` wasm bundle and wiring an automatic rebuild into `nil-website` dev/build (see `nil-website/package.json` `predev`/`prebuild`).
-2. **Dynamic sizing cleanup** remains pending but not blocking the demo.
-3. **Frontend MetaMask UX** (Wagmi/Viem provider + Connect flow) still incomplete per AGENTS.md §11.1.
+## 3. Backlog & "Eventual" Goals (Deferred)
 
-## 3. What the Next Agent Should Do First
+- **LibP2P in Browser:** Implement direct P2P connectivity (WebSocket/WebTransport) from the browser to the network.
+- **UI/UX Overhaul:** Major design refresh.
+- **Robust Gateway Fallback:** Smart toggle/fallback mechanism.
+- **Native↔WASM Parity Tests:** Automated parity tests.
 
-1. **Option D / B2 — Add native↔WASM parity tests for MDU expansion.**
-   - For a fixed 8MB fixture chunk, assert WASM `expand_file` output matches native expansion (and/or gateway canonical ingest).
+## 4. What the Next Agent Should Do First
 
-2. **Protocol Cleanup (Dynamic Sizing)** — remove legacy tiers and align thin‑provisioning end‑to‑end (AGENTS.md §11.2).
+1.  **Start Gamma-4:** Begin implementing `x/nilchain/types/params.go` for the economic upgrade.
+    *   Define parameters for storage cost (e.g., `StoragePricePerBytePerBlock`).
+    *   Define parameters for minimum lock-in duration.
+2.  **Refactor CreateDeal:** Update `MsgCreateDeal` handler to deduct a "Creation Fee" (anti-spam) from the creator's balance.
+3.  **Refactor UpdateDealContent:** Update `MsgUpdateDealContent` to calculate the "Term Deposit" (`Size * Duration * Price`) and transfer it to an escrow module/account.
 
-3. **Frontend MetaMask UX** — finish Wagmi/Viem wiring and add Connect + NilBridge happy‑path action (AGENTS.md §11.1).
+## 5. Key Files
 
-## 4. Key Files
+- **Roadmap:** `AGENTS.md` (Canonical).
+- **Chain Params:** `nilchain/x/nilchain/types/params.go`.
+- **Msg Server:** `nilchain/x/nilchain/keeper/msg_server.go`.
 
-- Roadmap/context: `AGENTS.md` §11.6.
-- Canonical ingest: `nil_gateway/ingest.go`, `nil_gateway/main.go` (`GatewayUpload`, `shardFile`).
-- NilFS structs/builders: `nil_gateway/pkg/layout/*`, `nil_gateway/pkg/builder/*`.
-- WASM path: `nil_core/src/wasm/*`, `nil-website/src/workers/mduWorker.ts`.
+## 6. How to Run
 
-## 5. How to Run
-
-- Start local stack: `./scripts/run_local_stack.sh start`
-- Backend lifecycle gate: `./scripts/e2e_lifecycle.sh`
+- **Start Stack (Split Mode):** `./scripts/run_local_stack.sh start`.
+- **Run Website Checks:** `sh verify_website_checks.sh`.
+- **Run E2E Test:** `cd nil-website && npx playwright test tests/direct-upload.spec.ts`.

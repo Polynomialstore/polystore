@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
@@ -8,6 +8,9 @@ import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } fro
 import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
+import { readMdu, readManifestRoot } from '../lib/storage/OpfsAdapter'
+import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
+import { readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 
 interface DealDetailProps {
   deal: LcdDeal
@@ -47,6 +50,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
+  const [localDownloadingPath, setLocalDownloadingPath] = useState<string | null>(null)
+  const [localDownloadError, setLocalDownloadError] = useState<string | null>(null)
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
 
@@ -93,36 +98,25 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
   }, [dealProvidersKey])
 
-  useEffect(() => {
-    if (deal.cid && deal.cid !== '') {
-      fetchSlab(deal.cid, deal.id, nilAddress)
-      fetchFiles(deal.cid, deal.id, nilAddress)
-      fetchManifestInfo(deal.cid, deal.id, nilAddress)
-    } else {
-      setFiles(null)
-      setManifestInfo(null)
-    }
-    fetchHeat(deal.id)
-  }, [deal.cid, deal.id, nilAddress])
-
-  useEffect(() => {
-    if (receiptStatus !== 'submitted') return
-    let canceled = false
-    const run = async () => {
-      // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
-      for (let i = 0; i < 8; i++) {
-        if (canceled) return
-        await fetchHeat(deal.id)
-        await new Promise((r) => setTimeout(r, 750))
+  const fetchLocalFiles = useCallback(async (dealId: string) => {
+    setLoadingFiles(true)
+    try {
+      const mdu0 = await readMdu(String(dealId), 0)
+      if (!mdu0) {
+        setFiles([])
+        return
       }
+      const parsed = parseNilfsFilesFromMdu0(mdu0)
+      setFiles(parsed)
+    } catch (e) {
+      console.error('Failed to fetch local NilFS file list', e)
+      setFiles([])
+    } finally {
+      setLoadingFiles(false)
     }
-    run()
-    return () => {
-      canceled = true
-    }
-  }, [receiptStatus, deal.id])
+  }, [])
 
-  async function fetchSlab(cid: string, dealId?: string, owner?: string) {
+  const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
       const json = await gatewayFetchSlabLayout(
@@ -136,23 +130,40 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingSlab(false)
     }
-  }
+  }, [])
 
-  async function fetchFiles(cid: string, dealId: string, owner: string) {
+  const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
       const list = await gatewayListFiles(appConfig.gatewayBase, cid, { dealId, owner })
-      setFiles(list)
+      if (list.length > 0) {
+        setFiles(list)
+        return
+      }
+
+      const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+      if (localManifest && localManifest.trim() !== cid.trim()) {
+        // Local slab doesn't match chain; still show gateway result (empty) to avoid confusion.
+        setFiles(list)
+        return
+      }
+
+      const mdu0 = await readMdu(String(dealId), 0)
+      if (!mdu0) {
+        setFiles(list)
+        return
+      }
+      setFiles(parseNilfsFilesFromMdu0(mdu0))
     } catch (e) {
       console.error('Failed to fetch NilFS file list', e)
-      setFiles([])
+      await fetchLocalFiles(dealId)
     } finally {
       setLoadingFiles(false)
     }
-  }
+  }, [fetchLocalFiles])
 
-  async function fetchManifestInfo(cid: string, dealId?: string, owner?: string) {
+  const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
     setManifestInfoError(null)
     setMduRootMerkle(null)
@@ -171,7 +182,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingManifestInfo(false)
     }
-  }
+  }, [])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -199,7 +210,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return `${hex.slice(0, 2 + head)}…${hex.slice(-tail)}`
   }
 
-  async function fetchHeat(dealId: string) {
+  const fetchHeat = useCallback(async (dealId: string) => {
       try {
           const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${dealId}/heat`)
           if (res.ok) {
@@ -211,7 +222,37 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       } catch (e) {
           console.error("Failed to fetch heat", e)
       }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (receiptStatus !== 'submitted') return
+    let canceled = false
+    const run = async () => {
+      // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
+      for (let i = 0; i < 8; i++) {
+        if (canceled) return
+        await fetchHeat(deal.id)
+        await new Promise((r) => setTimeout(r, 750))
+      }
+    }
+    run()
+    return () => {
+      canceled = true
+    }
+  }, [fetchHeat, receiptStatus, deal.id])
+
+  useEffect(() => {
+    if (deal.cid && deal.cid !== '') {
+      void fetchSlab(deal.cid, deal.id, nilAddress)
+      void fetchFiles(deal.cid, deal.id, nilAddress)
+      void fetchManifestInfo(deal.cid, deal.id, nilAddress)
+    } else {
+      void fetchLocalFiles(deal.id)
+      setManifestInfo(null)
+    }
+    setLocalDownloadError(null)
+    void fetchHeat(deal.id)
+  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
@@ -326,9 +367,19 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                   </div>
                 </div>
                 
-                {deal.cid && (
+                {(deal.cid || loadingFiles || (files && files.length > 0)) && (
                     <div className="sm:col-span-2 mt-2 space-y-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      {!deal.cid && (
+                        <div className="text-[11px] text-muted-foreground">
+                          Showing local OPFS slab (not yet committed on-chain).
+                        </div>
+                      )}
+                      {localDownloadError && (
+                        <div className="text-[11px] text-red-500 dark:text-red-400">
+                          Local download failed{localDownloadError ? `: ${localDownloadError}` : ''}
+                        </div>
+                      )}
                       {receiptStatus !== 'idle' && (
                         <div className="text-[11px]">
                           {receiptStatus === 'submitted' ? (
@@ -431,8 +482,53 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                 </div>
                                 <button
                                   onClick={async () => {
+                                    setLocalDownloadError(null)
                                     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
                                     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+
+                                    // Try local OPFS first (fixes multi-tab: gateway slab may not exist on disk).
+                                    try {
+                                      const chainCid = String(deal.cid || '').trim()
+                                      if (chainCid) {
+                                        const localManifest = await readManifestRoot(String(deal.id)).catch(() => null)
+                                        if (localManifest && localManifest.trim() !== chainCid) {
+                                          throw new Error('local slab does not match on-chain CID')
+                                        }
+                                        if (!localManifest) {
+                                          throw new Error('local slab missing manifest root')
+                                        }
+                                      }
+
+                                      setLocalDownloadingPath(f.path)
+                                      const bytes = await readNilfsFileFromOpfs({
+                                        dealId: String(deal.id),
+                                        file: f,
+                                        allFiles: files || [],
+                                        rangeStart: safeStart,
+                                        rangeLen: safeLen,
+                                      })
+
+                                      const safeBuffer = new Uint8Array(bytes.byteLength)
+                                      safeBuffer.set(bytes)
+                                      const url = window.URL.createObjectURL(new Blob([safeBuffer.buffer]))
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = f.path.split('/').pop() || 'download'
+                                      a.click()
+                                      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                                      return
+                                    } catch (e: unknown) {
+                                      const msg = e instanceof Error ? e.message : String(e)
+                                      console.warn('Local download failed, falling back to gateway', e)
+
+                                      if (!deal.cid) {
+                                        setLocalDownloadError(msg)
+                                        return
+                                      }
+                                    } finally {
+                                      setLocalDownloadingPath(null)
+                                    }
+
                                     const url = await fetchFile({
                                       dealId: String(deal.id),
                                       manifestRoot: deal.cid,
@@ -445,22 +541,26 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                       mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
                                       blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
                                     })
-                                    if (url) {
-                                      const a = document.createElement('a')
-                                      a.href = url
-                                      a.download = f.path.split('/').pop() || 'download'
-                                      a.click()
-                                      // Revoke after delay to allow download to start
-                                      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-                                    }
+                                    if (!url) return
+                                    const a = document.createElement('a')
+                                    a.href = url
+                                    a.download = f.path.split('/').pop() || 'download'
+                                    a.click()
+                                    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
                                   }}
-                                  disabled={downloading}
+                                  disabled={downloading || localDownloadingPath === f.path}
                                   data-testid="deal-detail-download"
                                   data-file-path={f.path}
                                   className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                 >
                                   <ArrowDownRight className="w-4 h-4" />
-                                  {downloading ? 'Signing...' : 'Download'}
+                                  {localDownloadingPath === f.path
+                                    ? 'Loading...'
+                                    : !deal.cid
+                                      ? 'Download (local)'
+                                      : downloading
+                                        ? 'Signing...'
+                                        : 'Download'}
                                 </button>
                               </div>
                             )

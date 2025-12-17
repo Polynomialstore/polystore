@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, Shield, HelpCircle, Vote, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
+import { GatewayStatusWidget } from './GatewayStatusWidget';
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -102,6 +103,7 @@ export const Layout = () => {
               </a>
 
               <ConnectWallet className="hidden sm:flex" />
+              <GatewayStatusWidget className="hidden sm:flex" />
 
               <ModeToggle />
               

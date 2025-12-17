@@ -333,6 +333,7 @@ func main() {
 	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
+	r.HandleFunc("/health", HealthCheck).Methods("GET", "OPTIONS")
 
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
@@ -365,6 +366,7 @@ func main() {
 		r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 	}
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
@@ -2754,7 +2756,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index")
 	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
@@ -4088,3 +4090,91 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		"session_id":  sessionKey,
 	})
 }
+
+func HealthCheck(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
+// SpUploadMdu accepts a raw MDU blob from a client and stores it in the deal's directory.
+// This supports the "Direct Upload" (Thick Client) flow where the browser performs sharding.
+func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+
+	if dealIDStr == "" || mduIndexStr == "" {
+		http.Error(w, "X-Nil-Deal-ID and X-Nil-Mdu-Index headers are required", http.StatusBadRequest)
+		return
+	}
+
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Deal against Chain
+	_, _, err = fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		// If we can't talk to the chain, we can't validate. Fail safe.
+		log.Printf("SpUploadMdu: failed to fetch deal %d: %v", dealID, err)
+		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
+		return
+	}
+
+	if clientManifestRoot == "" {
+		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
+		return
+	}
+
+	// Canonicalize Root
+	parsed, err := parseManifestRoot(clientManifestRoot)
+	if err != nil {
+		http.Error(w, "invalid manifest root", http.StatusBadRequest)
+		return
+	}
+	// Use canonical key (lowercase hex, no 0x) for directory
+	rootDir := filepath.Join(uploadDir, parsed.Key)
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Write MDU
+	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
+	path := filepath.Join(rootDir, filename)
+	
+	// Check content length to avoid DoS
+	// Default limit 10MB (MDU is 8MB)
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+
+	f, err := os.Create(path)
+	if err != nil {
+		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	n, err := io.Copy(f, r.Body)
+	if err != nil {
+		http.Error(w, "failed to write file", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, n, dealID)
+	w.WriteHeader(http.StatusOK)
+}
+
+

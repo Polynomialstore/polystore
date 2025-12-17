@@ -152,6 +152,23 @@ test('repro bug: download from commit content widget', async ({
         }
       },
     }
+
+    // EIP-6963 Announcement
+    const announceProvider = () => {
+      window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+        detail: {
+          info: {
+            uuid: '35067099-ba23-4b48-5075-8855098edf8d',
+            name: 'Mock Wallet',
+            icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMiIgZmlsbD0iIzAwMDAwMCIvPjwvc3ZnPg==',
+            rdns: 'io.metamask'
+          },
+          provider: w.ethereum
+        }
+      }))
+    }
+    window.addEventListener('eip6963:requestProvider', announceProvider)
+    announceProvider()
   }, { address: account.address, chainIdHex })
 
   // Mock balances
@@ -324,9 +341,13 @@ test('repro bug: download from commit content widget', async ({
   await page.goto(path)
 
   console.log('Connecting wallet...')
-  await page.getByTestId('connect-wallet').click()
-  await expect(page.getByTestId('wallet-address')).toBeVisible()
-  console.log('Wallet connected.')
+  if (await page.getByTestId('wallet-address').isVisible()) {
+    console.log('Wallet already connected (auto-connect).')
+  } else {
+    await page.getByTestId('connect-wallet').first().click({ force: true })
+    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    console.log('Wallet connected.')
+  }
 
   console.log('Requesting faucet...')
   await page.getByTestId('faucet-request').click()
