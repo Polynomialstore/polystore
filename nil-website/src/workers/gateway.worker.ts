@@ -80,6 +80,18 @@ self.onmessage = async (event) => {
                 }
                 break;
             }
+            case 'computeManifest': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { roots } = payload; // roots is Uint8Array (concatenated 32-byte roots)
+                result = nilWasmInstance.compute_manifest(roots);
+                break;
+            }
+            case 'computeMduRoot': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { witness } = payload; // witness is Uint8Array
+                result = nilWasmInstance.compute_mdu_root(witness);
+                break;
+            }
             default:
                 throw new Error(`Unknown message type: ${type}`);
         }

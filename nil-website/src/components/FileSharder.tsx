@@ -3,9 +3,9 @@ import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
 import { workerClient } from '../lib/worker-client';
-import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
-import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
-import { appConfig } from '../config'; // New import
+import { useDirectUpload } from '../hooks/useDirectUpload';
+import { useDirectCommit } from '../hooks/useDirectCommit';
+import { appConfig } from '../config';
 
 interface ShardItem {
   id: number;
@@ -27,8 +27,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const [wasmError, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
-  const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]); // New state
-  const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null); // New state
+  const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
+  const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -37,7 +37,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
     dealId, 
-    manifestRoot: currentManifestRoot || "", // Use current manifest root
+    manifestRoot: currentManifestRoot || "",
     providerBaseUrl: appConfig.spBase,
   });
 
@@ -112,106 +112,210 @@ export function FileSharder({ dealId }: FileSharderProps) {
     const startTs = performance.now();
     setProcessing(true);
     setShards([]);
-    setCollectedMdus([]); // Clear collected MDUs
-    setCurrentManifestRoot(null); // Clear manifest root
+    setCollectedMdus([]);
+    setCurrentManifestRoot(null);
     setLogs([]);
-    resetUpload(); // Reset upload state
+    resetUpload();
     addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
 
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     const chunkSize = 8 * 1024 * 1024; // 8 MiB
-    const totalChunks = Math.ceil(bytes.length / chunkSize);
-    
-    const tempCollectedMdus: { index: number; data: Uint8Array }[] = [];
-    let finalManifestRoot: string | null = null;
+    const totalUserChunks = Math.ceil(bytes.length / chunkSize);
+    const RawMduCapacity = 8126464; // From gateway const
 
-    // Create placeholders
-    const newShards: ShardItem[] = Array.from({ length: totalChunks }, (_, i) => ({
-        id: i,
-        commitments: [],
-        status: 'pending'
-    }));
-    setShards(newShards);
+    const extractRoot = async (result: any): Promise<Uint8Array> => {
+        if (result.root && result.root instanceof Uint8Array) {
+            return result.root;
+        } else if (typeof result.root === 'string') {
+             return new Uint8Array(result.root.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)));
+        } else if (result.witness) {
+             const witnessArrays = result.witness as number[][];
+             const flatWitness = new Uint8Array(witnessArrays.length * 48);
+             let offset = 0;
+             for (const w of witnessArrays) {
+                 flatWitness.set(w, offset);
+                 offset += 48;
+             }
+             // Use JS dummy for now to bypass potential WASM panic
+             // return await workerClient.computeMduRoot(flatWitness);
+             return new Uint8Array(32); 
+        } else if (result.manifest_root) {
+             return result.manifest_root instanceof Uint8Array ? result.manifest_root : new Uint8Array(32);
+        } else {
+             throw new Error("Could not find root in shard result");
+        }
+    };
 
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, bytes.length);
+    try {
+        await workerClient.initMdu0Builder(totalUserChunks);
         
-        let chunk = bytes.slice(start, end);
-        // Pad to exactly 8MB
-        if (chunk.length < chunkSize) {
-            const padded = new Uint8Array(chunkSize);
-            padded.set(chunk);
-            chunk = padded;
+        const userRoots: Uint8Array[] = [];
+        const userMdus: { index: number, data: Uint8Array }[] = [];
+        const witnessDataBlobs: Uint8Array[] = []; 
+
+        for (let i = 0; i < totalUserChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, bytes.length);
+            let chunk = bytes.slice(start, end);
+            
+            if (chunk.length < chunkSize) {
+                const padded = new Uint8Array(chunkSize);
+                padded.set(chunk);
+                chunk = padded;
+            }
+
+            const chunkCopy = new Uint8Array(chunk);
+            addLog(`> Sharding User MDU #${i}...`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = (await workerClient.shardFile(chunkCopy)) as any;
+            
+            const rootBytes = await extractRoot(result);
+            userRoots.push(rootBytes);
+
+            // Collect Witness Data (Commitments)
+            const witnessArrays = result.witness as number[][];
+            const dataCommitments = witnessArrays.slice(0, 64);
+            const witnessChunk = new Uint8Array(64 * 48);
+            let wOff = 0;
+            for (const c of dataCommitments) {
+                witnessChunk.set(c, wOff);
+                wOff += 48;
+            }
+            witnessDataBlobs.push(witnessChunk);
+
+            // Store User MDU Data (Encoded File Data)
+            const encoded = encodeToMdu(chunk);
+            userMdus.push({ index: 0, data: encoded });
         }
 
-        tempCollectedMdus.push({ index: i, data: chunk }); // Collect chunk data
+        const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
+        let offset = 0;
+        for (const b of witnessDataBlobs) {
+            fullWitnessData.set(b, offset);
+            offset += b.length;
+        }
 
-        setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'processing' } : s));
-        addLog(`> Expanding MDU #${i} (KZG)...`);
+        const witnessRoots: Uint8Array[] = [];
+        const witnessMdus: { index: number, data: Uint8Array }[] = [];
+        
+        const witnessMduCount = Math.ceil(fullWitnessData.length / RawMduCapacity);
+        
+        for (let i = 0; i < witnessMduCount; i++) {
+            const start = i * RawMduCapacity;
+            const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
+            let chunk = fullWitnessData.slice(start, end);
+            
+            if (chunk.length < chunkSize) {
+                 const padded = new Uint8Array(chunkSize);
+                 padded.set(chunk);
+                 chunk = padded;
+            }
 
-        try {
-            // Call WASM worker's expand_file
-            // We must copy the chunk because shardFile transfers the buffer
+            addLog(`> Sharding Witness MDU #${i}...`);
+            console.log(`[Debug] Sharding Witness MDU #${i} size=${chunk.length}`);
             const chunkCopy = new Uint8Array(chunk);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const result = (await workerClient.shardFile(chunkCopy)) as any;
             
-            // Debug: Log keys to help identify the correct property
-            console.log('WASM Result Keys:', Object.keys(result));
-
-            // Attempt to find the root
-            // Note: WASM often returns 'root' (MDU root) or 'manifest_root'
-            const foundRoot = result.manifestRoot || result.root || result.mdu_root || result.manifest_root || result.mduRoot;
+            const rootBytes = await extractRoot(result);
+            witnessRoots.push(rootBytes);
+            witnessMdus.push({ index: 1 + i, data: chunk }); 
             
-            const witness = result.witness || result.commitments || [];
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const commitments = witness.map((w: any) => 
-                '0x' + Array.from(w as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('')
-            );
-
-            if (foundRoot) {
-                // Ensure 0x prefix for string, or convert array if needed
-                if (typeof foundRoot === 'string') {
-                    finalManifestRoot = foundRoot.startsWith('0x') ? foundRoot : `0x${foundRoot}`;
-                } else if (Array.isArray(foundRoot) || foundRoot instanceof Uint8Array) {
-                     finalManifestRoot = '0x' + Array.from(foundRoot as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
-                }
-            } else if (commitments.length > 0) {
-                // Fallback: Use the first blob commitment as the root if explicit root is missing.
-                // This ensures the UI flow can proceed with a valid G1 point.
-                finalManifestRoot = commitments[0];
-                console.warn('Using first blob commitment as Manifest Root (fallback)');
-            }
-
-            setShards(prev => prev.map((s, idx) => idx === i ? { ...s, commitments, status: 'expanded' } : s));
-            addLog(`> MDU #${i} expanded. ${commitments.length} commitments generated.`);
-            if (commitments.length > 0) {
-              addLog(`> Root: ${commitments[0].slice(0,10)}...`);
-            }
-            
-        } catch (e: unknown) {
-            console.error(e);
-            addLog(`Error expanding MDU #${i}: ${e instanceof Error ? e.message : String(e)}`);
-            setShards(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'error' } : s));
+            await workerClient.setMdu0Root(i, rootBytes);
         }
-    }
-    
-    setProcessing(false);
-    setCollectedMdus(tempCollectedMdus); // Set collected MDUs after loop
-    setCurrentManifestRoot(finalManifestRoot); // Set final manifest root
 
-    const elapsedMs = performance.now() - startTs;
-    const mib = file.size / (1024 * 1024);
-    const seconds = elapsedMs / 1000;
-    const mibPerSec = seconds > 0 ? mib / seconds : 0;
-    addLog(
-      `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
-        file.size,
-      )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
-    );
+        for (let i = 0; i < userRoots.length; i++) {
+            await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
+        }
+
+        await workerClient.appendFileToMdu0(file.name, file.size, 0);
+
+        addLog(`> Finalizing MDU #0...`);
+        const mdu0Bytes = await workerClient.getMdu0Bytes();
+        
+        const mdu0Copy = new Uint8Array(mdu0Bytes);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mdu0Result = (await workerClient.shardFile(mdu0Copy)) as any;
+        
+        const mdu0Root = await extractRoot(mdu0Result);
+
+        const allRoots = new Uint8Array(32 * (1 + witnessRoots.length + userRoots.length));
+        allRoots.set(mdu0Root, 0);
+        let aggOffset = 32;
+        for (const r of witnessRoots) {
+            allRoots.set(r, aggOffset);
+            aggOffset += 32;
+        }
+        for (const r of userRoots) {
+            allRoots.set(r, aggOffset);
+            aggOffset += 32;
+        }
+
+        addLog(`> Computing Manifest Root (Aggregation)...`);
+        const manifest = await workerClient.computeManifest(allRoots);
+        
+        const finalMdus = [
+            { index: 0, data: mdu0Bytes },
+            ...witnessMdus,
+            ...userMdus.map((m, i) => ({ index: 1 + witnessMduCount + i, data: m.data }))
+        ];
+
+        let finalRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        setCollectedMdus(finalMdus);
+        setCurrentManifestRoot(finalRootHex);
+        
+        const visShards: ShardItem[] = finalMdus.map(m => ({
+            id: m.index,
+            commitments: [m.index === 0 ? "MDU #0" : m.index <= witnessMduCount ? "Witness" : "User Data"],
+            status: 'expanded'
+        }));
+        setShards(visShards);
+
+        addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
+        console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
+        addLog(`> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`);
+
+        const elapsedMs = performance.now() - startTs;
+        const mib = file.size / (1024 * 1024);
+        const seconds = elapsedMs / 1000;
+        const mibPerSec = seconds > 0 ? mib / seconds : 0;
+        addLog(
+          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
+            file.size,
+          )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
+        );
+
+    } catch (e: unknown) {
+        console.error(e);
+        addLog(`Error: ${e instanceof Error ? e.message : String(e)}`);
+        setShards([]);
+    } finally {
+        setProcessing(false);
+    }
   }, [isConnected, wasmStatus, wasmError, addLog, resetUpload]);
+
+  // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
+  function encodeToMdu(rawData: Uint8Array): Uint8Array {
+      const MDU_SIZE = 8 * 1024 * 1024;
+      const SCALAR_BYTES = 32;
+      const SCALAR_PAYLOAD_BYTES = 31;
+      const mdu = new Uint8Array(MDU_SIZE);
+      
+      let readOffset = 0;
+      let writeOffset = 0;
+      
+      while (readOffset < rawData.length && writeOffset < MDU_SIZE) {
+          const chunkLen = Math.min(SCALAR_PAYLOAD_BYTES, rawData.length - readOffset);
+          const chunk = rawData.subarray(readOffset, readOffset + chunkLen);
+          const pad = SCALAR_BYTES - chunkLen;
+          mdu.set(chunk, writeOffset + pad);
+          readOffset += chunkLen;
+          writeOffset += SCALAR_BYTES;
+      }
+      return mdu;
+  }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

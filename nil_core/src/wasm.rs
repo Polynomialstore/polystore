@@ -27,6 +27,49 @@ impl NilWasm {
         serde_wasm_bindgen::to_value(&res)
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
+
+    pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {
+        if roots_flat.len() % 32 != 0 {
+            return Err(JsValue::from_str("Roots length must be multiple of 32"));
+        }
+        let count = roots_flat.len() / 32;
+        let mut roots = Vec::with_capacity(count);
+        for chunk in roots_flat.chunks_exact(32) {
+            let mut r = [0u8; 32];
+            r.copy_from_slice(chunk);
+            roots.push(r);
+        }
+
+        let (commitment, blob) = self.kzg_ctx.compute_manifest_commitment(&roots)
+            .map_err(|e| JsValue::from_str(&format!("Compute manifest failed: {:?}", e)))?;
+
+        #[derive(serde::Serialize)]
+        struct ManifestResult {
+            root: Vec<u8>,
+            blob: Vec<u8>,
+        }
+        let res = ManifestResult { root: commitment.to_vec(), blob };
+        serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn compute_mdu_root(&self, witness_flat: &[u8]) -> Result<JsValue, JsValue> {
+        if witness_flat.len() % 48 != 0 {
+             return Err(JsValue::from_str("Witness length must be multiple of 48"));
+        }
+        let count = witness_flat.len() / 48;
+        let mut commitments = Vec::with_capacity(count);
+        for chunk in witness_flat.chunks_exact(48) {
+            let mut c = [0u8; 48];
+            c.copy_from_slice(chunk);
+            commitments.push(c);
+        }
+        
+        let root = self.kzg_ctx.create_mdu_merkle_root(&commitments)
+            .map_err(|e| JsValue::from_str(&format!("Merkle root failed: {:?}", e)))?;
+            
+        serde_wasm_bindgen::to_value(&root.to_vec())
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
 }
 
 #[wasm_bindgen]

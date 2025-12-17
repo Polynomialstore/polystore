@@ -774,4 +774,14 @@ mod tests {
         let ok = ctx.verify_proof(&commitment, &z_bytes, &y_out, &proof).unwrap();
         assert!(ok, "KZG proof must verify for constant-one blob");
     }
+
+    #[test]
+    fn create_mdu_merkle_root_works() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+        
+        let commitments = vec![[0u8; 48]; 96];
+        let root = ctx.create_mdu_merkle_root(&commitments).unwrap();
+        assert_ne!(root, [0u8; 32]);
+    }
 }

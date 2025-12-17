@@ -84,4 +84,13 @@ export const workerClient = {
   async shardFile(data: Uint8Array): Promise<{ manifestRoot: string; mduData: unknown[] }> {
     return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<{ manifestRoot: string; mduData: unknown[] }>;
   },
+
+  // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
+  async computeManifest(roots: Uint8Array): Promise<{ root: Uint8Array; blob: Uint8Array }> {
+    return sendMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{ root: Uint8Array; blob: Uint8Array }>;
+  },
+
+  async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('computeMduRoot', { witness }) as Promise<Uint8Array>;
+  },
 };
