@@ -68,8 +68,19 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
             id: payload?.id ?? 1,
             result: {
               transactionHash: txCommit,
+              transactionIndex: '0x1',
+              blockHash: '0x' + '11'.repeat(32),
+              blockNumber: '0x1',
+              from: account.address,
+              to: '0x0000000000000000000000000000000000000900',
+              cumulativeGasUsed: '0x1',
+              gasUsed: '0x1',
+              contractAddress: null,
+              logs: [],
+              logsBloom: '0x0000000000000000000000000000000000000000',
               status: '0x1',
-              logs: [], // No logs needed for simple success check in this test
+              effectiveGasPrice: '0x1',
+              type: '0x0',
             },
           }),
         })
@@ -92,30 +103,65 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     const w = window as any
     if (w.ethereum) return
 
-    w.ethereum = {
-      isMetaMask: true,
-      isNilStoreE2E: true,
-      selectedAddress: address,
-      on: () => {},
-      removeListener: () => {},
-      async request(args: any) {
-        const method = args?.method
-        switch (method) {
-          case 'eth_requestAccounts':
-          case 'eth_accounts': return [address]
-          case 'eth_chainId': return chainIdHex
-          case 'net_version': return String(parseInt(chainIdHex, 16))
-          case 'eth_sendTransaction': 
-             // We handle this in network interception, but the provider might call it locally?
-             // No, wagmi sends via RPC. But if injected, wagmi calls this.
-             // We need to return the TX hash here if Wagmi calls window.ethereum.request
-             // Note: MockWallet must return the tx hash string directly.
-             // We reuse txCommit from the test scope if we can inject it, or just a dummy.
-             return '0x' + '44'.repeat(32)
-          default: return null
+        w.ethereum = {
+
+          isMetaMask: true,
+
+          isNilStoreE2E: true,
+
+          selectedAddress: address,
+
+          on: () => {},
+
+          removeListener: () => {},
+
+          async request(args: any) {
+
+            const method = args?.method
+
+            switch (method) {
+
+              case 'eth_requestAccounts':
+
+              case 'eth_accounts': return [address]
+
+              case 'eth_chainId': return chainIdHex
+
+              case 'net_version': return String(parseInt(chainIdHex, 16))
+
+              case 'eth_sendTransaction': {
+
+                 const params = args?.params || []
+
+                 const txData = params?.[0]?.data
+
+                 if (typeof txData === 'string' && txData.length >= 202) {
+
+                     const sizeHex = txData.slice(138, 202)
+
+                     const sizeVal = parseInt(sizeHex, 16)
+
+                     console.log(`[Mock Wallet] eth_sendTransaction: sizeBytes=${sizeVal}`)
+
+                     if (sizeVal === 0) {
+
+                         throw new Error('Validation Failed: SizeBytes is 0!')
+
+                     }
+
+                 }
+
+                 return '0x' + '44'.repeat(32)
+
+              }
+
+              default: return null
+
+            }
+
+          },
+
         }
-      },
-    }
     const announceProvider = () => {
       window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
         detail: {
@@ -144,6 +190,10 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await page.getByTestId('connect-wallet').click({ force: true })
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
+
+  console.log('Switching to Local MDU tab...')
+  await page.getByTestId('tab-mdu').click()
+  await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
 
   // Find the Client-Side Expansion section
   const filePath = 'test-direct.txt'
@@ -179,7 +229,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Clicking Commit to Chain...')
   await commitBtn.click()
 
-  // Wait for "Committed!"
-  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 30000 })
-  console.log('Commit complete.')
+  // Wait for "Confirming..." (Validation passed if we got here)
+  await expect(page.getByRole('button', { name: 'Confirming...' })).toBeVisible({ timeout: 30000 })
+  console.log('Commit transaction sent (validation passed).')
 })

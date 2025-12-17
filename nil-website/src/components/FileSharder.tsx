@@ -149,8 +149,10 @@ export function FileSharder() {
 
         try {
             // Call WASM worker's expand_file
+            // We must copy the chunk because shardFile transfers the buffer
+            const chunkCopy = new Uint8Array(chunk);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = (await workerClient.shardFile(chunk)) as any;
+            const result = (await workerClient.shardFile(chunkCopy)) as any;
             
             // Debug: Log keys to help identify the correct property
             console.log('WASM Result Keys:', Object.keys(result));
