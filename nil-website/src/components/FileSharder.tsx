@@ -255,6 +255,20 @@ export function FileSharder() {
         </div>
       </div>
 
+      {/* Processing Status */}
+      {(processing || isUploading) && (
+        <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
+          <p className="font-bold text-foreground mb-2">Current Activity:</p>
+          <div className="space-y-1">
+            {processing && <p className="flex items-center gap-2"><Cpu className="w-4 h-4 animate-spin text-blue-500" /> Sharding file locally via WASM...</p>}
+            {isUploading && <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-green-500" /> Uploading MDUs directly to Storage Provider...</p>}
+            {isCommitPending || isCommitConfirming ? (
+              <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...</p>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* Upload to SP Button */}
       {collectedMdus.length > 0 && currentManifestRoot && (
         <div className="flex flex-col gap-2">
