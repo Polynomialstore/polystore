@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
-import { workerClient, type ExpandedMdu } from '../lib/worker-client';
+import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
@@ -121,24 +121,11 @@ export function FileSharder({ dealId }: FileSharderProps) {
     const buffer = await file.arrayBuffer();
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
-    const chunkSize = 8 * 1024 * 1024; // 8 MiB
-    const totalUserChunks = Math.ceil(bytes.length / chunkSize);
-    const RawMduCapacity = 8126464; // From gateway const
-    addLog(`DEBUG: File bytes: ${bytes.length}, ChunkSize: ${chunkSize}, TotalChunks: ${totalUserChunks}`);
+    const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
+    const totalUserChunks = Math.ceil(bytes.length / RawMduCapacity);
+    addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
 
-    const extractRoot = async (mdu: ExpandedMdu): Promise<Uint8Array> => {
-        const witnessArrays = mdu.witness as number[][];
-        console.log(`[Debug] Witness Count: ${witnessArrays.length}`);
-        if (witnessArrays.length > 0) console.log(`[Debug] Witness[0] len: ${witnessArrays[0].length}`);
-        const flatWitness = new Uint8Array(witnessArrays.length * 48);
-        let offset = 0;
-        for (const w of witnessArrays) {
-            flatWitness.set(w, offset);
-            offset += 48;
-        }
-        // return await workerClient.computeMduRoot(flatWitness); // Use the WASM function
-        return new Uint8Array(32); // DUMMY JS - BYPASS WASM CRASH
-    };
+    const toU8 = (v: Uint8Array | number[]): Uint8Array => (v instanceof Uint8Array ? v : new Uint8Array(v));
 
     try {
         await workerClient.initMdu0Builder(totalUserChunks);
@@ -148,35 +135,23 @@ export function FileSharder({ dealId }: FileSharderProps) {
         const witnessDataBlobs: Uint8Array[] = []; 
 
         for (let i = 0; i < totalUserChunks; i++) {
-            const start = i * chunkSize;
-            const end = Math.min(start + chunkSize, bytes.length);
-            let chunk = bytes.slice(start, end);
-            
-            if (chunk.length < chunkSize) {
-                const padded = new Uint8Array(chunkSize);
-                padded.set(chunk);
-                chunk = padded;
-            }
+            const start = i * RawMduCapacity;
+            const end = Math.min(start + RawMduCapacity, bytes.length);
+            const rawChunk = bytes.slice(start, end);
 
-            const chunkCopy = new Uint8Array(chunk);
+            const encodedMdu = encodeToMdu(rawChunk);
+            userMdus.push({ index: i, data: encodedMdu });
+
+            const chunkCopy = new Uint8Array(encodedMdu);
             addLog(`> Sharding User MDU #${i}...`);
-            const result = (await workerClient.shardFile(chunkCopy)); // No 'any' cast
-            
-            const rootBytes = await extractRoot(result);
+            const result = await workerClient.shardFile(chunkCopy);
+
+            const rootBytes = toU8(result.mdu_root);
             userRoots.push(rootBytes);
+            console.log(`[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`);
 
-            const witnessArrays = result.witness as number[][];
-            const dataCommitments = witnessArrays.slice(0, 64);
-            const witnessChunk = new Uint8Array(64 * 48);
-            let wOff = 0;
-            for (const c of dataCommitments) {
-                witnessChunk.set(c, wOff);
-                wOff += 48;
-            }
-            witnessDataBlobs.push(witnessChunk);
-
-            const encoded = encodeToMdu(chunk);
-            userMdus.push({ index: 0, data: encoded });
+            const witnessFlat = toU8(result.witness_flat);
+            witnessDataBlobs.push(witnessFlat);
         }
 
         const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
@@ -194,22 +169,17 @@ export function FileSharder({ dealId }: FileSharderProps) {
         for (let i = 0; i < witnessMduCount; i++) {
             const start = i * RawMduCapacity;
             const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
-            let chunk = fullWitnessData.slice(start, end);
-            
-            if (chunk.length < chunkSize) {
-                 const padded = new Uint8Array(chunkSize);
-                 padded.set(chunk);
-                 chunk = padded;
-            }
+            const rawChunk = fullWitnessData.slice(start, end);
+            const witnessMduBytes = encodeToMdu(rawChunk);
 
             addLog(`> Sharding Witness MDU #${i}...`);
-            console.log(`[Debug] Sharding Witness MDU #${i} size=${chunk.length}`);
-            const chunkCopy = new Uint8Array(chunk);
-            const result = (await workerClient.shardFile(chunkCopy));
-            
-            const rootBytes = await extractRoot(result);
+            console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
+            const chunkCopy = new Uint8Array(witnessMduBytes);
+            const result = await workerClient.shardFile(chunkCopy);
+
+            const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
-            witnessMdus.push({ index: 1 + i, data: chunk }); 
+            witnessMdus.push({ index: 1 + i, data: witnessMduBytes }); 
             
             await workerClient.setMdu0Root(i, rootBytes);
         }
@@ -224,9 +194,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
         const mdu0Bytes = await workerClient.getMdu0Bytes();
         
         const mdu0Copy = new Uint8Array(mdu0Bytes);
-        const mdu0Result = (await workerClient.shardFile(mdu0Copy));
-        
-        const mdu0Root = await extractRoot(mdu0Result);
+        const mdu0Result = await workerClient.shardFile(mdu0Copy);
+        const mdu0Root = toU8(mdu0Result.mdu_root);
 
         const allRoots = new Uint8Array(32 * (1 + witnessRoots.length + userRoots.length));
         allRoots.set(mdu0Root, 0);
@@ -246,7 +215,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
         const finalMdus = [
             { index: 0, data: mdu0Bytes },
             ...witnessMdus,
-            ...userMdus.map((m, i) => ({ index: 1 + witnessMduCount + i, data: m.data }))
+            ...userMdus.map((m) => ({ index: 1 + witnessMduCount + m.index, data: m.data }))
         ];
 
         const finalRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');

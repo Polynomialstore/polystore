@@ -29,6 +29,41 @@ impl NilWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
+    pub fn commit_mdu(&self, mdu_bytes: &[u8]) -> Result<JsValue, JsValue> {
+        if mdu_bytes.len() != crate::kzg::MDU_SIZE {
+            return Err(JsValue::from_str("MDU bytes must be exactly 8 MiB"));
+        }
+
+        let commitments = self
+            .kzg_ctx
+            .mdu_to_kzg_commitments(mdu_bytes)
+            .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
+
+        let root = self
+            .kzg_ctx
+            .create_mdu_merkle_root(&commitments)
+            .map_err(|e| JsValue::from_str(&format!("Merkle root failed: {:?}", e)))?;
+
+        let mut witness_flat = Vec::with_capacity(commitments.len() * 48);
+        for c in commitments {
+            witness_flat.extend_from_slice(&c);
+        }
+
+        #[derive(serde::Serialize)]
+        struct CommitResult {
+            witness_flat: Vec<u8>,
+            mdu_root: Vec<u8>,
+        }
+
+        let res = CommitResult {
+            witness_flat,
+            mdu_root: root.to_vec(),
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
     pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {
         if roots_flat.len() % 32 != 0 {
             return Err(JsValue::from_str("Roots length must be multiple of 32"));

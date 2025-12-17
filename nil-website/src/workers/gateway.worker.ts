@@ -71,13 +71,8 @@ self.onmessage = async (event) => {
             case 'shardFile': {
                 if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
                 const { data } = payload; // data is Uint8Array
-                const shardResult = nilWasmInstance.expand_file(data);
-                // wasm-bindgen may return an Object directly or a JSON string.
-                if (typeof shardResult === 'string') {
-                    result = JSON.parse(shardResult);
-                } else {
-                    result = shardResult;
-                }
+                const commitResult = nilWasmInstance.commit_mdu(data);
+                result = typeof commitResult === 'string' ? JSON.parse(commitResult) : commitResult;
                 break;
             }
             case 'computeManifest': {

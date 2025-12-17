@@ -7,7 +7,6 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { bech32 } from 'bech32';
 
 const NIL_CLI_PATH = path.resolve('..', 'nil_cli/target/release/nil_cli');
-const TEST_FILE_PATH = 'test-parity.txt';
 const TEST_FILE_SIZE = 1024 * 1024; // 1MB
 
 function ethToNil(ethAddress: string): string {
@@ -16,16 +15,19 @@ function ethToNil(ethAddress: string): string {
   return bech32.encode('nil', words);
 }
 
-test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }) => {
+test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
 
   // 1. Generate Test File
+  const testFilePath = testInfo.outputPath('test-parity.txt');
+  const outJsonPath = testInfo.outputPath('output.json');
   const fileBytes = Buffer.alloc(TEST_FILE_SIZE, 'a'); // 'a' content
-  fs.writeFileSync(TEST_FILE_PATH, fileBytes);
+  fs.writeFileSync(testFilePath, fileBytes);
 
   // 2. Run nil_cli to get reference Manifest Root
   console.log('Running nil_cli shard...');
   let referenceRoot = '';
+  let referenceMduRoot = '';
   try {
     // Check if nil_cli exists
     if (!fs.existsSync(NIL_CLI_PATH)) {
@@ -37,17 +39,18 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }) => {
 
     const trustedSetupPath = path.resolve('..', 'nilchain/trusted_setup.txt');
     console.log('Trusted Setup Path:', trustedSetupPath);
-    console.log('File Path:', path.resolve(TEST_FILE_PATH));
+    console.log('File Path:', path.resolve(testFilePath));
     
     // Run CLI
-    execSync(`${NIL_CLI_PATH} shard ${path.resolve(TEST_FILE_PATH)} --out output.json`, {
+    execSync(`${NIL_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
         encoding: 'utf-8',
         env: { ...process.env, CKZG_TRUSTED_SETUP: trustedSetupPath }
     });
     
     // Read JSON
-    const json = JSON.parse(fs.readFileSync('output.json', 'utf-8'));
+    const json = JSON.parse(fs.readFileSync(outJsonPath, 'utf-8'));
     referenceRoot = json.manifest_root_hex || json.manifest_root;
+    referenceMduRoot = json?.mdus?.[0]?.root_hex || '';
   } catch (e) {
     console.error('Failed to run nil_cli:', e);
     throw e;
@@ -55,6 +58,8 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }) => {
   
   console.log('Reference Root (nil_cli):', referenceRoot);
   expect(referenceRoot).toMatch(/^0x[0-9a-f]{96}$/);
+  console.log('Reference User MDU Root (nil_cli):', referenceMduRoot);
+  expect(referenceMduRoot).toMatch(/^0x[0-9a-f]{64}$/);
 
   // 3. Setup Browser Env
   // Setup Mock Wallet
@@ -89,13 +94,13 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }) => {
   });
 
   // Capture Console Logs to find the calculated root
-  let calculatedRoot = '';
+  let calculatedUserMduRoot = '';
   page.on('console', msg => {
       const text = msg.text();
       console.log(`[Browser] ${text}`);
-      if (text.startsWith('[Debug] Full Manifest Root:')) {
-          calculatedRoot = text.split(': ')[1].trim();
-          console.log('Captured Calculated Root:', calculatedRoot);
+      if (text.startsWith('[Debug] User MDU Root #0:')) {
+          calculatedUserMduRoot = text.split(': ')[1].trim();
+          console.log('Captured User MDU Root:', calculatedUserMduRoot);
       }
   });
 
@@ -150,17 +155,17 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }) => {
 
   console.log('Uploading file...');
   await page.locator('input[type="file"]').setInputFiles({
-    name: path.basename(TEST_FILE_PATH),
+    name: path.basename(testFilePath),
     mimeType: 'text/plain',
     buffer: fileBytes,
   });
 
-  // Wait for sharding to complete (manifest root logged)
-  await expect.poll(() => calculatedRoot, { timeout: 60000 }).toMatch(/^0x/);
+  // Wait for sharding to complete (user MDU root logged)
+  await expect.poll(() => calculatedUserMduRoot, { timeout: 60000 }).toMatch(/^0x[0-9a-f]{64}$/);
 
   console.log('Comparing Roots...');
-  console.log(`Reference: ${referenceRoot}`);
-  console.log(`Calculated: ${calculatedRoot}`);
+  console.log(`Reference User MDU Root: ${referenceMduRoot}`);
+  console.log(`Calculated User MDU Root: ${calculatedUserMduRoot}`);
 
-  expect(calculatedRoot).toBe(referenceRoot);
+  expect(calculatedUserMduRoot).toBe(referenceMduRoot);
 });
