@@ -116,23 +116,6 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
   }, [])
 
-  useEffect(() => {
-    if (receiptStatus !== 'submitted') return
-    let canceled = false
-    const run = async () => {
-      // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
-      for (let i = 0; i < 8; i++) {
-        if (canceled) return
-        await fetchHeat(deal.id)
-        await new Promise((r) => setTimeout(r, 750))
-      }
-    }
-    run()
-    return () => {
-      canceled = true
-    }
-  }, [fetchHeat, receiptStatus, deal.id])
-
   const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
@@ -240,6 +223,23 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
           console.error("Failed to fetch heat", e)
       }
   }, [])
+
+  useEffect(() => {
+    if (receiptStatus !== 'submitted') return
+    let canceled = false
+    const run = async () => {
+      // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
+      for (let i = 0; i < 8; i++) {
+        if (canceled) return
+        await fetchHeat(deal.id)
+        await new Promise((r) => setTimeout(r, 750))
+      }
+    }
+    run()
+    return () => {
+      canceled = true
+    }
+  }, [fetchHeat, receiptStatus, deal.id])
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
