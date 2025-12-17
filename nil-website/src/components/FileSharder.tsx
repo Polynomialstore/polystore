@@ -15,7 +15,11 @@ interface ShardItem {
 
 type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
-export function FileSharder() {
+interface FileSharderProps {
+  dealId: string;
+}
+
+export function FileSharder({ dealId }: FileSharderProps) {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
   
@@ -32,7 +36,7 @@ export function FileSharder() {
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
-    dealId: "0", // For now, use a mock deal ID. Will be dynamic later.
+    dealId, 
     manifestRoot: currentManifestRoot || "", // Use current manifest root
     providerBaseUrl: appConfig.spBase,
   });
@@ -331,7 +335,7 @@ export function FileSharder() {
               onClick={() => {
                 const totalSize = collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
                 commitContent({
-                    dealId: "0",
+                    dealId,
                     manifestRoot: currentManifestRoot,
                     fileSize: totalSize
                 });

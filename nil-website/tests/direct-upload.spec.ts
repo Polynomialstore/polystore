@@ -98,6 +98,26 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     })
   })
 
+  // Mock LCD Deals
+  await page.route('**/nilchain/nilchain/v1/deals**', async route => {
+      await route.fulfill({
+          status: 200,
+          body: JSON.stringify({
+              deals: [
+                  {
+                      id: '1',
+                      owner: nilAddress,
+                      cid: '',
+                      size: '0',
+                      escrow_balance: '1000000',
+                      end_block: '1000',
+                      providers: ['nil1provider'],
+                  }
+              ]
+          })
+      })
+  })
+
   // Inject Wallet
   await page.addInitScript(({ address, chainIdHex }) => {
     const w = window as any
@@ -190,6 +210,10 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   console.log('Switching to Local MDU tab...')
   await page.getByTestId('tab-mdu').click()
+
+  console.log('Selecting Deal #1...')
+  await page.getByTestId('mdu-deal-select').selectOption('1')
+
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
 
   // Find the Client-Side Expansion section

@@ -1111,7 +1111,33 @@ export function Dashboard() {
                     <ArrowUpRight className="w-3 h-3" /> Offloads heavy work to your browser.
                   </div>
                 </div>
-                <FileSharder />
+                
+                <div className="grid grid-cols-1 gap-3 text-sm">
+                    <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
+                        <select 
+                            value={targetDealId} 
+                            onChange={e => setTargetDealId(e.target.value)}
+                            data-testid="mdu-deal-select"
+                            className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        >
+                            <option value="">Select a Deal...</option>
+                            {deals.filter(d => d.owner === nilAddress).map(d => (
+                                <option key={d.id} value={d.id}>
+                                  Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+
+                {targetDealId ? (
+                    <FileSharder dealId={targetDealId} />
+                ) : (
+                    <div className="p-8 text-center border border-dashed border-border rounded-xl">
+                        <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
+                    </div>
+                )}
               </div>
             )}
           </div>
