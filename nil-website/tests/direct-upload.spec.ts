@@ -26,6 +26,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
 
+  let manifestUploadCalls = 0
+
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
@@ -38,6 +40,11 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
         return route.fulfill({ status: 400, body: 'Missing headers' })
     }
     console.log(`[SP Upload Mock] Received MDU #${mduIndex} for Deal ${dealId} (Root: ${manifestRoot})`)
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
+  await page.route('**/sp/upload_manifest', async (route) => {
+    manifestUploadCalls += 1
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
@@ -258,6 +265,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   // Wait for "Upload Complete".
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30000 })
   console.log('Upload complete.')
+  await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
   // Check "Commit to Chain" button
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })

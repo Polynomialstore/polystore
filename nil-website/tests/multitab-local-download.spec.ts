@@ -37,6 +37,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
 
   let committedRoot = ''
   let gatewayPlanCalls = 0
+  let manifestUploadCalls = 0
 
   // Intercept SP Upload and capture manifest root.
   await page.route('**/sp/upload_mdu', async (route) => {
@@ -45,6 +46,11 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (typeof manifestRoot === 'string' && manifestRoot.startsWith('0x')) {
       committedRoot = manifestRoot
     }
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
+  await page.route('**/sp/upload_manifest', async (route) => {
+    manifestUploadCalls += 1
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
@@ -201,6 +207,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(uploadBtn).toBeEnabled()
   await uploadBtn.click()
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
   await commitBtn.click()
