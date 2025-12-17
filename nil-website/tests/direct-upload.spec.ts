@@ -204,7 +204,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   if (await page.getByTestId('wallet-address').isVisible()) {
     console.log('Wallet already connected.')
   } else {
-    await page.getByTestId('connect-wallet').click({ force: true })
+    await page.getByTestId('connect-wallet').first().click({ force: true })
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 

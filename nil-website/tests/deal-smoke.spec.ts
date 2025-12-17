@@ -29,7 +29,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   await page.goto(path)
 
-  await page.getByTestId('connect-wallet').click()
+  await page.getByTestId('connect-wallet').first().click()
   await expect(page.getByTestId('wallet-address')).toBeVisible()
   await expect(page.getByTestId('cosmos-identity')).toContainText('nil1')
   const owner = (await page.getByTestId('cosmos-identity').textContent())?.trim() || ''
