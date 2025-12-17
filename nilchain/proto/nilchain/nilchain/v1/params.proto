@@ -3,6 +3,7 @@ package nilchain.nilchain.v1;
 
 import "amino/amino.proto";
 import "gogoproto/gogo.proto";
+import "cosmos/base/v1beta1/coin.proto";
 
 option go_package = "nilchain/x/nilchain/types";
 
@@ -14,4 +15,15 @@ message Params {
   uint64 base_stripe_cost = 1; // NIL per epoch
   uint64 halving_interval = 2; // Blocks
   uint64 eip712_chain_id = 3; // Numeric EIP-712 domain chainId (default 31337 for localhost devnet)
+
+  string storage_price = 4 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ]; // Price per byte per block in base denom (e.g. unil)
+
+  cosmos.base.v1beta1.Coin deal_creation_fee = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  uint64 min_duration_blocks = 6;
 }

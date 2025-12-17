@@ -14,6 +14,7 @@ import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	ma "github.com/multiformats/go-multiaddr"
@@ -134,6 +135,13 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	// Map EVM address -> Cosmos bech32 (same bytes, different prefix).
 	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
 	ownerAddrStr := ownerAcc.String()
+
+	// --- CREATION FEE ---
+	if params.DealCreationFee.IsValid() && params.DealCreationFee.IsPositive() {
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, authtypes.FeeCollectorName, sdk.NewCoins(params.DealCreationFee)); err != nil {
+			return nil, fmt.Errorf("failed to pay deal creation fee: %w", err)
+		}
+	}
 
 	// Decode service hint and requested replication (owner is derived from EVM).
 	rawHint := strings.TrimSpace(intent.ServiceHint)
@@ -333,6 +341,14 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
 
+	params := k.GetParams(ctx)
+	// --- CREATION FEE ---
+	if params.DealCreationFee.IsValid() && params.DealCreationFee.IsPositive() {
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, authtypes.FeeCollectorName, sdk.NewCoins(params.DealCreationFee)); err != nil {
+			return nil, fmt.Errorf("failed to pay deal creation fee: %w", err)
+		}
+	}
+
 	dealID, err := k.DealCount.Next(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
@@ -460,7 +476,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdateDealContent) (*types.MsgUpdateDealContentResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	_, err := sdk.AccAddressFromBech32(msg.Creator)
+	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
@@ -472,6 +488,28 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	if deal.Owner != msg.Creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
+	}
+
+	params := k.GetParams(ctx)
+
+	// --- TERM DEPOSIT (Storage Lock-in) ---
+	if msg.Size_ > deal.Size_ {
+		deltaSize := msg.Size_ - deal.Size_
+		duration := deal.EndBlock - deal.StartBlock
+
+		price := params.StoragePrice
+		if price.IsPositive() {
+			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			cost := costDec.Ceil().TruncateInt()
+
+			if cost.IsPositive() {
+				coins := sdk.NewCoins(sdk.NewCoin("unil", cost))
+				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
+					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
+				}
+				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+			}
+		}
 	}
 
 	if strings.TrimSpace(msg.Cid) == "" {
@@ -593,6 +631,32 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 
 	if deal.Owner != ownerAcc.String() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
+	}
+
+	// --- TERM DEPOSIT (Storage Lock-in) ---
+	// Cost = (NewSize - OldSize) * Duration * Price
+	// Only charge for size increase.
+	if intent.SizeBytes > deal.Size_ {
+		deltaSize := intent.SizeBytes - deal.Size_
+		duration := deal.EndBlock - deal.StartBlock
+
+		// price is Dec per byte per block
+		price := params.StoragePrice
+		if price.IsPositive() {
+			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			cost := costDec.Ceil().TruncateInt()
+
+			if cost.IsPositive() {
+				// We assume base denom is "unil". This should ideally be a param, but hardcoded for now matches DefaultParams.
+				coins := sdk.NewCoins(sdk.NewCoin("unil", cost))
+				// Deduct from Creator -> Module Account (Escrow)
+				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
+					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
+				}
+				// Credit the deal's escrow balance (Total Value Locked)
+				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+			}
+		}
 	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
