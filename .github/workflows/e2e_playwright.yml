@@ -47,11 +47,15 @@ jobs:
         working-directory: nil-website
         run: npx playwright install --with-deps chromium
 
+      - name: Start Dev Server
+        working-directory: nil-website
+        run: |
+          npx vite --host 0.0.0.0 --port 5173 &
+          npx wait-on http://localhost:5173 --timeout 60000
+
       - name: Run Playwright Tests
         working-directory: nil-website
         run: npx playwright test
         env:
-          # Use npm run dev to start the server via playwright config
-          WEB_SERVER_COMMAND: "npm run dev -- --host 0.0.0.0 --port 5173"
-          # Mock environment variables if needed
+          # WEB_SERVER_COMMAND is NOT set, so playwright will NOT start the server again
           VITE_E2E: "1"
