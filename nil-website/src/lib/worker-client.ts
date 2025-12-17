@@ -46,7 +46,7 @@ function sendMessageToWorker(type: string, payload: unknown, transferables?: Tra
   });
 }
 
-interface ExpandedMdu {
+export interface ExpandedMdu {
     witness: number[][]; // Vec<Vec<u8>> from Rust
     shards: number[][]; // Vec<Vec<u8>> from Rust
 }

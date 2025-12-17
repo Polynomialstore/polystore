@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
-import { workerClient } from '../lib/worker-client';
-import { useDirectUpload } from '../hooks/useDirectUpload';
-import { useDirectCommit } from '../hooks/useDirectCommit';
+import { workerClient, type ExpandedMdu } from '../lib/worker-client';
+import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
 
 interface ShardItem {
