@@ -1,5 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, expect } from '@playwright/test'
 import { planNilfsFileRangeChunks } from '../src/lib/rangeChunker'
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
+import { bech32 } from 'bech32'
+import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const gatewayBase = process.env.E2E_GATEWAY_BASE || 'http://localhost:8080'
@@ -21,16 +25,71 @@ type DealHeatResponse = {
   }
 }
 
+function ethToNil(ethAddress: string): string {
+  const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
+  const words = bech32.toWords(data)
+  return bech32.encode('nil', words)
+}
+
 test('deal lifecycle smoke (connect → fund → create → upload → commit → explore → fetch)', async ({
   page,
   request,
 }) => {
   test.setTimeout(300_000)
 
+  // Setup Mock Wallet
+  const randomPk = generatePrivateKey()
+  const account = privateKeyToAccount(randomPk)
+  const chainId = Number(process.env.CHAIN_ID || 31337)
+  const chainIdHex = `0x${chainId.toString(16)}`
+  const nilAddress = ethToNil(account.address)
+
+  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+
+  // Inject Wallet
+  await page.addInitScript(({ address, chainIdHex }) => {
+    const w = window as any
+    if (w.ethereum) return
+
+    w.ethereum = {
+      isMetaMask: true,
+      isNilStoreE2E: true,
+      selectedAddress: address,
+      on: () => {},
+      removeListener: () => {},
+      async request(args: any) {
+        const method = args?.method
+        switch (method) {
+          case 'eth_requestAccounts': return [address]
+          case 'eth_accounts': return [address]
+          case 'eth_chainId': return chainIdHex
+          case 'net_version': return String(parseInt(chainIdHex, 16))
+          case 'eth_sendTransaction': return '0x' + '11'.repeat(32) // Dummy tx
+          default: return null
+        }
+      },
+    }
+    const announceProvider = () => {
+      window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+        detail: {
+          info: { uuid: 'test-uuid-smoke', name: 'Mock Wallet', icon: '', rdns: 'io.metamask' },
+          provider: w.ethereum
+        }
+      }))
+    }
+    window.addEventListener('eip6963:requestProvider', announceProvider)
+    announceProvider()
+  }, { address: account.address, chainIdHex })
+
   await page.goto(path)
 
   await page.getByTestId('connect-wallet').first().click({ force: true })
   await expect(page.getByTestId('wallet-address')).toBeVisible()
+  
+  // The dashboard shows truncated address or name?
+  // It shows 'nil1...' if mapped? Wait, wallet connects with ETH address.
+  // The dashboard converts it to nil address.
+  // We check for 'nil1' prefix.
   await expect(page.getByTestId('cosmos-identity')).toContainText('nil1')
   const owner = (await page.getByTestId('cosmos-identity').textContent())?.trim() || ''
   expect(owner).toMatch(/^nil1/i)
