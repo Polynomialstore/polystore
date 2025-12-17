@@ -331,7 +331,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
 
   const downloadPromise = page2.waitForEvent('download', { timeout: 60_000 })
-  await page2.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await page2.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`).click()
   const download = await downloadPromise
   const stream = await download.createReadStream()
   const downloadedBytes = await streamToBuffer(stream)
@@ -339,4 +339,3 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
 
   expect(gatewayPlanCalls).toBe(0)
 })
-

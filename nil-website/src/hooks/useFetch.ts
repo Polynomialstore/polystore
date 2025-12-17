@@ -13,6 +13,14 @@ export interface FetchInput {
   manifestRoot: string
   owner: string
   filePath: string
+  /**
+   * Base URL for the service hosting `/gateway/*` retrieval endpoints.
+   * Defaults to `appConfig.gatewayBase`.
+   *
+   * In thick-client flows, this often needs to point at the Storage Provider (`appConfig.spBase`)
+   * because the local gateway may not have the slab on disk.
+   */
+  serviceBase?: string
   rangeStart?: number
   rangeLen?: number
   fileStartOffset?: number
@@ -150,6 +158,7 @@ export function useFetch() {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
+      const serviceBase = String(input.serviceBase ?? '').trim().replace(/\/$/, '') || appConfig.gatewayBase
       const planParams = new URLSearchParams({
         deal_id: dealId,
         owner,
@@ -157,7 +166,7 @@ export function useFetch() {
         range_start: String(wantRangeStart),
         range_len: String(effectiveRangeLen),
       })
-      const planUrl = `${appConfig.gatewayBase}/gateway/plan-retrieval-session/${manifestRoot}?${planParams.toString()}`
+      const planUrl = `${serviceBase}/gateway/plan-retrieval-session/${manifestRoot}?${planParams.toString()}`
 
       const planRes = await fetch(planUrl)
       if (!planRes.ok) {
@@ -226,7 +235,7 @@ export function useFetch() {
       }))
 
       const fetchParams = new URLSearchParams({ deal_id: dealId, owner, file_path: filePath })
-      const fetchUrl = `${appConfig.gatewayBase}/gateway/fetch/${manifestRoot}?${fetchParams.toString()}`
+      const fetchUrl = `${serviceBase}/gateway/fetch/${manifestRoot}?${fetchParams.toString()}`
 
       const parts: Uint8Array[] = []
       let bytesFetched = 0
@@ -279,7 +288,7 @@ export function useFetch() {
         await waitForTransactionReceipt(confirmTxHash)
 
         setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))
-        const proofRes = await fetch(`${appConfig.gatewayBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
+        const proofRes = await fetch(`${serviceBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId }),

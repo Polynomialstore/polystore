@@ -275,7 +275,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
 
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
-  await expect(fileRow).toContainText('Browser cache: no')
+  await expect(fileRow).toContainText('File cache: no')
 
   // Browser Download: should fall back to SP retrieval (plan session) and then cache the bytes.
   const download1 = page.waitForEvent('download', { timeout: 60_000 })
@@ -283,7 +283,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   const dl1 = await download1
   expect(await streamToBuffer(await dl1.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBeGreaterThan(0)
-  await expect(fileRow).toContainText('Browser cache: yes')
+  await expect(fileRow).toContainText('File cache: yes')
 
   const planCallsAfterFirst = planCalls
 
@@ -296,7 +296,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
 
   // Clear cache and force another SP retrieval.
   await page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`).click()
-  await expect(fileRow).toContainText('Browser cache: no')
+  await expect(fileRow).toContainText('File cache: no')
 
   const download3 = page.waitForEvent('download', { timeout: 60_000 })
   await page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
