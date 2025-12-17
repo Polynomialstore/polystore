@@ -333,6 +333,7 @@ func main() {
 	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
+	r.HandleFunc("/health", HealthCheck).Methods("GET", "OPTIONS")
 
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
@@ -4088,3 +4089,14 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		"session_id":  sessionKey,
 	})
 }
+
+func HealthCheck(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
