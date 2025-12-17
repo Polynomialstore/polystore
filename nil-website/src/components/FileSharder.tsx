@@ -34,7 +34,7 @@ export function FileSharder() {
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
     dealId: "0", // For now, use a mock deal ID. Will be dynamic later.
     manifestRoot: currentManifestRoot || "", // Use current manifest root
-    providerBaseUrl: appConfig.gatewayBase,
+    providerBaseUrl: appConfig.spBase,
   });
 
   // Use the direct commit hook

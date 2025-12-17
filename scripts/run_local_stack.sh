@@ -149,7 +149,7 @@ auto_faucet_request() {
 }
 
 wait_for_ports_clear() {
-  local ports=(26657 26656 1317 8545 8080 8081 5173)
+  local ports=(26657 26656 1317 8545 8080 8081 8082 5173)
   local attempts=20
   local delay=0.5
   local port
@@ -197,7 +197,7 @@ register_demo_provider() {
   for i in $(seq 1 "$attempts"); do
     "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
       --from faucet \
-      --endpoint "/ip4/127.0.0.1/tcp/8080/http" \
+      --endpoint "/ip4/127.0.0.1/tcp/8082/http" \
       --chain-id "$CHAIN_ID" \
       --yes \
       --home "$CHAIN_HOME" \
@@ -394,23 +394,55 @@ start_faucet() {
   echo "faucet pid $(cat "$PID_DIR/faucet.pid"), logs: $LOG_DIR/faucet.log"
 }
 
-start_gateway() {
-  banner "Starting gateway service"
+start_sp_gateway() {
+  banner "Starting SP gateway service (Port 8082)"
   ensure_nil_cli
   (
     cd "$ROOT_DIR/nil_gateway"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads" NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
+    # SP Mode (default), Listen on 8082, Uploads to uploads_sp
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
+      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER_MODE="0" \
+      NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+      NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GO_BIN" run . \
-      >"$LOG_DIR/gateway.log" 2>&1 &
-    echo $! > "$PID_DIR/gateway.pid"
+      >"$LOG_DIR/gateway_sp.log" 2>&1 &
+    echo $! > "$PID_DIR/gateway_sp.pid"
   )
   sleep 0.5
-  if ! kill -0 "$(cat "$PID_DIR/gateway.pid")" 2>/dev/null; then
-    echo "gateway failed to start; check $LOG_DIR/gateway.log"
-    tail -n 20 "$LOG_DIR/gateway.log" || true
+  if ! kill -0 "$(cat "$PID_DIR/gateway_sp.pid")" 2>/dev/null; then
+    echo "SP gateway failed to start; check $LOG_DIR/gateway_sp.log"
+    tail -n 20 "$LOG_DIR/gateway_sp.log" || true
     exit 1
   fi
-  echo "gateway pid $(cat "$PID_DIR/gateway.pid"), logs: $LOG_DIR/gateway.log"
+  echo "SP gateway pid $(cat "$PID_DIR/gateway_sp.pid"), logs: $LOG_DIR/gateway_sp.log"
+}
+
+start_user_gateway() {
+  if [ "${NIL_START_USER_GATEWAY:-1}" != "1" ]; then
+    echo "Skipping User Gateway (NIL_START_USER_GATEWAY=0)"
+    return
+  fi
+
+  banner "Starting User gateway service (Port 8080)"
+  ensure_nil_cli
+  (
+    cd "$ROOT_DIR/nil_gateway"
+    # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
+      NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER_MODE="1" \
+      NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+      NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
+      "$GO_BIN" run . \
+      >"$LOG_DIR/gateway_user.log" 2>&1 &
+    echo $! > "$PID_DIR/gateway_user.pid"
+  )
+  sleep 0.5
+  if ! kill -0 "$(cat "$PID_DIR/gateway_user.pid")" 2>/dev/null; then
+    echo "User gateway failed to start; check $LOG_DIR/gateway_user.log"
+    tail -n 20 "$LOG_DIR/gateway_user.log" || true
+    exit 1
+  fi
+  echo "User gateway pid $(cat "$PID_DIR/gateway_user.pid"), logs: $LOG_DIR/gateway_user.log"
 }
 
 start_bridge() {
@@ -480,44 +512,51 @@ start_web() {
 }
 
 restart_gateway() {
-  banner "Restarting gateway service"
-  pid_file="$PID_DIR/gateway.pid"
-  if [ -f "$pid_file" ]; then
-    pid=$(cat "$pid_file")
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-      sleep 0.5
-      if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid" 2>/dev/null || true
+  banner "Restarting gateway services"
+  for svc in gateway_sp gateway_user; do
+    pid_file="$PID_DIR/$svc.pid"
+    if [ -f "$pid_file" ]; then
+      pid=$(cat "$pid_file")
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 0.5
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -9 "$pid" 2>/dev/null || true
+        fi
+        echo "Stopped $svc (pid $pid)"
       fi
-      echo "Stopped gateway (pid $pid)"
+      rm -f "$pid_file"
     fi
-    rm -f "$pid_file"
-  fi
-  # go run can spawn a child process that survives killing the parent. Ensure
-  # the port is truly free before restarting.
-  gw_pids=$(lsof -ti :8080 2>/dev/null || true)
-  if [ -n "$gw_pids" ]; then
-    kill $gw_pids 2>/dev/null || true
-    sleep 0.5
-    gw_pids2=$(lsof -ti :8080 2>/dev/null || true)
-    if [ -n "$gw_pids2" ]; then
-      kill -9 $gw_pids2 2>/dev/null || true
+  done
+  
+  # Ensure ports are free
+  for port in 8080 8082; do
+    gw_pids=$(lsof -ti :$port 2>/dev/null || true)
+    if [ -n "$gw_pids" ]; then
+      kill $gw_pids 2>/dev/null || true
+      sleep 0.5
+      gw_pids2=$(lsof -ti :$port 2>/dev/null || true)
+      if [ -n "$gw_pids2" ]; then
+        kill -9 $gw_pids2 2>/dev/null || true
+      fi
     fi
-  fi
-  start_gateway
+  done
+
+  start_sp_gateway
+  start_user_gateway
 }
 
 start_all() {
   stop_all
-  rm -rf "$LOG_DIR/uploads"
+  rm -rf "$LOG_DIR/uploads_sp" "$LOG_DIR/uploads_user"
   ensure_nilchaind
   init_chain
   start_chain
   register_demo_provider
   start_faucet
   auto_faucet_request
-  start_gateway
+  start_sp_gateway
+  start_user_gateway
   start_bridge
   start_web
   banner "Stack ready"
@@ -526,7 +565,8 @@ RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31337)
 Faucet:      http://localhost:8081/faucet
-Gateway:     http://localhost:8080/gateway/upload
+SP Gateway:  http://localhost:8082 (Uploads to $LOG_DIR/uploads_sp)
+User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
 Web UI:      http://localhost:5173/#/dashboard
 Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
 Home:        $CHAIN_HOME
@@ -536,7 +576,7 @@ EOF
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet gateway website; do
+  for svc in nilchaind faucet gateway_sp gateway_user website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
@@ -547,7 +587,7 @@ stop_all() {
       rm -f "$pid_file"
     fi
   done
-  for port in 26657 26656 1317 8545 8080 8081 5173; do
+  for port in 26657 26656 1317 8545 8080 8081 8082 5173; do
     pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
