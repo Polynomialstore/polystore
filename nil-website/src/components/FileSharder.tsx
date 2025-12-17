@@ -15,7 +15,7 @@ interface ShardItem {
 
 type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
-interface FileSharderProps {
+export interface FileSharderProps {
   dealId: string;
 }
 

@@ -1,9 +1,31 @@
 import { Download, Terminal, Wallet, Blocks } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useAccount } from "wagmi";
 import { FileSharder } from "../components/FileSharder";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { appConfig } from "../config";
+import { ethToNil } from "../lib/address";
+import { lcdFetchDeals } from "../api/lcdClient";
+import type { LcdDeal as Deal } from "../domain/lcd";
 
 export const TestnetDocs = () => {
+  const { address } = useAccount();
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [targetDealId, setTargetDealId] = useState("");
+
+  useEffect(() => {
+    if (address) {
+      const cosmosAddress = ethToNil(address);
+      lcdFetchDeals(appConfig.lcdBase).then((all) => {
+        const filtered = all.filter((d) => d.owner === cosmosAddress);
+        setDeals(filtered);
+      });
+    } else {
+      setDeals([]);
+      setTargetDealId("");
+    }
+  }, [address]);
+
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-4xl">
       <div className="mb-12">
@@ -163,7 +185,34 @@ export const TestnetDocs = () => {
           <p className="text-muted-foreground">
             Experience the "Sharding & Binding" process directly in your browser. Upload any file to see how the NilStore protocol splits it into 8 MiB Data Units (DUs) and computes the cryptographic binding for each.
           </p>
-          <FileSharder dealId="0" />
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 text-sm">
+                <label className="space-y-1">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
+                    <select 
+                        value={targetDealId} 
+                        onChange={e => setTargetDealId(e.target.value)}
+                        className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                    >
+                        <option value="">Select a Deal...</option>
+                        {deals.map(d => (
+                            <option key={d.id} value={d.id}>
+                              Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+
+            {targetDealId ? (
+                <FileSharder dealId={targetDealId} />
+            ) : (
+                <div className="p-8 text-center border border-dashed border-border rounded-xl">
+                    <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
+                </div>
+            )}
+          </div>
         </section>
 
         {/* For Providers */}
