@@ -123,6 +123,7 @@ func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeSta
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
@@ -151,15 +152,16 @@ func TestGatewayFetch_MissingParams(t *testing.T) {
 	}
 }
 
-
-
 func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	r := testRouter()
 
 	// Stub LCD so fetchDealOwnerAndCID returns a specific owner/cid.
 	root := mustTestManifestRoot(t, "owner-mismatch")
 	realOwner := testDealOwner(t)
-	dealStates := map[uint64]struct{ Owner string; CID string }{
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		1: {Owner: realOwner, CID: root.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)
@@ -194,7 +196,10 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	rootReq := mustTestManifestRoot(t, "cid-mismatch-req")
 	rootChain := mustTestManifestRoot(t, "cid-mismatch-chain")
 	owner := testDealOwner(t)
-	dealStates := map[uint64]struct{ Owner string; CID string }{
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		2: {Owner: owner, CID: rootChain.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)
@@ -467,7 +472,7 @@ func TestShardFile_TimeoutCancels(t *testing.T) {
 		}
 		return []byte{}, nil
 	})
-	
+
 	input := filepath.Join(uploadDir, "input.bin")
 	if err := os.WriteFile(input, []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write input: %v", err)
@@ -500,7 +505,7 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 		}
 		return []byte{}, nil
 	})
-	
+
 	oldUploadTimeout := uploadIngestTimeout
 	uploadIngestTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { uploadIngestTimeout = oldUploadTimeout })
@@ -613,8 +618,8 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 
 	// 1. Build a minimal slab manually
 	fileContent := []byte("This is some test data for Deal ID 0.")
-	
-	// Create dummy witness data (doesn't need to be valid for this test if we mock the proof generation or if generateProofHeaderJSON handles dummy data gracefully, 
+
+	// Create dummy witness data (doesn't need to be valid for this test if we mock the proof generation or if generateProofHeaderJSON handles dummy data gracefully,
 	// but generateProofHeaderJSON checks valid lengths. So we need valid length witness).
 	commitmentBytes := 48
 	witnessPlain := make([]byte, 64*commitmentBytes) // Full MDU of commitments
@@ -636,7 +641,7 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile("deal0_test.txt", uint64(len(fileContent)), 0)
-	
+
 	mdu0Bytes, _ := b.Bytes()
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644)
 
@@ -652,7 +657,10 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 
 	// 2. Mock LCD to serve Deal ID 0
 	dealID := uint64(0)
-	dealStates := map[uint64]struct{ Owner string; CID string }{
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)

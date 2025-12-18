@@ -224,8 +224,6 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
-
-
 // execNilchaind runs a nilchaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
@@ -339,6 +337,7 @@ func main() {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
@@ -352,6 +351,7 @@ func main() {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
@@ -3288,17 +3288,13 @@ func decodeHex(s string) ([]byte, error) {
 
 	}
 
-				return hex.DecodeString(s)
+	return hex.DecodeString(s)
 
-			}
+}
 
-			
+// RetrievalReceipt represents the JSON payload signed by the client.
 
-			// RetrievalReceipt represents the JSON payload signed by the client.
-
-			type RetrievalReceipt struct {
-
-			
+type RetrievalReceipt struct {
 	DealId        uint64          `json:"deal_id"`
 	EpochId       uint64          `json:"epoch_id"`
 	Provider      string          `json:"provider"`
@@ -4156,7 +4152,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
-	
+
 	// Check content length to avoid DoS
 	// Default limit 10MB (MDU is 8MB)
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
