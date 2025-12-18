@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
@@ -88,6 +88,14 @@ export function FileSharder({ dealId }: FileSharderProps) {
     lastOpMs: null,
   });
   const [uiTick, setUiTick] = useState(0);
+  const rollingSpeedRef = useRef<number>(0);
+  const lastSpeedUpdateMsRef = useRef<number | null>(null);
+  const lastBlobsDoneRef = useRef<number>(0);
+  const lastProgressSampleRef = useRef<{ tMs: number; blobsDone: number } | null>(null);
+
+  const etaDisplayMsRef = useRef<number | null>(null);
+  const etaLastTickMsRef = useRef<number | null>(null);
+  const etaLastRawMsRef = useRef<number | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -110,6 +118,107 @@ export function FileSharder({ dealId }: FileSharderProps) {
     return () => window.clearInterval(handle);
   }, [processing]);
 
+  useEffect(() => {
+    if (!processing) {
+      rollingSpeedRef.current = 0;
+      lastSpeedUpdateMsRef.current = null;
+      lastBlobsDoneRef.current = 0;
+      lastProgressSampleRef.current = null;
+      etaDisplayMsRef.current = null;
+      etaLastTickMsRef.current = null;
+      etaLastRawMsRef.current = null;
+      return;
+    }
+
+    if (shardProgress.startTsMs == null) return;
+
+    // Reset per-run state when a new run starts.
+    if (lastSpeedUpdateMsRef.current == null && shardProgress.blobsDone === 0) {
+      lastBlobsDoneRef.current = 0;
+      lastProgressSampleRef.current = null;
+      rollingSpeedRef.current = 0;
+      etaDisplayMsRef.current = null;
+      etaLastTickMsRef.current = null;
+      etaLastRawMsRef.current = null;
+    }
+  }, [processing, shardProgress.startTsMs, shardProgress.blobsDone]);
+
+  useEffect(() => {
+    if (!processing) return;
+    void uiTick;
+
+    const now = performance.now();
+    const BLOB_BYTES = 128 * 1024;
+
+    // --- Rolling speed ---
+    if (shardProgress.blobsDone > lastBlobsDoneRef.current) {
+      const prev =
+        lastProgressSampleRef.current ??
+        (shardProgress.currentOpStartedAtMs != null
+          ? { tMs: shardProgress.currentOpStartedAtMs, blobsDone: lastBlobsDoneRef.current }
+          : null);
+      if (prev) {
+        const dtMs = now - prev.tMs;
+        const db = shardProgress.blobsDone - prev.blobsDone;
+        if (dtMs > 0 && db > 0) {
+          const instantaneous = ((db * BLOB_BYTES) / (1024 * 1024)) / (dtMs / 1000);
+          const alpha = 0.4;
+          rollingSpeedRef.current =
+            rollingSpeedRef.current > 0
+              ? rollingSpeedRef.current * (1 - alpha) + instantaneous * alpha
+              : instantaneous;
+          lastSpeedUpdateMsRef.current = now;
+        }
+      }
+      lastProgressSampleRef.current = { tMs: now, blobsDone: shardProgress.blobsDone };
+      lastBlobsDoneRef.current = shardProgress.blobsDone;
+    } else {
+      const last = lastSpeedUpdateMsRef.current;
+      if (last != null) {
+        const idleMs = now - last;
+        if (idleMs > 4000) {
+          const decay = Math.pow(0.85, (idleMs - 4000) / 1000);
+          rollingSpeedRef.current *= Math.max(0, Math.min(1, decay));
+        }
+      }
+    }
+
+    // --- ETA display (countdown) ---
+    const lastEtaTick = etaLastTickMsRef.current;
+    const dtEta = lastEtaTick == null ? 0 : Math.max(0, now - lastEtaTick);
+    etaLastTickMsRef.current = now;
+
+    if (etaDisplayMsRef.current != null && dtEta > 0) {
+      etaDisplayMsRef.current = Math.max(0, etaDisplayMsRef.current - dtEta);
+    }
+
+    const elapsedMs = shardProgress.startTsMs ? Math.max(0, now - shardProgress.startTsMs) : 0;
+    const avgWorkMs =
+      shardProgress.avgWorkMs ??
+      (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
+    const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
+    const etaRaw = avgWorkMs ? avgWorkMs * remainingWork : null;
+
+    if (etaRaw == null) {
+      etaDisplayMsRef.current = null;
+      etaLastRawMsRef.current = null;
+      return;
+    }
+
+    const lastRaw = etaLastRawMsRef.current;
+    if (etaDisplayMsRef.current == null || lastRaw == null) {
+      etaDisplayMsRef.current = etaRaw;
+      etaLastRawMsRef.current = etaRaw;
+      return;
+    }
+
+    if (Math.abs(etaRaw - lastRaw) >= 250) {
+      etaDisplayMsRef.current = etaRaw;
+      etaLastRawMsRef.current = etaRaw;
+      return;
+    }
+  }, [processing, uiTick, shardProgress]);
+
   const shardingUi = useMemo(() => {
     void uiTick;
     const now = performance.now();
@@ -120,10 +229,12 @@ export function FileSharder({ dealId }: FileSharderProps) {
       shardProgress.avgWorkMs ??
       (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
-    const etaMs = avgWorkMs ? avgWorkMs * remainingWork : null;
+    const etaRawMs = avgWorkMs ? avgWorkMs * remainingWork : null;
+    const etaMs = etaDisplayMsRef.current ?? etaRawMs;
     const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
     const seconds = elapsedMs / 1000;
-    const mibPerSec = seconds > 0 ? mib / seconds : 0;
+    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+    const mibPerSec = rollingSpeedRef.current > 0 ? rollingSpeedRef.current : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
@@ -337,12 +448,19 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
     const buffer = await file.arrayBuffer();
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
-    const bytes = new Uint8Array(buffer);
-    const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
-    const totalUserChunks = Math.ceil(bytes.length / RawMduCapacity);
-    const witnessBytesPerMdu = 64 * 48; // witness_flat: 64 commitments * 48 bytes
-    const witnessMduCount = Math.max(1, Math.ceil((witnessBytesPerMdu * totalUserChunks) / RawMduCapacity));
-    addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
+	    const bytes = new Uint8Array(buffer);
+	    const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
+	    const totalUserChunks = Math.ceil(bytes.length / RawMduCapacity);
+	    const witnessBytesPerMdu = 64 * 48; // witness_flat: 64 commitments * 48 bytes
+	    const witnessMduCount = Math.max(1, Math.ceil((witnessBytesPerMdu * totalUserChunks) / RawMduCapacity));
+	    addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
+	    console.log('[perf] sharding start', {
+	      file: file.name,
+	      rawBytes: bytes.length,
+	      rawMduCapacity: RawMduCapacity,
+	      totalUserMdus: totalUserChunks,
+	      witnessMduCount,
+	    });
 
     const BLOBS_PER_MDU = 64;
     const BLOB_BYTES = 128 * 1024;
@@ -460,17 +578,22 @@ export function FileSharder({ dealId }: FileSharderProps) {
               prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
             );
 
-            const start = i * RawMduCapacity;
-            const end = Math.min(start + RawMduCapacity, bytes.length);
-            const rawChunk = bytes.slice(start, end);
+	            const encodeStart = performance.now();
+	            const start = i * RawMduCapacity;
+	            const end = Math.min(start + RawMduCapacity, bytes.length);
+	            const rawChunk = bytes.subarray(start, end);
 
-            const encodedMdu = encodeToMdu(rawChunk);
-            userMdus.push({ index: i, data: encodedMdu });
-
+	            const encodedMdu = encodeToMdu(rawChunk);
+	            userMdus.push({ index: i, data: encodedMdu });
+	            const encodeMs = performance.now() - encodeStart;
+	            const copyStart = performance.now();
 	            const chunkCopy = new Uint8Array(encodedMdu);
+	            const copyMs = performance.now() - copyStart;
 	            addLog(`> Sharding User MDU #${i}...`);
+	            const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+	            const wasmStart = performance.now();
 	            const result = await workerClient.shardFileProgressive(chunkCopy, {
-	              batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	              batchBlobs,
 	              onProgress: (progress) => {
 	                const payload = progress as { kind?: string; done?: number; total?: number };
 	                if (payload.kind !== 'blob') return;
@@ -490,17 +613,27 @@ export function FileSharder({ dealId }: FileSharderProps) {
                       prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
                   };
                 });
-              },
-            });
+	              },
+	            });
+	            const wasmMs = performance.now() - wasmStart;
 
-            const rootBytes = toU8(result.mdu_root);
-            userRoots.push(rootBytes);
-            console.log(`[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`);
+	            const rootBytes = toU8(result.mdu_root);
+	            userRoots.push(rootBytes);
+	            console.log(`[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`);
 
             const witnessFlat = toU8(result.witness_flat);
             witnessDataBlobs.push(witnessFlat);
 
 	            const opMs = performance.now() - opStart;
+	            console.log('[perf] user mdu', {
+	              i,
+	              rawBytes: rawChunk.byteLength,
+	              batchBlobs,
+	              encodeMs,
+	              copyMs,
+	              wasmMs,
+	              totalMs: opMs,
+	            });
 	            prevCommitMsPerMdu = opMs;
 	            mdusCommitted += 1;
 	            workCommitted += workTotalThisMdu;
@@ -555,16 +688,22 @@ export function FileSharder({ dealId }: FileSharderProps) {
             }));
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'processing' } : s)));
 
-            const start = i * RawMduCapacity;
-            const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
-            const rawChunk = fullWitnessData.slice(start, end);
-            const witnessMduBytes = encodeToMdu(rawChunk);
+	            const encodeStart = performance.now();
+	            const start = i * RawMduCapacity;
+	            const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
+	            const rawChunk = fullWitnessData.subarray(start, end);
+	            const witnessMduBytes = encodeToMdu(rawChunk);
+	            const encodeMs = performance.now() - encodeStart;
 
 	            addLog(`> Sharding Witness MDU #${i}...`);
 	            console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
+	            const copyStart = performance.now();
 	            const chunkCopy = new Uint8Array(witnessMduBytes);
+	            const copyMs = performance.now() - copyStart;
+	            const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+	            const wasmStart = performance.now();
 	            const result = await workerClient.shardFileProgressive(chunkCopy, {
-	              batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	              batchBlobs,
 	              onProgress: (progress) => {
 	                const payload = progress as { kind?: string; done?: number; total?: number };
 	                if (payload.kind !== 'blob') return;
@@ -584,8 +723,9 @@ export function FileSharder({ dealId }: FileSharderProps) {
                       prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
                   };
                 });
-              },
-            });
+	              },
+	            });
+	            const wasmMs = performance.now() - wasmStart;
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
@@ -594,6 +734,15 @@ export function FileSharder({ dealId }: FileSharderProps) {
             await workerClient.setMdu0Root(i, rootBytes);
 
 	            const opMs = performance.now() - opStart;
+	            console.log('[perf] witness mdu', {
+	              i,
+	              rawBytes: rawChunk.byteLength,
+	              batchBlobs,
+	              encodeMs,
+	              copyMs,
+	              wasmMs,
+	              totalMs: opMs,
+	            });
 	            prevCommitMsPerMdu = opMs;
 	            mdusCommitted += 1;
 	            workCommitted += workTotalThisMdu;
@@ -635,11 +784,17 @@ export function FileSharder({ dealId }: FileSharderProps) {
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
-        const mdu0Bytes = await workerClient.getMdu0Bytes();
-        
+	        const mdu0FetchStart = performance.now();
+	        const mdu0Bytes = await workerClient.getMdu0Bytes();
+	        const mdu0FetchMs = performance.now() - mdu0FetchStart;
+	        
+	        const mdu0CopyStart = performance.now();
 	        const mdu0Copy = new Uint8Array(mdu0Bytes);
+	        const mdu0CopyMs = performance.now() - mdu0CopyStart;
+	        const mdu0BatchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+	        const wasmStart = performance.now();
 	        const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
-	          batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	          batchBlobs: mdu0BatchBlobs,
 	          onProgress: (progress) => {
 	            const payload = progress as { kind?: string; done?: number; total?: number };
 	            if (payload.kind !== 'blob') return;
@@ -659,11 +814,19 @@ export function FileSharder({ dealId }: FileSharderProps) {
                   prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
               };
             });
-          },
-        });
+	          },
+	        });
+	        const wasmMs = performance.now() - wasmStart;
 	        const mdu0Root = toU8(mdu0Result.mdu_root);
 	        setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
 	        const opMs = performance.now() - opStartMdu0;
+	        console.log('[perf] meta mdu0', {
+	          fetchMs: mdu0FetchMs,
+	          copyMs: mdu0CopyMs,
+	          batchBlobs: mdu0BatchBlobs,
+	          wasmMs,
+	          totalMs: opMs,
+	        });
 	        prevCommitMsPerMdu = opMs;
 	        mdusCommitted += 1;
 	        workCommitted += workTotalThisMdu0;
@@ -693,7 +856,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
             aggOffset += 32;
         }
 
-        addLog(`> Computing Manifest Root (Aggregation)...`);
+	        addLog(`> Computing Manifest Root (Aggregation)...`);
         setShardProgress((p) => ({
           ...p,
           phase: 'compute_manifest',
@@ -702,7 +865,10 @@ export function FileSharder({ dealId }: FileSharderProps) {
           currentMduKind: null,
           currentMduIndex: null,
         }));
-        const manifest = await workerClient.computeManifest(allRoots);
+	        const manifestStart = performance.now();
+	        const manifest = await workerClient.computeManifest(allRoots);
+	        const manifestMs = performance.now() - manifestStart;
+	        console.log('[perf] manifest aggregation', { ms: manifestMs, roots: allRoots.length / 32 });
         
         const finalMdus = [
             { index: 0, data: mdu0Bytes },
@@ -717,7 +883,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
         setCurrentManifestRoot(finalRootHex);
         setCurrentManifestBlob(finalManifestBlob);
         
-        setShardProgress((p) => ({
+	        setShardProgress((p) => ({
           ...p,
           phase: 'done',
           label: 'Client-side expansion complete.',
@@ -728,19 +894,33 @@ export function FileSharder({ dealId }: FileSharderProps) {
           blobsInCurrentMdu: 0,
         }));
 
-        addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
-        console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
-        addLog(`> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`);
+	        addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
+	        console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
+	        addLog(`> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`);
 
-        const elapsedMs = performance.now() - startTs;
-        const mib = file.size / (1024 * 1024);
-        const seconds = elapsedMs / 1000;
-        const mibPerSec = seconds > 0 ? mib / seconds : 0;
-        addLog(
-          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
-            file.size,
-          )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
-        );
+	        console.log('[perf] sharding totals', {
+	          totalMs: performance.now() - startTs,
+	          fileBytes: bytes.length,
+	          totalMdus: finalMdus.length,
+	          totalUserMdus: totalUserChunks,
+	          totalWitnessMdus: witnessMduCount,
+	          manifestMs,
+	        });
+
+	        const elapsedMs = performance.now() - startTs;
+	        const mib = file.size / (1024 * 1024);
+	        const seconds = elapsedMs / 1000;
+	        const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+	        const recentMibPerSec = rollingSpeedRef.current;
+	        const speedStr =
+	          recentMibPerSec > 0
+	            ? `${recentMibPerSec.toFixed(2)} MiB/s recent (${avgMibPerSec.toFixed(2)} MiB/s avg)`
+	            : `${avgMibPerSec.toFixed(2)} MiB/s avg`;
+	        addLog(
+	          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
+	            file.size,
+	          )}. Speed: ${speedStr}.`,
+	        );
 
     } catch (e: unknown) {
         console.error(e);
@@ -890,10 +1070,10 @@ export function FileSharder({ dealId }: FileSharderProps) {
                       {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
                     </div>
                   </div>
-                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Speed</div>
-                    <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
-                  </div>
+	                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
+	                    <div className="opacity-70">Speed (recent)</div>
+	                    <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
+	                  </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
                     <div className="opacity-70">Op Time</div>
                     <div className="text-foreground">

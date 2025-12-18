@@ -8,25 +8,40 @@
 import init, { WasmMdu0Builder, NilWasm } from '../../public/wasm/nil_core.js';
 
 let wasmInitialized = false;
+let wasmInitPromise: Promise<void> | null = null;
+let wasmInitError: unknown = null;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
 let nilWasmInstance: NilWasm | null = null;
 
-async function initializeWasm() {
-    if (!wasmInitialized) {
-        // Assume nil_core_bg.wasm is in the same directory as nil_core.js
-        await init(); 
+function initializeWasm(): Promise<void> {
+    if (wasmInitialized) return Promise.resolve();
+    if (wasmInitError) return Promise.reject(wasmInitError);
+    if (wasmInitPromise) return wasmInitPromise;
+
+    const wasmUrl = new URL('/wasm/nil_core_bg.wasm', self.location.origin);
+    wasmInitPromise = (async () => {
+        await init(wasmUrl);
         wasmInitialized = true;
-    }
+    })().catch((err) => {
+        wasmInitError = err;
+        throw err;
+    });
+
+    return wasmInitPromise;
 }
+
+// Start fetching + compiling the WASM as soon as the worker loads so the first
+// request message doesn't pay the full initialization latency.
+void initializeWasm();
 
 // Listen for messages from the main thread
 self.onmessage = async (event) => {
     const { type, payload, id } = event.data;
 
-    // Ensure WASM is loaded before processing messages
-    await initializeWasm();
-
     try {
+        // Ensure WASM is loaded before processing messages
+        await initializeWasm();
+
         let result;
         const collectTransferables = (val: unknown): Transferable[] => {
             const out: Transferable[] = [];
@@ -51,6 +66,10 @@ self.onmessage = async (event) => {
         switch (type) {
             case 'initNilWasm': {
                 const { trustedSetupBytes } = payload;
+                if (nilWasmInstance) {
+                    result = 'NilWasm already initialized';
+                    break;
+                }
                 if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for NilWasm initialization');
                 nilWasmInstance = new NilWasm(trustedSetupBytes);
                 result = 'NilWasm initialized';
