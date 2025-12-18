@@ -1,18 +1,18 @@
-# Pricing & Escrow Model (Market-Rate Lock-in)
+# Pricing & Escrow Model (Gamma-4 Economics)
 
 **Date:** 2025-12-15
-**Status:** Revised Draft / Proposal
-**Context:** Defining dynamic economic mechanics where storage is purchased at the **current market rate** at the moment of ingest or extension.
+**Status:** Revised Draft / Partially Implemented (Devnet)
+**Context:** Devnet economics for deal creation fees, term deposits on ingest, and escrow accounting.
 
 ## 1. Executive Summary
 
-Instead of a generic prepaid balance that drains at a variable rate, this model treats storage as a **Term Deposit**. Users pay up-front for specific capacity/duration slices at the *market price at that moment*.
+Instead of a continuously draining balance, Devnet treats storage as a **term deposit**: when content is committed to a deal, the user prepays for the full deal duration based on the current `storage_price`.
 
-*   **Creation Fee:** Fixed cost to initialize a Drive (Deal ID).
-*   **Ingest Payment:** When uploading files, the user prepays for the storage duration at the **current spot price**.
-*   **Extension Payment:** Extending the life of data happens at the **new spot price**.
+*   **Creation Fee:** Fixed cost to initialize a Deal (`MsgCreateDeal` / `MsgCreateDealFromEvm`).
+*   **Initial Escrow:** Optional upfront escrow deposit at deal creation (in base denom).
+*   **Ingest Payment (Term Deposit):** When `MsgUpdateDealContent*` increases `deal.size`, the user prepays for `delta_size_bytes * deal_duration_blocks * storage_price`.
 
-This protects users from sudden price hikes for *already paid* data, while ensuring the network captures value if demand rises for *new* storage.
+This lock-in model ensures new storage capacity is paid for immediately at the spot price, without retroactively changing the cost of already-committed bytes.
 
 ---
 
@@ -20,55 +20,54 @@ This protects users from sudden price hikes for *already paid* data, while ensur
 
 | Parameter | Type | Default (Devnet) | Description |
 | :--- | :--- | :--- | :--- |
-| `base_creation_fee` | `uint64` | `1_000_000` (1 NIL) | Fixed cost to execute `MsgCreateDeal`. |
-| `spot_price_per_gb_epoch` | `uint64` | `100` | **Dynamic.** The current market price to buy 1 GB of storage for 1 Epoch. |
+| `deal_creation_fee` | `Coin` | `0stake` | Fixed cost to execute `MsgCreateDeal` / `MsgCreateDealFromEvm` (sent to fee collector). |
+| `storage_price` | `Dec` | `0` | Price per byte per block, charged when increasing `deal.size` via `MsgUpdateDealContent*`. |
+| `min_duration_blocks` | `uint64` | `10` | Minimum `duration_blocks` accepted by `MsgCreateDeal` / `MsgCreateDealFromEvm`. |
 
-*Note: In Devnet, `spot_price` is a fixed param. In Mainnet, this is an algorithmic curve based on network utilization.*
+**Denom:** Devnet uses the Cosmos bond denom (`sdk.DefaultBondDenom`, currently `stake`) for fees, escrow, and term deposits.
 
 ---
 
 ## 3. The "Lock-in" Lifecycle
 
 ### 3.1 Drive Initialization (`MsgCreateDeal`)
-The user initializes a "Drive" (Container). This action reserves the Deal ID and the initial Metadata MDU (MDU #0).
+The user initializes a "Drive" (Deal container). This action reserves the Deal ID and assigns storage providers.
 
-*   **Cost:** `base_creation_fee`.
+*   **Validation:** `duration_blocks >= min_duration_blocks`.
+*   **Cost:** `deal_creation_fee` (base denom) + optional `initial_escrow_amount` (base denom).
 *   **Action:**
-    *   User pays 1 NIL.
-    *   Chain creates `Deal` with `size = 0` and `end_block = 0` (or a small initial grace period).
-    *   *Result:* An empty "Drive" exists.
+    *   Transfer `deal_creation_fee` from user to fee collector (if non-zero).
+    *   Transfer `initial_escrow_amount` from user to the `nilchain` module account.
+    *   Create `Deal` with `size = 0`, `manifest_root` empty, `start_block = now`, `end_block = now + duration_blocks`.
 
 ### 3.2 Ingest / Commit Content (`MsgUpdateDealContent`)
 The user uploads files (e.g., 1 GB) and commits them to the Drive. At this moment, they must fund this new data.
 
 *   **Input:**
-    *   `new_size`: 1 GB.
-    *   `duration_epochs`: e.g., 525,600 (1 year).
+    *   `new_size_bytes`: total deal size after commit (bytes).
+    *   `cid`: 48-byte `manifest_root` (hex).
 *   **Pricing Logic (Chain):**
-    *   `rate = Params.spot_price_per_gb_epoch` (e.g., 100).
-    *   `cost = new_size_gb * duration_epochs * rate`.
-    *   `cost = 1 * 525,600 * 100 = 52,560,000` (52.5 NIL).
+    *   `delta_size = max(0, new_size_bytes - old_size_bytes)`.
+    *   `duration_blocks = deal.end_block - deal.start_block`.
+    *   `cost = ceil(storage_price * delta_size * duration_blocks)`.
 *   **Action:**
-    *   User pays 52.5 NIL immediately.
-    *   Chain updates `Deal.end_block` to reflect the paid duration.
-    *   *Result:* This specific 1 GB is strictly paid for until `end_block`.
+    *   Transfer `cost` from user to the `nilchain` module account (if `cost > 0`).
+    *   Increase `deal.escrow_balance` by `cost` (accounting / TVL).
+    *   Update `deal.manifest_root` and `deal.size`.
 
 ### 3.3 Adding More Data (Expansion)
 The user adds another 2 GB file, 6 months later.
 
-*   **Scenario:** Spot price has doubled (`rate = 200`).
-*   **Input:** `added_size`: 2 GB. `remaining_epochs`: 262,800 (6 months).
-*   **Cost:** `2 * 262,800 * 200 = 105,120,000` (105.1 NIL).
-*   **Action:** User pays the higher rate for the *new* data. The *old* data remains paid for at the old rate (effectively, because `end_block` covers the aggregate).
+*   **Scenario:** `storage_price` has increased since the first commit.
+*   **Cost:** Only the *additional bytes* are charged at the new price:
+    *   `delta_size = new_size_bytes - old_size_bytes`
+    *   `cost = ceil(storage_price * delta_size * duration_blocks)`
+*   **Action:** User pays the higher rate only for the newly-added bytes.
 
 ### 3.4 Extending Life (Refueling)
-The user wants to extend the Drive's life by another year (`MsgExtendDeal`).
+The user wants to extend the Drive's life beyond `end_block`.
 
-*   **Scenario:** Spot price is now `rate = 200`.
-*   **Input:** `extension_epochs`: 525,600.
-*   **Total Size:** 3 GB.
-*   **Cost:** `3 * 525,600 * 200`.
-*   **Observation:** Extensions are priced at the **current market rate** for the **entire volume**.
+**Not implemented in Devnet yet.** A future `MsgExtendDeal` (or equivalent) should charge at the current `storage_price` to push `end_block` forward.
 
 ---
 
@@ -77,7 +76,7 @@ The user wants to extend the Drive's life by another year (`MsgExtendDeal`).
 In this model, `Deal.escrow_balance` behaves differently:
 
 *   **Old Model:** A draining battery.
-*   **New Model:** A holding tank for *future* extensions or *bandwidth* fees. The storage fees are **deducted immediately** upon `MsgUpdateDealContent` or `MsgExtendDeal` to push out `end_block`.
+*   **New Model (Devnet):** An accounting value for escrow + term deposits. Storage term deposits are transferred immediately on `MsgUpdateDealContent*` (when `deal.size` increases). Deal expiry (`end_block`) is currently set at creation time and does not change yet.
 
 ### Why this is better?
 1.  **Certainty:** Users know exactly when their data expires (`end_block`). They don't have to guess "how long will my balance last if price fluctuates?".
@@ -86,57 +85,61 @@ In this model, `Deal.escrow_balance` behaves differently:
 
 ---
 
-## 5. User Journey Example (Revised)
+## 5. User Journey Example (Illustrative)
 
-1.  **"New Drive":** User clicks "New Drive".
-    *   Prompt: "Pay 1 NIL to initialize Drive."
-    *   Tx: `MsgCreateDeal`. Status: Empty.
-2.  **Upload:** User stages 1 GB file.
-    *   UI Prompt: "Market Rate is 100/epoch. To store this 1 GB for 1 Year, pay 52.5 NIL."
-    *   User approves.
-    *   Tx: `MsgUpdateDealContent` (transfers 52.5 NIL).
-    *   Status: "Paid until Dec 2026".
-3.  **Price Spike:** Market rate doubles to 200/epoch.
-4.  **Upload 2:** User stages 100 MB.
-    *   UI Prompt: "Market Rate is 200/epoch. Cost for remaining 6 months: ~5 NIL."
-    *   User pays. The old 1 GB is unaffected.
-5.  **Refuel:** In Dec 2026, user extends for 1 more year.
-    *   UI Prompt: "Market Rate is 200/epoch. Total Drive Size 1.1 GB. Cost to extend: ~115 NIL."
-    *   User pays the *new* rate for the extension.
+1.  **Create Deal:** User executes `MsgCreateDeal` with `duration_blocks`.
+    *   Chain enforces `duration_blocks >= min_duration_blocks`.
+    *   Chain collects `deal_creation_fee` (if non-zero) and locks `initial_escrow_amount` in the module account.
+2.  **Commit Content:** User uploads data off-chain, then executes `MsgUpdateDealContent` with `cid` + `new_size_bytes`.
+    *   If `new_size_bytes` increased, chain charges `ceil(storage_price * delta_size * duration_blocks)` and credits it into `deal.escrow_balance`.
+3.  **Add More Files Later:** User commits a larger `new_size_bytes`.
+    *   Only the additional bytes are charged (delta-based).
 
 ---
 
 ## 6. Implementation Plan
 
-1.  **Proto:** Remove `escrow_balance` drain logic from EndBlocker. Keep `escrow` for bandwidth (retrieval) only.
-2.  **Msg:** Update `MsgUpdateDealContent` to accept an optional `extension_epochs` or enforce alignment with existing `end_block`.
-3.  **Msg:** Add `MsgExtendDeal` to push `end_block` forward by paying `current_size * duration * spot_price`.
-4.  **UI:** Dashboard displays "Lease Expires: [Date]" instead of "Fuel Low".
+1.  **Future:** Add `MsgExtendDeal` or allow updating `end_block` by paying for extension at current `storage_price`.
+2.  **Future:** Split accounting so retrieval credits / bandwidth and storage term deposits are tracked separately.
+3.  **UI:** Display "Lease Expires" derived from `end_block`.
 
 ---
 
-## 7. Retrieval Economics (Bandwidth & Credits)
+## 7. TODO (Spec-Only): Deal Expiry Cleanup / GC
+
+Devnet currently does **not** implement automatic cleanup when `end_block` is reached.
+
+**TODO:** Specify and implement a cleanup process (likely in EndBlocker) that:
+1. Marks deals as expired and stops rewarding proofs past expiry (if applicable).
+2. Defines retention / grace period rules.
+3. Cleans up on-chain state (or archives it) and coordinates with gateway/SP local storage lifecycle.
+
+This is intentionally **not implemented** yet; it will be required for mainnet-grade lifecycle management.
+
+---
+
+## 8. Retrieval Economics (Bandwidth & Credits)
 
 In addition to storage costs, the protocol charges for data egress (retrieval). This prevents network abuse and compensates providers for bandwidth.
 
-### 7.1 Global Parameters (Chain State)
+### 8.1 Global Parameters (Chain State)
 
 | Parameter | Type | Default (Devnet) | Description |
 | :--- | :--- | :--- | :--- |
 | `base_retrieval_fee` | `uint64` | `100` | Fixed cost per `RetrievalSession` (anti-spam). |
 | `price_per_retrieval_byte` | `uint64` | `1` | Cost per byte downloaded. |
 
-### 7.2 Built-in Retrieval Credit
+### 8.2 Built-in Retrieval Credit
 To improve UX, purchasing storage includes a "Free Tier" for retrieval.
 
 *   **Logic:** Every `1 GB-Month` of storage purchased grants `X` GB of retrieval credit.
 *   **State:** `Deal` struct gains a `retrieval_credit` field (bytes).
 *   **Accrual:**
     *   When `MsgUpdateDealContent` or `MsgExtendDeal` is called:
-    *   `credit_earned = (new_duration_epochs * size_bytes * credit_multiplier)`.
+    *   `credit_earned = f(delta_size_bytes, duration_blocks)` (exact function TBD).
     *   `Deal.retrieval_credit += credit_earned`.
 
-### 7.3 Consumption Hierarchy
+### 8.3 Consumption Hierarchy
 When a `RetrievalSession` is completed (`MsgConfirmRetrievalSession` + Proof):
 
 1.  **Calculate Cost:** `total_cost = base_retrieval_fee + (bytes_served * price_per_retrieval_byte)`.
@@ -152,7 +155,7 @@ When a `RetrievalSession` is completed (`MsgConfirmRetrievalSession` + Proof):
     *   `Deal.escrow_balance -= paid_from_escrow`.
     *   If `escrow_balance` < 0, the retrieval debt is recorded or the session fails (if checked at open time).
 
-### 7.4 Top-Up (Retrieval Balance)
+### 8.4 Top-Up (Retrieval Balance)
 Users can fund retrieval beyond the free tier using `MsgAddCredit`.
 *   Since `escrow_balance` is no longer used for storage rent (which is paid via Term Deposits), `escrow_balance` **effectively becomes the "Retrieval/Gas Tank"**.
 *   **UX:** "Add Fuel for Downloads".

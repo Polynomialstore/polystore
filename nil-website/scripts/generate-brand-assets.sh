@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 SRC_DARK="${ROOT_DIR}/brand-src/logo-dark.png"
+SRC_LIGHT_OVERRIDE="${ROOT_DIR}/new logo light.jpeg"
 SRC_LIGHT="${ROOT_DIR}/brand-src/logo-light.png"
 OUT_BRAND_DIR="${ROOT_DIR}/public/brand"
 
@@ -20,6 +21,10 @@ fi
 if [[ ! -f "${SRC_DARK}" ]]; then
   echo "error: missing source asset: ${SRC_DARK}" >&2
   exit 1
+fi
+
+if [[ -f "${SRC_LIGHT_OVERRIDE}" ]]; then
+  SRC_LIGHT="${SRC_LIGHT_OVERRIDE}"
 fi
 
 if [[ ! -f "${SRC_LIGHT}" ]]; then

@@ -14,6 +14,7 @@ import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	ma "github.com/multiformats/go-multiaddr"
@@ -64,6 +65,10 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	params := k.GetParams(ctx)
 	eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
 	domainSep := types.HashDomainSeparator(eip712ChainID)
+
+	if params.MinDurationBlocks > 0 && intent.DurationBlocks < params.MinDurationBlocks {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+	}
 
 	structHash, err := types.HashCreateDeal(intent)
 
@@ -135,6 +140,13 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	ownerAcc := sdk.AccAddress(evmAddr.Bytes())
 	ownerAddrStr := ownerAcc.String()
 
+	// --- CREATION FEE ---
+	if params.DealCreationFee.IsValid() && params.DealCreationFee.IsPositive() {
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, authtypes.FeeCollectorName, sdk.NewCoins(params.DealCreationFee)); err != nil {
+			return nil, fmt.Errorf("failed to pay deal creation fee: %w", err)
+		}
+	}
+
 	// Decode service hint and requested replication (owner is derived from EVM).
 	rawHint := strings.TrimSpace(intent.ServiceHint)
 	serviceHint := rawHint
@@ -192,7 +204,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
 
-	escrowCoins := sdk.NewCoins(sdk.NewCoin("stake", intent.InitialEscrow))
+	escrowCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, intent.InitialEscrow))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, escrowCoins); err != nil {
 		return nil, err
 	}
@@ -333,6 +345,18 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
 
+	params := k.GetParams(ctx)
+	if params.MinDurationBlocks > 0 && msg.DurationBlocks < params.MinDurationBlocks {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+	}
+
+	// --- CREATION FEE ---
+	if params.DealCreationFee.IsValid() && params.DealCreationFee.IsPositive() {
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, authtypes.FeeCollectorName, sdk.NewCoins(params.DealCreationFee)); err != nil {
+			return nil, fmt.Errorf("failed to pay deal creation fee: %w", err)
+		}
+	}
+
 	dealID, err := k.DealCount.Next(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next deal ID: %w", err)
@@ -413,8 +437,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", msg.MaxMonthlySpend)
 	}
 
-	// For the local devnet, we denominate escrow in the staking token ("stake").
-	escrowCoin := sdk.NewCoins(sdk.NewCoin("stake", initialEscrowAmount))
+	escrowCoin := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, initialEscrowAmount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, escrowCoin); err != nil {
 		return nil, err
 	}
@@ -460,7 +483,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdateDealContent) (*types.MsgUpdateDealContentResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	_, err := sdk.AccAddressFromBech32(msg.Creator)
+	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
 	}
@@ -472,6 +495,28 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	if deal.Owner != msg.Creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
+	}
+
+	params := k.GetParams(ctx)
+
+	// --- TERM DEPOSIT (Storage Lock-in) ---
+	if msg.Size_ > deal.Size_ {
+		deltaSize := msg.Size_ - deal.Size_
+		duration := deal.EndBlock - deal.StartBlock
+
+		price := params.StoragePrice
+		if price.IsPositive() {
+			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			cost := costDec.Ceil().TruncateInt()
+
+			if cost.IsPositive() {
+				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
+					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
+				}
+				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+			}
+		}
 	}
 
 	if strings.TrimSpace(msg.Cid) == "" {
@@ -593,6 +638,31 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 
 	if deal.Owner != ownerAcc.String() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
+	}
+
+	// --- TERM DEPOSIT (Storage Lock-in) ---
+	// Cost = (NewSize - OldSize) * Duration * Price
+	// Only charge for size increase.
+	if intent.SizeBytes > deal.Size_ {
+		deltaSize := intent.SizeBytes - deal.Size_
+		duration := deal.EndBlock - deal.StartBlock
+
+		// price is Dec per byte per block
+		price := params.StoragePrice
+		if price.IsPositive() {
+			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			cost := costDec.Ceil().TruncateInt()
+
+			if cost.IsPositive() {
+				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+				// Deduct from Creator -> Module Account (Escrow)
+				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
+					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
+				}
+				// Credit the deal's escrow balance (Total Value Locked)
+				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+			}
+		}
 	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
@@ -1282,7 +1352,7 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid amount")
 	}
 
-	coins := sdk.NewCoins(sdk.NewCoin("stake", amount))
+	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, amount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, senderAddr, types.ModuleName, coins); err != nil {
 		return nil, err
 	}
@@ -1358,7 +1428,7 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
 	// Net result: Supply change = +Y.
 	// The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
 
-	coins := sdk.NewCoins(sdk.NewCoin("stake", rewards))
+	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, rewards))
 	if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
 		return nil, err
 	}
