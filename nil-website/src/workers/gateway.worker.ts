@@ -13,6 +13,18 @@ let wasmInitError: unknown = null;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
 let nilWasmInstance: NilWasm | null = null;
 
+type CommitWorkerPending = {
+    resolve: (value: unknown) => void;
+    reject: (reason?: unknown) => void;
+};
+
+let commitWorkers: Worker[] = [];
+let commitWorkersReady: Promise<void> | null = null;
+let commitPending = new Map<number, CommitWorkerPending>();
+let commitNextMessageId = 1;
+let commitRoundRobin = 0;
+let commitPendingByWorker = new Map<Worker, Set<number>>();
+
 function initializeWasm(): Promise<void> {
     if (wasmInitialized) return Promise.resolve();
     if (wasmInitError) return Promise.reject(wasmInitError);
@@ -28,6 +40,100 @@ function initializeWasm(): Promise<void> {
     });
 
     return wasmInitPromise;
+}
+
+function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
+    if (commitWorkersReady) return commitWorkersReady;
+
+    const hc = (self as unknown as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 4;
+    const desired = Math.max(1, Math.min(4, Math.max(0, Number(hc) - 1) || 1));
+    if (desired <= 1) {
+        commitWorkers = [];
+        commitWorkersReady = Promise.resolve();
+        return commitWorkersReady;
+    }
+
+    commitWorkersReady = (async () => {
+        const workers: Worker[] = [];
+        try {
+            for (let i = 0; i < desired; i++) {
+                const w = new Worker(new URL('./commit.worker.ts', import.meta.url), { type: 'module' });
+                commitPendingByWorker.set(w, new Set());
+                w.onmessage = (event) => {
+                    const { id, type, payload } = event.data;
+                    commitPendingByWorker.get(w)?.delete(id);
+                    const pending = commitPending.get(id);
+                    if (!pending) return;
+                    if (type === 'result') {
+                        pending.resolve(payload as Uint8Array);
+                    } else if (type === 'error') {
+                        pending.reject(new Error(String(payload)));
+                    } else {
+                        pending.reject(new Error(`Unknown commit worker response: ${String(type)}`));
+                    }
+                    commitPending.delete(id);
+                };
+                w.onerror = (err) => {
+                    // eslint-disable-next-line no-console
+                    console.warn('Commit worker error:', err);
+                    const ids = commitPendingByWorker.get(w);
+                    if (ids) {
+                        for (const id of ids) {
+                            commitPending.get(id)?.reject(new Error('Commit worker crashed'));
+                            commitPending.delete(id);
+                        }
+                        commitPendingByWorker.delete(w);
+                    }
+                    commitWorkers = commitWorkers.filter((ww) => ww !== w);
+                };
+                workers.push(w);
+            }
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('Failed to spawn commit worker pool; continuing single-threaded.', e);
+            commitWorkers = [];
+            return;
+        }
+
+        const initPromises = workers.map((w) => {
+            const id = commitNextMessageId++;
+            const setupCopy = trustedSetupBytes.slice();
+            return new Promise<void>((resolve, reject) => {
+                commitPending.set(id, {
+                    resolve: () => resolve(),
+                    reject,
+                });
+                w.postMessage({ id, type: 'initNilWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer]);
+            });
+        });
+
+        await Promise.all(initPromises);
+        commitWorkers = workers;
+    })();
+
+    return commitWorkersReady;
+}
+
+function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
+    if (!commitWorkers || commitWorkers.length === 0) {
+        if (!nilWasmInstance) return Promise.reject(new Error('NilWasm not initialized'));
+        const commitments = nilWasmInstance.commit_blobs(data) as unknown;
+        const bytes = commitments instanceof Uint8Array ? commitments : new Uint8Array(commitments as ArrayBufferLike);
+        return Promise.resolve(bytes);
+    }
+
+    const w = commitWorkers[commitRoundRobin % commitWorkers.length];
+    commitRoundRobin += 1;
+
+    const id = commitNextMessageId++;
+    return new Promise<Uint8Array>((resolve, reject) => {
+        commitPending.set(id, {
+            resolve: (val) => resolve(val as Uint8Array),
+            reject,
+        });
+        commitPendingByWorker.get(w)?.add(id);
+        w.postMessage({ id, type: 'commitBlobs', payload: { data } }, [data.buffer]);
+    });
 }
 
 // Start fetching + compiling the WASM as soon as the worker loads so the first
@@ -72,6 +178,15 @@ self.onmessage = async (event) => {
                 }
                 if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for NilWasm initialization');
                 nilWasmInstance = new NilWasm(trustedSetupBytes);
+                // Initialize the blob-commit compute pool (best-effort).
+                try {
+                    await initializeCommitPool(trustedSetupBytes);
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.warn('Commit worker pool init failed; continuing single-threaded.', e);
+                    commitWorkers = [];
+                    commitWorkersReady = Promise.resolve();
+                }
                 result = 'NilWasm initialized';
                 break;
             }
@@ -125,26 +240,42 @@ self.onmessage = async (event) => {
 
                 const batch = Math.max(1, Math.min(16, Number(batchBlobs || 4)));
                 const witnessFlat = new Uint8Array(BLOBS_PER_MDU * 48);
-                let writeOffset = 0;
+                const concurrency = Math.max(1, commitWorkers.length || 1);
+                let completedBlobs = 0;
+
+                const inFlight = new Set<Promise<void>>();
+                const enqueue = (p: Promise<void>) => {
+                    inFlight.add(p);
+                    p.finally(() => inFlight.delete(p)).catch(() => {});
+                };
 
                 for (let blobIndex = 0; blobIndex < BLOBS_PER_MDU; blobIndex += batch) {
+                    while (inFlight.size >= concurrency) {
+                        await Promise.race(Array.from(inFlight));
+                    }
+
                     const n = Math.min(batch, BLOBS_PER_MDU - blobIndex);
                     const start = blobIndex * BLOB_SIZE;
                     const end = (blobIndex + n) * BLOB_SIZE;
 
-                    const blobBatch = data.subarray(start, end);
-                    const commitmentsFlat = nilWasmInstance.commit_blobs(blobBatch) as unknown;
-                    const commitmentsBytes =
-                        commitmentsFlat instanceof Uint8Array ? commitmentsFlat : new Uint8Array(commitmentsFlat as ArrayBufferLike);
+                    // Copy to a dedicated buffer so we can transfer it to a pool worker.
+                    const blobBatch = data.slice(start, end);
+                    const task = (async () => {
+                        const commitmentsBytes = await commitBlobsWithPool(blobBatch);
+                        witnessFlat.set(commitmentsBytes, blobIndex * 48);
+                        completedBlobs += n;
+                        self.postMessage({
+                            id,
+                            type: 'progress',
+                            payload: { kind: 'blob', done: completedBlobs, total: BLOBS_PER_MDU },
+                        });
+                    })();
 
-                    witnessFlat.set(commitmentsBytes, writeOffset);
-                    writeOffset += commitmentsBytes.byteLength;
+                    enqueue(task);
+                }
 
-                    self.postMessage({
-                        id,
-                        type: 'progress',
-                        payload: { kind: 'blob', done: blobIndex + n, total: BLOBS_PER_MDU },
-                    });
+                if (inFlight.size > 0) {
+                    await Promise.all(Array.from(inFlight));
                 }
 
                 const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;

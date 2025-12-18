@@ -71,8 +71,7 @@ impl NilWasm {
         }
 
         let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
-        let mut commitments = Vec::with_capacity(count * 48);
-
+        let mut flat = Vec::with_capacity(count * 48);
         for i in 0..count {
             let start = i * crate::kzg::BLOB_SIZE;
             let end = start + crate::kzg::BLOB_SIZE;
@@ -80,10 +79,10 @@ impl NilWasm {
                 .kzg_ctx
                 .blob_to_commitment(&blobs_flat[start..end])
                 .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
-            commitments.extend_from_slice(&c);
+            flat.extend_from_slice(&c);
         }
 
-        Ok(Uint8Array::from(commitments.as_slice()))
+        Ok(Uint8Array::from(flat.as_slice()))
     }
 
     pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {

@@ -29,4 +29,3 @@ declare module '/wasm/nil_core.js' {
     free(): void
   }
 }
-
