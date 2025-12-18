@@ -68,7 +68,7 @@ export const Layout = () => {
           <div className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
             <Link to="/" className="flex items-center gap-3" onClick={() => setIsOpen(false)}>
               <div className="relative w-9 h-9">
-                  <div className="absolute inset-0 bg-primary/60 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-150"></div>
+                  <div className="absolute inset-0 bg-primary/60 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-150"></div>
                   <div className="relative w-full h-full transition-transform group-hover:scale-110 duration-300 rounded-full border border-border overflow-hidden p-0.5 bg-background/50">
                     <img
                       src="/brand/logo-light-36.png"
