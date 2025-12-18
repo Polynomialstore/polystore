@@ -66,6 +66,10 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	eip712ChainID := new(big.Int).SetUint64(params.Eip712ChainId)
 	domainSep := types.HashDomainSeparator(eip712ChainID)
 
+	if params.MinDurationBlocks > 0 && intent.DurationBlocks < params.MinDurationBlocks {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+	}
+
 	structHash, err := types.HashCreateDeal(intent)
 
 	if err != nil {
@@ -200,7 +204,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
 
-	escrowCoins := sdk.NewCoins(sdk.NewCoin("stake", intent.InitialEscrow))
+	escrowCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, intent.InitialEscrow))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, escrowCoins); err != nil {
 		return nil, err
 	}
@@ -342,6 +346,10 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}
 
 	params := k.GetParams(ctx)
+	if params.MinDurationBlocks > 0 && msg.DurationBlocks < params.MinDurationBlocks {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+	}
+
 	// --- CREATION FEE ---
 	if params.DealCreationFee.IsValid() && params.DealCreationFee.IsPositive() {
 		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, authtypes.FeeCollectorName, sdk.NewCoins(params.DealCreationFee)); err != nil {
@@ -429,8 +437,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid max monthly spend: %s", msg.MaxMonthlySpend)
 	}
 
-	// For the local devnet, we denominate escrow in the staking token ("stake").
-	escrowCoin := sdk.NewCoins(sdk.NewCoin("stake", initialEscrowAmount))
+	escrowCoin := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, initialEscrowAmount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, escrowCoin); err != nil {
 		return nil, err
 	}
@@ -503,7 +510,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 			cost := costDec.Ceil().TruncateInt()
 
 			if cost.IsPositive() {
-				coins := sdk.NewCoins(sdk.NewCoin("unil", cost))
+				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
 				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
 					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
 				}
@@ -647,8 +654,7 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 			cost := costDec.Ceil().TruncateInt()
 
 			if cost.IsPositive() {
-				// We assume base denom is "unil". This should ideally be a param, but hardcoded for now matches DefaultParams.
-				coins := sdk.NewCoins(sdk.NewCoin("unil", cost))
+				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
 				// Deduct from Creator -> Module Account (Escrow)
 				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
 					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
@@ -1346,7 +1352,7 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid amount")
 	}
 
-	coins := sdk.NewCoins(sdk.NewCoin("stake", amount))
+	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, amount))
 	if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, senderAddr, types.ModuleName, coins); err != nil {
 		return nil, err
 	}
@@ -1422,7 +1428,7 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
 	// Net result: Supply change = +Y.
 	// The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
 
-	coins := sdk.NewCoins(sdk.NewCoin("stake", rewards))
+	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, rewards))
 	if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
 		return nil, err
 	}

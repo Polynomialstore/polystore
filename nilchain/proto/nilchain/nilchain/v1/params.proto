@@ -19,7 +19,7 @@ message Params {
   string storage_price = 4 [
     (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
     (gogoproto.nullable) = false
-  ]; // Price per byte per block in base denom (e.g. unil)
+  ]; // Price per byte per block in base denom (devnet: stake)
 
   cosmos.base.v1beta1.Coin deal_creation_fee = 5 [
     (gogoproto.nullable) = false

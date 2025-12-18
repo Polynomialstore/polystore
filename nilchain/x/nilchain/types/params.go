@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"strings"
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -50,7 +51,7 @@ func DefaultParams() Params {
 		1000,  // HalvingInterval
 		31337, // EIP712ChainId (MetaMask localhost default)
 		math.LegacyNewDec(0), // StoragePrice
-		sdk.NewCoin("unil", math.NewInt(0)), // DealCreationFee
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // DealCreationFee
 		10, // MinDurationBlocks
 	)
 }
@@ -129,6 +130,9 @@ func validateDealCreationFee(i interface{}) error {
 	}
 	if !v.IsValid() {
 		return fmt.Errorf("invalid deal creation fee: %s", v)
+	}
+	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
+		return fmt.Errorf("deal creation fee denom must be %q (got %q)", sdk.DefaultBondDenom, v.Denom)
 	}
 	return nil
 }
