@@ -85,23 +85,15 @@ In this model, `Deal.escrow_balance` behaves differently:
 
 ---
 
-## 5. User Journey Example (Revised)
+## 5. User Journey Example (Illustrative)
 
-1.  **"New Drive":** User clicks "New Drive".
-    *   Prompt: "Pay 1 NIL to initialize Drive."
-    *   Tx: `MsgCreateDeal`. Status: Empty.
-2.  **Upload:** User stages 1 GB file.
-    *   UI Prompt: "Market Rate is 100/epoch. To store this 1 GB for 1 Year, pay 52.5 NIL."
-    *   User approves.
-    *   Tx: `MsgUpdateDealContent` (transfers 52.5 NIL).
-    *   Status: "Paid until Dec 2026".
-3.  **Price Spike:** Market rate doubles to 200/epoch.
-4.  **Upload 2:** User stages 100 MB.
-    *   UI Prompt: "Market Rate is 200/epoch. Cost for remaining 6 months: ~5 NIL."
-    *   User pays. The old 1 GB is unaffected.
-5.  **Refuel:** In Dec 2026, user extends for 1 more year.
-    *   UI Prompt: "Market Rate is 200/epoch. Total Drive Size 1.1 GB. Cost to extend: ~115 NIL."
-    *   User pays the *new* rate for the extension.
+1.  **Create Deal:** User executes `MsgCreateDeal` with `duration_blocks`.
+    *   Chain enforces `duration_blocks >= min_duration_blocks`.
+    *   Chain collects `deal_creation_fee` (if non-zero) and locks `initial_escrow_amount` in the module account.
+2.  **Commit Content:** User uploads data off-chain, then executes `MsgUpdateDealContent` with `cid` + `new_size_bytes`.
+    *   If `new_size_bytes` increased, chain charges `ceil(storage_price * delta_size * duration_blocks)` and credits it into `deal.escrow_balance`.
+3.  **Add More Files Later:** User commits a larger `new_size_bytes`.
+    *   Only the additional bytes are charged (delta-based).
 
 ---
 
@@ -113,7 +105,7 @@ In this model, `Deal.escrow_balance` behaves differently:
 
 ---
 
-## 8. TODO (Spec-Only): Deal Expiry Cleanup / GC
+## 7. TODO (Spec-Only): Deal Expiry Cleanup / GC
 
 Devnet currently does **not** implement automatic cleanup when `end_block` is reached.
 
@@ -126,18 +118,18 @@ This is intentionally **not implemented** yet; it will be required for mainnet-g
 
 ---
 
-## 7. Retrieval Economics (Bandwidth & Credits)
+## 8. Retrieval Economics (Bandwidth & Credits)
 
 In addition to storage costs, the protocol charges for data egress (retrieval). This prevents network abuse and compensates providers for bandwidth.
 
-### 7.1 Global Parameters (Chain State)
+### 8.1 Global Parameters (Chain State)
 
 | Parameter | Type | Default (Devnet) | Description |
 | :--- | :--- | :--- | :--- |
 | `base_retrieval_fee` | `uint64` | `100` | Fixed cost per `RetrievalSession` (anti-spam). |
 | `price_per_retrieval_byte` | `uint64` | `1` | Cost per byte downloaded. |
 
-### 7.2 Built-in Retrieval Credit
+### 8.2 Built-in Retrieval Credit
 To improve UX, purchasing storage includes a "Free Tier" for retrieval.
 
 *   **Logic:** Every `1 GB-Month` of storage purchased grants `X` GB of retrieval credit.
@@ -147,7 +139,7 @@ To improve UX, purchasing storage includes a "Free Tier" for retrieval.
     *   `credit_earned = f(delta_size_bytes, duration_blocks)` (exact function TBD).
     *   `Deal.retrieval_credit += credit_earned`.
 
-### 7.3 Consumption Hierarchy
+### 8.3 Consumption Hierarchy
 When a `RetrievalSession` is completed (`MsgConfirmRetrievalSession` + Proof):
 
 1.  **Calculate Cost:** `total_cost = base_retrieval_fee + (bytes_served * price_per_retrieval_byte)`.
@@ -163,7 +155,7 @@ When a `RetrievalSession` is completed (`MsgConfirmRetrievalSession` + Proof):
     *   `Deal.escrow_balance -= paid_from_escrow`.
     *   If `escrow_balance` < 0, the retrieval debt is recorded or the session fails (if checked at open time).
 
-### 7.4 Top-Up (Retrieval Balance)
+### 8.4 Top-Up (Retrieval Balance)
 Users can fund retrieval beyond the free tier using `MsgAddCredit`.
 *   Since `escrow_balance` is no longer used for storage rent (which is paid via Term Deposits), `escrow_balance` **effectively becomes the "Retrieval/Gas Tank"**.
 *   **UX:** "Add Fuel for Downloads".
