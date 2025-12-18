@@ -44,6 +44,7 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 
 pub struct KzgContext {
     g1_points: Vec<G1Affine>,
+    g1_points_projective: Vec<G1Projective>,
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
     g1_points_are_monomial: bool,
@@ -114,18 +115,21 @@ impl KzgContext {
         // The KZG verification equation uses the base G1 generator (τ^0).
         // - Monomial SRS: generator is g1_points[0].
         // - Lagrange SRS: generator is the commitment to the all-ones blob (Σ L_i(τ) = 1).
+        let g1_points_projective: Vec<G1Projective> =
+            g1_points.iter().map(|p| G1Projective::from(*p)).collect();
         let g1_generator = if g1_points_are_monomial {
             g1_points[0]
         } else {
             let mut acc = G1Projective::identity();
-            for p in g1_points.iter() {
-                acc += G1Projective::from(*p);
+            for p in g1_points_projective.iter() {
+                acc += *p;
             }
             acc.to_affine()
         };
 
         Ok(Self {
             g1_points,
+            g1_points_projective,
             g2_points,
             g1_generator,
             g1_points_are_monomial,
@@ -171,7 +175,9 @@ impl KzgContext {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
             let evals = bytes_to_scalars(blob_bytes)?;
-            Ok(msm_pippenger_g1(&self.g1_points, &evals).to_affine().to_compressed())
+            Ok(msm_pippenger_g1_projective(&self.g1_points_projective, &evals)
+                .to_affine()
+                .to_compressed())
         }
     }
 
@@ -621,6 +627,62 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     acc
 }
 
+fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
+    debug_assert_eq!(points.len(), scalars.len());
+
+    let n = points.len().min(scalars.len());
+    if n == 0 {
+        return G1Projective::identity();
+    }
+    let points = &points[..n];
+    let scalars = &scalars[..n];
+
+    let window_bits = pippenger_window_size(points.len());
+    let buckets_len = 1usize << window_bits;
+    let windows = (256 + window_bits - 1) / window_bits;
+
+    let scalar_bytes: Vec<[u8; 32]> = scalars
+        .iter()
+        .map(|s| {
+            let repr = s.to_repr();
+            let mut out = [0u8; 32];
+            out.copy_from_slice(repr.as_ref());
+            out
+        })
+        .collect();
+
+    let mut buckets = vec![G1Projective::identity(); buckets_len];
+    let mut acc = G1Projective::identity();
+
+    for window_index in (0..windows).rev() {
+        if window_index != windows - 1 {
+            for _ in 0..window_bits {
+                acc = acc.double();
+            }
+        }
+
+        buckets.fill(G1Projective::identity());
+
+        let bit_offset = window_index * window_bits;
+        for (i, point) in points.iter().enumerate() {
+            let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+            if w != 0 && w < buckets_len {
+                buckets[w] += *point;
+            }
+        }
+
+        let mut running = G1Projective::identity();
+        let mut window_sum = G1Projective::identity();
+        for idx in (1..buckets_len).rev() {
+            running += buckets[idx];
+            window_sum += running;
+        }
+        acc += window_sum;
+    }
+
+    acc
+}
+
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
     // Map arbitrary 32-byte chunks (stored big-endian in blobs) into Scalars.
     // Using `from_bytes_wide` avoids BigUint/mod_floor overhead and is reliable on wasm.
@@ -738,7 +800,10 @@ mod tests {
         }
 
         let fast = msm_pippenger_g1(&points, &scalars);
+        let points_projective: Vec<G1Projective> = points.iter().map(|p| G1Projective::from(*p)).collect();
+        let fast_projective = msm_pippenger_g1_projective(&points_projective, &scalars);
         assert_eq!(fast.to_affine(), naive.to_affine());
+        assert_eq!(fast_projective.to_affine(), naive.to_affine());
     }
 
     #[test]
