@@ -28,6 +28,26 @@ self.onmessage = async (event) => {
 
     try {
         let result;
+        const collectTransferables = (val: unknown): Transferable[] => {
+            const out: Transferable[] = [];
+            const visit = (v: unknown) => {
+                if (!v) return;
+                if (v instanceof Uint8Array) {
+                    out.push(v.buffer);
+                    return;
+                }
+                if (Array.isArray(v)) {
+                    for (const item of v) visit(item);
+                    return;
+                }
+                if (typeof v === 'object') {
+                    for (const vv of Object.values(v as Record<string, unknown>)) visit(vv);
+                }
+            };
+            visit(val);
+            return out;
+        };
+
         switch (type) {
             case 'initNilWasm': {
                 const { trustedSetupBytes } = payload;
@@ -75,6 +95,44 @@ self.onmessage = async (event) => {
                 result = typeof commitResult === 'string' ? JSON.parse(commitResult) : commitResult;
                 break;
             }
+            case 'shardFileProgressive': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { data, batchBlobs } = payload as { data: Uint8Array; batchBlobs?: number };
+
+                const BLOB_SIZE = 128 * 1024;
+                const BLOBS_PER_MDU = 64;
+                if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
+                if (data.byteLength !== 8 * 1024 * 1024) throw new Error('MDU bytes must be exactly 8 MiB');
+
+                const batch = Math.max(1, Math.min(16, Number(batchBlobs || 4)));
+                const witnessFlat = new Uint8Array(BLOBS_PER_MDU * 48);
+                let writeOffset = 0;
+
+                for (let blobIndex = 0; blobIndex < BLOBS_PER_MDU; blobIndex += batch) {
+                    const n = Math.min(batch, BLOBS_PER_MDU - blobIndex);
+                    const start = blobIndex * BLOB_SIZE;
+                    const end = (blobIndex + n) * BLOB_SIZE;
+
+                    const blobBatch = data.subarray(start, end);
+                    const commitmentsFlat = nilWasmInstance.commit_blobs(blobBatch) as unknown;
+                    const commitmentsBytes =
+                        commitmentsFlat instanceof Uint8Array ? commitmentsFlat : new Uint8Array(commitmentsFlat as ArrayBufferLike);
+
+                    witnessFlat.set(commitmentsBytes, writeOffset);
+                    writeOffset += commitmentsBytes.byteLength;
+
+                    self.postMessage({
+                        id,
+                        type: 'progress',
+                        payload: { kind: 'blob', done: blobIndex + n, total: BLOBS_PER_MDU },
+                    });
+                }
+
+                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+                result = { witness_flat: witnessFlat, mdu_root: rootBytes };
+                break;
+            }
             case 'computeManifest': {
                 if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
                 const { roots } = payload; // roots is Uint8Array (concatenated 32-byte roots)
@@ -90,8 +148,7 @@ self.onmessage = async (event) => {
             default:
                 throw new Error(`Unknown message type: ${type}`);
         }
-        // If the result is a Uint8Array, transfer its buffer to avoid copying
-        const transferList = result instanceof Uint8Array ? [result.buffer] : [];
+        const transferList = collectTransferables(result);
         // @ts-expect-error - TS definition for postMessage in worker might be ambiguous
         self.postMessage({ id, type: 'result', payload: result }, transferList);
     } catch (error: unknown) {
