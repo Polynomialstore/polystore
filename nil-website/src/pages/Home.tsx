@@ -16,12 +16,14 @@ export const Home = () => {
             className="mx-auto w-64 h-64 mb-8 relative"
           >
              <img 
-               src="/logo_dark.jpg" 
+               src="/brand/logo-light-256.png"
+               srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
                alt="NilStore Logo" 
                className="absolute inset-0 w-full h-full object-contain dark:hidden"
              />
              <img 
-               src="/logo_light.jpg" 
+               src="/brand/logo-dark-256.png"
+               srcSet="/brand/logo-dark-256.png 1x, /brand/logo-dark-512.png 2x"
                alt="NilStore Logo" 
                className="absolute inset-0 w-full h-full object-contain hidden dark:block"
              />
