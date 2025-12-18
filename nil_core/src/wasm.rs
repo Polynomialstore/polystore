@@ -3,6 +3,7 @@ use crate::kzg::KzgContext;
 use crate::builder::Mdu0Builder;
 use crate::layout::{FileRecordV1, pack_length_and_flags};
 use wasm_bindgen::prelude::*;
+use js_sys::Uint8Array;
 
 #[wasm_bindgen]
 pub struct NilWasm {
@@ -64,7 +65,7 @@ impl NilWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
-    pub fn commit_blobs(&self, blobs_flat: &[u8]) -> Result<JsValue, JsValue> {
+    pub fn commit_blobs(&self, blobs_flat: &[u8]) -> Result<Uint8Array, JsValue> {
         if blobs_flat.len() % crate::kzg::BLOB_SIZE != 0 {
             return Err(JsValue::from_str("Blobs length must be a multiple of 128 KiB"));
         }
@@ -82,8 +83,7 @@ impl NilWasm {
             commitments.extend_from_slice(&c);
         }
 
-        serde_wasm_bindgen::to_value(&commitments)
-            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+        Ok(Uint8Array::from(commitments.as_slice()))
     }
 
     pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {

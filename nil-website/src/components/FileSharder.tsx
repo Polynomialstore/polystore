@@ -420,15 +420,26 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
     const toU8 = (v: Uint8Array | number[]): Uint8Array => (v instanceof Uint8Array ? v : new Uint8Array(v));
 
-    try {
-        await workerClient.initMdu0Builder(totalUserChunks);
+	    try {
+	        await workerClient.initMdu0Builder(totalUserChunks);
 
-        let mdusCommitted = 0;
-        let workCommitted = 0;
+	        let mdusCommitted = 0;
+	        let workCommitted = 0;
+	        let prevCommitMsPerMdu: number | null = null;
 
-        const userRoots: Uint8Array[] = [];
-        const userMdus: { index: number, data: Uint8Array }[] = [];
-        const witnessDataBlobs: Uint8Array[] = []; 
+	        const pickBatchBlobs = (prevMduMs: number | null): number => {
+	          const TARGET_UPDATE_MS = 2500;
+	          const MIN_BATCH = 4;
+	          const MAX_BATCH = 16;
+	          if (!prevMduMs || !Number.isFinite(prevMduMs) || prevMduMs <= 0) return MIN_BATCH;
+	          const msPerBlob = prevMduMs / BLOBS_PER_MDU;
+	          const est = Math.round(TARGET_UPDATE_MS / Math.max(1, msPerBlob));
+	          return Math.max(MIN_BATCH, Math.min(MAX_BATCH, est));
+	        };
+
+	        const userRoots: Uint8Array[] = [];
+	        const userMdus: { index: number, data: Uint8Array }[] = [];
+	        const witnessDataBlobs: Uint8Array[] = []; 
 
         for (let i = 0; i < totalUserChunks; i++) {
             const opStart = performance.now();
@@ -456,15 +467,15 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const encodedMdu = encodeToMdu(rawChunk);
             userMdus.push({ index: i, data: encodedMdu });
 
-            const chunkCopy = new Uint8Array(encodedMdu);
-            addLog(`> Sharding User MDU #${i}...`);
-            const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs: 4,
-              onProgress: (progress) => {
-                const payload = progress as { kind?: string; done?: number; total?: number };
-                if (payload.kind !== 'blob') return;
-                const done = Number(payload.done ?? 0);
-                setShardProgress((prev) => {
+	            const chunkCopy = new Uint8Array(encodedMdu);
+	            addLog(`> Sharding User MDU #${i}...`);
+	            const result = await workerClient.shardFileProgressive(chunkCopy, {
+	              batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	              onProgress: (progress) => {
+	                const payload = progress as { kind?: string; done?: number; total?: number };
+	                if (payload.kind !== 'blob') return;
+	                const done = Number(payload.done ?? 0);
+	                setShardProgress((prev) => {
                   const blobsDone = mdusCommitted * BLOBS_PER_MDU + done;
                   const doneNonTrivial = Math.min(done, nonTrivialBlobs);
                   const doneTrivial = Math.max(0, done - nonTrivialBlobs);
@@ -489,12 +500,13 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const witnessFlat = toU8(result.witness_flat);
             witnessDataBlobs.push(witnessFlat);
 
-            const opMs = performance.now() - opStart;
-            mdusCommitted += 1;
-            workCommitted += workTotalThisMdu;
-            setShardProgress((p) => {
-              const blobsDone = mdusCommitted * BLOBS_PER_MDU;
-              const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
+	            const opMs = performance.now() - opStart;
+	            prevCommitMsPerMdu = opMs;
+	            mdusCommitted += 1;
+	            workCommitted += workTotalThisMdu;
+	            setShardProgress((p) => {
+	              const blobsDone = mdusCommitted * BLOBS_PER_MDU;
+	              const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
               return {
                 ...p,
                 blobsDone,
@@ -548,16 +560,16 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const rawChunk = fullWitnessData.slice(start, end);
             const witnessMduBytes = encodeToMdu(rawChunk);
 
-            addLog(`> Sharding Witness MDU #${i}...`);
-            console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
-            const chunkCopy = new Uint8Array(witnessMduBytes);
-            const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs: 4,
-              onProgress: (progress) => {
-                const payload = progress as { kind?: string; done?: number; total?: number };
-                if (payload.kind !== 'blob') return;
-                const done = Number(payload.done ?? 0);
-                setShardProgress((prev) => {
+	            addLog(`> Sharding Witness MDU #${i}...`);
+	            console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
+	            const chunkCopy = new Uint8Array(witnessMduBytes);
+	            const result = await workerClient.shardFileProgressive(chunkCopy, {
+	              batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	              onProgress: (progress) => {
+	                const payload = progress as { kind?: string; done?: number; total?: number };
+	                if (payload.kind !== 'blob') return;
+	                const done = Number(payload.done ?? 0);
+	                setShardProgress((prev) => {
                   const blobsDone = mdusCommitted * BLOBS_PER_MDU + done;
                   const doneNonTrivial = Math.min(done, nonTrivialBlobs);
                   const doneTrivial = Math.max(0, done - nonTrivialBlobs);
@@ -581,12 +593,13 @@ export function FileSharder({ dealId }: FileSharderProps) {
             
             await workerClient.setMdu0Root(i, rootBytes);
 
-            const opMs = performance.now() - opStart;
-            mdusCommitted += 1;
-            workCommitted += workTotalThisMdu;
-            setShardProgress((p) => {
-              const blobsDone = mdusCommitted * BLOBS_PER_MDU;
-              const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
+	            const opMs = performance.now() - opStart;
+	            prevCommitMsPerMdu = opMs;
+	            mdusCommitted += 1;
+	            workCommitted += workTotalThisMdu;
+	            setShardProgress((p) => {
+	              const blobsDone = mdusCommitted * BLOBS_PER_MDU;
+	              const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
               return {
                 ...p,
                 blobsDone,
@@ -624,14 +637,14 @@ export function FileSharder({ dealId }: FileSharderProps) {
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
         const mdu0Bytes = await workerClient.getMdu0Bytes();
         
-        const mdu0Copy = new Uint8Array(mdu0Bytes);
-        const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
-          batchBlobs: 4,
-          onProgress: (progress) => {
-            const payload = progress as { kind?: string; done?: number; total?: number };
-            if (payload.kind !== 'blob') return;
-            const done = Number(payload.done ?? 0);
-            setShardProgress((prev) => {
+	        const mdu0Copy = new Uint8Array(mdu0Bytes);
+	        const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
+	          batchBlobs: pickBatchBlobs(prevCommitMsPerMdu),
+	          onProgress: (progress) => {
+	            const payload = progress as { kind?: string; done?: number; total?: number };
+	            if (payload.kind !== 'blob') return;
+	            const done = Number(payload.done ?? 0);
+	            setShardProgress((prev) => {
               const blobsDone = mdusCommitted * BLOBS_PER_MDU + done;
               const doneNonTrivial = Math.min(done, 1);
               const doneTrivial = Math.max(0, done - 1);
@@ -648,14 +661,15 @@ export function FileSharder({ dealId }: FileSharderProps) {
             });
           },
         });
-        const mdu0Root = toU8(mdu0Result.mdu_root);
-        setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
-        const opMs = performance.now() - opStartMdu0;
-        mdusCommitted += 1;
-        workCommitted += workTotalThisMdu0;
-        setShardProgress((p) => {
-          const blobsDone = mdusCommitted * BLOBS_PER_MDU;
-          const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
+	        const mdu0Root = toU8(mdu0Result.mdu_root);
+	        setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
+	        const opMs = performance.now() - opStartMdu0;
+	        prevCommitMsPerMdu = opMs;
+	        mdusCommitted += 1;
+	        workCommitted += workTotalThisMdu0;
+	        setShardProgress((p) => {
+	          const blobsDone = mdusCommitted * BLOBS_PER_MDU;
+	          const avg = p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
           return {
             ...p,
             blobsDone,
