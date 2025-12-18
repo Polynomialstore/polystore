@@ -73,13 +73,13 @@ export const Layout = () => {
                     <img
                       src="/brand/logo-light-36.png"
                       srcSet="/brand/logo-light-36.png 1x, /brand/logo-light-72.png 2x"
-                      className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full"
+                      className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300 opacity-100 dark:opacity-0 drop-shadow-md rounded-full"
                       alt="NilStore Logo"
                     />
                     <img
                       src="/brand/logo-dark-36.png"
                       srcSet="/brand/logo-dark-36.png 1x, /brand/logo-dark-72.png 2x"
-                      className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full"
+                      className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300 opacity-0 dark:opacity-100 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full"
                       alt="NilStore Logo"
                     />
                   </div>
