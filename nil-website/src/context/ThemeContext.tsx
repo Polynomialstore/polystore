@@ -21,6 +21,18 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
+function getSystemTheme(): Exclude<Theme, "system"> {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light"
+}
+
+function setFavicon(resolvedTheme: Exclude<Theme, "system">) {
+  const favicon = document.querySelector<HTMLLinkElement>('link#favicon')
+  if (!favicon) return
+  favicon.href = resolvedTheme === "dark" ? "/favicon-dark-32.png" : "/favicon-light-32.png"
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
@@ -36,16 +48,35 @@ export function ThemeProvider({
     root.classList.remove("light", "dark")
 
     if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
+      const apply = () => {
+        const systemTheme = getSystemTheme()
+        root.classList.remove("light", "dark")
+        root.classList.add(systemTheme)
+        setFavicon(systemTheme)
+      }
 
-      root.classList.add(systemTheme)
-      return
+      apply()
+
+      const mql = window.matchMedia("(prefers-color-scheme: dark)")
+      const onChange = () => apply()
+      const legacyMql = mql as unknown as {
+        addEventListener?: (type: "change", listener: () => void) => void
+        removeEventListener?: (type: "change", listener: () => void) => void
+        addListener?: (listener: () => void) => void
+        removeListener?: (listener: () => void) => void
+      }
+
+      if (legacyMql.addEventListener && legacyMql.removeEventListener) {
+        legacyMql.addEventListener("change", onChange)
+        return () => legacyMql.removeEventListener?.("change", onChange)
+      }
+
+      legacyMql.addListener?.(onChange)
+      return () => legacyMql.removeListener?.(onChange)
     }
 
     root.classList.add(theme)
+    setFavicon(theme)
   }, [theme])
 
   const value = {
