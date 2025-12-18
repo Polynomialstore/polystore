@@ -258,6 +258,7 @@ dependencies = [
  "getrandom 0.3.4",
  "group",
  "hex",
+ "js-sys",
  "libc",
  "num-bigint",
  "num-integer",
