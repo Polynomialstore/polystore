@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "brand:generate": "bash scripts/generate-brand-assets.sh",
     "wasm:build": "command -v wasm-pack >/dev/null 2>&1 || { echo \"wasm-pack not found\"; exit 1; }; cd ../nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core",
     "predev": "npm run wasm:build",
     "prebuild": "npm run wasm:build",
