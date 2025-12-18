@@ -9,7 +9,10 @@ const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.ur
 });
 
 // Map to store pending worker messages (promises)
-const pendingWorkerMessages = new Map<number, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
+const pendingWorkerMessages = new Map<
+  number,
+  { resolve: (value: unknown) => void; reject: (reason?: unknown) => void; onProgress?: (payload: unknown) => void }
+>();
 let nextWorkerMessageId = 0;
 
 // Handle messages coming back from the worker
@@ -22,6 +25,9 @@ worker.onmessage = (event) => {
       pending.resolve(payload);
     } else if (type === 'error') {
       pending.reject(new Error(payload));
+    } else if (type === 'progress') {
+      pending.onProgress?.(payload);
+      return;
     }
     pendingWorkerMessages.delete(id);
   }
@@ -38,10 +44,15 @@ worker.onerror = (error) => {
 };
 
 // Function to send messages to the worker and await a response
-function sendMessageToWorker(type: string, payload: unknown, transferables?: Transferable[]): Promise<unknown> {
+function sendMessageToWorker(
+  type: string,
+  payload: unknown,
+  transferables?: Transferable[],
+  onProgress?: (payload: unknown) => void,
+): Promise<unknown> {
   const id = nextWorkerMessageId++;
   return new Promise((resolve, reject) => {
-    pendingWorkerMessages.set(id, { resolve, reject });
+    pendingWorkerMessages.set(id, { resolve, reject, onProgress });
     worker.postMessage({ id, type, payload }, transferables || []);
   });
 }
@@ -88,6 +99,18 @@ export const workerClient = {
   // This will likely need to handle streaming of data in the future for large files.
   async shardFile(data: Uint8Array): Promise<ExpandedMdu> {
     return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<ExpandedMdu>;
+  },
+
+  async shardFileProgressive(
+    data: Uint8Array,
+    opts?: { batchBlobs?: number; onProgress?: (payload: unknown) => void },
+  ): Promise<ExpandedMdu> {
+    return sendMessageToWorker(
+      'shardFileProgressive',
+      { data, batchBlobs: opts?.batchBlobs },
+      [data.buffer],
+      opts?.onProgress,
+    ) as Promise<ExpandedMdu>;
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)

@@ -64,6 +64,28 @@ impl NilWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
+    pub fn commit_blobs(&self, blobs_flat: &[u8]) -> Result<JsValue, JsValue> {
+        if blobs_flat.len() % crate::kzg::BLOB_SIZE != 0 {
+            return Err(JsValue::from_str("Blobs length must be a multiple of 128 KiB"));
+        }
+
+        let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
+        let mut commitments = Vec::with_capacity(count * 48);
+
+        for i in 0..count {
+            let start = i * crate::kzg::BLOB_SIZE;
+            let end = start + crate::kzg::BLOB_SIZE;
+            let c = self
+                .kzg_ctx
+                .blob_to_commitment(&blobs_flat[start..end])
+                .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
+            commitments.extend_from_slice(&c);
+        }
+
+        serde_wasm_bindgen::to_value(&commitments)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
     pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {
         if roots_flat.len() % 32 != 0 {
             return Err(JsValue::from_str("Roots length must be multiple of 32"));
