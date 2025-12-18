@@ -20,10 +20,10 @@ type CommitWorkerPending = {
 
 let commitWorkers: Worker[] = [];
 let commitWorkersReady: Promise<void> | null = null;
-let commitPending = new Map<number, CommitWorkerPending>();
+const commitPending = new Map<number, CommitWorkerPending>();
 let commitNextMessageId = 1;
 let commitRoundRobin = 0;
-let commitPendingByWorker = new Map<Worker, Set<number>>();
+const commitPendingByWorker = new Map<Worker, Set<number>>();
 
 function initializeWasm(): Promise<void> {
     if (wasmInitialized) return Promise.resolve();
@@ -74,7 +74,6 @@ function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
                     commitPending.delete(id);
                 };
                 w.onerror = (err) => {
-                    // eslint-disable-next-line no-console
                     console.warn('Commit worker error:', err);
                     const ids = commitPendingByWorker.get(w);
                     if (ids) {
@@ -89,7 +88,6 @@ function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
                 workers.push(w);
             }
         } catch (e) {
-            // eslint-disable-next-line no-console
             console.warn('Failed to spawn commit worker pool; continuing single-threaded.', e);
             commitWorkers = [];
             return;
@@ -182,7 +180,6 @@ self.onmessage = async (event) => {
                 try {
                     await initializeCommitPool(trustedSetupBytes);
                 } catch (e) {
-                    // eslint-disable-next-line no-console
                     console.warn('Commit worker pool init failed; continuing single-threaded.', e);
                     commitWorkers = [];
                     commitWorkersReady = Promise.resolve();
