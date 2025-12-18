@@ -37,6 +37,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
 
   let committedRoot = ''
   let gatewayPlanCalls = 0
+  let manifestUploadCalls = 0
 
   // Intercept SP Upload and capture manifest root.
   await page.route('**/sp/upload_mdu', async (route) => {
@@ -45,6 +46,11 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (typeof manifestRoot === 'string' && manifestRoot.startsWith('0x')) {
       committedRoot = manifestRoot
     }
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
+  await page.route('**/sp/upload_manifest', async (route) => {
+    manifestUploadCalls += 1
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
@@ -201,6 +207,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(uploadBtn).toBeEnabled()
   await uploadBtn.click()
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
   await commitBtn.click()
@@ -331,7 +338,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
 
   const downloadPromise = page2.waitForEvent('download', { timeout: 60_000 })
-  await page2.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await page2.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`).click()
   const download = await downloadPromise
   const stream = await download.createReadStream()
   const downloadedBytes = await streamToBuffer(stream)
@@ -339,4 +346,3 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
 
   expect(gatewayPlanCalls).toBe(0)
 })
-

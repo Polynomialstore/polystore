@@ -26,6 +26,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
 
+  let manifestUploadCalls = 0
+
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
@@ -38,6 +40,11 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
         return route.fulfill({ status: 400, body: 'Missing headers' })
     }
     console.log(`[SP Upload Mock] Received MDU #${mduIndex} for Deal ${dealId} (Root: ${manifestRoot})`)
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
+  await page.route('**/sp/upload_manifest', async (route) => {
+    manifestUploadCalls += 1
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
@@ -258,6 +265,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   // Wait for "Upload Complete".
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30000 })
   console.log('Upload complete.')
+  await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
   // Check "Commit to Chain" button
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
@@ -276,4 +284,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
+
+  // Regression: Manifest & MDUs tab should populate from local OPFS slab (even if gateway has no disk cache).
+  await page.getByTestId('deal-detail-tab-manifest').click()
+  await expect(page.getByText('Slab MDUs')).toBeVisible({ timeout: 60_000 })
 })

@@ -64,7 +64,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	// 4. Sign Receipt
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	
+
 	signOut, err := execNilchaind(
 		signCtx,
 		"tx", "nilchain", "sign-retrieval-receipt",
@@ -215,7 +215,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	commitmentSpan := uint64(types.BLOBS_PER_MDU * commitmentBytes)
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan)
+	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
 	}

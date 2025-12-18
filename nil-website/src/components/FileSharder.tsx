@@ -30,6 +30,9 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
   const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
+  const [currentManifestBlob, setCurrentManifestBlob] = useState<Uint8Array | null>(null);
+  const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+  const [mirrorError, setMirrorError] = useState<string | null>(null)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -39,6 +42,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
     dealId, 
     manifestRoot: currentManifestRoot || "",
+    manifestBlob: currentManifestBlob,
     providerBaseUrl: appConfig.spBase,
   });
 
@@ -48,6 +52,67 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const isUploadComplete = uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
+  const mirrorSlabToGateway = useCallback(async () => {
+    const manifestRoot = String(currentManifestRoot || '').trim()
+    if (!manifestRoot) return
+    if (!currentManifestBlob || currentManifestBlob.byteLength === 0) return
+    if (!collectedMdus || collectedMdus.length === 0) return
+
+    const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
+    const spBase = appConfig.spBase.replace(/\/$/, '')
+    if (!gatewayBase || gatewayBase === spBase) return
+
+    setMirrorStatus('running')
+    setMirrorError(null)
+    addLog(`> Mirroring slab to local gateway (${gatewayBase})...`)
+
+    try {
+      const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+      if (!health.ok) throw new Error(`gateway health returned ${health.status}`)
+
+      for (const mdu of collectedMdus) {
+        const res = await fetch(`${gatewayBase}/sp/upload_mdu`, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Mdu-Index': String(mdu.index),
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([mdu.data as any]),
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `gateway upload_mdu failed (${res.status})`)
+        }
+      }
+
+      const manifestRes = await fetch(`${gatewayBase}/sp/upload_manifest`, {
+        method: 'POST',
+        headers: {
+          'X-Nil-Deal-ID': dealId,
+          'X-Nil-Manifest-Root': manifestRoot,
+          'Content-Type': 'application/octet-stream',
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        body: new Blob([currentManifestBlob as any]),
+      })
+      if (!manifestRes.ok) {
+        const txt = await manifestRes.text().catch(() => '')
+        throw new Error(txt || `gateway upload_manifest failed (${manifestRes.status})`)
+      }
+
+      setMirrorStatus('success')
+      addLog('> Mirrored slab to local gateway.')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setMirrorStatus('error')
+      setMirrorError(msg)
+      addLog(`> Mirror to gateway failed: ${msg}`)
+    }
+  }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,9 +311,11 @@ export function FileSharder({ dealId }: FileSharderProps) {
         ];
 
         const finalRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');
+        const finalManifestBlob = toU8((manifest as unknown as { blob: Uint8Array | number[] }).blob);
 
         setCollectedMdus(finalMdus);
         setCurrentManifestRoot(finalRootHex);
+        setCurrentManifestBlob(finalManifestBlob);
         
         const visShards: ShardItem[] = finalMdus.map(m => ({
             id: m.index,
@@ -391,7 +458,12 @@ export function FileSharder({ dealId }: FileSharderProps) {
       {collectedMdus.length > 0 && currentManifestRoot && (
         <div className="flex flex-col gap-2">
             <button
-              onClick={() => uploadMdus(collectedMdus)}
+              onClick={async () => {
+                const ok = await uploadMdus(collectedMdus)
+                if (ok) {
+                  void mirrorSlabToGateway()
+                }
+              }}
               disabled={isUploading || processing || isUploadComplete}
               className={`mt-4 inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 ${isUploadComplete ? 'bg-green-600/50 text-white cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-primary-foreground'}`}
             >
@@ -401,16 +473,23 @@ export function FileSharder({ dealId }: FileSharderProps) {
             {(isUploading || isUploadComplete) && uploadProgress.length > 0 && (
               <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
                 <p className="mb-1 text-primary font-bold">Upload Progress:</p>
-                <div className="space-y-1 max-h-24 overflow-y-auto">
-                  {uploadProgress.map((p, i) => (
-                    <div key={i} className="flex justify-between items-center">
-                      <span>MDU #{p.mduIndex}:</span>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {uploadProgress.map((p, i) => (
+                      <div key={i} className="flex justify-between items-center">
+                      <span>{p.label}:</span>
                       <span className={`font-bold ${p.status === 'complete' ? 'text-green-500' : p.status === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
                         {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
                       </span>
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {mirrorStatus !== 'idle' && (
+              <div className="text-[11px] text-muted-foreground">
+                Gateway mirror: {mirrorStatus}
+                {mirrorError ? ` (${mirrorError})` : ''}
               </div>
             )}
         </div>

@@ -8,9 +8,40 @@ import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } fro
 import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
-import { readMdu, readManifestRoot } from '../lib/storage/OpfsAdapter'
+import { deleteCachedFile, hasCachedFile, readCachedFile, readMdu, readManifestRoot, writeCachedFile } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
-import { readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
+import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
+import { workerClient } from '../lib/worker-client'
+
+let wasmReadyPromise: Promise<void> | null = null
+
+function toU8(value: Uint8Array | number[] | null | undefined): Uint8Array {
+  if (!value) return new Uint8Array()
+  return value instanceof Uint8Array ? value : new Uint8Array(value)
+}
+
+function bytesTo0xHex(bytes: Uint8Array): string {
+  let out = '0x'
+  for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0')
+  return out
+}
+
+async function ensureWasmReady(): Promise<void> {
+  if (wasmReadyPromise) return wasmReadyPromise
+  wasmReadyPromise = (async () => {
+    const res = await fetch('/trusted_setup.txt')
+    if (!res.ok) throw new Error(`Failed to load trusted setup (${res.status})`)
+    const buf = await res.arrayBuffer()
+    const trustedSetupBytes = new Uint8Array(buf)
+    try {
+      await workerClient.initNilWasm(trustedSetupBytes)
+    } catch (e) {
+      // If the worker was already initialized, ignore and proceed.
+      void e
+    }
+  })()
+  return wasmReadyPromise
+}
 
 interface DealDetailProps {
   deal: LcdDeal
@@ -33,11 +64,17 @@ interface ProviderInfo {
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
+  const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
+  const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
+  const [gatewayReachable, setGatewayReachable] = useState<'unknown' | 'yes' | 'no'>('unknown')
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [browserCachedByPath, setBrowserCachedByPath] = useState<Record<string, boolean>>({})
+  const [busyFilePath, setBusyFilePath] = useState<string | null>(null)
+  const [fileActionError, setFileActionError] = useState<string | null>(null)
   const [downloadRangeStart, setDownloadRangeStart] = useState<number>(0)
   const [downloadRangeLen, setDownloadRangeLen] = useState<number>(0)
   const [manifestInfo, setManifestInfo] = useState<ManifestInfoData | null>(null)
@@ -50,8 +87,6 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
-  const [localDownloadingPath, setLocalDownloadingPath] = useState<string | null>(null)
-  const [localDownloadError, setLocalDownloadError] = useState<string | null>(null)
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
 
@@ -59,6 +94,31 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
+  const primaryProvider = dealProviders[0] || ''
+
+  const resolveProviderHttpBase = useCallback((): string => {
+    const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
+    for (const ep of endpoints) {
+      const trimmed = String(ep || '').trim()
+      if (!trimmed) continue
+      if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/$/, '')
+      if (trimmed.startsWith('/')) {
+        const parts = trimmed.split('/').filter(Boolean)
+        let host = ''
+        let port = ''
+        let scheme = 'http'
+        for (let i = 0; i < parts.length; i++) {
+          const p = parts[i]
+          if (p === 'ip4' || p === 'dns4' || p === 'dns' || p === 'ip6') host = parts[i + 1] || host
+          if (p === 'tcp') port = parts[i + 1] || port
+          if (p === 'https') scheme = 'https'
+          if (p === 'http') scheme = 'http'
+        }
+        if (host && port) return `${scheme}://${host}:${port}`
+      }
+    }
+    return appConfig.spBase
+  }, [primaryProvider, providersByAddr])
 
   useEffect(() => {
     if (!dealProvidersKey) {
@@ -98,6 +158,25 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
   }, [dealProvidersKey])
 
+  useEffect(() => {
+    let canceled = false
+    async function pingGateway() {
+      try {
+        setGatewayReachable('unknown')
+        const res = await fetch(`${appConfig.gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+        if (canceled) return
+        setGatewayReachable(res.ok ? 'yes' : 'no')
+      } catch {
+        if (canceled) return
+        setGatewayReachable('no')
+      }
+    }
+    void pingGateway()
+    return () => {
+      canceled = true
+    }
+  }, [])
+
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
     try {
@@ -116,17 +195,155 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
   }, [])
 
+  const fetchLocalSlabLayout = useCallback(async (dealId: string) => {
+    setLoadingSlab(true)
+    try {
+      const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+      if (!localManifest) {
+        setSlab(null)
+        setSlabSource('none')
+        return
+      }
+      const mdu0 = await readMdu(String(dealId), 0)
+      if (!mdu0) {
+        setSlab(null)
+        setSlabSource('none')
+        return
+      }
+      const localFiles = parseNilfsFilesFromMdu0(mdu0)
+      const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
+      const totalSizeBytes = localFiles.reduce((acc, f) => acc + (Number(f.size_bytes) || 0), 0)
+      const mduSizeBytes = 8 * 1024 * 1024
+      const blobSizeBytes = 128 * 1024
+      const segments = [
+        { kind: 'mdu0', start_index: 0, count: 1, size_bytes: mduSizeBytes },
+        ...(witnessCount > 0 ? [{ kind: 'witness', start_index: 1, count: witnessCount, size_bytes: witnessCount * mduSizeBytes }] : []),
+        ...(userCount > 0
+          ? [{ kind: 'user', start_index: 1 + witnessCount, count: userCount, size_bytes: userCount * mduSizeBytes }]
+          : []),
+      ] as SlabLayoutData['segments']
+      setSlab({
+        manifest_root: localManifest,
+        mdu_size_bytes: mduSizeBytes,
+        blob_size_bytes: blobSizeBytes,
+        total_mdus: totalMdus,
+        witness_mdus: witnessCount,
+        user_mdus: userCount,
+        file_records: localFiles.length,
+        file_count: localFiles.length,
+        total_size_bytes: totalSizeBytes,
+        segments,
+      })
+      setSlabSource('opfs')
+    } catch (e) {
+      console.error('Failed to compute local slab layout', e)
+      setSlab(null)
+      setSlabSource('none')
+    } finally {
+      setLoadingSlab(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let canceled = false
+    async function refreshBrowserCache() {
+      if (!files || files.length === 0) {
+        setBrowserCachedByPath({})
+        return
+      }
+      const dealId = String(deal.id)
+      const entries = await Promise.all(
+        files.map(async (f) => {
+          try {
+            return [f.path, await hasCachedFile(dealId, f.path)] as const
+          } catch {
+            return [f.path, false] as const
+          }
+        }),
+      )
+      if (canceled) return
+      const next: Record<string, boolean> = {}
+      for (const [path, ok] of entries) next[path] = ok
+      setBrowserCachedByPath(next)
+    }
+    void refreshBrowserCache()
+    return () => {
+      canceled = true
+    }
+  }, [deal.id, files])
+
+  function downloadBytesAsFile(bytes: Uint8Array, filePath: string) {
+    const safe = new Uint8Array(bytes.byteLength)
+    safe.set(bytes)
+    const url = window.URL.createObjectURL(new Blob([safe.buffer], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filePath.split('/').pop() || 'download'
+    a.click()
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+  }
+
+  function downloadBlobAsFile(blob: Blob, filePath: string) {
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filePath.split('/').pop() || 'download'
+    a.click()
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+  }
+
   const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
-      const json = await gatewayFetchSlabLayout(
-        appConfig.gatewayBase,
-        cid,
-        dealId && owner ? { dealId: String(dealId), owner } : undefined,
-      )
+      setGatewaySlabStatus('unknown')
+      setSlabSource('none')
+      const json = await gatewayFetchSlabLayout(appConfig.gatewayBase, cid, dealId && owner ? { dealId: String(dealId), owner } : undefined)
       setSlab(json)
+      setSlabSource('gateway')
+      setGatewaySlabStatus('present')
     } catch (e) {
-      console.error('Failed to fetch slab layout', e)
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/slab not found on disk/i.test(msg) || /\b404\b/.test(msg)) {
+        setGatewaySlabStatus('missing')
+      } else {
+        setGatewaySlabStatus('error')
+      }
+
+      // Fall back to local OPFS slab layout if available (thick client / multi-tab).
+      try {
+        if (!dealId) return
+        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+        if (!localManifest || localManifest.trim() !== cid.trim()) return
+        const mdu0 = await readMdu(String(dealId), 0)
+        if (!mdu0) return
+        const localFiles = parseNilfsFilesFromMdu0(mdu0)
+        const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
+        const totalSizeBytes = localFiles.reduce((acc, f) => acc + (Number(f.size_bytes) || 0), 0)
+        const mduSizeBytes = 8 * 1024 * 1024
+        const blobSizeBytes = 128 * 1024
+        const segments = [
+          { kind: 'mdu0', start_index: 0, count: 1, size_bytes: mduSizeBytes },
+          ...(witnessCount > 0 ? [{ kind: 'witness', start_index: 1, count: witnessCount, size_bytes: witnessCount * mduSizeBytes }] : []),
+          ...(userCount > 0
+            ? [{ kind: 'user', start_index: 1 + witnessCount, count: userCount, size_bytes: userCount * mduSizeBytes }]
+            : []),
+        ] as SlabLayoutData['segments']
+        setSlab({
+          manifest_root: cid,
+          mdu_size_bytes: mduSizeBytes,
+          blob_size_bytes: blobSizeBytes,
+          total_mdus: totalMdus,
+          witness_mdus: witnessCount,
+          user_mdus: userCount,
+          file_records: localFiles.length,
+          file_count: localFiles.length,
+          total_size_bytes: totalSizeBytes,
+          segments,
+        })
+        setSlabSource('opfs')
+      } catch (e2) {
+        console.error('Failed to infer local slab layout', e2)
+      }
     } finally {
       setLoadingSlab(false)
     }
@@ -176,9 +393,65 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       )
       setManifestInfo(json)
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
       console.error('Failed to fetch manifest info', e)
+
+      // Local OPFS fallback: compute manifest info from locally stored MDUs.
+      try {
+        if (!dealId) throw new Error('missing deal id')
+        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+        if (!localManifest) throw new Error('missing local manifest root')
+        if (cid && localManifest.trim() !== cid.trim()) throw new Error('local slab does not match chain CID')
+
+        const mdu0 = await readMdu(String(dealId), 0)
+        if (!mdu0) throw new Error('missing local MDU #0')
+        const localFiles = parseNilfsFilesFromMdu0(mdu0)
+        const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
+
+        await ensureWasmReady()
+
+        const rootsOut: { kind: 'mdu0' | 'witness' | 'user'; mdu_index: number; root_hex: string; root_table_index?: number }[] = []
+        const rootsAgg = new Uint8Array(32 * totalMdus)
+
+        for (let idx = 0; idx < totalMdus; idx++) {
+          const bytes = await readMdu(String(dealId), idx)
+          if (!bytes) throw new Error(`missing local MDU #${idx}`)
+          const copy = new Uint8Array(bytes)
+          const committed = await workerClient.shardFile(copy)
+          const mduRoot = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
+          if (mduRoot.byteLength !== 32) throw new Error(`invalid mdu_root length for MDU #${idx}`)
+          rootsAgg.set(mduRoot, idx * 32)
+
+          const kind = idx === 0 ? 'mdu0' : idx <= witnessCount ? 'witness' : 'user'
+          const rootHex = bytesTo0xHex(mduRoot)
+          const rec: (typeof rootsOut)[number] = { mdu_index: idx, kind, root_hex: rootHex }
+          if (idx > 0) rec.root_table_index = idx - 1
+          rootsOut.push(rec)
+        }
+
+        const manifest = await workerClient.computeManifest(rootsAgg)
+        const computedRoot = bytesTo0xHex(toU8((manifest as { root?: Uint8Array | number[] }).root))
+        const blobHex = bytesTo0xHex(toU8((manifest as { blob?: Uint8Array | number[] }).blob))
+
+        if (cid && computedRoot.trim().toLowerCase() !== cid.trim().toLowerCase()) {
+          setManifestInfoError(`manifest root mismatch: computed=${shortHex(computedRoot)} expected=${shortHex(cid)}`)
+        }
+
+        setManifestInfo({
+          manifest_root: cid || computedRoot,
+          manifest_blob_hex: blobHex,
+          total_mdus: totalMdus,
+          witness_mdus: witnessCount,
+          user_mdus: userCount,
+          roots: rootsOut,
+        })
+        return
+      } catch (e2) {
+        console.error('Failed to compute local manifest info', e2)
+      }
+
       setManifestInfo(null)
-      setManifestInfoError(e instanceof Error ? e.message : 'Failed to fetch manifest info')
+      setManifestInfoError(msg || 'Failed to fetch manifest info')
     } finally {
       setLoadingManifestInfo(false)
     }
@@ -196,9 +469,57 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       )
       setMduKzg(json)
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
       console.error('Failed to fetch MDU KZG', e)
+
+      // Local OPFS fallback.
+      try {
+        if (!dealId) throw new Error('missing deal id')
+        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+        if (!localManifest) throw new Error('missing local manifest root')
+        if (cid && localManifest.trim() !== cid.trim()) throw new Error('local slab does not match chain CID')
+
+        const bytes = await readMdu(String(dealId), mduIndex)
+        if (!bytes) throw new Error(`missing local MDU #${mduIndex}`)
+
+        await ensureWasmReady()
+        const copy = new Uint8Array(bytes)
+        const committed = await workerClient.shardFile(copy)
+
+        const witnessFlat = toU8((committed as { witness_flat?: Uint8Array | number[] }).witness_flat)
+        const mduRoot = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
+        if (mduRoot.byteLength !== 32) throw new Error(`invalid mdu_root length for MDU #${mduIndex}`)
+        if (witnessFlat.byteLength === 0 || witnessFlat.byteLength % 48 !== 0) throw new Error('invalid witness_flat length')
+
+        const blobCount = witnessFlat.byteLength / 48
+        const blobs: string[] = []
+        for (let i = 0; i < blobCount; i++) {
+          blobs.push(bytesTo0xHex(witnessFlat.slice(i * 48, (i + 1) * 48)))
+        }
+
+        const kind =
+          slab && slab.total_mdus > 0
+            ? mduIndex === 0
+              ? 'mdu0'
+              : mduIndex <= slab.witness_mdus
+                ? 'witness'
+                : 'user'
+            : 'user'
+
+        setMduKzg({
+          manifest_root: cid,
+          mdu_index: mduIndex,
+          kind,
+          root_hex: bytesTo0xHex(mduRoot),
+          blobs,
+        })
+        return
+      } catch (e2) {
+        console.error('Failed to compute local MDU KZG', e2)
+      }
+
       setMduKzg(null)
-      setMduKzgError(e instanceof Error ? e.message : 'Failed to fetch MDU commitments')
+      setMduKzgError(msg || 'Failed to fetch MDU commitments')
     } finally {
       setLoadingMduKzg(false)
     }
@@ -248,11 +569,12 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       void fetchManifestInfo(deal.cid, deal.id, nilAddress)
     } else {
       void fetchLocalFiles(deal.id)
+      void fetchLocalSlabLayout(deal.id)
       setManifestInfo(null)
     }
-    setLocalDownloadError(null)
+    setFileActionError(null)
     void fetchHeat(deal.id)
-  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
+  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchLocalSlabLayout, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
@@ -375,9 +697,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                           Showing local OPFS slab (not yet committed on-chain).
                         </div>
                       )}
-                      {localDownloadError && (
+                      {fileActionError && (
                         <div className="text-[11px] text-red-500 dark:text-red-400">
-                          Local download failed{localDownloadError ? `: ${localDownloadError}` : ''}
+                          Download failed{fileActionError ? `: ${fileActionError}` : ''}
                         </div>
                       )}
                       {receiptStatus !== 'idle' && (
@@ -465,111 +787,289 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                       ) : files && files.length > 0 ? (
                         <div className="space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => {
+                            const cached = !!browserCachedByPath[f.path]
+                            const isBusy = busyFilePath === f.path
                             return (
                               <div
                                 key={`${f.path}:${f.start_offset}`}
                                 data-testid="deal-detail-file-row"
                                 data-file-path={f.path}
-                                className="flex items-center justify-between gap-3 bg-secondary/50 border border-border rounded px-3 py-2"
+                                className="bg-secondary/50 border border-border rounded px-3 py-2 space-y-2"
                               >
-                                <div className="min-w-0">
-                                  <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
-                                    {f.path}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                      {f.path}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">{f.size_bytes} bytes</div>
                                   </div>
                                   <div className="text-[10px] text-muted-foreground">
-                                    {f.size_bytes} bytes
+                                    File cache: {cached ? 'yes' : 'no'} • Gateway: {gatewayReachable} • Slab: {gatewaySlabStatus}
                                   </div>
                                 </div>
-                                <button
-                                  onClick={async () => {
-                                    setLocalDownloadError(null)
-                                    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
 
-                                    // Try local OPFS first (fixes multi-tab: gateway slab may not exist on disk).
-                                    try {
-                                      const chainCid = String(deal.cid || '').trim()
-                                      if (chainCid) {
-                                        const localManifest = await readManifestRoot(String(deal.id)).catch(() => null)
-                                        if (localManifest && localManifest.trim() !== chainCid) {
-                                          throw new Error('local slab does not match on-chain CID')
-                                        }
-                                        if (!localManifest) {
-                                          throw new Error('local slab missing manifest root')
-                                        }
-                                      }
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                        Browser
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        cache {cached ? 'yes' : 'no'} • slab {slabSource === 'opfs' ? 'yes' : 'unknown'}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          setBusyFilePath(f.path)
+                                          const dealId = String(deal.id)
+                                          try {
+                                            const cachedBytes = await readCachedFile(dealId, f.path)
+                                            if (!cachedBytes) throw new Error('not cached in browser')
+                                            downloadBytesAsFile(cachedBytes, f.path)
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          } finally {
+                                            setBusyFilePath(null)
+                                          }
+                                        }}
+                                        disabled={isBusy || !cached}
+                                        data-testid="deal-detail-download-browser-cache"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        Cached
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          setBusyFilePath(f.path)
+                                          const dealId = String(deal.id)
+                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+                                          try {
+                                            const chainCid = String(deal.cid || '').trim()
+                                            const localManifest = await readManifestRoot(dealId).catch(() => null)
+                                            const canUseLocalSlab =
+                                              !!localManifest && (!chainCid || localManifest.trim() === chainCid)
+                                            if (!canUseLocalSlab) throw new Error('local slab not available')
 
-                                      setLocalDownloadingPath(f.path)
-                                      const bytes = await readNilfsFileFromOpfs({
-                                        dealId: String(deal.id),
-                                        file: f,
-                                        allFiles: files || [],
-                                        rangeStart: safeStart,
-                                        rangeLen: safeLen,
-                                      })
+                                            const bytes = await readNilfsFileFromOpfs({
+                                              dealId,
+                                              file: f,
+                                              allFiles: files || [],
+                                              rangeStart: safeStart,
+                                              rangeLen: safeLen,
+                                            })
+                                            await writeCachedFile(dealId, f.path, bytes)
+                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                            downloadBytesAsFile(bytes, f.path)
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          } finally {
+                                            setBusyFilePath(null)
+                                          }
+                                        }}
+                                        disabled={isBusy}
+                                        data-testid="deal-detail-download-browser-slab"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        <ArrowDownRight className="w-4 h-4" />
+                                        {isBusy ? 'Loading...' : 'Slab'}
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          const dealId = String(deal.id)
+                                          try {
+                                            await deleteCachedFile(dealId, f.path)
+                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: false }))
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          }
+                                        }}
+                                        disabled={downloading || isBusy || !cached}
+                                        data-testid="deal-detail-clear-browser-cache"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        Clear
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          setBusyFilePath(f.path)
+                                          const dealId = String(deal.id)
+                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+                                          try {
+                                            const cachedBytes = await readCachedFile(dealId, f.path)
+                                            if (cachedBytes) {
+                                              downloadBytesAsFile(cachedBytes, f.path)
+                                              return
+                                            }
 
-                                      const safeBuffer = new Uint8Array(bytes.byteLength)
-                                      safeBuffer.set(bytes)
-                                      const url = window.URL.createObjectURL(new Blob([safeBuffer.buffer]))
-                                      const a = document.createElement('a')
-                                      a.href = url
-                                      a.download = f.path.split('/').pop() || 'download'
-                                      a.click()
-                                      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-                                      return
-                                    } catch (e: unknown) {
-                                      const msg = e instanceof Error ? e.message : String(e)
-                                      console.warn('Local download failed, falling back to gateway', e)
+                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+                                            const result = await fetchFile({
+                                              dealId,
+                                              manifestRoot: deal.cid,
+                                              owner: nilAddress,
+                                              filePath: f.path,
+                                              serviceBase: resolveProviderHttpBase(),
+                                              rangeStart: safeStart,
+                                              rangeLen: safeLen,
+                                              fileStartOffset: f.start_offset,
+                                              fileSizeBytes: f.size_bytes,
+                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                            })
+                                            if (!result) throw new Error('download failed')
+                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
+                                            await writeCachedFile(dealId, f.path, bytes)
+                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                            downloadBlobAsFile(result.blob, f.path)
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          } finally {
+                                            setBusyFilePath(null)
+                                          }
+                                        }}
+                                        disabled={downloading || isBusy || !deal.cid}
+                                        data-testid="deal-detail-download"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        Download
+                                      </button>
+                                    </div>
+                                  </div>
 
-                                      if (!deal.cid) {
-                                        setLocalDownloadError(msg)
-                                        return
-                                      }
-                                    } finally {
-                                      setLocalDownloadingPath(null)
-                                    }
+                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                        Gateway
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        reach {gatewayReachable} • slab {gatewaySlabStatus}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          setBusyFilePath(f.path)
+                                          try {
+                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+                                            const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                            const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+                                            const q = new URLSearchParams()
+                                            q.set('deal_id', String(deal.id))
+                                            q.set('owner', String(nilAddress))
+                                            q.set('file_path', f.path)
+                                            q.set('range_start', String(safeStart))
+                                            q.set('range_len', String(safeLen))
+                                            const url = `${appConfig.gatewayBase}/gateway/debug/raw-fetch/${encodeURIComponent(
+                                              deal.cid,
+                                            )}?${q.toString()}`
+                                            const res = await fetch(url)
+                                            if (!res.ok) {
+                                              const txt = await res.text().catch(() => '')
+                                              throw new Error(txt || `gateway raw fetch failed (${res.status})`)
+                                            }
+                                            const bytes = new Uint8Array(await res.arrayBuffer())
+                                            await writeCachedFile(String(deal.id), f.path, bytes)
+                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                            downloadBytesAsFile(bytes, f.path)
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          } finally {
+                                            setBusyFilePath(null)
+                                          }
+                                        }}
+                                        disabled={downloading || isBusy || gatewaySlabStatus !== 'present'}
+                                        data-testid="deal-detail-download-gateway"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        Download
+                                      </button>
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      Requires gateway slab on disk (and debug raw fetch enabled).
+                                    </div>
+                                  </div>
 
-                                    const url = await fetchFile({
-                                      dealId: String(deal.id),
-                                      manifestRoot: deal.cid,
-                                      owner: nilAddress,
-                                      filePath: f.path,
-                                      rangeStart: safeStart,
-                                      rangeLen: safeLen,
-                                      fileStartOffset: f.start_offset,
-                                      fileSizeBytes: f.size_bytes,
-                                      mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                      blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                    })
-                                    if (!url) return
-                                    const a = document.createElement('a')
-                                    a.href = url
-                                    a.download = f.path.split('/').pop() || 'download'
-                                    a.click()
-                                    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-                                  }}
-                                  disabled={downloading || localDownloadingPath === f.path}
-                                  data-testid="deal-detail-download"
-                                  data-file-path={f.path}
-                                  className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
-                                >
-                                  <ArrowDownRight className="w-4 h-4" />
-                                  {localDownloadingPath === f.path
-                                    ? 'Loading...'
-                                    : !deal.cid
-                                      ? 'Download (local)'
-                                      : downloading
-                                        ? 'Signing...'
-                                        : 'Download'}
-                                </button>
+                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                        SP (interactive)
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        {downloading ? 'in progress' : 'wallet'}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={async () => {
+                                          setFileActionError(null)
+                                          setBusyFilePath(f.path)
+                                          const dealId = String(deal.id)
+                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+                                          try {
+                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+                                            const result = await fetchFile({
+                                              dealId,
+                                              manifestRoot: deal.cid,
+                                              owner: nilAddress,
+                                              filePath: f.path,
+                                              serviceBase: resolveProviderHttpBase(),
+                                              rangeStart: safeStart,
+                                              rangeLen: safeLen,
+                                              fileStartOffset: f.start_offset,
+                                              fileSizeBytes: f.size_bytes,
+                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                            })
+                                            if (!result) throw new Error('download failed')
+                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
+                                            await writeCachedFile(dealId, f.path, bytes)
+                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                            downloadBlobAsFile(result.blob, f.path)
+                                          } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : String(e)
+                                            setFileActionError(msg)
+                                          } finally {
+                                            setBusyFilePath(null)
+                                          }
+                                        }}
+                                        disabled={downloading || isBusy || !deal.cid}
+                                        data-testid="deal-detail-download-sp"
+                                        data-file-path={f.path}
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                                      >
+                                        <ArrowDownRight className="w-4 h-4" />
+                                        Download
+                                      </button>
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      Opens a retrieval session and submits the receipt on-chain; then caches in-browser.
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             )
                           })}
                         </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground italic">
-                          No files found for this manifest root.
-                        </div>
+                        <div className="text-xs text-muted-foreground italic">No files found for this manifest root.</div>
                       )}
                     </div>
                 )}
@@ -588,6 +1088,9 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                 <div className="text-lg font-mono text-foreground">{slab.total_mdus}</div>
                                 <div className="text-[10px] text-muted-foreground mt-1">
                                     MDU #0 + {slab.witness_mdus} witness + {slab.user_mdus} user
+                                </div>
+                                <div className="text-[10px] text-muted-foreground mt-1">
+                                    Source: {slabSource === 'gateway' ? 'gateway' : slabSource === 'opfs' ? 'browser (OPFS)' : '—'}
                                 </div>
                             </div>
                             <div className="bg-secondary/50 p-3 rounded border border-border">

@@ -120,6 +120,9 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
+func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
+	RouterGatewayFetch(w, r)
+}
 func RouterGatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
