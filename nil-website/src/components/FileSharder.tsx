@@ -88,10 +88,6 @@ export function FileSharder({ dealId }: FileSharderProps) {
     lastOpMs: null,
   });
   const [uiTick, setUiTick] = useState(0);
-  const rollingSpeedRef = useRef<number>(0);
-  const lastSpeedUpdateMsRef = useRef<number | null>(null);
-  const lastBlobsDoneRef = useRef<number>(0);
-  const lastProgressSampleRef = useRef<{ tMs: number; blobsDone: number } | null>(null);
 
   const etaDisplayMsRef = useRef<number | null>(null);
   const etaLastTickMsRef = useRef<number | null>(null);
@@ -120,10 +116,6 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
   useEffect(() => {
     if (!processing) {
-      rollingSpeedRef.current = 0;
-      lastSpeedUpdateMsRef.current = null;
-      lastBlobsDoneRef.current = 0;
-      lastProgressSampleRef.current = null;
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
@@ -133,10 +125,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
     if (shardProgress.startTsMs == null) return;
 
     // Reset per-run state when a new run starts.
-    if (lastSpeedUpdateMsRef.current == null && shardProgress.blobsDone === 0) {
-      lastBlobsDoneRef.current = 0;
-      lastProgressSampleRef.current = null;
-      rollingSpeedRef.current = 0;
+    if (shardProgress.blobsDone === 0) {
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
@@ -148,40 +137,6 @@ export function FileSharder({ dealId }: FileSharderProps) {
     void uiTick;
 
     const now = performance.now();
-    const BLOB_BYTES = 128 * 1024;
-
-    // --- Rolling speed ---
-    if (shardProgress.blobsDone > lastBlobsDoneRef.current) {
-      const prev =
-        lastProgressSampleRef.current ??
-        (shardProgress.currentOpStartedAtMs != null
-          ? { tMs: shardProgress.currentOpStartedAtMs, blobsDone: lastBlobsDoneRef.current }
-          : null);
-      if (prev) {
-        const dtMs = now - prev.tMs;
-        const db = shardProgress.blobsDone - prev.blobsDone;
-        if (dtMs > 0 && db > 0) {
-          const instantaneous = ((db * BLOB_BYTES) / (1024 * 1024)) / (dtMs / 1000);
-          const alpha = 0.4;
-          rollingSpeedRef.current =
-            rollingSpeedRef.current > 0
-              ? rollingSpeedRef.current * (1 - alpha) + instantaneous * alpha
-              : instantaneous;
-          lastSpeedUpdateMsRef.current = now;
-        }
-      }
-      lastProgressSampleRef.current = { tMs: now, blobsDone: shardProgress.blobsDone };
-      lastBlobsDoneRef.current = shardProgress.blobsDone;
-    } else {
-      const last = lastSpeedUpdateMsRef.current;
-      if (last != null) {
-        const idleMs = now - last;
-        if (idleMs > 4000) {
-          const decay = Math.pow(0.85, (idleMs - 4000) / 1000);
-          rollingSpeedRef.current *= Math.max(0, Math.min(1, decay));
-        }
-      }
-    }
 
     // --- ETA display (countdown) ---
     const lastEtaTick = etaLastTickMsRef.current;
@@ -230,11 +185,21 @@ export function FileSharder({ dealId }: FileSharderProps) {
       (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
     const etaRawMs = avgWorkMs ? avgWorkMs * remainingWork : null;
-    const etaMs = etaDisplayMsRef.current ?? etaRawMs;
-    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
-    const seconds = elapsedMs / 1000;
-    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
-    const mibPerSec = rollingSpeedRef.current > 0 ? rollingSpeedRef.current : avgMibPerSec;
+	    const etaMs = etaDisplayMsRef.current ?? etaRawMs;
+	    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
+	    const seconds = elapsedMs / 1000;
+	    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+	    const BLOB_BYTES = 128 * 1024;
+	    const blobMib = BLOB_BYTES / (1024 * 1024);
+	    const overallMib = shardProgress.blobsDone * blobMib;
+	    const overallMibPerSec = seconds > 0 ? overallMib / seconds : 0;
+
+	    // Per-op average avoids spikes when parallel workers finish batches at once.
+	    const opSeconds = currentOpMs / 1000;
+	    const opMib = shardProgress.blobsInCurrentMdu * blobMib;
+	    const opMibPerSec = opSeconds > 0 ? opMib / opSeconds : 0;
+
+	    const mibPerSec = opMibPerSec > 0 ? opMibPerSec : overallMibPerSec > 0 ? overallMibPerSec : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
@@ -907,20 +872,16 @@ export function FileSharder({ dealId }: FileSharderProps) {
 	          manifestMs,
 	        });
 
-	        const elapsedMs = performance.now() - startTs;
-	        const mib = file.size / (1024 * 1024);
-	        const seconds = elapsedMs / 1000;
-	        const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
-	        const recentMibPerSec = rollingSpeedRef.current;
-	        const speedStr =
-	          recentMibPerSec > 0
-	            ? `${recentMibPerSec.toFixed(2)} MiB/s recent (${avgMibPerSec.toFixed(2)} MiB/s avg)`
-	            : `${avgMibPerSec.toFixed(2)} MiB/s avg`;
-	        addLog(
-	          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
-	            file.size,
-	          )}. Speed: ${speedStr}.`,
-	        );
+		        const elapsedMs = performance.now() - startTs;
+		        const mib = file.size / (1024 * 1024);
+		        const seconds = elapsedMs / 1000;
+		        const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+		        const speedStr = `${avgMibPerSec.toFixed(2)} MiB/s (file avg)`;
+		        addLog(
+		          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
+		            file.size,
+		          )}. Speed: ${speedStr}.`,
+		        );
 
     } catch (e: unknown) {
         console.error(e);
@@ -1071,7 +1032,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
                     </div>
                   </div>
 	                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-	                    <div className="opacity-70">Speed (recent)</div>
+	                    <div className="opacity-70">Speed (op avg)</div>
 	                    <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
 	                  </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
