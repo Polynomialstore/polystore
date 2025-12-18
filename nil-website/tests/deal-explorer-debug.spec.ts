@@ -41,6 +41,8 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
 
   let planCalls = 0
   let gatewayRawCalls = 0
+  let gatewayProofCalls = 0
+  let spProofCalls = 0
 
   // LCD deals + balances
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
@@ -139,6 +141,9 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   })
 
   await page.route('**/gateway/session-proof**', async (route) => {
+    const url = route.request().url()
+    if (url.includes(':8080/')) gatewayProofCalls += 1
+    if (url.includes(':8082/')) spProofCalls += 1
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
@@ -312,4 +317,6 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   expect(await streamToBuffer(await dl4.createReadStream())).toEqual(fileBytes)
   expect(gatewayRawCalls).toBe(1)
   expect(planCalls).toBe(planCallsBeforeGateway)
+  expect(gatewayProofCalls).toBeGreaterThan(0)
+  expect(spProofCalls).toBe(0)
 })

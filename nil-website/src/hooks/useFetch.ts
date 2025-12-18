@@ -288,7 +288,11 @@ export function useFetch() {
         await waitForTransactionReceipt(confirmTxHash)
 
         setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))
-        const proofRes = await fetch(`${serviceBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
+        // `session-proof` is an internal "user daemon -> provider" forward and requires gateway auth.
+        // Even when `serviceBase` points at the provider (direct fetch flows), proof submission must go
+        // through the local gateway.
+        const proofBase = appConfig.gatewayBase
+        const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId }),

@@ -39,6 +39,8 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
 
   let planCalls = 0
+  let gatewayProofCalls = 0
+  let spProofCalls = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     await route.fulfill({
@@ -117,6 +119,9 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   })
 
   await page.route('**/gateway/session-proof**', async (route) => {
+    const url = route.request().url()
+    if (url.includes(':8080/')) gatewayProofCalls += 1
+    if (url.includes(':8082/')) spProofCalls += 1
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
@@ -250,4 +255,6 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBeGreaterThan(0)
+  expect(gatewayProofCalls).toBeGreaterThan(0)
+  expect(spProofCalls).toBe(0)
 })

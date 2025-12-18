@@ -40,6 +40,8 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
 
   let gatewayPlanCalls = 0
   let spPlanCalls = 0
+  let gatewayProofCalls = 0
+  let spProofCalls = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     await route.fulfill({
@@ -128,6 +130,9 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   })
 
   await page.route('**/gateway/session-proof**', async (route) => {
+    const url = route.request().url()
+    if (url.includes(':8080/')) gatewayProofCalls += 1
+    if (url.includes(':8082/')) spProofCalls += 1
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
@@ -254,4 +259,6 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
 
   expect(spPlanCalls).toBeGreaterThan(0)
   expect(gatewayPlanCalls).toBe(0)
+  expect(gatewayProofCalls).toBeGreaterThan(0)
+  expect(spProofCalls).toBe(0)
 })
