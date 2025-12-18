@@ -567,9 +567,13 @@ fn pippenger_window(bytes_le: &[u8; 32], bit_offset: usize, window_bits: usize) 
 
 fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
-    if points.is_empty() {
+
+    let n = points.len().min(scalars.len());
+    if n == 0 {
         return G1Projective::identity();
     }
+    let points = &points[..n];
+    let scalars = &scalars[..n];
 
     let window_bits = pippenger_window_size(points.len());
     let buckets_len = 1usize << window_bits;
@@ -600,7 +604,7 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
         let bit_offset = window_index * window_bits;
         for (i, point) in points.iter().enumerate() {
             let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
-            if w != 0 {
+            if w != 0 && w < buckets_len {
                 buckets[w] += G1Projective::from(*point);
             }
         }

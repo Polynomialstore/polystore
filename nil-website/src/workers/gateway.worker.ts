@@ -71,13 +71,20 @@ self.onmessage = async (event) => {
             case 'shardFile': {
                 if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
                 const { data } = payload; // data is Uint8Array
-                const shardResult = nilWasmInstance.expand_file(data);
-                // wasm-bindgen may return an Object directly or a JSON string.
-                if (typeof shardResult === 'string') {
-                    result = JSON.parse(shardResult);
-                } else {
-                    result = shardResult;
-                }
+                const commitResult = nilWasmInstance.commit_mdu(data);
+                result = typeof commitResult === 'string' ? JSON.parse(commitResult) : commitResult;
+                break;
+            }
+            case 'computeManifest': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { roots } = payload; // roots is Uint8Array (concatenated 32-byte roots)
+                result = nilWasmInstance.compute_manifest(roots);
+                break;
+            }
+            case 'computeMduRoot': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { witness } = payload; // witness is Uint8Array
+                result = nilWasmInstance.compute_mdu_root(witness);
                 break;
             }
             default:

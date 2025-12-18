@@ -3,12 +3,15 @@ import { useState, useCallback } from 'react';
 interface DirectUploadOptions {
   dealId: string;
   manifestRoot: string; // The canonical 0x-prefixed hex string
+  manifestBlob?: Uint8Array | null; // 128 KiB manifest blob (manifest.bin)
   providerBaseUrl: string; // Base URL of the Storage Provider (e.g., http://localhost:8080)
 }
 
 interface UploadProgress {
-  mduIndex: number;
-  totalMdus: number;
+  kind: 'mdu' | 'manifest';
+  label: string;
+  mduIndex?: number;
+  totalSteps: number;
   status: 'pending' | 'uploading' | 'complete' | 'error';
   error?: string;
 }
@@ -21,7 +24,7 @@ interface DirectUploadResult {
 }
 
 export function useDirectUpload(options: DirectUploadOptions): DirectUploadResult {
-  const { dealId, manifestRoot, providerBaseUrl } = options;
+  const { dealId, manifestRoot, manifestBlob, providerBaseUrl } = options;
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -32,20 +35,27 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
 
   const uploadMdus = useCallback(async (mdus: { index: number; data: Uint8Array }[]): Promise<boolean> => {
     setIsUploading(true);
-    setUploadProgress(
-      mdus.map((mdu) => ({
-        mduIndex: mdu.index,
-        totalMdus: mdus.length,
-        status: 'pending',
-      })),
-    );
+    const steps: UploadProgress[] = mdus.map((mdu) => ({
+      kind: 'mdu',
+      label: `MDU #${mdu.index}`,
+      mduIndex: mdu.index,
+      totalSteps: mdus.length + 1,
+      status: 'pending',
+    }))
+    steps.push({
+      kind: 'manifest',
+      label: 'manifest.bin',
+      totalSteps: mdus.length + 1,
+      status: 'pending',
+    })
+    setUploadProgress(steps);
 
     let allSuccessful = true;
 
     for (const mdu of mdus) {
       setUploadProgress((prev) =>
         prev.map((p) =>
-          p.mduIndex === mdu.index ? { ...p, status: 'uploading' } : p,
+          p.kind === 'mdu' && p.mduIndex === mdu.index ? { ...p, status: 'uploading' } : p,
         ),
       );
 
@@ -71,7 +81,7 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
 
         setUploadProgress((prev) =>
           prev.map((p) =>
-            p.mduIndex === mdu.index ? { ...p, status: 'complete' } : p,
+            p.kind === 'mdu' && p.mduIndex === mdu.index ? { ...p, status: 'complete' } : p,
           ),
         );
       } catch (e: unknown) {
@@ -79,16 +89,55 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
         const message = e instanceof Error ? e.message : String(e);
         setUploadProgress((prev) =>
           prev.map((p) =>
-            p.mduIndex === mdu.index ? { ...p, status: 'error', error: message } : p,
+            p.kind === 'mdu' && p.mduIndex === mdu.index ? { ...p, status: 'error', error: message } : p,
           ),
         );
         console.error(`Error uploading MDU ${mdu.index}:`, e);
       }
     }
 
+    // Upload manifest.bin (required for /gateway/fetch proof generation).
+    if (allSuccessful) {
+      setUploadProgress((prev) =>
+        prev.map((p) => (p.kind === 'manifest' ? { ...p, status: 'uploading' } : p)),
+      )
+
+      try {
+        if (!manifestBlob || manifestBlob.byteLength === 0) {
+          throw new Error('manifest blob missing (re-shard to regenerate)')
+        }
+
+        const url = `${providerBaseUrl}/sp/upload_manifest`
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([manifestBlob as any]),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Upload failed: ${response.status} ${errorText}`)
+        }
+
+        setUploadProgress((prev) => prev.map((p) => (p.kind === 'manifest' ? { ...p, status: 'complete' } : p)))
+      } catch (e: unknown) {
+        allSuccessful = false
+        const message = e instanceof Error ? e.message : String(e)
+        setUploadProgress((prev) =>
+          prev.map((p) => (p.kind === 'manifest' ? { ...p, status: 'error', error: message } : p)),
+        )
+        console.error('Error uploading manifest.bin:', e)
+      }
+    }
+
     setIsUploading(false);
     return allSuccessful;
-  }, [dealId, manifestRoot, providerBaseUrl]);
+  }, [dealId, manifestBlob, manifestRoot, providerBaseUrl]);
 
   return { uploadProgress, isUploading, uploadMdus, reset };
 }

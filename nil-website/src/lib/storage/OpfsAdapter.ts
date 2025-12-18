@@ -1,5 +1,8 @@
 // nil-website/src/lib/storage/OpfsAdapter.ts
 
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
+
 /**
  * Returns a handle to the root of the origin's private file system.
  * This handle is persistent across sessions for the same origin.
@@ -18,6 +21,43 @@ async function getDealDirectory(dealId: string): Promise<FileSystemDirectoryHand
     return root.getDirectoryHandle(`deal-${dealId}`, { create: true });
 }
 
+async function writeBlob(dealId: string, name: string, data: BlobPart | Uint8Array<ArrayBufferLike>): Promise<void> {
+    const dealDir = await getDealDirectory(dealId);
+    const fileHandle = await dealDir.getFileHandle(name, { create: true });
+    const writable = await fileHandle.createWritable();
+    // NOTE: Newer TS DOM lib defines `BlobPart` in a way that rejects `Uint8Array<ArrayBufferLike>`
+    // (because it might be backed by `SharedArrayBuffer`). For OPFS writes, we accept it and rely
+    // on runtime support; tests exercise the path.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await writable.write(data as any);
+    await writable.close();
+}
+
+async function readBlob(dealId: string, name: string): Promise<Uint8Array | null> {
+    const dealDir = await getDealDirectory(dealId);
+    try {
+        const fileHandle = await dealDir.getFileHandle(name);
+        const file = await fileHandle.getFile();
+        const buffer = await file.arrayBuffer();
+        return new Uint8Array(buffer);
+    } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'NotFoundError') {
+            return null;
+        }
+        throw e;
+    }
+}
+
+async function deleteDealFile(dealId: string, name: string): Promise<void> {
+    const dealDir = await getDealDirectory(dealId);
+    try {
+        await dealDir.removeEntry(name);
+    } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'NotFoundError') return;
+        throw e;
+    }
+}
+
 /**
  * Writes MDU data to a file within a specific deal's OPFS directory.
  * @param dealId The ID of the deal.
@@ -25,13 +65,8 @@ async function getDealDirectory(dealId: string): Promise<FileSystemDirectoryHand
  * @param data The Uint8Array containing the MDU's binary data.
  */
 export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Array): Promise<void> {
-    const dealDir = await getDealDirectory(dealId);
     const fileName = `mdu_${mduIndex}.bin`;
-    const fileHandle = await dealDir.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await writable.write(data as any);
-    await writable.close();
+    await writeBlob(dealId, fileName, data);
 }
 
 /**
@@ -41,20 +76,8 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
  * @returns A Promise that resolves to the MDU data as Uint8Array, or null if not found.
  */
 export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Array | null> {
-    const dealDir = await getDealDirectory(dealId);
     const fileName = `mdu_${mduIndex}.bin`;
-    try {
-        const fileHandle = await dealDir.getFileHandle(fileName);
-        const file = await fileHandle.getFile();
-        const buffer = await file.arrayBuffer();
-        return new Uint8Array(buffer);
-    } catch (e: unknown) {
-        // Return null if the file is not found, otherwise re-throw.
-        if (e instanceof Error && e.name === 'NotFoundError') {
-            return null;
-        }
-        throw e;
-    }
+    return await readBlob(dealId, fileName);
 }
 
 /**
@@ -88,5 +111,50 @@ export async function deleteDealDirectory(dealId: string): Promise<void> {
             return;
         }
         throw e;
+    }
+}
+
+export async function writeManifestRoot(dealId: string, manifestRoot: string): Promise<void> {
+    const normalized = String(manifestRoot || '').trim();
+    await writeBlob(dealId, 'manifest_root.txt', normalized);
+}
+
+export async function readManifestRoot(dealId: string): Promise<string | null> {
+    const bytes = await readBlob(dealId, 'manifest_root.txt');
+    if (!bytes) return null;
+    const txt = new TextDecoder().decode(bytes);
+    const trimmed = txt.trim();
+    return trimmed ? trimmed : null;
+}
+
+export function cachedFileNameForPath(filePath: string): string {
+    const normalized = String(filePath ?? '')
+    const bytes = new TextEncoder().encode(normalized)
+    const digest = sha256(bytes)
+    return `filecache_${bytesToHex(digest)}.bin`
+}
+
+export async function writeCachedFile(dealId: string, filePath: string, data: Uint8Array): Promise<void> {
+    await writeBlob(dealId, cachedFileNameForPath(filePath), data)
+}
+
+export async function readCachedFile(dealId: string, filePath: string): Promise<Uint8Array | null> {
+    return await readBlob(dealId, cachedFileNameForPath(filePath))
+}
+
+export async function hasCachedFile(dealId: string, filePath: string): Promise<boolean> {
+    const bytes = await readCachedFile(dealId, filePath)
+    return !!bytes && bytes.byteLength > 0
+}
+
+export async function deleteCachedFile(dealId: string, filePath: string): Promise<void> {
+    await deleteDealFile(dealId, cachedFileNameForPath(filePath))
+}
+
+export async function clearCachedFiles(dealId: string): Promise<void> {
+    const files = await listDealFiles(dealId)
+    const targets = files.filter((f) => f.startsWith('filecache_') && f.endsWith('.bin'))
+    for (const name of targets) {
+        await deleteDealFile(dealId, name)
     }
 }

@@ -224,8 +224,6 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
-
-
 // execNilchaind runs a nilchaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
@@ -339,6 +337,7 @@ func main() {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
@@ -352,6 +351,7 @@ func main() {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
@@ -367,6 +367,7 @@ func main() {
 		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	}
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
@@ -3287,17 +3288,13 @@ func decodeHex(s string) ([]byte, error) {
 
 	}
 
-				return hex.DecodeString(s)
+	return hex.DecodeString(s)
 
-			}
+}
 
-			
+// RetrievalReceipt represents the JSON payload signed by the client.
 
-			// RetrievalReceipt represents the JSON payload signed by the client.
-
-			type RetrievalReceipt struct {
-
-			
+type RetrievalReceipt struct {
 	DealId        uint64          `json:"deal_id"`
 	EpochId       uint64          `json:"epoch_id"`
 	Provider      string          `json:"provider"`
@@ -4155,7 +4152,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
-	
+
 	// Check content length to avoid DoS
 	// Default limit 10MB (MDU is 8MB)
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
@@ -4177,4 +4174,66 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// SpUploadManifest accepts a raw manifest blob (128 KiB) and stores it as manifest.bin in the slab directory.
+// This supports thick-client uploads where the browser computes the manifest commitment and blob.
+func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+
+	if dealIDStr == "" || clientManifestRoot == "" {
+		http.Error(w, "X-Nil-Deal-ID and X-Nil-Manifest-Root headers are required", http.StatusBadRequest)
+		return
+	}
+
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Deal against Chain (fail safe if chain is unreachable).
+	_, _, err = fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		log.Printf("SpUploadManifest: failed to fetch deal %d: %v", dealID, err)
+		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
+		return
+	}
+
+	parsed, err := parseManifestRoot(clientManifestRoot)
+	if err != nil {
+		http.Error(w, "invalid manifest root", http.StatusBadRequest)
+		return
+	}
+
+	rootDir := filepath.Join(uploadDir, parsed.Key)
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Limit manifest blob size (manifest is 128 KiB; allow some slack).
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
+
+	path := filepath.Join(rootDir, "manifest.bin")
+	f, err := os.Create(path)
+	if err != nil {
+		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	n, err := io.Copy(f, r.Body)
+	if err != nil {
+		http.Error(w, "failed to write file", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, n, dealID)
+	w.WriteHeader(http.StatusOK)
+}

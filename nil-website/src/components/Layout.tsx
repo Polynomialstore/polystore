@@ -70,8 +70,18 @@ export const Layout = () => {
               <div className="relative w-9 h-9">
                   <div className="absolute inset-0 bg-primary/60 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-150"></div>
                   <div className="relative w-full h-full transition-transform group-hover:scale-110 duration-300 rounded-full border border-border overflow-hidden p-0.5 bg-background/50">
-                    <img src="/logo_dark.jpg" className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full" alt="Logo Dark" />
-                    <img src="/logo_light.jpg" className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full" alt="Logo Light" />
+                    <img
+                      src="/brand/logo-light-36.png"
+                      srcSet="/brand/logo-light-36.png 1x, /brand/logo-light-72.png 2x"
+                      className="absolute inset-0 w-full h-full object-contain dark:hidden drop-shadow-md rounded-full"
+                      alt="NilStore Logo"
+                    />
+                    <img
+                      src="/brand/logo-dark-36.png"
+                      srcSet="/brand/logo-dark-36.png 1x, /brand/logo-dark-72.png 2x"
+                      className="absolute inset-0 w-full h-full object-contain hidden dark:block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] rounded-full"
+                      alt="NilStore Logo"
+                    />
                   </div>
               </div>
               <span className="font-extrabold tracking-tight text-xl hidden sm:block font-sans">

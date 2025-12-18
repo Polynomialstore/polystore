@@ -101,7 +101,7 @@ func resolveNilfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, u
 	}
 
 	slabStartIdx := 1 + entry.witnessCount
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length)
+	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset, info.Length)
 	if err != nil {
 		return nil, 0, "", 0, err
 	}
@@ -135,7 +135,7 @@ func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart
 	}
 
 	slabStartIdx := 1 + entry.witnessCount
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset+rangeStart, segmentLen)
+	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset+rangeStart, segmentLen)
 	if err != nil {
 		return nil, 0, "", 0, fileLen, 0, err
 	}

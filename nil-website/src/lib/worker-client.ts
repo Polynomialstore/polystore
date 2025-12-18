@@ -46,6 +46,11 @@ function sendMessageToWorker(type: string, payload: unknown, transferables?: Tra
   });
 }
 
+export interface ExpandedMdu {
+    witness_flat: Uint8Array | number[]; // 96 * 48 bytes
+    mdu_root: Uint8Array | number[]; // 32 bytes
+}
+
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
@@ -71,7 +76,7 @@ export const workerClient = {
 
   // Set a root in the MDU #0 builder
   async setMdu0Root(index: number, root: Uint8Array): Promise<string> {
-    return sendMessageToWorker('setMdu0Root', { index, root }, [root.buffer]) as Promise<string>;
+    return sendMessageToWorker('setMdu0Root', { index, root }) as Promise<string>;
   },
 
   // Get witness count from MDU #0 builder
@@ -81,7 +86,16 @@ export const workerClient = {
 
   // Shard a file (or part of it) using NilWasm
   // This will likely need to handle streaming of data in the future for large files.
-  async shardFile(data: Uint8Array): Promise<{ manifestRoot: string; mduData: unknown[] }> {
-    return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<{ manifestRoot: string; mduData: unknown[] }>;
+  async shardFile(data: Uint8Array): Promise<ExpandedMdu> {
+    return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<ExpandedMdu>;
+  },
+
+  // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
+  async computeManifest(roots: Uint8Array): Promise<{ root: Uint8Array; blob: Uint8Array }> {
+    return sendMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{ root: Uint8Array; blob: Uint8Array }>;
+  },
+
+  async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('computeMduRoot', { witness }) as Promise<Uint8Array>;
   },
 };

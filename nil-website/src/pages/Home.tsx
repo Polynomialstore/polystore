@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 export const Home = () => {
   return (
-    <div className="pt-24 pb-12 px-4">
+    <div className="pt-8 pb-12 px-4">
       <div className="container mx-auto max-w-6xl">
         
         {/* Hero Section */}
@@ -16,12 +16,14 @@ export const Home = () => {
             className="mx-auto w-64 h-64 mb-8 relative"
           >
              <img 
-               src="/logo_dark.jpg" 
+               src="/brand/logo-light-256.png"
+               srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
                alt="NilStore Logo" 
                className="absolute inset-0 w-full h-full object-contain dark:hidden"
              />
              <img 
-               src="/logo_light.jpg" 
+               src="/brand/logo-dark-256.png"
+               srcSet="/brand/logo-dark-256.png 1x, /brand/logo-dark-512.png 2x"
                alt="NilStore Logo" 
                className="absolute inset-0 w-full h-full object-contain hidden dark:block"
              />
@@ -64,9 +66,6 @@ export const Home = () => {
           >
             <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
               <strong className="text-purple-600 dark:text-purple-400">NilStore</strong> is a <strong className="text-purple-600 dark:text-purple-400">Decentralized</strong>, <strong className="text-purple-600 dark:text-purple-400">Autonomous</strong> and <strong className="text-purple-600 dark:text-purple-400">Self-Governing</strong><br/><strong className="text-purple-600 dark:text-purple-400">Storage</strong> and <strong className="text-purple-600 dark:text-purple-400">Distribution Network</strong>.
-            </p>
-            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-              The design is inspired by the <strong className="text-purple-600 dark:text-purple-400">Isotropic</strong> and <strong className="text-purple-600 dark:text-purple-400">Homogeneous Geometry</strong> of a <a href="https://en.wikipedia.org/wiki/Nilmanifold" target="_blank" rel="noopener noreferrer" className="text-primary/70 dark:text-blue-400 hover:text-primary dark:hover:text-foreground hover:underline transition-colors">Nilmanifold</a>, creating a <strong className="text-purple-600 dark:text-purple-400">Uniform Topology</strong> that naturally enables <strong className="text-purple-600 dark:text-purple-400">True Decentralization</strong>.
             </p>
           </motion.p>
 

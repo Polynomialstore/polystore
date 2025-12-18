@@ -26,6 +26,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
 
+  let manifestUploadCalls = 0
+
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
@@ -41,12 +43,33 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
+  await page.route('**/sp/upload_manifest', async (route) => {
+    manifestUploadCalls += 1
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
   // Mock EVM RPC
-  await page.route('**://localhost:8545', async (route) => {
+  await page.route('**://localhost:8545/**', async (route) => {
     const req = route.request()
     const payload = JSON.parse(req.postData() || '{}') as any
     const method = payload?.method
     const params = payload?.params || []
+
+    if (method === 'eth_chainId') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: chainIdHex }),
+      })
+    }
+
+    if (method === 'eth_blockNumber') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x1' }),
+      })
+    }
 
     if (method === 'eth_sendTransaction') {
         // Assume this is the commit transaction
@@ -59,7 +82,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '')
-      if (hash === txCommit) {
+      if (hash.toLowerCase() === txCommit.toLowerCase()) {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -96,6 +119,26 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
       contentType: 'application/json',
       body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: null }),
     })
+  })
+
+  // Mock LCD Deals
+  await page.route('**/nilchain/nilchain/v1/deals**', async route => {
+      await route.fulfill({
+          status: 200,
+          body: JSON.stringify({
+              deals: [
+                  {
+                      id: '1',
+                      owner: nilAddress,
+                      cid: '',
+                      size: '0',
+                      escrow_balance: '1000000',
+                      end_block: '1000',
+                      providers: ['nil1provider'],
+                  }
+              ]
+          })
+      })
   })
 
   // Inject Wallet
@@ -184,12 +227,16 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   if (await page.getByTestId('wallet-address').isVisible()) {
     console.log('Wallet already connected.')
   } else {
-    await page.getByTestId('connect-wallet').click({ force: true })
+    await page.getByTestId('connect-wallet').first().click({ force: true })
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 
   console.log('Switching to Local MDU tab...')
   await page.getByTestId('tab-mdu').click()
+
+  console.log('Selecting Deal #1...')
+  await page.getByTestId('mdu-deal-select').selectOption('1')
+
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
 
   // Find the Client-Side Expansion section
@@ -218,6 +265,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   // Wait for "Upload Complete".
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30000 })
   console.log('Upload complete.')
+  await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
   // Check "Commit to Chain" button
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
@@ -226,7 +274,18 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Clicking Commit to Chain...')
   await commitBtn.click()
 
-  // Wait for "Confirming..." (Validation passed if we got here)
-  await expect(page.getByRole('button', { name: 'Confirming...' })).toBeVisible({ timeout: 30000 })
-  console.log('Commit transaction sent (validation passed).')
+  // Wait for "Committed!" (ensures OPFS persistence hook ran)
+  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 30000 })
+  console.log('Commit confirmed.')
+  await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
+
+  // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
+  await page.getByTestId('deal-row-1').click()
+  await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
+  await expect(fileRow).toBeVisible({ timeout: 60_000 })
+
+  // Regression: Manifest & MDUs tab should populate from local OPFS slab (even if gateway has no disk cache).
+  await page.getByTestId('deal-detail-tab-manifest').click()
+  await expect(page.getByText('Slab MDUs')).toBeVisible({ timeout: 60_000 })
 })
