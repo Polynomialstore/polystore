@@ -88,6 +88,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
     lastOpMs: null,
   });
   const [uiTick, setUiTick] = useState(0);
+  const recentSpeedMibPerSecRef = useRef<number>(0);
+  const speedSamplesRef = useRef<Array<{ tMs: number; bytesDone: number }>>([]);
 
   const etaDisplayMsRef = useRef<number | null>(null);
   const etaLastTickMsRef = useRef<number | null>(null);
@@ -116,6 +118,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
   useEffect(() => {
     if (!processing) {
+      recentSpeedMibPerSecRef.current = 0;
+      speedSamplesRef.current = [];
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
@@ -126,6 +130,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
     // Reset per-run state when a new run starts.
     if (shardProgress.blobsDone === 0) {
+      recentSpeedMibPerSecRef.current = 0;
+      speedSamplesRef.current = [];
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
@@ -137,6 +143,24 @@ export function FileSharder({ dealId }: FileSharderProps) {
     void uiTick;
 
     const now = performance.now();
+
+    // --- Rolling speed (effective bytes over a fixed window) ---
+    // Using a fixed window avoids inflated "burst" speeds when progress events arrive in batches.
+    const SPEED_WINDOW_MS = 3000;
+    const totalWork = shardProgress.workTotal;
+    const workFrac = totalWork > 0 ? Math.max(0, Math.min(1, shardProgress.workDone / totalWork)) : 0;
+    const bytesDone = shardProgress.fileBytesTotal * workFrac;
+    const samples = speedSamplesRef.current;
+    samples.push({ tMs: now, bytesDone });
+    while (samples.length > 2 && now - samples[0].tMs > SPEED_WINDOW_MS) samples.shift();
+    if (samples.length >= 2) {
+      const oldest = samples[0];
+      const dtMs = now - oldest.tMs;
+      const db = bytesDone - oldest.bytesDone;
+      if (dtMs > 0 && db > 0) {
+        recentSpeedMibPerSecRef.current = (db / (1024 * 1024)) / (dtMs / 1000);
+      }
+    }
 
     // --- ETA display (countdown) ---
     const lastEtaTick = etaLastTickMsRef.current;
@@ -189,17 +213,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
 	    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
 	    const seconds = elapsedMs / 1000;
 	    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
-	    const BLOB_BYTES = 128 * 1024;
-	    const blobMib = BLOB_BYTES / (1024 * 1024);
-	    const overallMib = shardProgress.blobsDone * blobMib;
-	    const overallMibPerSec = seconds > 0 ? overallMib / seconds : 0;
-
-	    // Per-op average avoids spikes when parallel workers finish batches at once.
-	    const opSeconds = currentOpMs / 1000;
-	    const opMib = shardProgress.blobsInCurrentMdu * blobMib;
-	    const opMibPerSec = opSeconds > 0 ? opMib / opSeconds : 0;
-
-	    const mibPerSec = opMibPerSec > 0 ? opMibPerSec : overallMibPerSec > 0 ? overallMibPerSec : avgMibPerSec;
+	    const mibPerSec = recentSpeedMibPerSecRef.current > 0 ? recentSpeedMibPerSecRef.current : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
@@ -1032,7 +1046,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
                     </div>
                   </div>
 	                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-	                    <div className="opacity-70">Speed (op avg)</div>
+	                    <div className="opacity-70">Speed (recent)</div>
 	                    <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
 	                  </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
