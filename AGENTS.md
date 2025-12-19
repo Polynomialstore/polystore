@@ -552,20 +552,20 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - All **chain transactions require browser wallet signing** (MetaMask): the gateway must not become a signing authority; it can only (a) serve data-plane operations and (b) provide “plan/trace/status” helpers that the browser can choose to use.
 - The future “gateway GUI” is an **interface/distribution change** for the optional local gateway (status/config/logs and a better UX), not a shift of signing responsibilities away from the browser.
 
-**Gateway fallback is only partially done. We have:**
+**Gateway fallback is implemented. Current components include:**
 - [x] Local gateway detection + green‑dot widget (`useLocalGateway`, `GatewayStatusWidget`).
 - [x] OPFS fallback paths in `DealDetail.tsx` for showing local slab/manifest data.
 
 **What’s still missing for a “robust fallback”:**
-- [ ] No unified routing layer that automatically switches upload/fetch between local gateway, direct‑to‑SP, and chain precompile.
-- [ ] No retry policy or error classification to trigger fallback.
-- [ ] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
+- [x] No unified routing layer that automatically switches upload/fetch between local gateway, direct‑to‑SP, and chain precompile.
+- [x] No retry policy or error classification to trigger fallback.
+- [x] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
 
 #### 11.3.A Delta Sprint Checklist: Gateway Fallback (Routing + Retry + UX)
 
 **Goal:** Make the web client resilient when the local gateway is missing/flaky, while keeping MetaMask signing in the browser.
 
-- [ ] **Task 1: Transport Router primitives (client-side; no React; GUI-ready traces).**
+- [x] **Task 1: Transport Router primitives (client-side; no React; GUI-ready traces).**
   - **New module (pure TS):** `nil-website/src/lib/transport/`
     - `types.ts`: shared types for routing/trace/errors (no DOM).
     - `errors.ts`: error normalization + classification.
@@ -592,7 +592,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - 4xx no-retry behavior
     - provider mismatch is terminal
 
-- [ ] **Task 2: Integrate router across all user-visible network paths (Web UI never half-breaks).**
+- [x] **Task 2: Integrate router across all user-visible network paths (Web UI never half-breaks).**
   - **New hook:** `nil-website/src/hooks/useTransportRouter.ts`
     - Owns current `RoutePreference` (localStorage) + exposes `lastDecisionTrace` for UI.
     - Wraps calls like `transport.fetch(...)`, `transport.upload(...)`, `transport.listFiles(...)`, `transport.slab(...)`.
@@ -621,13 +621,13 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - Gateway ON: continues to work as today.
     - (Optional) SP OFF: if gateway can serve bytes, router falls back and succeeds.
 
-- [ ] **Task 3: User-visible fallback UX + manual override.**
+- [x] **Task 3: User-visible fallback UX + manual override.**
   - Show “current route” + last fallback reason (from `DecisionTrace`).
   - Add override mode: `Auto` / `Prefer Local Gateway` / `Prefer Direct SP`.
   - Persist preference (localStorage is fine for Delta).
   - **Pass gate:** UI reflects live decisions; user override forces route selection.
 
-- [ ] **Task 4: Gateway “GUI-readiness” status surface (minimal, informational only).**
+- [x] **Task 4: Gateway “GUI-readiness” status surface (minimal, informational only).**
   - **Gateway change:** add `GET /status` (or extend `/health`) to return JSON with:
     - `version`, `git_sha`, `build_time` (best-effort)
     - `mode` (router/SP/etc), `listening_addr`
@@ -636,7 +636,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - **Browser change:** `useLocalGateway` should prefer `/status` when available and fall back to `/health`.
   - **Pass gate:** browser shows “Gateway present + capabilities” (or “Gateway absent”) without throwing.
 
-- [ ] **Task 5: Tests + CI coverage.**
+- [x] **Task 5: Tests + CI coverage.**
   - **Unit tests:** router tests live under `nil-website/src/lib/transport/*.test.ts` so `npm run test:unit` covers them.
   - **E2E (browser) smoke:** add a Playwright spec that runs the “direct path” with the gateway disabled.
     - Add stack control: update `scripts/run_local_stack.sh` to honor `NIL_DISABLE_GATEWAY=1` (do not start gateway; keep chain + SP + web).
@@ -651,7 +651,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Goal:** Add automated parity checks so native (`nil_core`) and browser/WASM (`nil_core` wasm build) produce identical outputs for core flows.
 
-- [ ] **Task 1: Choose parity fixtures + “what exactly must match”.**
+- [x] **Task 1: Choose parity fixtures + “what exactly must match”.**
   - **Fixtures directory:** `nil_core/fixtures/parity/`
     - `blob_128k.bin` (deterministic bytes)
     - `mdu_8m.bin` (deterministic bytes; can be repeated pattern)
@@ -669,7 +669,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - If proofs are not deterministic: compare `proof_hash` + `verify(proof)==true` (and ensure `proof_hash` is computed deterministically from canonical fields).
   - **Pass gate:** fixtures + output spec are committed and documented in `nil_core/fixtures/parity/README.md`.
 
-- [ ] **Task 2: Implement native parity runner (Rust).**
+- [x] **Task 2: Implement native parity runner (Rust).**
   - Add a small Rust binary: `nil_core/src/bin/parity_native.rs`
     - Reads fixtures from `nil_core/fixtures/parity/`.
     - Emits a single JSON blob to stdout with the fields defined above.
@@ -677,7 +677,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Add a Rust unit test that runs the binary logic in-process (optional) to keep coverage.
   - **Pass gate:** `cd nil_core && cargo run --release --bin parity_native` produces JSON on Linux/macOS and is stable across runs.
 
-- [ ] **Task 3: Implement WASM parity runner (Node).**
+- [x] **Task 3: Implement WASM parity runner (Node).**
   - Build wasm using the repo’s existing pattern:
     - `cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core`
   - Add Node runner script: `nil-website/scripts/parity_wasm.ts`
@@ -685,13 +685,13 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - Uses Node fs to read fixture bytes; does not require a browser.
   - **Pass gate:** `cd nil-website && tsx scripts/parity_wasm.ts` prints JSON matching the native schema.
 
-- [ ] **Task 4: Compare native vs WASM outputs (single parity assertion).**
+- [x] **Task 4: Compare native vs WASM outputs (single parity assertion).**
   - Add comparator script: `tools/parity/compare_parity.ts` (or keep in `nil-website/scripts/`).
     - Runs native runner, runs wasm runner, compares JSON fields, prints a readable diff, exits non-zero on mismatch.
   - Make mismatch output actionable (show which field mismatched + expected/actual digests).
   - **Pass gate:** running the comparator locally fails fast on any mismatch and is easy to debug.
 
-- [ ] **Task 5: CI integration (dedicated parity job).**
+- [x] **Task 5: CI integration (dedicated parity job).**
   - Extend `.github/workflows/ci.yml` with a new job `native-wasm-parity` that:
     - Sets up Rust + Node.
     - Builds native `nil_core` and runs `cargo run --release --bin parity_native > native.json`.
@@ -981,7 +981,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 - The Dashboard MDU #0 inspector + commit-content flow is **good enough for this demo**; further polish can iterate later.
 
 **Deprioritized:**
-- Native↔WASM parity tests (see **11.6.B2**) are not a priority right now.
+- (none)
 
 ### 11.7 Sprint 4 (Retrieval Sessions: On-Chain Session State + User Completion)
 

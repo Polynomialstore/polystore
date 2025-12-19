@@ -332,6 +332,7 @@ func main() {
 	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/health", HealthCheck).Methods("GET", "OPTIONS")
+	r.HandleFunc("/status", GatewayStatus).Methods("GET", "OPTIONS")
 
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")

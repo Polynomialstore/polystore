@@ -16,10 +16,11 @@ import { FileSharder } from './FileSharder'
 import { injectedConnector } from '../lib/web3Config'
 import { formatUnits } from 'viem'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
-import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
+import { useTransportRouter } from '../hooks/useTransportRouter'
+import { multiaddrToHttpUrl } from '../lib/multiaddr'
 
 interface Provider {
   address: string
@@ -145,6 +146,7 @@ export function Dashboard() {
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
+  const transport = useTransportRouter()
 
   const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
@@ -302,29 +304,33 @@ export function Dashboard() {
       setContentSlabLoading(true)
       setContentSlabError(null)
       try {
+        const directBase = resolveProviderBase(targetDeal)
         const [filesResult, slabResult] = await Promise.allSettled([
-          gatewayListFiles(appConfig.gatewayBase, manifestRoot, {
+          transport.listFiles({
+            manifestRoot,
             dealId: targetDealId,
             owner: nilAddress,
+            directBase,
           }),
-          gatewayFetchSlabLayout(
-            appConfig.gatewayBase,
+          transport.slab({
             manifestRoot,
-            { dealId: targetDealId, owner: nilAddress },
-          ),
+            dealId: targetDealId,
+            owner: nilAddress,
+            directBase,
+          }),
         ])
 
         if (cancelled) return
 
         if (filesResult.status === 'fulfilled') {
-          setContentFiles(filesResult.value)
+          setContentFiles(filesResult.value.data)
         } else {
           setContentFiles([])
           setContentFilesError(filesResult.reason instanceof Error ? filesResult.reason.message : 'Failed to load NilFS file table')
         }
 
         if (slabResult.status === 'fulfilled') {
-          setContentSlab(slabResult.value)
+          setContentSlab(slabResult.value.data)
         } else {
           setContentSlab(null)
           setContentSlabError(slabResult.reason instanceof Error ? slabResult.reason.message : 'Failed to load slab layout')
@@ -349,7 +355,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, stagedUpload?.cid, targetDeal?.cid, targetDealId])
+  }, [nilAddress, resolveProviderBase, stagedUpload?.cid, targetDeal?.cid, targetDealId, transport])
 
   useEffect(() => {
     if (address) {
@@ -497,6 +503,31 @@ export function Dashboard() {
     return `${(num / 100).toFixed(num % 100 === 0 ? 0 : 2)}%`
   }
 
+  const providerEndpointsByAddr = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const p of providers) {
+      if (!p.address) continue
+      const endpoints = Array.isArray(p.endpoints) ? p.endpoints : []
+      map.set(p.address, endpoints.filter((e): e is string => typeof e === 'string'))
+    }
+    return map
+  }, [providers])
+
+  const resolveProviderBase = useCallback(
+    (deal: Deal | null): string | undefined => {
+      if (!deal || !deal.providers || deal.providers.length === 0) return undefined
+      const primary = deal.providers[0]
+      const endpoints = providerEndpointsByAddr.get(primary) ?? []
+      for (const ep of endpoints) {
+        if (/^https?:\/\//i.test(ep)) return ep.replace(/\/$/, '')
+        const url = multiaddrToHttpUrl(ep)
+        if (url) return url
+      }
+      return appConfig.spBase
+    },
+    [providerEndpointsByAddr],
+  )
+
   const providerStatsByAddress = useMemo(() => {
     const byProvider = new Map<string, { assignedDeals: number; activeDeals: number; retrievals: number; bytesServed: number }>()
 
@@ -535,7 +566,11 @@ export function Dashboard() {
       return
     }
     try {
-      const opts: { dealId?: string } = { dealId: targetDealId }
+      const dealForUpload = allDeals.find((d) => d.id === targetDealId) || deals.find((d) => d.id === targetDealId) || null
+      const opts: { dealId?: string; directBase?: string } = {
+        dealId: targetDealId,
+        directBase: resolveProviderBase(dealForUpload),
+      }
 
       const result = await upload(file, address, opts)
       setStagedUpload({

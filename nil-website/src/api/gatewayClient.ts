@@ -157,3 +157,40 @@ export async function gatewayFetchMduKzg(
   if (!json) throw new Error('Invalid mdu-kzg JSON')
   return json
 }
+
+export interface GatewayPlanResponse {
+  deal_id: number
+  owner: string
+  provider: string
+  manifest_root: string
+  file_path: string
+  range_start: number
+  range_len: number
+  start_mdu_index: number
+  start_blob_index: number
+  blob_count: number
+}
+
+export async function gatewayPlanRetrievalSession(
+  gatewayBase: string,
+  manifestRoot: string,
+  params: { dealId: string; owner: string; filePath: string; rangeStart?: number; rangeLen?: number },
+  fetchFn: typeof fetch = fetch,
+): Promise<GatewayPlanResponse> {
+  const q = new URLSearchParams()
+  q.set('deal_id', params.dealId)
+  q.set('owner', params.owner)
+  q.set('file_path', params.filePath)
+  if (params.rangeStart !== undefined) q.set('range_start', String(params.rangeStart))
+  if (params.rangeLen !== undefined) q.set('range_len', String(params.rangeLen))
+
+  const url = `${gatewayBase}/gateway/plan-retrieval-session/${encodeURIComponent(manifestRoot)}?${q.toString()}`
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 10_000, fetchFn)
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Gateway plan returned ${res.status}`)
+  }
+  const json = (await res.json().catch(() => null)) as GatewayPlanResponse | null
+  if (!json) throw new Error('Invalid plan JSON')
+  return json
+}

@@ -10,7 +10,8 @@ interface LocalGatewayInfo {
 }
 
 const DEFAULT_LOCAL_GATEWAY_URL = 'http://localhost:8080';
-const GATEWAY_HEALTH_ENDPOINT = '/health'; // Assuming a /health endpoint exists
+const GATEWAY_STATUS_ENDPOINT = '/status';
+const GATEWAY_HEALTH_ENDPOINT = '/health';
 
 export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
@@ -22,16 +23,32 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
       setStatus('connecting');
       setError(null); // Clear previous errors
       try {
-        const response = await fetch(`${DEFAULT_LOCAL_GATEWAY_URL}${GATEWAY_HEALTH_ENDPOINT}`, {
+        const statusUrl = `${DEFAULT_LOCAL_GATEWAY_URL}${GATEWAY_STATUS_ENDPOINT}`;
+        const response = await fetch(statusUrl, {
           method: 'GET',
-          signal: AbortSignal.timeout(3000) // Timeout after 3 seconds
+          signal: AbortSignal.timeout(3000),
         });
 
         if (response.ok) {
           setStatus('connected');
-        } else {
+          return;
+        }
+
+        if (response.status !== 404) {
           setStatus('disconnected');
           setError(`Gateway responded with status: ${response.status}`);
+          return;
+        }
+
+        const healthRes = await fetch(`${DEFAULT_LOCAL_GATEWAY_URL}${GATEWAY_HEALTH_ENDPOINT}`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(3000),
+        });
+        if (healthRes.ok) {
+          setStatus('connected');
+        } else {
+          setStatus('disconnected');
+          setError(`Gateway responded with status: ${healthRes.status}`);
         }
       } catch (e: unknown) {
         setStatus('disconnected');

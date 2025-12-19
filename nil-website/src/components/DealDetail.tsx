@@ -5,13 +5,14 @@ import { useProofs } from '../hooks/useProofs'
 import { useFetch } from '../hooks/useFetch'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
-import { gatewayFetchManifestInfo, gatewayFetchMduKzg, gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
 import { deleteCachedFile, hasCachedFile, readCachedFile, readMdu, readManifestRoot, writeCachedFile } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
+import { multiaddrToHttpUrl } from '../lib/multiaddr'
+import { useTransportRouter } from '../hooks/useTransportRouter'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -89,6 +90,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
+  const transport = useTransportRouter()
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -102,20 +104,8 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       const trimmed = String(ep || '').trim()
       if (!trimmed) continue
       if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/$/, '')
-      if (trimmed.startsWith('/')) {
-        const parts = trimmed.split('/').filter(Boolean)
-        let host = ''
-        let port = ''
-        let scheme = 'http'
-        for (let i = 0; i < parts.length; i++) {
-          const p = parts[i]
-          if (p === 'ip4' || p === 'dns4' || p === 'dns' || p === 'ip6') host = parts[i + 1] || host
-          if (p === 'tcp') port = parts[i + 1] || port
-          if (p === 'https') scheme = 'https'
-          if (p === 'http') scheme = 'http'
-        }
-        if (host && port) return `${scheme}://${host}:${port}`
-      }
+      const httpUrl = multiaddrToHttpUrl(trimmed)
+      if (httpUrl) return httpUrl
     }
     return appConfig.spBase
   }, [primaryProvider, providersByAddr])
@@ -175,7 +165,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return () => {
       canceled = true
     }
-  }, [])
+  }, [resolveProviderHttpBase, transport])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -297,8 +287,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     try {
       setGatewaySlabStatus('unknown')
       setSlabSource('none')
-      const json = await gatewayFetchSlabLayout(appConfig.gatewayBase, cid, dealId && owner ? { dealId: String(dealId), owner } : undefined)
-      setSlab(json)
+      const directBase = resolveProviderHttpBase()
+      const result = await transport.slab({
+        manifestRoot: cid,
+        dealId: String(dealId || ''),
+        owner: String(owner || ''),
+        directBase,
+      })
+      setSlab(result.data)
       setSlabSource('gateway')
       setGatewaySlabStatus('present')
     } catch (e) {
@@ -353,7 +349,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
-      const list = await gatewayListFiles(appConfig.gatewayBase, cid, { dealId, owner })
+      const directBase = resolveProviderHttpBase()
+      const result = await transport.listFiles({
+        manifestRoot: cid,
+        dealId,
+        owner,
+        directBase,
+      })
+      const list = result.data
       if (list.length > 0) {
         setFiles(list)
         return
@@ -378,7 +381,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
-  }, [fetchLocalFiles])
+  }, [fetchLocalFiles, resolveProviderHttpBase, transport])
 
   const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
@@ -386,12 +389,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     setMduRootMerkle(null)
     setMerkleError(null)
     try {
-      const json = await gatewayFetchManifestInfo(
-        appConfig.gatewayBase,
-        cid,
-        dealId && owner ? { dealId: String(dealId), owner } : undefined,
-      )
-      setManifestInfo(json)
+      const directBase = resolveProviderHttpBase()
+      const result = await transport.manifestInfo({
+        manifestRoot: cid,
+        dealId: dealId ? String(dealId) : undefined,
+        owner,
+        directBase,
+      })
+      setManifestInfo(result.data)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('Failed to fetch manifest info', e)
@@ -461,13 +466,15 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     setLoadingMduKzg(true)
     setMduKzgError(null)
     try {
-      const json = await gatewayFetchMduKzg(
-        appConfig.gatewayBase,
-        cid,
+      const directBase = resolveProviderHttpBase()
+      const result = await transport.mduKzg({
+        manifestRoot: cid,
         mduIndex,
-        dealId && owner ? { dealId: String(dealId), owner } : undefined,
-      )
-      setMduKzg(json)
+        dealId: dealId ? String(dealId) : undefined,
+        owner,
+        directBase,
+      })
+      setMduKzg(result.data)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('Failed to fetch MDU KZG', e)

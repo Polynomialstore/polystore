@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { appConfig } from '../config'
 import { ethToNil } from '../lib/address'
-import { gatewayUpload } from '../api/gatewayClient'
+import { useTransportRouter } from './useTransportRouter'
 
 export interface UploadResult {
   cid: string
@@ -13,11 +12,12 @@ export interface UploadResult {
 
 export function useUpload() {
   const [loading, setLoading] = useState(false)
+  const transport = useTransportRouter()
 
   async function upload(
     file: File | null | undefined,
     address: string | undefined,
-    opts?: { dealId?: string; maxUserMdus?: number },
+    opts?: { dealId?: string; maxUserMdus?: number; directBase?: string },
   ): Promise<UploadResult> {
     if (!file) {
       throw new Error('No file selected')
@@ -29,12 +29,14 @@ export function useUpload() {
     setLoading(true)
     try {
       const owner = address.startsWith('0x') ? ethToNil(address) : address
-      return await gatewayUpload(appConfig.gatewayBase, {
+      const result = await transport.uploadFile({
         file,
         owner,
         dealId: opts?.dealId,
         maxUserMdus: opts?.maxUserMdus,
+        directBase: opts?.directBase,
       })
+      return result.data
     } finally {
       setLoading(false)
     }

@@ -7,6 +7,9 @@ import { normalizeDealId } from '../lib/dealId'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import { resolveProviderEndpoint } from '../lib/providerDiscovery'
+import { useTransportRouter } from './useTransportRouter'
+import type { RoutePreference } from '../lib/transport/types'
 
 export interface FetchInput {
   dealId: string
@@ -77,6 +80,7 @@ function decodeHttpError(bodyText: string): string {
 
 export function useFetch() {
   const { address } = useAccount()
+  const transport = useTransportRouter()
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
@@ -158,28 +162,22 @@ export function useFetch() {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
-      const serviceBase = String(input.serviceBase ?? '').trim().replace(/\/$/, '') || appConfig.gatewayBase
-      const planParams = new URLSearchParams({
-        deal_id: dealId,
+      const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
+      const preferenceOverride: RoutePreference | undefined =
+        serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
+      const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
+      const directBase = serviceOverride || directEndpoint?.baseUrl
+      const planResult = await transport.plan({
+        manifestRoot,
         owner,
-        file_path: filePath,
-        range_start: String(wantRangeStart),
-        range_len: String(effectiveRangeLen),
+        dealId,
+        filePath,
+        rangeStart: wantRangeStart,
+        rangeLen: effectiveRangeLen,
+        directBase,
+        preference: preferenceOverride,
       })
-      const planUrl = `${serviceBase}/gateway/plan-retrieval-session/${manifestRoot}?${planParams.toString()}`
-
-      const planRes = await fetch(planUrl)
-      if (!planRes.ok) {
-        const text = await planRes.text().catch(() => '')
-        throw new Error(decodeHttpError(text) || `plan retrieval session failed (${planRes.status})`)
-      }
-      const planJson = (await planRes.json()) as {
-        provider?: string
-        start_mdu_index?: number
-        start_blob_index?: number
-        blob_count?: number
-        manifest_root?: string
-      }
+      const planJson = planResult.data
       const provider = String(planJson.provider || '').trim()
       if (!provider) throw new Error('gateway plan did not return provider')
       const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
@@ -233,6 +231,12 @@ export function useFetch() {
         bytesTotal: effectiveRangeLen,
         receiptsTotal: 2,
       }))
+
+      const serviceBase =
+        serviceOverride ||
+        planResult.trace.chosen?.endpoint ||
+        (planResult.backend === 'direct_sp' ? directBase : appConfig.gatewayBase) ||
+        appConfig.gatewayBase
 
       const fetchParams = new URLSearchParams({ deal_id: dealId, owner, file_path: filePath })
       const fetchUrl = `${serviceBase}/gateway/fetch/${manifestRoot}?${fetchParams.toString()}`

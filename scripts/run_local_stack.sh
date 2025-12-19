@@ -418,6 +418,10 @@ start_sp_gateway() {
 }
 
 start_user_gateway() {
+  if [ "${NIL_DISABLE_GATEWAY:-0}" = "1" ]; then
+    echo "Skipping User Gateway (NIL_DISABLE_GATEWAY=1)"
+    return
+  fi
   if [ "${NIL_START_USER_GATEWAY:-1}" != "1" ]; then
     echo "Skipping User Gateway (NIL_START_USER_GATEWAY=0)"
     return

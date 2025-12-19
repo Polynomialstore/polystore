@@ -14,6 +14,12 @@ export interface LcdDeal {
   providers?: string[]
 }
 
+export interface LcdProvider {
+  address: string
+  endpoints?: string[]
+  status?: string
+}
+
 export interface LcdCoin {
   amount: string
   denom: string
@@ -68,6 +74,32 @@ export function normalizeLcdDealsResponse(payload: unknown): LcdDeal[] {
   for (const item of deals) {
     const deal = normalizeLcdDeal(item)
     if (deal) out.push(deal)
+  }
+  return out
+}
+
+export function normalizeLcdDealResponse(payload: unknown): LcdDeal | null {
+  if (!isRecord(payload)) return null
+  const deal = payload['deal']
+  if (!deal) return null
+  return normalizeLcdDeal(deal)
+}
+
+export function normalizeLcdProvidersResponse(payload: unknown): LcdProvider[] {
+  if (!isRecord(payload)) return []
+  const providers = payload['providers']
+  if (!Array.isArray(providers)) return []
+  const out: LcdProvider[] = []
+  for (const item of providers) {
+    if (!isRecord(item)) continue
+    const endpoints = Array.isArray(item['endpoints'])
+      ? (item['endpoints'].filter((e) => typeof e === 'string') as string[])
+      : []
+    out.push({
+      address: asString(item['address']),
+      status: asString(item['status']),
+      endpoints: endpoints.length > 0 ? endpoints : undefined,
+    })
   }
   return out
 }

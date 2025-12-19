@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchStatus, ServiceStatus } from '../lib/status'
 import { appConfig } from '../config'
 import { useAccount, useChainId } from 'wagmi'
+import { useTransportContext } from '../context/TransportContext'
 
 function Badge({ label, status }: { label: string; status: ServiceStatus }) {
   const colors =
@@ -26,6 +27,7 @@ function Badge({ label, status }: { label: string; status: ServiceStatus }) {
 export function StatusBar() {
   const chainId = useChainId()
   const { isConnected } = useAccount()
+  const { preference, setPreference, lastTrace } = useTransportContext()
   const [height, setHeight] = useState<number | undefined>(undefined)
   const [chainName, setChainName] = useState<string | undefined>(undefined)
   const [summary, setSummary] = useState({
@@ -57,6 +59,10 @@ export function StatusBar() {
         : <Badge label={`Wallet chain ${chainId}`} status="error" />
       : <Badge label="Wallet: Not connected" status="warn" />
 
+  const lastRoute = lastTrace?.chosen?.backend ? lastTrace.chosen.backend.replace('_', ' ') : '—'
+  const lastFailure = lastTrace?.attempts.find((a) => !a.ok)
+  const lastReason = lastFailure?.errorMessage ? ` (${lastFailure.errorMessage})` : ''
+
   return (
     <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">
       <Badge label={`LCD`} status={summary.lcd} />
@@ -69,6 +75,19 @@ export function StatusBar() {
       {evmChainId !== undefined && (
         <span className="opacity-75">EVM Chain: {evmChainId}</span>
       )}
+      <span className="opacity-75">Route: {lastRoute}{lastReason}</span>
+      <label className="flex items-center gap-2">
+        <span className="opacity-75">Preference</span>
+        <select
+          value={preference}
+          onChange={(e) => setPreference(e.target.value as typeof preference)}
+          className="bg-background border border-border rounded px-2 py-1 text-xs"
+        >
+          <option value="auto">Auto</option>
+          <option value="prefer_gateway">Prefer gateway</option>
+          <option value="prefer_direct_sp">Prefer direct SP</option>
+        </select>
+      </label>
     </div>
   )
 }

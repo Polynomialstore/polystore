@@ -93,6 +93,9 @@ echo "==> Starting local stack..."
 
 wait_for_http "LCD" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 40 3
 wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 3
+if [ "${CHECK_GATEWAY_STATUS:-0}" = "1" ]; then
+  wait_for_http "Gateway status" "$GATEWAY_BASE/status" 40 3
+fi
 
 # 1. Derive Addresses
 echo "==> Deriving addresses..."
