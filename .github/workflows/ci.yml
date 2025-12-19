@@ -1,10 +1,7 @@
 name: NilStore CI
 
 on:
-  push:
-    branches: [ "main", "delta-sprint" ]
-  pull_request:
-    branches: [ "main", "delta-sprint" ]
+  push
 
 jobs:
   # ------------------------------------------------------------------
