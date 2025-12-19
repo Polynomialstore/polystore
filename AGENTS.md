@@ -517,9 +517,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
     - **Align spec with current implementation:** denom, fee destinations, and `ceil(...)` rounding MUST be explicitly stated.
     - **Define retrieval economics (no credits for Gamma-4):**
-        - **Fees:** `OpenRetrievalSession` MUST preflight+lock the maximum session cost up-front.
-        - **Payout:** on session `COMPLETED`, pay the provider from locked funds and burn a protocol cut (default 5%).
-        - **Failure semantics:** if the session expires without completion, refund the variable portion back to the Deal; the base fee is non-refundable (anti-spam).
+        - **Fees:** `OpenRetrievalSession` MUST (a) charge `base_retrieval_fee` (non-refundable, burned) and (b) preflight+lock the variable portion up-front.
+        - **Payout:** on session `COMPLETED`, pay the provider from the locked variable funds and burn a protocol cut (default 5%).
+        - **Failure semantics:** if the session expires without completion, refund the locked variable portion back to the Deal.
 - [ ] **Goal 2: Chain Params & Fees.**
     - **Already present (storage lock-in):** `storage_price` (`Dec`), `deal_creation_fee` (`Coin`), `min_duration_blocks` (`uint64`).
     - **Add (retrieval economics):** `base_retrieval_fee` (`Coin`), `retrieval_price_per_blob` (`Coin`, 128KiB unit), `retrieval_burn_bps` (`uint64`, default `500` = 5%).
@@ -532,8 +532,8 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Decision:** Retrieval credits are **out of scope** for Gamma-4 (too much state/UX ambiguity). Revisit after economics stabilize.
     - **Pricing unit:** price per **Blob** (128KiB) to avoid per-byte decimals and match `RetrievalSession.blob_count`.
     - **Preflight/lock:** `OpenRetrievalSession` MUST charge `base_retrieval_fee` (non-refundable) and reserve `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance` so providers never serve unpaid sessions.
-    - **Completion payout:** on session `COMPLETED`, transfer `provider_cut = cost - burn_cut` from `nilchain` module account to provider and burn `burn_cut = ceil(cost * retrieval_burn_bps / 10000)`.
-    - **Refund:** if a session expires/cancels without completion, refund only the locked `variable` amount back to `Deal.escrow_balance` (base fee remains spent).
+    - **Completion payout:** on session `COMPLETED`, burn `burn_cut = ceil(variable * retrieval_burn_bps / 10000)` and transfer `provider_cut = variable - burn_cut` from `nilchain` module account to provider.
+    - **Refund:** if a session expires/cancels without completion, refund only the locked `variable` amount back to `Deal.escrow_balance` (base fee remains burned/spent).
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**
