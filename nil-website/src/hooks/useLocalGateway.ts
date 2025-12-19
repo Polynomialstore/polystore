@@ -1,5 +1,6 @@
 // nil-website/src/hooks/useLocalGateway.ts
 import { useState, useEffect, useRef } from 'react';
+import { appConfig } from '../config';
 
 type GatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -19,6 +20,11 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
   const pollIntervalRef = useRef<number>(pollInterval); // Use ref for stable poll interval
 
   useEffect(() => {
+    if (appConfig.gatewayDisabled) {
+      setStatus('disconnected');
+      setError('Gateway disabled');
+      return;
+    }
     const checkGatewayStatus = async () => {
       setStatus('connecting');
       setError(null); // Clear previous errors

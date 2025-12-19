@@ -75,30 +75,48 @@ export function useTransportRouter() {
     }
   }, [coerceHttpError])
 
+  const resolvePreference = useCallback(
+    (override?: RoutePreference): RoutePreference =>
+      appConfig.gatewayDisabled ? 'prefer_direct_sp' : override ?? preference,
+    [preference],
+  )
+
+  const resolveDirectBase = useCallback((explicit?: string): string | undefined => {
+    const trimmed = explicit?.trim()
+    if (trimmed && trimmed !== appConfig.gatewayBase) return trimmed
+    if (appConfig.gatewayDisabled && appConfig.spBase && appConfig.spBase !== appConfig.gatewayBase) {
+      return appConfig.spBase
+    }
+    return undefined
+  }, [])
+
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
+    const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayListFiles(appConfig.gatewayBase, req.manifestRoot, {
-              dealId: req.dealId,
-              owner: req.owner,
-            }),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayListFiles(appConfig.gatewayBase, req.manifestRoot, {
+                  dealId: req.dealId,
+                  owner: req.owner,
+                }),
+              )
+            },
+          }]
+        : []),
     ]
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
+        endpoint: directBase,
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayListFiles(req.directBase!, req.manifestRoot, {
+            gatewayListFiles(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
             }),
@@ -106,10 +124,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for list files')
+    }
 
     try {
       const result = await executeWithFallback('list_files', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -122,29 +143,32 @@ export function useTransportRouter() {
   }, [preference, recordTrace, wrapExecute])
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
+    const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<SlabLayoutData>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayFetchSlabLayout(appConfig.gatewayBase, req.manifestRoot, {
-              dealId: req.dealId,
-              owner: req.owner,
-            }),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayFetchSlabLayout(appConfig.gatewayBase, req.manifestRoot, {
+                  dealId: req.dealId,
+                  owner: req.owner,
+                }),
+              )
+            },
+          }]
+        : []),
     ]
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
+        endpoint: directBase,
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayFetchSlabLayout(req.directBase!, req.manifestRoot, {
+            gatewayFetchSlabLayout(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
             }),
@@ -152,10 +176,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for slab')
+    }
 
     try {
       const result = await executeWithFallback('slab', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -168,32 +195,35 @@ export function useTransportRouter() {
   }, [preference, recordTrace, wrapExecute])
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
+    const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayPlanRetrievalSession(appConfig.gatewayBase, req.manifestRoot, {
-              dealId: req.dealId,
-              owner: req.owner,
-              filePath: req.filePath,
-              rangeStart: req.rangeStart,
-              rangeLen: req.rangeLen,
-            }),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayPlanRetrievalSession(appConfig.gatewayBase, req.manifestRoot, {
+                  dealId: req.dealId,
+                  owner: req.owner,
+                  filePath: req.filePath,
+                  rangeStart: req.rangeStart,
+                  rangeLen: req.rangeLen,
+                }),
+              )
+            },
+          }]
+        : []),
     ]
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
+        endpoint: directBase,
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayPlanRetrievalSession(req.directBase!, req.manifestRoot, {
+            gatewayPlanRetrievalSession(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
               filePath: req.filePath,
@@ -204,10 +234,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for retrieval plan')
+    }
 
     try {
       const result = await executeWithFallback('plan', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -220,24 +253,26 @@ export function useTransportRouter() {
   }, [preference, recordTrace, wrapExecute])
 
   const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
+    const directBase = resolveDirectBase(req.directBase) ?? appConfig.spBase
     const candidates: TransportCandidate<UploadResult>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayUpload(appConfig.gatewayBase, {
-              file: req.file,
-              owner: req.owner,
-              dealId: req.dealId,
-              maxUserMdus: req.maxUserMdus,
-            }),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayUpload(appConfig.gatewayBase, {
+                  file: req.file,
+                  owner: req.owner,
+                  dealId: req.dealId,
+                  maxUserMdus: req.maxUserMdus,
+                }),
+              )
+            },
+          }]
+        : []),
     ]
-    const directBase = req.directBase && req.directBase !== appConfig.gatewayBase ? req.directBase : appConfig.spBase
     if (directBase && directBase !== appConfig.gatewayBase) {
       candidates.push({
         backend: 'direct_sp' as const,
@@ -255,9 +290,15 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for upload')
+    }
 
     try {
-      const result = await executeWithFallback('upload', candidates, { preference, timeoutMs: 60_000 })
+      const result = await executeWithFallback('upload', candidates, {
+        preference: resolvePreference(),
+        timeoutMs: 60_000,
+      })
       recordTrace(result.trace)
       return result
     } catch (err) {
@@ -267,31 +308,34 @@ export function useTransportRouter() {
   }, [preference, recordTrace, wrapExecute])
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
+    const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<ManifestInfoData>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayFetchManifestInfo(
-              appConfig.gatewayBase,
-              req.manifestRoot,
-              req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            ),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayFetchManifestInfo(
+                  appConfig.gatewayBase,
+                  req.manifestRoot,
+                  req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
+                ),
+              )
+            },
+          }]
+        : []),
     ]
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
+        endpoint: directBase,
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
             gatewayFetchManifestInfo(
-              req.directBase!,
+              directBase,
               req.manifestRoot,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
             ),
@@ -299,10 +343,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for manifest info')
+    }
 
     try {
       const result = await executeWithFallback('manifest_info', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -315,32 +362,35 @@ export function useTransportRouter() {
   }, [preference, recordTrace, wrapExecute])
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
+    const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<MduKzgData>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            gatewayFetchMduKzg(
-              appConfig.gatewayBase,
-              req.manifestRoot,
-              req.mduIndex,
-              req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            ),
-          )
-        },
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => {
+              void signal
+              return wrapExecute(() =>
+                gatewayFetchMduKzg(
+                  appConfig.gatewayBase,
+                  req.manifestRoot,
+                  req.mduIndex,
+                  req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
+                ),
+              )
+            },
+          }]
+        : []),
     ]
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
+        endpoint: directBase,
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
             gatewayFetchMduKzg(
-              req.directBase!,
+              directBase,
               req.manifestRoot,
               req.mduIndex,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
@@ -349,10 +399,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for MDU KZG')
+    }
 
     try {
       const result = await executeWithFallback('mdu_kzg', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 30_000,
         maxAttemptsPerBackend: 2,
       })
@@ -369,6 +422,7 @@ export function useTransportRouter() {
       throw new Error('rangeLen must be > 0')
     }
 
+    const directBase = resolveDirectBase(req.directBase)
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
@@ -410,24 +464,29 @@ export function useTransportRouter() {
     }
 
     const candidates: TransportCandidate<{ bytes: Uint8Array; provider: string }>[] = [
-      {
-        backend: 'gateway' as const,
-        endpoint: appConfig.gatewayBase,
-        execute: async (signal) => executeFetch(appConfig.gatewayBase, signal),
-      },
+      ...(!appConfig.gatewayDisabled
+        ? [{
+            backend: 'gateway' as const,
+            endpoint: appConfig.gatewayBase,
+            execute: async (signal: AbortSignal) => executeFetch(appConfig.gatewayBase, signal),
+          }]
+        : []),
     ]
 
-    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+    if (directBase) {
       candidates.push({
         backend: 'direct_sp' as const,
-        endpoint: req.directBase,
-        execute: async (signal) => executeFetch(req.directBase!, signal),
+        endpoint: directBase,
+        execute: async (signal) => executeFetch(directBase, signal),
       })
+    }
+    if (candidates.length === 0) {
+      throw new Error('No available transport candidates for fetch')
     }
 
     try {
       const result = await executeWithFallback('fetch', candidates, {
-        preference: req.preference ?? preference,
+        preference: resolvePreference(req.preference),
         timeoutMs: 30_000,
         maxAttemptsPerBackend: 2,
       })

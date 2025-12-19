@@ -918,8 +918,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
                             <input
-                              value={duration}
-                              onChange={(e) => setDuration(e.target.value)}
+                              defaultValue={duration ?? ''}
+                              onChange={(e) => setDuration(e.target.value ?? '')}
                               data-testid="alloc-duration"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -927,8 +927,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
                             <input
-                              value={initialEscrow}
-                              onChange={(e) => setInitialEscrow(e.target.value)}
+                              defaultValue={initialEscrow ?? ''}
+                              onChange={(e) => setInitialEscrow(e.target.value ?? '')}
                               data-testid="alloc-initial-escrow"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -936,8 +936,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
                             <input
-                              value={maxMonthlySpend}
-                              onChange={(e) => setMaxMonthlySpend(e.target.value)}
+                              defaultValue={maxMonthlySpend ?? ''}
+                              onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
                               data-testid="alloc-max-monthly-spend"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -945,8 +945,10 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
                             <select
-                                value={redundancyMode}
-                                onChange={(e) => setRedundancyMode(e.target.value as 'mode1' | 'mode2')}
+                                defaultValue={redundancyMode || 'mode1'}
+                                onChange={(e) =>
+                                  setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode1')
+                                }
                                 data-testid="alloc-redundancy-mode"
                                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             >
@@ -961,8 +963,8 @@ export function Dashboard() {
                                   type="number"
                                   min={1}
                                   max={12}
-                                  value={replication}
-                                  onChange={e => setReplication(e.target.value)}
+                                  defaultValue={replication ?? ''}
+                                  onChange={e => setReplication(e.target.value ?? '')}
                                   data-testid="alloc-replication"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                               />
@@ -975,8 +977,8 @@ export function Dashboard() {
                                       type="number"
                                       min={1}
                                       max={64}
-                                      value={rsK}
-                                      onChange={e => setRsK(e.target.value)}
+                                      defaultValue={rsK ?? ''}
+                                      onChange={e => setRsK(e.target.value ?? '')}
                                       data-testid="alloc-rs-k"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                                   />
@@ -987,8 +989,8 @@ export function Dashboard() {
                                       type="number"
                                       min={1}
                                       max={64}
-                                      value={rsM}
-                                      onChange={e => setRsM(e.target.value)}
+                                      defaultValue={rsM ?? ''}
+                                      onChange={e => setRsM(e.target.value ?? '')}
                                       data-testid="alloc-rs-m"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                                   />
@@ -1017,7 +1019,7 @@ export function Dashboard() {
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                               <select 
-                                  value={targetDealId} 
+                                  value={targetDealId ?? ''} 
                                   onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                                   data-testid="content-deal-select"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
@@ -1284,7 +1286,7 @@ export function Dashboard() {
                     <label className="space-y-1">
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                         <select 
-                            value={targetDealId} 
+                            value={targetDealId ?? ''} 
                             onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                             data-testid="mdu-deal-select"
                             className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
