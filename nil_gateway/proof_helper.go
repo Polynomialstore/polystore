@@ -131,7 +131,9 @@ type proofCacheKey struct {
 	mduIndex      uint64
 	mduPath       string
 	manifestPath  string
-	blobIndex     uint32
+	encodedBlob   uint32
+	leafIndex     uint64
+	leafCount     uint64
 	manifestEpoch uint64
 }
 
@@ -150,7 +152,7 @@ var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 //	{ "proof_details": <ChainedProof> }
 //
 // This function is performance critical and caches results keyed by (mduIndex,mduPath,manifestPath,blobIndex,epoch).
-func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, blobIndex uint32, zHint uint64) ([]byte, string, error) {
+func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, encodedBlobIndex uint32, leafIndex uint64, leafCount uint64, zHint uint64) ([]byte, string, error) {
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
@@ -175,7 +177,9 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		mduIndex:      mduIndex,
 		mduPath:       mduPath,
 		manifestPath:  manifestPath,
-		blobIndex:     blobIndex,
+		encodedBlob:   encodedBlobIndex,
+		leafIndex:     leafIndex,
+		leafCount:     leafCount,
 		manifestEpoch: epoch,
 	}
 
@@ -212,7 +216,10 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 
 	// Hop 2: derive blob commitments from Witness MDUs (fast; avoids recomputing KZG commitments).
 	const commitmentBytes = 48
-	commitmentSpan := uint64(types.BLOBS_PER_MDU * commitmentBytes)
+	if leafCount == 0 {
+		return nil, "", fmt.Errorf("leaf_count must be > 0")
+	}
+	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
 	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
@@ -228,27 +235,30 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		return nil, "", fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
 	}
 
-	if blobIndex >= uint32(types.BLOBS_PER_MDU) {
-		return nil, "", fmt.Errorf("blobIndex out of range: %d", blobIndex)
+	if uint64(leafIndex) >= leafCount {
+		return nil, "", fmt.Errorf("leaf_index out of range: %d", leafIndex)
 	}
-	commitmentOffset := int(blobIndex) * commitmentBytes
+	commitmentOffset := int(leafIndex) * commitmentBytes
 	blobCommitment := witnessRaw[commitmentOffset : commitmentOffset+commitmentBytes]
 
-	leafHashes := make([][32]byte, 0, types.BLOBS_PER_MDU)
+	leafHashes := make([][32]byte, 0, int(leafCount))
 	for i := 0; i < len(witnessRaw); i += commitmentBytes {
 		sum := blake2s.Sum256(witnessRaw[i : i+commitmentBytes])
 		leafHashes = append(leafHashes, sum)
 	}
-	root, merklePath := merkleRootAndPath(leafHashes, int(blobIndex))
+	if len(leafHashes) == 0 || uint64(len(leafHashes)) != leafCount {
+		return nil, "", fmt.Errorf("invalid witness length: got %d expected %d", len(leafHashes), leafCount)
+	}
+	root, merklePath := merkleRootAndPath(leafHashes, int(leafIndex))
 
 	// Hop 3: compute a single blob opening proof without recomputing commitments.
-	blobBytes, err := readMduBlob(mduPath, uint64(blobIndex))
+	blobBytes, err := readMduBlob(mduPath, uint64(encodedBlobIndex))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read blob bytes: %w", err)
 	}
 	z := make([]byte, 32)
 	z[0] = 42
-	z[1] = byte(blobIndex)
+	z[1] = byte(encodedBlobIndex)
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], zHint)
 	copy(z[2:10], b[:])
@@ -268,7 +278,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		ManifestOpening: manifestProof,
 		BlobCommitment:  blobCommitment,
 		MerklePath:      merklePath,
-		BlobIndex:       blobIndex,
+		BlobIndex:       uint32(leafIndex),
 		ZValue:          z,
 		YValue:          y,
 		KzgOpeningProof: kzgProofBytes,

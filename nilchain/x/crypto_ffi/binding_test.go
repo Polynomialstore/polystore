@@ -32,7 +32,7 @@ func TestVerifyMduProof(t *testing.T) {
     y := make([]byte, 32)
     proof := make([]byte, 48)
 
-    valid, err := VerifyMduProof(mduRoot, comm, merklePath, 0, z, y, proof)
+    valid, err := VerifyMduProof(mduRoot, comm, merklePath, 0, 64, z, y, proof)
     if err != nil {
         // It might return error if internal check fails, but here we expect false
         // Actually invalid points (all zeros) might cause C-KZG error?
@@ -55,8 +55,8 @@ func TestVerifyChainedProof(t *testing.T) {
     merklePath := make([]byte, 32)
 
     valid, err := VerifyChainedProof(
-        manifestComm, 0, manifestProof, mduRoot, 
-        blobComm, 0, merklePath, 
+        manifestComm, 0, manifestProof, mduRoot,
+        blobComm, 0, 64, merklePath,
         z, y, blobProof,
     )
     

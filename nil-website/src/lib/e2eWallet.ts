@@ -51,6 +51,7 @@ export function installE2eWallet() {
     // Or add isNilStoreE2E to vite-env.d.ts?
     // I'll add it to vite-env.d.ts.
     selectedAddress: account.address,
+    isNilStoreE2E: true,
 
     on,
     removeListener,
@@ -117,4 +118,17 @@ export function installE2eWallet() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any // Cast to any to bypass exact shape check if needed, or better, match interface.
   // I'll cast to any for assignment to allow extra props like isNilStoreE2E without modifying vite-env again.
+
+  const announceProvider = () => {
+    window.dispatchEvent(
+      new CustomEvent('eip6963:announceProvider', {
+        detail: {
+          info: { uuid: 'nilstore-e2e', name: 'NilStore E2E', icon: '', rdns: 'nilstore.e2e' },
+          provider: window.ethereum,
+        },
+      }),
+    )
+  }
+  window.addEventListener('eip6963:requestProvider', announceProvider)
+  announceProvider()
 }

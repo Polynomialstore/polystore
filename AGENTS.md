@@ -708,7 +708,84 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 ---
 
-### 11.4 Next Sprint: Devnet Gamma‑Mode2 Web Integration (Preliminary Outline)
+### 11.4 Mode 2 StripeReplica (Implementation Sprint: `mode2` branch)
+
+**Objective:** Deliver end-to-end Mode 2 (StripeReplica) with RS(K, K+M) striping, provider slot assignment, shard uploads, and retrieval reconstruction across browser + gateway + SPs.
+
+**Constraints (keep explicit):**
+- **K | 64** and **N = K+M** must be enforced end-to-end.
+- **Deal.providers** is the **ordered slot list** (`slot → provider`) in Mode 2.
+- **Metadata MDUs (MDU #0 + Witness)** are replicated to all `N` providers.
+- **User data MDUs** are striped; each provider stores **one shard** per MDU.
+
+#### 11.4.A Chain & Deal Cataloging
+- [x] **Task 1: RS parameter capture (deal creation).**
+  - Encode `rs=K+M` in `service_hint` (e.g., `General:replicas=12,rs=8+4`) until explicit proto fields exist.
+  - Parse in `MsgCreateDeal`/`MsgCreateDealFromEvm` to set:
+    - `deal.redundancy_mode = 2`
+    - `requestedReplicas = N` (cap by available providers)
+    - `current_replication = len(providers)`
+  - Reject invalid profiles (`K=0`, `M=0`, `K | 64` fails, or `N > available`).
+- [x] **Task 2: Slot-aware proof enforcement.**
+  - When `deal.redundancy_mode == 2`, enforce:
+    - `rows = 64 / K`
+    - `leaf_count = (K+M) * rows`
+    - `blob_index < leaf_count`
+    - `slot(blob_index) == provider_slot(msg.creator)` with `slot = blob_index / rows`
+  - Use `deal.providers[slot]` as the authoritative provider address.
+- [x] **Task 3: Retrieval-session validation (Mode 2).**
+  - Keep `start_blob_index < leaf_count`.
+  - Require provider is assigned to the relevant `slot`.
+  - Pin `manifest_root` at session open as today.
+
+#### 11.4.B Core Crypto (`nil_core`) + FFI
+- [x] **Task 1: Parametric RS expansion.**
+  - Add `expand_mdu_rs(k, m)` (WASM + native) to return:
+    - `shards`: `N` shards of `MDU_SIZE / K` bytes
+    - `witness`: `N * rows` commitments in **slot-major** order
+  - Preserve old behavior as default `K=8, M=4`.
+- [x] **Task 2: RS decode helper.**
+  - Implement `reconstruct_mdu_from_shards(shards, k, m)` that rebuilds a full 8 MiB MDU from any `K` shards.
+  - Add tests for reconstructing from missing shards.
+- [x] **Task 3: Mode 2 Merkle verification.**
+  - Allow `verify_mdu_merkle_proof(root, commitment, leaf_index, path, leaf_count)` to accept dynamic leaf counts.
+  - Update C-FFI + Go bindings to pass `leaf_count`.
+
+#### 11.4.C Gateway + SP Storage
+- [x] **Task 1: Mode 2 ingest (new deal + append).**
+  - Browser/WASM builds full NilFS slab locally (MDU #0 + Witness + User MDUs).
+  - User data MDUs are expanded into shards and uploaded per slot; metadata MDUs are replicated to all slots.
+  - Manifest root is computed from Mode 2 MDU roots and committed on-chain.
+- [x] **Task 2: SP shard upload API.**
+  - Add `/sp/upload_shard` with `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root`.
+  - Store shards as `mdu_<index>_slot_<slot>.bin`.
+  - Keep MDU #0 + Witness replicated to all slots via `/sp/upload_mdu`.
+- [x] **Task 3: Mode 2 retrieval aggregator.**
+  - Gateways reconstruct MDUs from per-slot shards when local slab bytes are missing.
+  - Fetches slot shards via `/sp/shard` and reassembles blob-aligned MDUs for streaming/proofs.
+
+#### 11.4.D Browser (User UX)
+- [x] **Task 1: RS selector in Create Deal.**
+  - Add `K` and `M` inputs (defaults 8+4) in dashboard Create Deal flow.
+  - Inject `rs=K+M` into `service_hint` for on-chain deal creation.
+- [x] **Task 2: Mode 2 upload path.**
+  - Use WASM `expand_mdu_rs(k, m)` in worker.
+  - Upload shards to each provider slot (`/sp/upload_shard`).
+  - Upload metadata MDUs to all providers; commit `manifest_root`.
+- [x] **Task 3: Mode 2 retrieval path.**
+  - Slot-aware fetch via provider endpoints and gateway reconstruction when needed.
+  - Verify proofs against Mode 2 Merkle ordering with dynamic leaf counts.
+
+#### 11.4.E Tests (Unit + E2E)
+- [x] **Unit:** nil_core RS param + decode tests (missing shards, invalid K|64).
+- [x] **Unit:** gateway Mode 2 reconstruction test (data shard -> MDU).
+- [x] **E2E:** a new script that spins up **12+ SPs**, creates a Mode 2 deal, uploads data, and retrieves bytes successfully.
+  - Simple routing: slot 0..N-1 -> providers[slot] (ordered list from chain).
+  - Validate: on-chain deal providers list length == N, manifest root updated, retrieval returns correct bytes.
+
+---
+
+### 11.4.1 Next Sprint: Devnet Gamma‑Mode2 Web Integration (Preliminary Outline)
 
 **Status:** Preliminary outline only (final scope depends on Delta completion and CI stability).
 

@@ -62,6 +62,12 @@ export interface ExpandedMdu {
     mdu_root: Uint8Array | number[]; // 32 bytes
 }
 
+export interface ExpandedStripe {
+    witness_flat: Uint8Array | number[];
+    mdu_root: Uint8Array | number[];
+    shards: Array<Uint8Array | number[]>;
+}
+
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
@@ -71,8 +77,8 @@ export const workerClient = {
   },
 
   // Initialize Mdu0Builder within the worker
-  async initMdu0Builder(maxUserMdus: number): Promise<string> {
-    return sendMessageToWorker('initMdu0Builder', { maxUserMdus }) as Promise<string>;
+  async initMdu0Builder(maxUserMdus: number, commitmentsPerMdu?: number): Promise<string> {
+    return sendMessageToWorker('initMdu0Builder', { maxUserMdus, commitmentsPerMdu }) as Promise<string>;
   },
 
   // Append a file entry to the MDU #0 builder in the worker
@@ -111,6 +117,10 @@ export const workerClient = {
       [data.buffer],
       opts?.onProgress,
     ) as Promise<ExpandedMdu>;
+  },
+
+  async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
+    return sendMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)

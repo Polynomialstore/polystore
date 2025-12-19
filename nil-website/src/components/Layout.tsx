@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { ConnectWallet } from "./ConnectWallet";
 import { useState } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, Shield, HelpCircle, Vote, Terminal } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { GatewayStatusWidget } from './GatewayStatusWidget';
@@ -32,7 +32,6 @@ export const Layout = () => {
       items: [
         { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         { name: "Devnet Join", path: "/devnet", description: "Join a multi-provider devnet.", icon: <Terminal className="w-5 h-5" /> },
-        { name: "Security", path: "/security", description: "Threat model & mitigations.", icon: <Shield className="w-5 h-5" /> },
         { name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
       ] 
     },

@@ -28,14 +28,15 @@ export const Leaderboard = () => {
   }, []);
 
   // Sort by Total Storage (desc)
-  const ranked = [...providers].sort((a, b) => parseInt(b.total_storage) - parseInt(a.total_storage));
+  const ranked = [...providers].sort((a, b) => Number(b.total_storage) - Number(a.total_storage));
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-bold mb-4 text-foreground">Storage Providers Network</h1>
         <p className="text-xl text-muted-foreground">
-          Active providers registered on-chain. Ranked by reported capacity and status.
+          Active providers registered on-chain. Devnet rankings currently weight reported capacity; retrieval-performance
+          metrics are surfaced in the Live Proofs dashboard.
         </p>
       </div>
 
@@ -76,7 +77,11 @@ export const Leaderboard = () => {
                       Capacity
                     </div>
                     <div className="font-mono font-medium text-foreground">
-                      {(parseInt(node.total_storage) / (1024 * 1024 * 1024)).toFixed(2)} GB
+                      {(() => {
+                        const total = Number(node.total_storage)
+                        if (!Number.isFinite(total) || total <= 0) return '—'
+                        return `${(total / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                      })()}
                     </div>
                   </div>
 

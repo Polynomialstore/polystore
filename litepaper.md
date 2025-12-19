@@ -14,7 +14,7 @@ By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Plac
 ### Value for Data Owners
 *   **Instant Availability:** Data is stored in 8 MiB Mega-Data Units (MDUs) for efficient retrieval.
 *   **User-Funded Elasticity:** Viral content automatically scales using **Stripe-Aligned Scaling** to meet demand, funded by the deal's escrow.
-*   **Configurable Resilience:** Users define `ServiceHints` (Hot/Cold) to optimize placement for cost (Archive) or speed (Edge).
+*   **Configurable Resilience:** Users define `ServiceHints` (Hot/Cold) and can select RS(K, K+M) profiles to tune durability vs. cost.
 *   **Enterprise Privacy:** Data is encrypted client-side. Scaling is "Zero-Touch" (network replicates ciphertext). Deletion is guaranteed via **Crypto-Erasure**.
 
 ---
@@ -67,7 +67,7 @@ Concretely, the mainnet Mode 1 design adds:
 1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)` (thin-provisioned container).
 2.  **Upload:** User streams data to the assigned nodes and receives a `manifest_root`.
 3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
-4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned across shard indices for 8 MiB MDUs.
+4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In **StripeReplica (Mode 2)**, the Chain assigns an ordered slot list of size `N = K+M`, replicating metadata to all slots while striping user data per slot.
 
 ### Step 2: The Loop
 *   **Traffic (Mode 1):** Users request data via retrieval sessions. After a successful download, the user confirms the session and the provider submits the session proof for liveness and bandwidth fees.

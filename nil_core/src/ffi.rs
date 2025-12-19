@@ -92,6 +92,7 @@ pub extern "C" fn nil_verify_mdu_proof(
     merkle_path_bytes: *const u8,         // Serialized Merkle path
     merkle_path_len: usize,               // Length of serialized Merkle path
     challenged_kzg_commitment_index: u32, // Index of the challenged blob (0-63)
+    leaf_count: u64,                      // Number of leaves in the MDU Merkle tree
     z_value: *const u8,                   // 32-byte challenge point
     y_value: *const u8,                   // 32-byte claimed value
     kzg_opening_proof: *const u8,         // 48-byte KZG opening proof
@@ -128,7 +129,7 @@ pub extern "C" fn nil_verify_mdu_proof(
         challenged_kzg_commitment_slice,
         challenged_kzg_commitment_index as usize,
         merkle_path_slice,
-        BLOBS_PER_MDU,
+        leaf_count as usize,
     ) {
         Ok(true) => { /* Merkle proof valid, proceed to KZG verification */ }
         Ok(false) => {
@@ -434,6 +435,7 @@ pub extern "C" fn nil_verify_chained_proof(
     // Hop 2 Inputs
     blob_commitment: *const u8,   // 48 bytes
     blob_index: u64,              // Index of Blob in MDU
+    leaf_count: u64,              // Number of leaves in the MDU Merkle tree
     blob_merkle_proof: *const u8, // Serialized Merkle path
     blob_merkle_proof_len: usize,
 
@@ -497,7 +499,7 @@ pub extern "C" fn nil_verify_chained_proof(
         blob_commitment_slice,
         blob_index as usize,
         blob_merkle_proof_slice,
-        crate::kzg::BLOBS_PER_MDU,
+        leaf_count as usize,
     ) {
         Ok(true) => {}
         Ok(false) => {
@@ -688,4 +690,3 @@ pub extern "C" fn nil_mdu0_get_record(ptr: *mut Mdu0Builder, index: u32, out_rec
     }
     0
 }
-

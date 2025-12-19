@@ -19,6 +19,11 @@ type dealProviderCacheEntry struct {
 	expires  time.Time
 }
 
+type dealHintCacheEntry struct {
+	hint    string
+	expires time.Time
+}
+
 type providerBaseCacheEntry struct {
 	baseURL string
 	expires time.Time
@@ -26,9 +31,11 @@ type providerBaseCacheEntry struct {
 
 var (
 	dealProviderCache  sync.Map // map[uint64]*dealProviderCacheEntry
+	dealHintCache      sync.Map // map[uint64]*dealHintCacheEntry
 	providerBaseCache  sync.Map // map[string]*providerBaseCacheEntry
 	providerCacheTTL   = 30 * time.Second
 	dealProviderTTL    = 10 * time.Second
+	dealHintTTL        = 10 * time.Second
 	errNoHTTPMultiaddr = errors.New("no supported http multiaddr")
 )
 
@@ -156,6 +163,58 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 		}
 	}
 	return nil, fmt.Errorf("LCD returned 500: %s", lastBody)
+}
+
+func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, error) {
+	if cachedAny, ok := dealHintCache.Load(dealID); ok {
+		cached := cachedAny.(*dealHintCacheEntry)
+		if time.Now().Before(cached.expires) {
+			return cached.hint, nil
+		}
+	}
+
+	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	var lastBody string
+	for attempt := 1; attempt <= 10; attempt++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := lcdHTTPClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("LCD request failed: %w", err)
+		}
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		lastBody = strings.TrimSpace(string(bodyBytes))
+
+		if resp.StatusCode == http.StatusOK {
+			var payload struct {
+				Deal struct {
+					ServiceHint string `json:"service_hint"`
+				} `json:"deal"`
+			}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				return "", fmt.Errorf("failed to decode LCD response: %w", err)
+			}
+			hint := strings.TrimSpace(payload.Deal.ServiceHint)
+			dealHintCache.Store(dealID, &dealHintCacheEntry{
+				hint:    hint,
+				expires: time.Now().Add(dealHintTTL),
+			})
+			return hint, nil
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			return "", ErrDealNotFound
+		}
+		if !isRetryableLCDStatus(resp.StatusCode) || attempt == 10 {
+			return "", fmt.Errorf("LCD returned %d: %s", resp.StatusCode, lastBody)
+		}
+
+		if err := sleepWithContext(ctx, time.Duration(attempt)*150*time.Millisecond); err != nil {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("LCD returned 500: %s", lastBody)
 }
 
 func fetchProviderEndpointsFromLCD(ctx context.Context, providerAddr string) ([]string, error) {

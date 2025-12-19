@@ -385,6 +385,33 @@ func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error
 		userCount = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
 	}
 
+	// Prefer deriving witness count from the root table in MDU #0.
+	if mdu0Bytes, err := b.Bytes(); err == nil {
+		rootTableBytes := 16 * uint64(types.BLOB_SIZE)
+		if uint64(len(mdu0Bytes)) >= rootTableBytes {
+			totalRoots := 0
+			for off := uint64(0); off+32 <= rootTableBytes; off += 32 {
+				chunk := mdu0Bytes[off : off+32]
+				allZero := true
+				for _, v := range chunk {
+					if v != 0 {
+						allZero = false
+						break
+					}
+				}
+				if !allZero {
+					totalRoots++
+				}
+			}
+			if totalRoots > 0 {
+				if uint64(totalRoots) < userCount {
+					return 0, fmt.Errorf("invalid root table: roots=%d userCount=%d", totalRoots, userCount)
+				}
+				return uint64(totalRoots) - userCount, nil
+			}
+		}
+	}
+
 	entries, err := os.ReadDir(dealDir)
 	if err != nil {
 		return 0, err

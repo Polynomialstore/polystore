@@ -15,34 +15,46 @@ pub struct Mdu0Builder {
     pub header: FileTableHeader,
     pub witness_mdu_count: u64,
     pub max_user_mdus: u64,
+    pub commitments_per_mdu: u64,
 }
 
 impl Mdu0Builder {
     pub fn new(max_user_mdus: u64) -> Self {
+        Self::new_with_commitments(max_user_mdus, 64)
+    }
+
+    pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> Self {
+        let commitments = if commitments_per_mdu == 0 { 64 } else { commitments_per_mdu };
         // Calculate W
-        let total_commitment_bytes = (max_user_mdus * 64 * 48) as f64;
+        let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
         let w = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
 
         let mut header = FileTableHeader::default();
         header.record_size = FILE_RECORD_SIZE as u16;
         header.record_count = 0;
-        
+
         let mut builder = Mdu0Builder {
             buffer: vec![0u8; MDU_SIZE],
             header,
             witness_mdu_count: w,
             max_user_mdus,
+            commitments_per_mdu: commitments,
         };
         builder.flush_header();
         builder
     }
 
     pub fn load(data: &[u8], max_user_mdus: u64) -> Result<Self, String> {
+        Self::load_with_commitments(data, max_user_mdus, 64)
+    }
+
+    pub fn load_with_commitments(data: &[u8], max_user_mdus: u64, commitments_per_mdu: u64) -> Result<Self, String> {
         if data.len() != MDU_SIZE {
             return Err("invalid MDU size".to_string());
         }
 
-        let total_commitment_bytes = (max_user_mdus * 64 * 48) as f64;
+        let commitments = if commitments_per_mdu == 0 { 64 } else { commitments_per_mdu };
+        let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
         let witness_mdu_count = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
 
         let header_slice = &data[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE];
@@ -57,6 +69,7 @@ impl Mdu0Builder {
             header,
             witness_mdu_count,
             max_user_mdus,
+            commitments_per_mdu: commitments,
         })
     }
 

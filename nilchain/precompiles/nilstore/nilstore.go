@@ -451,7 +451,13 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 			return nil, errors.New("proveRetrievalBatch: bytes overflow")
 		}
 
-		ok, err := verifyChainedProof(ctx, deal.ManifestRoot, c.Proof)
+		leafCount := types.BlobsPerMdu
+		if parsed, err := types.ParseServiceHint(deal.ServiceHint); err == nil {
+			if rs, ok, err := types.RSParamsFromHint(parsed); err == nil && ok {
+				leafCount = rs.LeafCount
+			}
+		}
+		ok, err := verifyChainedProof(ctx, deal.ManifestRoot, leafCount, c.Proof)
 		if err != nil {
 			return nil, fmt.Errorf("proveRetrievalBatch: triple proof verification error: %w", err)
 		}
@@ -600,7 +606,7 @@ func decodeChunks(v any) ([]decodedChunk, error) {
 	return out, nil
 }
 
-func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, chainedProof types.ChainedProof) (bool, error) {
+func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, leafCount uint64, chainedProof types.ChainedProof) (bool, error) {
 	if len(manifestRoot) != 48 {
 		return false, nil
 	}
@@ -625,6 +631,7 @@ func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, chainedProof types
 		chainedProof.MduRootFr,
 		chainedProof.BlobCommitment,
 		uint64(chainedProof.BlobIndex),
+		leafCount,
 		flattenedMerkle,
 		chainedProof.ZValue,
 		chainedProof.YValue,

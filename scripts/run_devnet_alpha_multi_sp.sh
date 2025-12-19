@@ -29,6 +29,7 @@ DENOM="${NIL_DENOM:-stake}"
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
+NIL_GATEWAY_BIN="$ROOT_DIR/nil_gateway/nil_gateway"
 TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
@@ -45,6 +46,30 @@ FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride commo
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+ensure_nil_core() {
+  local lib_dir="$ROOT_DIR/nil_core/target/release"
+  if [ -f "$lib_dir/libnil_core.a" ] || [ -f "$lib_dir/libnil_core.so" ] || [ -f "$lib_dir/libnil_core.dylib" ]; then
+    return 0
+  fi
+  banner "Building nil_core (native)"
+  (cd "$ROOT_DIR/nil_core" && cargo build --release)
+  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+    local alt=""
+    for ext in a so dylib; do
+      alt=$(ls "$ROOT_DIR"/nil_core/target/*/release/libnil_core."$ext" 2>/dev/null | head -n1 || true)
+      if [ -n "$alt" ]; then
+        mkdir -p "$lib_dir"
+        cp "$alt" "$lib_dir/libnil_core.$ext"
+        break
+      fi
+    done
+  fi
+  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+    echo "nil_core native library not found after build" >&2
+    exit 1
+  fi
+}
 
 wait_for_http() {
   local name="$1"
@@ -127,13 +152,18 @@ PY
 
 ensure_nilchaind() {
   banner "Building nilchaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/nilchaind)
 }
 
 ensure_nil_cli() {
   banner "Building nil_cli (release)"
   (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+}
+
+ensure_nil_gateway() {
+  banner "Building nil_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/nil_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NIL_GATEWAY_BIN" .)
 }
 
 ensure_metadata() {
@@ -318,7 +348,7 @@ start_provider() {
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_PROVIDER_KEY="$key" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$GO_BIN" run . \
+      "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/$key.log" 2>&1 &
     echo $! >"$PID_DIR/$key.pid"
   )
@@ -336,7 +366,7 @@ start_router() {
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$GO_BIN" run . \
+      "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/router.log" 2>&1 &
     echo $! >"$PID_DIR/router.pid"
   )
@@ -403,8 +433,10 @@ start_all() {
     fi
   fi
 
+  ensure_nil_core
   ensure_nilchaind
   ensure_nil_cli
+  ensure_nil_gateway
   init_chain
   start_chain
   start_faucet

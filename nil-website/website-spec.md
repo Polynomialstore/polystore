@@ -200,7 +200,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
-*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes the desired replica count.
+*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
 *   **Output:** `deal_id` parsed from the `DealCreated` event.
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
@@ -210,7 +210,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
     *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
-*   **Purpose:** Handles file upload via the transport router (gateway or direct SP).
+*   **Purpose:** Handles thin-client file upload via the transport router (gateway or direct SP).
 *   **Logic:**
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
@@ -225,13 +225,14 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 *   **Preference:** `auto`, `prefer_gateway`, `prefer_direct_sp` (persisted in localStorage via `TransportContext`).
 
 ### 4.5 `useFetch` (`src/hooks/useFetch.ts`)
-*   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission.
+*   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission (Mode 1 + Mode 2).
 *   **Flow:**
     1.  Plan blob-range via `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...` (gateway or direct SP).
     2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
     3.  Fetch bytes with `X-Nil-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
     4.  Confirm completion on-chain (`confirmRetrievalSession`).
     5.  Submit proof relay via `POST /gateway/session-proof` (gateway forwards to provider).
+*   **Mode 2:** When the deal is striped, the fetch path is slot-aware (blob ranges must stay within a slot); gateways may reconstruct missing MDUs from `/sp/shard`.
 
 ### 4.6 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
@@ -244,20 +245,21 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 5.1 Global Layout (`src/components/Layout.tsx`)
 *   **Structure:** Fixed "Cyber-Glass" Navbar + Main Content + Footer.
 *   **Navigation:**
-    *   Links: Dashboard, Technology, Leaderboard, Performance, Proofs, Economy, Security, S3 Adapter, Governance, FAQ.
+    *   Links: Dashboard, Technology, Leaderboard, Performance, Proofs, Economy, Devnet, FAQ, Governance, S3 Adapter.
     *   Mobile: Hamburger menu with `framer-motion` slide-down.
 *   **Child Components:** `ConnectWallet`, `ModeToggle`.
 
 ### 5.2 Dashboard (`src/components/Dashboard.tsx`)
 The central hub for deal management.
 *   **State:**
-    *   `activeTab`: 'alloc' (Allocation) vs 'content' (Commitment).
+    *   `activeTab`: 'alloc' (Allocation), 'content' (Commitment), 'mdu' (Thick client).
     *   `deals`: List of user's deals (fetched from LCD).
     *   `providers`: Active SP list.
     *   `nilAddress`: Derived Cosmos address from connected EVM wallet.
 *   **Key Interactions:**
-    *   **Allocation:** Form -> `useCreateDeal`.
-    *   **Commitment:** File Input -> `useUpload` -> `useUpdateDealContent`.
+    *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
+    *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
+    *   **Commitment (MDU tab):** `FileSharder` (WASM) -> uploads metadata + shards -> `useUpdateDealContent`.
     *   **Inspection:** Clicking a deal row opens `DealDetail`.
 *   **Network Checks:** Warns on Chain ID mismatch or local RPC mismatch.
 
@@ -311,7 +313,7 @@ The central hub for deal management.
 ### 5.7 Utility Components
 *   **`ModeToggle.tsx`:** Sun/Moon icon toggle using `useTheme`.
 *   **`FaucetWidget.tsx`:** Standalone button triggering `useFaucet`.
-*   **`FileSharder.tsx`:** *Educational Demo*. Simulates client-side file chunking (8MB), SHA-256 hashing, and "sealing" delay. Updates `ProofContext` with simulated proofs.
+*   **`FileSharder.tsx`:** Thick-client sharder. Uses `nil_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
 
 ---
 
@@ -328,7 +330,7 @@ The central hub for deal management.
 *   **Modules:**
     *   `ShardingDeepDive`: Interactive Erasure Coding explainer.
     *   `KZGDeepDive`: Polynomial Commitment math visualizer.
-    *   `PerformanceDeepDive`: Sealing latency comparison.
+    *   `PerformanceDeepDive`: Performance market + latency racer visualization.
 
 ### 6.3 Dashboards
 *   **`Leaderboard.tsx`:**
@@ -342,8 +344,8 @@ The central hub for deal management.
 
 ### 6.4 Documentation & Research
 *   **`TestnetDocs.tsx`:** Guide for CLI setup, Faucet usage, and Running a Node. Embeds `FaucetWidget` and `FileSharder`.
-*   **`AdversarialSimulation.tsx`:** "Lazy Provider" attack simulator.
-    *   Uses `recharts` to plot Profit/Loss of Honest vs. AWS S3 (Lazy) nodes over time.
+*   **`AdversarialSimulation.tsx`:** Archived incentive simulation (local NVMe vs. remote storage).
+    *   Uses `recharts` to plot Profit/Loss of local vs remote providers over time.
     *   Consumes `src/data/adversarial_simulation.json`.
 *   **`Papers.tsx`:** `Litepaper` and `Whitepaper` components wrapping a generic `MarkdownPage` loader.
 *   **`LatticeMap.tsx`:** Visualization component (likely embedded in Technology or Home) showing nodes as a grid.
@@ -374,6 +376,8 @@ The website depends on the following services (configured in `config.ts`):
 
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
+*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root` (Mode 2).
+*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
@@ -405,24 +409,31 @@ The website depends on the following services (configured in `config.ts`):
 | `/` | `Home` | Marketing landing page. |
 | `/dashboard` | `Dashboard` | App: Deal management. |
 | `/testnet` | `TestnetDocs` | Guide: Connect CLI/Node. |
+| `/devnet` | `Devnet` | Guide: Join multi-provider devnet. |
 | `/technology` | `TechnologyLayout` | Wrapper for tech deep dives. |
 | `/technology/kzg` | `KZGDeepDive` | Explainer: Polynomial Commitments. |
 | `/technology/sharding` | `ShardingDeepDive` | Explainer: Erasure Coding. |
 | `/leaderboard` | `Leaderboard` | Table: Top SPs by score. |
 | `/proofs` | `ProofsDashboard` | Stream: Live ZK verification. |
+| `/performance` | `PerformanceReport` | Metrics: Performance market/chain benchmarks. |
+| `/economy` | `EconomyDashboard` | Simulation: Token + storage economics. |
+| `/faq` | `FAQ` | Frequently asked questions. |
 | `/whitepaper` | `Whitepaper` | PDF/Markdown render of spec. |
 | `/s3-adapter` | `S3AdapterDocs` | Guide: Using S3 compatibility. |
+| `/governance` | `GovernanceDocs` | DAO + council overview. |
+| `/adversarial-simulation` | `AdversarialSimulation` | Archived incentive simulation. |
 
 ---
 
 ## 8. Spec Compliance & Implementation Reality (Gap Analysis)
 
-**Critical Note:** As of v2.7, the web frontend is a **Hybrid Client**. It can operate without a local gateway (direct SP + OPFS), but still uses gateway/SP endpoints for server-side sharding/commitments on ingest.
+**Critical Note:** As of v2.7, the web frontend is a **Hybrid Client**. It can operate without a local gateway (direct SP + OPFS) and now supports a thick-client WASM sharding path alongside the legacy gateway ingest path.
 
 ### 8.1 Data Ingestion (Upload)
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
-*   **Actual:** Client uploads **raw `FormData`** to a gateway/SP endpoint (`POST /gateway/upload` on `gatewayBase` or `spBase`). The server performs sharding, KZG commitments, and NilFS packing, returning `manifest_root` (legacy alias: `cid`) and `size_bytes`.
-*   **Hybrid state:** WASM/OPFS tooling exists for local slab inspection and future thick-client ingest, but the canonical network ingest path is still server-side.
+*   **Actual (two paths):**
+    1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and NilFS packing, returning `manifest_root` and `size_bytes`.
+    2. **Thick client ingest (MDU tab):** Client uses WASM to shard locally, uploads metadata MDUs to all slots (`/sp/upload_mdu`) and user shards via `/sp/upload_shard` (Mode 2), then commits the `manifest_root` on-chain.
 
 ### 8.2 Data Retrieval (Download)
 *   **Spec:** Client fetches chunks from SPs (or gateway acting as SP proxy), verifies the KZG Triple Proof, and confirms success on-chain.
@@ -435,11 +446,12 @@ The website depends on the following services (configured in `config.ts`):
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.
 
 ### 8.3 Visualizations vs. Logic
-*   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
+*   **`FileSharder.tsx`:** Uses `nil_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
 *   **Real Data Flow:** The actual data flow for a deal is:
     1.  `useCreateDeal` -> Creates a thin-provisioned Deal on-chain.
-    2.  `useUpload` -> Streams raw file to Gateway -> Gateway returns `manifest_root`.
-    3.  `useUpdateDealContent` -> Commits the `manifest_root` to the chain.
+    2.  **Gateway path:** `useUpload` streams raw file to Gateway -> Gateway returns `manifest_root`.
+    3.  **Thick path:** `FileSharder` uses WASM to shard -> uploads to SPs -> yields `manifest_root`.
+    4.  `useUpdateDealContent` -> Commits the `manifest_root` to the chain.
 
 ---
 

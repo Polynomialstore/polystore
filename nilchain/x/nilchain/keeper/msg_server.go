@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -149,48 +148,31 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 
 	// Decode service hint and requested replication (owner is derived from EVM).
 	rawHint := strings.TrimSpace(intent.ServiceHint)
-	serviceHint := rawHint
+	parsedHint, err := types.ParseServiceHint(rawHint)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	serviceHintBase := parsedHint.Base
+	serviceHintRaw := parsedHint.Raw
 	requestedReplicas := uint64(types.DealBaseReplication)
+	redundancyMode := uint32(1)
 
-	if rawHint != "" {
-		base := rawHint
-		if idx := strings.Index(rawHint, ":"); idx != -1 {
-			base = strings.TrimSpace(rawHint[:idx])
-			extras := strings.Split(rawHint[idx+1:], ":")
-			for _, token := range extras {
-				token = strings.TrimSpace(token)
-				if token == "" {
-					continue
-				}
-				parts := strings.SplitN(token, "=", 2)
-				if len(parts) != 2 {
-					continue
-				}
-				key := strings.ToLower(strings.TrimSpace(parts[0]))
-				val := strings.TrimSpace(parts[1])
-				switch key {
-				case "replicas":
-					if val == "" {
-						continue
-					}
-					n, err := strconv.ParseUint(val, 10, 64)
-					if err != nil || n == 0 {
-						return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid replicas value in service hint: %s", val)
-					}
-					if n > uint64(types.DealBaseReplication) {
-						n = uint64(types.DealBaseReplication)
-					}
-					requestedReplicas = n
-				}
-			}
+	if parsedHint.HasRS {
+		rsN := parsedHint.RSK + parsedHint.RSM
+		if parsedHint.HasReplicas && parsedHint.Replicas != rsN {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("service_hint replicas must equal rs K+M")
 		}
-		if base != "" {
-			serviceHint = base
+		requestedReplicas = rsN
+		redundancyMode = 2
+	} else if parsedHint.HasReplicas {
+		requestedReplicas = parsedHint.Replicas
+		if requestedReplicas > uint64(types.DealBaseReplication) {
+			requestedReplicas = uint64(types.DealBaseReplication)
 		}
 	}
 
-	if serviceHint != "Hot" && serviceHint != "Cold" && serviceHint != "General" && serviceHint != "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHint)
+	if serviceHintBase != "Hot" && serviceHintBase != "Cold" && serviceHintBase != "General" && serviceHintBase != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHintBase)
 	}
 
 	dealID, err := k.DealCount.Next(ctx)
@@ -199,7 +181,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, requestedReplicas)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
@@ -220,9 +202,9 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		StartBlock:         uint64(ctx.BlockHeight()),
 		EndBlock:           uint64(ctx.BlockHeight()) + intent.DurationBlocks,
 		Providers:          assignedProviders,
-		RedundancyMode:     1,
+		RedundancyMode:     redundancyMode,
 		CurrentReplication: currentReplication,
-		ServiceHint:        serviceHint,
+		ServiceHint:        serviceHintRaw,
 		MaxMonthlySpend:    intent.MaxMonthlySpend,
 	}
 
@@ -364,59 +346,41 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	// Decode any overrides embedded in the service hint.
 	// Format used by the web gateway:
-	//   "<Hint>[:owner=<nilAddress>][:replicas=<N>]"
+	//   "<Hint>[:owner=<nilAddress>][:replicas=<N>][:rs=K+M]"
 	rawHint := strings.TrimSpace(msg.ServiceHint)
-	serviceHint := rawHint
+	parsedHint, err := types.ParseServiceHint(rawHint)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	serviceHintBase := parsedHint.Base
+	serviceHintRaw := parsedHint.Raw
 	ownerAddrStr := msg.Creator
 	requestedReplicas := uint64(types.DealBaseReplication)
+	redundancyMode := uint32(1)
 
-	if rawHint != "" {
-		base := rawHint
-		if idx := strings.Index(rawHint, ":"); idx != -1 {
-			base = strings.TrimSpace(rawHint[:idx])
-			extras := strings.Split(rawHint[idx+1:], ":")
-			for _, token := range extras {
-				token = strings.TrimSpace(token)
-				if token == "" {
-					continue
-				}
-				parts := strings.SplitN(token, "=", 2)
-				if len(parts) != 2 {
-					continue
-				}
-				key := strings.ToLower(strings.TrimSpace(parts[0]))
-				val := strings.TrimSpace(parts[1])
-				switch key {
-				case "owner":
-					if val == "" {
-						continue
-					}
-					if _, err := sdk.AccAddressFromBech32(val); err != nil {
-						return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", val)
-					}
-					ownerAddrStr = val
-				case "replicas":
-					if val == "" {
-						continue
-					}
-					n, err := strconv.ParseUint(val, 10, 64)
-					if err != nil || n == 0 {
-						return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid replicas value in service hint: %s", val)
-					}
-					if n > uint64(types.DealBaseReplication) {
-						n = uint64(types.DealBaseReplication)
-					}
-					requestedReplicas = n
-				}
-			}
+	if parsedHint.Owner != "" {
+		if _, err := sdk.AccAddressFromBech32(parsedHint.Owner); err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", parsedHint.Owner)
 		}
-		if base != "" {
-			serviceHint = base
+		ownerAddrStr = parsedHint.Owner
+	}
+
+	if parsedHint.HasRS {
+		rsN := parsedHint.RSK + parsedHint.RSM
+		if parsedHint.HasReplicas && parsedHint.Replicas != rsN {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("service_hint replicas must equal rs K+M")
+		}
+		requestedReplicas = rsN
+		redundancyMode = 2
+	} else if parsedHint.HasReplicas {
+		requestedReplicas = parsedHint.Replicas
+		if requestedReplicas > uint64(types.DealBaseReplication) {
+			requestedReplicas = uint64(types.DealBaseReplication)
 		}
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHint, requestedReplicas)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
@@ -424,8 +388,8 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	if msg.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
 	}
-	if serviceHint != "Hot" && serviceHint != "Cold" && serviceHint != "General" && serviceHint != "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHint)
+	if serviceHintBase != "Hot" && serviceHintBase != "Cold" && serviceHintBase != "General" && serviceHintBase != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHintBase)
 	}
 
 	initialEscrowAmount := msg.InitialEscrowAmount
@@ -453,9 +417,9 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		StartBlock:         uint64(ctx.BlockHeight()),
 		EndBlock:           uint64(ctx.BlockHeight()) + msg.DurationBlocks,
 		Providers:          assignedProviders,
-		RedundancyMode:     1,
+		RedundancyMode:     redundancyMode,
 		CurrentReplication: currentReplication,
-		ServiceHint:        serviceHint,
+		ServiceHint:        serviceHintRaw,
 		MaxMonthlySpend:    maxMonthlySpend,
 	}
 
@@ -709,6 +673,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
 	}
 
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+
 	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool) (bool, error) {
 		if chainedProof == nil {
 			return false, nil
@@ -720,6 +689,19 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 		if len(deal.ManifestRoot) != 48 {
 			return false, nil
+		}
+		if uint64(chainedProof.BlobIndex) >= stripe.leafCount {
+			return false, nil
+		}
+		if stripe.mode == 2 {
+			slot, serr := leafSlotIndex(uint64(chainedProof.BlobIndex), stripe.rows)
+			if serr != nil {
+				return false, nil
+			}
+			providerSlot, ok := providerSlotIndex(deal, msg.Creator)
+			if !ok || providerSlot != slot {
+				return false, nil
+			}
 		}
 
 		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
@@ -751,6 +733,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			chainedProof.MduRootFr,
 			chainedProof.BlobCommitment,
 			uint64(chainedProof.BlobIndex),
+			stripe.leafCount,
 			flattenedMerkle,
 			chainedProof.ZValue,
 			chainedProof.YValue,
@@ -1478,19 +1461,48 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Provider, msg.DealId)
 	}
 
-	if msg.StartBlobIndex >= uint32(types.BlobsPerMdu) {
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+
+	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
 	}
-	startGlobal := msg.StartMduIndex*types.BlobsPerMdu + uint64(msg.StartBlobIndex)
+	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
 	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
 	if overflow {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+	if stripe.mode == 2 {
+		if msg.BlobCount == 0 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
+		}
+		endIndex := uint64(msg.StartBlobIndex) + msg.BlobCount - 1
+		if endIndex >= stripe.leafCount {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds leaf_count")
+		}
+		startSlot, serr := leafSlotIndex(uint64(msg.StartBlobIndex), stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		endSlot, serr := leafSlotIndex(endIndex, stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		if startSlot != endSlot {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range must stay within a single slot in Mode 2")
+		}
+		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
+		if !ok || providerSlot != startSlot {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
+		}
 	}
 	if deal.TotalMdus != 0 {
 		if msg.StartMduIndex >= deal.TotalMdus {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
 		}
-		maxGlobal := deal.TotalMdus * types.BlobsPerMdu
+		maxGlobal := deal.TotalMdus * stripe.leafCount
 		if endGlobal > maxGlobal {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
@@ -1736,7 +1748,11 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof count mismatch for session blob_count")
 	}
 
-	startGlobal := session.StartMduIndex*types.BlobsPerMdu + uint64(session.StartBlobIndex)
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+	startGlobal := session.StartMduIndex*stripe.leafCount + uint64(session.StartBlobIndex)
 
 	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
 		if chainedProof == nil {
@@ -1766,6 +1782,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 			chainedProof.MduRootFr,
 			chainedProof.BlobCommitment,
 			uint64(chainedProof.BlobIndex),
+			stripe.leafCount,
 			flattenedMerkle,
 			chainedProof.ZValue,
 			chainedProof.YValue,
@@ -1781,11 +1798,21 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		p := msg.Proofs[int(i)]
 
 		expectedGlobal := startGlobal + i
-		expectedMdu := expectedGlobal / types.BlobsPerMdu
-		expectedBlob := expectedGlobal % types.BlobsPerMdu
+		expectedMdu := expectedGlobal / stripe.leafCount
+		expectedBlob := expectedGlobal % stripe.leafCount
 
 		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
+		}
+		if stripe.mode == 2 {
+			slot, serr := leafSlotIndex(expectedBlob, stripe.rows)
+			if serr != nil {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+			}
+			providerSlot, ok := providerSlotIndex(deal, session.Provider)
+			if !ok || providerSlot != slot {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for proof")
+			}
 		}
 
 		ok, err := verifyChainedProof(&p)

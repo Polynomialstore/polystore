@@ -132,6 +132,21 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
+  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: [
+          {
+            address: 'nil1provider',
+            endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+        ],
+      }),
+    })
+  })
+
   // Mock balances for the Dashboard header.
   await page.route('**/cosmos/bank/v1beta1/balances/*', async (route) => {
     await route.fulfill({
@@ -259,6 +274,21 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
             escrow_balance: '1000000',
             end_block: '1000',
             providers: ['nil1provider'],
+          },
+        ],
+      }),
+    })
+  })
+
+  await page2.route('**/nilchain/nilchain/v1/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: [
+          {
+            address: 'nil1provider',
+            endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
           },
         ],
       }),

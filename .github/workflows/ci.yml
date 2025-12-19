@@ -101,6 +101,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: nil-website/package-lock.json
+          cache: 'npm'
+          cache-dependency-path: nil-website/package-lock.json
 
       - name: Install Dependencies
         working-directory: nil-website
@@ -142,6 +144,14 @@ jobs:
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install Dependencies
+        working-directory: nil-website
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        working-directory: nil-website
+        run: npx playwright install --with-deps
 
       - name: Install Dependencies
         working-directory: nil-website
@@ -217,6 +227,11 @@ jobs:
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
           ./e2e_open_retrieval_session_cli.sh
 
+      - name: Run Retrieval Session CLI E2E Script (Mode2 Slot-Aware)
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          ./e2e_open_retrieval_session_mode2_cli.sh
+
   e2e-browser-no-gateway:
     name: Playwright (Gateway Absent)
     runs-on: ubuntu-latest
@@ -269,6 +284,46 @@ jobs:
         run: |
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
           scripts/e2e_browser_smoke_no_gateway.sh
+
+  e2e-mode2-stripe:
+    name: E2E Mode2 Stripe (12 SPs)
+    runs-on: ubuntu-latest
+    needs: [go-test, rust-test, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: wasm32-unknown-unknown
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Run Mode2 Stripe E2E
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          scripts/e2e_mode2_stripe_multi_sp.sh
 
   # ------------------------------------------------------------------
   # SMART CONTRACTS (Foundry)

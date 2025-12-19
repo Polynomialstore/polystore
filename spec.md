@@ -150,16 +150,16 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 NilStore supports two redundancy modes at the policy level:
 
-*   **Mode 1 – FullReplica (Alpha, Implemented):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`. This is the current implementation and the default for the devnet.
-*   **Mode 2 – StripeReplica (Planned):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
+*   **Mode 1 – FullReplica (Alpha):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`.
+*   **Mode 2 – StripeReplica (Implemented):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
 
-For v2.4, **Mode 1** is normative and **Mode 2** is specified as a forward-compatible extension.
+**Profile selection (current implementation):** the RS profile is encoded in `service_hint` as `rs=K+M` (for example, `General:replicas=12,rs=8+4`). If `rs=` is present, the chain treats the deal as **Mode 2** and assigns `N = K+M` ordered providers as slots.
 
 To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
 
 #### 6.2.1 The Stripe Unit
 *   **Principle:** Increasing the capacity of Shard #1 does not help if Shards #2-12 are saturated.
-*   **Mechanism (Mode 2 – Planned):** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` (e.g., 12) new Overlay Providers, creating one new replica for *each* shard index. In Mode 1, this is approximated by adding `n` full replicas (additional providers in `Deal.providers[]`) without per-stripe awareness.
+*   **Mechanism (Mode 2):** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` new Overlay Providers, creating one new replica for *each* shard index. In Mode 1, this is approximated by adding `n` full replicas (additional providers in `Deal.providers[]`) without per-stripe awareness.
 
 #### 6.2.2 Damping & Hysteresis (Intelligent Triggers)
 To prevent oscillation (rapidly spinning nodes up and down) and account for the cost of data transfer:
@@ -338,13 +338,13 @@ To support the invariants, the protocol uses three challenge families, all bindi
 3.  **Selection:** The client selects a single Provider from `Deal.providers[]` (e.g., the nearest or least loaded). In Mode 1, each Provider holds a full replica, so any assigned Provider is sufficient.
 4.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material. A local gateway may proxy these calls, but it is optional; direct‑to‑provider fetches are first‑class.
 
-In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 will extend this to true parallel, stripe‑aware fetching.
+In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 uses stripe‑aware fetching across any `K` slots per MDU.
 
-#### 7.1.1 Mode 2 (Planned): Stripe-aware retrieval & challenges
+#### 7.1.1 Mode 2: Stripe-aware retrieval & challenges
 
 For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → provider` of length `N = K+M`.
 
-* **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (typically the fastest responders), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
+* **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (simple routing: take the first `K` slots by index), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
 * **Synthetic challenges (accountability):** the protocol derives challenges keyed by `(deal_id, slot)` so every slot is independently accountable. In a Mode 2 proof, the chain enforces that the submitting provider matches the challenged `slot` (see §7.4).
 
 #### 7.1.2 Client bootstrap & caching (Non-normative guidance)
@@ -369,7 +369,9 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   Invariants:
         *   Provider MUST be assigned in `Deal.providers[]`.
         *   `manifest_root` MUST match the current on-chain `Deal.manifest_root` (pin content).
-        *   `start_blob_index < BLOBS_PER_MDU`, `blob_count > 0`.
+        *   **Mode 1:** `start_blob_index < BLOBS_PER_MDU`.
+        *   **Mode 2:** `start_blob_index < leaf_count` where `leaf_count = (K+M) * rows`, `rows = 64 / K`.
+        *   `blob_count > 0`.
         *   `total_bytes = blob_count * 131072` and MUST be a multiple of 128 KiB (by construction).
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
@@ -559,8 +561,8 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 
 ### C.1 Guiding constraints
 
-* **Mode 1 only:** Devnet Alpha does not attempt Mode 2 RS striping, repair, or rebalancing.
-* **No protocol-level Mode 1 replication:** Mode 1 is treated as a single-provider deal. If a user wants redundancy today, they do it out-of-band.
+* **Mode 2 available (devnet):** RS(K, K+M) striping is supported when `service_hint` includes `rs=K+M`. Repair/rebalancing remain deferred.
+* **Mode 1 replication remains minimal:** Mode 1 is still treated as a single-provider deal unless `replicas=` is specified.
 * **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in the session proof (or from an explicit deputy, once specified).
 * **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
 
@@ -573,7 +575,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | HTTP transport | MUST | e.g. `/dns4/sp1.example.com/tcp/8080/http` |
 | libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
 | Mode 1 replication (`providers[]` length > 1) | NO | Devnet Alpha uses `replicas=1` in `ServiceHint` |
-| Mode 2 RS deals | NO | Separate milestone |
+| Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` |
 | Gateway role | MUST | routes/proxies to the assigned provider; SHOULD not read local deal bytes |
 | Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
 | Upload/ingest | MUST | upload directed to the assigned provider for the deal |

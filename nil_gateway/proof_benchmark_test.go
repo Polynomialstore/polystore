@@ -55,7 +55,7 @@ func TestBenchmarkProofGen(t *testing.T) {
 	mduPath := filepath.Join(tmpDir, "mdu_2.bin")
 
 	start := time.Now()
-	_, _, err := generateProofHeaderJSON(context.Background(), 1, 1, 2, mduPath, manifestPath, 0, 0)
+	_, _, err := generateProofHeaderJSON(context.Background(), 1, 1, 2, mduPath, manifestPath, 0, 0, 64, 0)
 	if err != nil {
 		t.Fatalf("generateProofHeaderJSON failed: %v", err)
 	}

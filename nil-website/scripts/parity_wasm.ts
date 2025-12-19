@@ -73,10 +73,10 @@ const witness = (Array.isArray(expanded.witness) ? expanded.witness : []).map(to
 const shards = (Array.isArray(expanded.shards) ? expanded.shards : []).map(toU8)
 
 const witnessFlat = new Uint8Array(
-  witness.slice(0, 64).reduce((acc, cur) => acc + cur.length, 0),
+  witness.reduce((acc, cur) => acc + cur.length, 0),
 )
 let offset = 0
-for (const entry of witness.slice(0, 64)) {
+for (const entry of witness) {
   witnessFlat.set(entry, offset)
   offset += entry.length
 }

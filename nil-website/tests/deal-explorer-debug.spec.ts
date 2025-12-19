@@ -65,6 +65,21 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     })
   })
 
+  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: [
+          {
+            address: 'nil1provider',
+            endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+        ],
+      }),
+    })
+  })
+
   await page.route('**/cosmos/bank/v1beta1/balances/*', async (route) => {
     await route.fulfill({
       status: 200,

@@ -224,6 +224,21 @@ test('repro bug: download from commit content widget', async ({
     });
   });
 
+  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: [
+          {
+            address: 'nil1provider',
+            endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+        ],
+      }),
+    })
+  })
+
   // Mock upload
   await page.route('**/gateway/upload*', async route => {
       await route.fulfill({

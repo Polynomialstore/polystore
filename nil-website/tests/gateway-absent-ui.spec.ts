@@ -29,7 +29,14 @@ test.describe('gateway absent', () => {
   const walletAddress = page.getByTestId('wallet-address')
   if (!(await walletAddress.isVisible().catch(() => false))) {
     const connectButton = page.getByTestId('connect-wallet').first()
-    await connectButton.click()
+    await connectButton.click({ force: true })
+    await page.evaluate(async () => {
+      const eth = (window as { ethereum?: { request?: (args: { method: string }) => Promise<unknown> } }).ethereum
+      if (!eth?.request) {
+        throw new Error('No injected wallet available for E2E')
+      }
+      await eth.request({ method: 'eth_requestAccounts' })
+    })
     await expect(walletAddress).toBeVisible({ timeout: 60_000 })
   }
 

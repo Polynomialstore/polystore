@@ -13,6 +13,7 @@ import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
+import { buildServiceHint } from '../lib/serviceHint'
 import { injectedConnector } from '../lib/web3Config'
 import { formatUnits } from 'viem'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
@@ -136,6 +137,9 @@ export function Dashboard() {
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
   const [replication, setReplication] = useState('1')
+  const [redundancyMode, setRedundancyMode] = useState<'mode1' | 'mode2'>('mode1')
+  const [rsK, setRsK] = useState('8')
+  const [rsM, setRsM] = useState('4')
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
@@ -622,12 +626,33 @@ export function Dashboard() {
       return
     }
       try {
+        let serviceHint = ''
+        if (redundancyMode === 'mode2') {
+          const k = Number(rsK)
+          const m = Number(rsM)
+          if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
+            setStatusTone('error')
+            setStatusMsg('Mode 2 requires numeric K and M values.')
+            return
+          }
+          if (64 % k !== 0) {
+            setStatusTone('error')
+            setStatusMsg('Mode 2 requires K to divide 64.')
+            return
+          }
+          const n = k + m
+          serviceHint = buildServiceHint('General', { replicas: n, rsK: k, rsM: m })
+        } else {
+          const replicas = Number(replication)
+          serviceHint = buildServiceHint('General', { replicas })
+        }
         const res = await submitDeal({
           creator: address || nilAddress,
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
           replication: Number(replication),
+          serviceHint,
         })
         setStatusTone('success')
         setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
@@ -685,6 +710,11 @@ export function Dashboard() {
       }
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
+  }
+
+  const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
+    if (!nilAddress) return
+    refreshDealsAfterContentCommit(nilAddress, dealId, manifestRoot)
   }
 
   useEffect(() => {
@@ -913,17 +943,58 @@ export function Dashboard() {
                             />
                         </label>
                         <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={12}
-                                value={replication}
-                                onChange={e => setReplication(e.target.value)}
-                                data-testid="alloc-replication"
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
+                            <select
+                                value={redundancyMode}
+                                onChange={(e) => setRedundancyMode(e.target.value as 'mode1' | 'mode2')}
+                                data-testid="alloc-redundancy-mode"
                                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
+                            >
+                                <option value="mode1">Mode 1: Full Replica</option>
+                                <option value="mode2">Mode 2: StripeReplica (RS)</option>
+                            </select>
                         </label>
+                        {redundancyMode === 'mode1' ? (
+                          <label className="space-y-1">
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
+                              <input
+                                  type="number"
+                                  min={1}
+                                  max={12}
+                                  value={replication}
+                                  onChange={e => setReplication(e.target.value)}
+                                  data-testid="alloc-replication"
+                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                              />
+                          </label>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-3">
+                              <label className="space-y-1">
+                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                                  <input
+                                      type="number"
+                                      min={1}
+                                      max={64}
+                                      value={rsK}
+                                      onChange={e => setRsK(e.target.value)}
+                                      data-testid="alloc-rs-k"
+                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                                  />
+                              </label>
+                              <label className="space-y-1">
+                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
+                                  <input
+                                      type="number"
+                                      min={1}
+                                      max={64}
+                                      value={rsM}
+                                      onChange={e => setRsM(e.target.value)}
+                                      data-testid="alloc-rs-m"
+                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                                  />
+                              </label>
+                          </div>
+                        )}
                     </div>
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-xs text-muted-foreground">
@@ -947,7 +1018,7 @@ export function Dashboard() {
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                               <select 
                                   value={targetDealId} 
-                                  onChange={e => setTargetDealId(e.target.value)}
+                                  onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                                   data-testid="content-deal-select"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                               >
@@ -1049,24 +1120,32 @@ export function Dashboard() {
                                           MDU Segments
                                         </div>
                                         <div className="text-[10px] text-muted-foreground">
-                                          {Math.round(contentSlab.mdu_size_bytes / (1024 * 1024))} MiB / MDU
+                                          {(() => {
+                                            const mduSize = Number(contentSlab.mdu_size_bytes)
+                                            if (!Number.isFinite(mduSize) || mduSize <= 0) return '—'
+                                            return `${Math.round(mduSize / (1024 * 1024))} MiB / MDU`
+                                          })()}
                                         </div>
                                       </div>
                                       <div className="mt-2 flex h-2 w-full overflow-hidden rounded bg-muted">
-                                        {contentSlab.segments.map((seg) => (
-                                          <div
-                                            key={`${seg.kind}:${seg.start_index}`}
-                                            style={{ flexGrow: Math.max(1, seg.count) }}
-                                            className={
-                                              seg.kind === 'mdu0'
-                                                ? 'bg-blue-500/60'
-                                                : seg.kind === 'witness'
-                                                  ? 'bg-purple-500/60'
-                                                  : 'bg-emerald-500/60'
-                                            }
-                                            title={`${seg.kind} • start=${seg.start_index} • count=${seg.count}`}
-                                          />
-                                        ))}
+                                        {contentSlab.segments.map((seg) => {
+                                          const segCount = Number(seg.count)
+                                          const safeCount = Number.isFinite(segCount) && segCount > 0 ? segCount : 1
+                                          return (
+                                            <div
+                                              key={`${seg.kind}:${seg.start_index}`}
+                                              style={{ flexGrow: Math.max(1, safeCount) }}
+                                              className={
+                                                seg.kind === 'mdu0'
+                                                  ? 'bg-blue-500/60'
+                                                  : seg.kind === 'witness'
+                                                    ? 'bg-purple-500/60'
+                                                    : 'bg-emerald-500/60'
+                                              }
+                                              title={`${seg.kind} • start=${seg.start_index} • count=${seg.count}`}
+                                            />
+                                          )
+                                        })}
                                       </div>
                                       <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
                                         <div>
@@ -1206,7 +1285,7 @@ export function Dashboard() {
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                         <select 
                             value={targetDealId} 
-                            onChange={e => setTargetDealId(e.target.value)}
+                            onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                             data-testid="mdu-deal-select"
                             className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                         >
@@ -1221,7 +1300,7 @@ export function Dashboard() {
                 </div>
 
                 {targetDealId ? (
-                    <FileSharder dealId={targetDealId} />
+                    <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
                 ) : (
                     <div className="p-8 text-center border border-dashed border-border rounded-xl">
                         <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
@@ -1289,7 +1368,11 @@ export function Dashboard() {
                     <td className="px-4 py-2 text-right text-muted-foreground">{stats.retrievals}</td>
                     <td className="px-4 py-2 text-right text-muted-foreground">{formatBytes(stats.bytesServed)}</td>
                     <td className="px-4 py-2 text-right text-muted-foreground">
-                      {p.total_storage ? `${(parseInt(p.total_storage) / (1024 ** 4)).toFixed(2)} TiB` : '—'}
+                      {(() => {
+                        const totalStorage = Number(p.total_storage)
+                        if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
+                        return `${(totalStorage / (1024 ** 4)).toFixed(2)} TiB`
+                      })()}
                     </td>
                   </tr>
                 )
@@ -1437,7 +1520,11 @@ export function Dashboard() {
                                 {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                                {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                {(() => {
+                                  const sizeNum = Number(deal.size)
+                                  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
+                                  return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
+                                })()}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                   {deal.cid ? (
@@ -1461,7 +1548,7 @@ export function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(deal.id); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(String(deal.id ?? '')); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                                   className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
                                 >
                                   Upload to deal
