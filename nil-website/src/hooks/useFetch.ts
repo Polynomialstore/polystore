@@ -166,7 +166,7 @@ export function useFetch() {
       const preferenceOverride: RoutePreference | undefined =
         serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
-      const directBase = serviceOverride || directEndpoint?.baseUrl
+      const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
       const planResult = await transport.plan({
         manifestRoot,
         owner,
