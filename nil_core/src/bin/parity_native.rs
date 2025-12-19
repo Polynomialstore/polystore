@@ -9,6 +9,7 @@ use nil_core::kzg::{KzgContext, BLOBS_PER_MDU};
 struct FixtureInfo {
     mdu_bytes: usize,
     root_count: usize,
+    root_indices: Vec<u8>,
 }
 
 #[derive(serde::Serialize)]
@@ -51,13 +52,27 @@ fn sha256_chunks(chunks: &[Vec<u8>]) -> String {
     hex::encode(digest)
 }
 
-fn derive_roots(base: [u8; 32], count: usize) -> Vec<[u8; 32]> {
-    let mut out = Vec::with_capacity(count);
-    for i in 0..count {
+fn derive_roots(base: [u8; 32], indices: &[u8]) -> Vec<[u8; 32]> {
+    let mut out = Vec::with_capacity(indices.len());
+    for idx in indices {
         let mut root = base;
-        root[0] ^= i as u8;
-        root[31] ^= (i.wrapping_mul(29)) as u8;
+        root[0] ^= *idx;
+        root[31] ^= idx.wrapping_mul(29);
         out.push(root);
+    }
+    out
+}
+
+fn pick_indices(count: usize) -> Vec<u8> {
+    const ROOT_SEED: u32 = 0xC0FFEE;
+    let mut seed = ROOT_SEED;
+    let mut out: Vec<u8> = Vec::with_capacity(count);
+    while out.len() < count {
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        let idx = (seed % 255 + 1) as u8; // 1..255 (avoid trivial 0)
+        if !out.contains(&idx) {
+            out.push(idx);
+        }
     }
     out
 }
@@ -92,13 +107,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mdu_root = ctx.create_mdu_merkle_root(&commitments)?;
-    let roots = derive_roots(mdu_root, 4);
+    let root_indices = pick_indices(4);
+    let roots = derive_roots(mdu_root, &root_indices);
     let (manifest_commitment, manifest_blob) = ctx.compute_manifest_commitment(&roots)?;
 
     let output = ParityOutput {
         fixture: FixtureInfo {
             mdu_bytes: mdu_bytes.len(),
             root_count: roots.len(),
+            root_indices,
         },
         expand_mdu: ExpandInfo {
             witness_sha256: witness_hash,

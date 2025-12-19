@@ -35,12 +35,23 @@ function sha256Chunks(chunks: Uint8Array[]): string {
   return hash.digest('hex')
 }
 
-function deriveRoots(base: Uint8Array, count: number): Uint8Array[] {
+function pickIndices(count: number): number[] {
+  const out: number[] = []
+  let seed = 0x00c0ffee
+  while (out.length < count) {
+    seed = (seed * 1664525 + 1013904223) >>> 0
+    const idx = (seed % 255) + 1 // 1..255 (avoid trivial 0)
+    if (!out.includes(idx)) out.push(idx)
+  }
+  return out
+}
+
+function deriveRoots(base: Uint8Array, indices: number[]): Uint8Array[] {
   const out: Uint8Array[] = []
-  for (let i = 0; i < count; i += 1) {
+  for (const idx of indices) {
     const next = new Uint8Array(base)
-    next[0] ^= i & 0xff
-    next[31] ^= (i * 29) & 0xff
+    next[0] ^= idx & 0xff
+    next[31] ^= (idx * 29) & 0xff
     out.push(next)
   }
   return out
@@ -71,7 +82,8 @@ for (const entry of witness.slice(0, 64)) {
 }
 
 const mduRoot = toU8(wasm.compute_mdu_root(witnessFlat))
-const roots = deriveRoots(mduRoot, 4)
+const rootIndices = pickIndices(4)
+const roots = deriveRoots(mduRoot, rootIndices)
 const rootsFlat = new Uint8Array(roots.length * 32)
 roots.forEach((root, i) => rootsFlat.set(root, i * 32))
 
@@ -83,6 +95,7 @@ const output = {
   fixture: {
     mdu_bytes: mduBytes.length,
     root_count: roots.length,
+    root_indices: rootIndices,
   },
   expand_mdu: {
     witness_sha256: sha256Chunks(witness),

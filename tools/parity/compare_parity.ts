@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { isDeepStrictEqual } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -33,6 +34,7 @@ const wasm = JSON.parse(wasmRaw) as Record<string, unknown>
 const fields = [
   'fixture.mdu_bytes',
   'fixture.root_count',
+  'fixture.root_indices',
   'expand_mdu.witness_sha256',
   'expand_mdu.shards_sha256',
   'expand_mdu.mdu_root',
@@ -44,8 +46,10 @@ const diffs: string[] = []
 for (const field of fields) {
   const left = getPath(native, field)
   const right = getPath(wasm, field)
-  if (left !== right) {
-    diffs.push(`${field}: native=${String(left)} wasm=${String(right)}`)
+  if (!isDeepStrictEqual(left, right)) {
+    const leftText = typeof left === 'string' ? left : JSON.stringify(left)
+    const rightText = typeof right === 'string' ? right : JSON.stringify(right)
+    diffs.push(`${field}: native=${leftText} wasm=${rightText}`)
   }
 }
 

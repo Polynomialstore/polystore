@@ -672,6 +672,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - Proof generation / verification:
       - If proofs are deterministic: compare proof bytes hashes.
       - If proofs are not deterministic: compare `proof_hash` + `verify(proof)==true` (and ensure `proof_hash` is computed deterministically from canonical fields).
+  - **Indices selection:** use a fixed‑seed PRNG to pick non‑trivial `mdu_index`/`blob_index` (avoid 0), so parity runs are deterministic but closer to realistic randomness.
   - **Pass gate:** fixtures + output spec are committed and documented in `nil_core/fixtures/parity/README.md`.
 
 - [x] **Task 2: Implement native parity runner (Rust).**
