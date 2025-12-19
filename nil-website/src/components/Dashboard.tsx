@@ -712,13 +712,10 @@ export function Dashboard() {
     }
   }
 
-  const handleMduCommitSuccess = useCallback(
-    (dealId: string, manifestRoot: string) => {
-      if (!nilAddress) return
-      refreshDealsAfterContentCommit(nilAddress, dealId, manifestRoot)
-    },
-    [nilAddress],
-  )
+  const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
+    if (!nilAddress) return
+    refreshDealsAfterContentCommit(nilAddress, dealId, manifestRoot)
+  }
 
   useEffect(() => {
     if (faucetTxStatus === 'confirmed' && faucetTx) {

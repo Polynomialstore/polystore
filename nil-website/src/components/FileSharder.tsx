@@ -55,6 +55,20 @@ interface ShardProgressState {
   lastOpMs: number | null;
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+}
+
+function formatDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${ms.toFixed(0)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
@@ -514,20 +528,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
     initWasmInWorker();
   }, [addLog, wasmStatus]);
-
-  const formatBytes = (bytes: number) => {
-    if (!Number.isFinite(bytes) || bytes < 0) return '—';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
-  };
-
-  const formatDuration = (ms: number) => {
-    if (!Number.isFinite(ms) || ms < 0) return '—';
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1140,7 +1140,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [isConnected, wasmStatus, wasmError, addLog, resetUpload, stripeParams, formatBytes, formatDuration]);
+  }, [isConnected, wasmStatus, wasmError, addLog, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
