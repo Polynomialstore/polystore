@@ -169,7 +169,7 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
 	require.NoError(t, err)
 	require.Equal(t, user, deal.Owner, "deal owner should be overridden via service hint")
-	require.Equal(t, "General", deal.ServiceHint, "service hint should be normalised to base value")
+	require.Equal(t, fmt.Sprintf("General:owner=%s", user), deal.ServiceHint, "service hint should preserve overrides")
 }
 
 // TestCreateDeal_ReplicationViaHint verifies that the requested replication
@@ -211,7 +211,7 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), deal.CurrentReplication)
-	require.Equal(t, "General", deal.ServiceHint)
+	require.Equal(t, "General:replicas=3", deal.ServiceHint)
 }
 
 // TestCreateDeal_BootstrapReplication verifies that on small devnets where the
@@ -398,7 +398,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	// Sanity: Hop2+Hop3 should verify in isolation.
-	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, z, y, kzgProof)
+	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, 64, z, y, kzgProof)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -411,6 +411,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 		root,
 		commitment,
 		uint64(chunkIdx),
+		64,
 		merkleProof,
 		z,
 		y,
@@ -654,7 +655,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	// Sanity: Hop2+Hop3 should verify in isolation.
-	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, z, y, kzgProof)
+	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, 64, z, y, kzgProof)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -667,6 +668,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 		root,
 		commitment,
 		uint64(chunkIdx),
+		64,
 		merkleProof,
 		z,
 		y,

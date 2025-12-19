@@ -1,4 +1,4 @@
-use crate::coding::expand_mdu;
+use crate::coding::{expand_mdu, expand_mdu_encoded};
 use crate::kzg::KzgContext;
 use crate::builder::Mdu0Builder;
 use crate::layout::{FileRecordV1, pack_length_and_flags};
@@ -24,6 +24,14 @@ impl NilWasm {
 
     pub fn expand_file(&self, data: &[u8]) -> Result<JsValue, JsValue> {
         let res = expand_mdu(&self.kzg_ctx, data)
+            .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn expand_mdu_rs(&self, mdu_bytes: &[u8], k: u32, m: u32) -> Result<JsValue, JsValue> {
+        let res = expand_mdu_encoded(&self.kzg_ctx, mdu_bytes, k as usize, m as usize)
             .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
 
         serde_wasm_bindgen::to_value(&res)
@@ -139,6 +147,11 @@ impl WasmMdu0Builder {
     #[wasm_bindgen(constructor)]
     pub fn new(max_user_mdus: u64) -> WasmMdu0Builder {
         WasmMdu0Builder { inner: Mdu0Builder::new(max_user_mdus) }
+    }
+
+    #[wasm_bindgen]
+    pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> WasmMdu0Builder {
+        WasmMdu0Builder { inner: Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu) }
     }
 
     pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {

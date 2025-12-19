@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use nil_core::coding::expand_mdu;
-use nil_core::kzg::{KzgContext, BLOBS_PER_MDU};
+use nil_core::kzg::KzgContext;
 
 #[derive(serde::Serialize)]
 struct FixtureInfo {
@@ -77,12 +77,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let witness_hash = sha256_chunks(&expanded.witness);
     let shards_hash = sha256_chunks(&expanded.shards);
 
-    if expanded.witness.len() < BLOBS_PER_MDU {
-        return Err("not enough witness commitments for mdu root".into());
+    if expanded.witness.is_empty() {
+        return Err("no witness commitments for mdu root".into());
     }
 
-    let mut commitments = Vec::with_capacity(BLOBS_PER_MDU);
-    for w in expanded.witness.iter().take(BLOBS_PER_MDU) {
+    let mut commitments = Vec::with_capacity(expanded.witness.len());
+    for w in expanded.witness.iter() {
         if w.len() != 48 {
             return Err(format!("unexpected witness commitment length: {}", w.len()).into());
         }

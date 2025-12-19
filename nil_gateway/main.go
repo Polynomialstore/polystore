@@ -368,6 +368,8 @@ func main() {
 		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
+		r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 		r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	}
 
@@ -1772,6 +1774,17 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 
+	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
+	if serr != nil {
+		log.Printf("GatewayFetch: failed to fetch service hint: %v", serr)
+		serviceHint = ""
+	}
+	stripe, serr := stripeParamsFromHint(serviceHint)
+	if serr != nil {
+		log.Printf("GatewayFetch: invalid service hint: %v", serr)
+		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
+	}
+
 	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -1936,6 +1949,33 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if stripe.mode == 2 {
+		startOffset, fileLen, witnessCount, metaErr := GetFileMetaByPath(dealDir, filePath)
+		if metaErr != nil {
+			if errors.Is(metaErr, os.ErrNotExist) {
+				writeJSONError(
+					w,
+					http.StatusNotFound,
+					"file not found in deal",
+					fmt.Sprintf("List files via GET /gateway/list-files/%s?deal_id=%d&owner=%s", manifestRoot.Canonical, dealID, owner),
+				)
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve file metadata", metaErr.Error())
+			return
+		}
+		if fileLen == 0 || reqRangeStart >= fileLen {
+			writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+			return
+		}
+		absOffset := startOffset + reqRangeStart
+		mduIdx := uint64(1) + witnessCount + (absOffset / RawMduCapacity)
+		if _, metaErr := ensureMode2MduOnDisk(r.Context(), dealID, manifestRoot, mduIdx, dealDir, stripe); metaErr != nil {
+			writeJSONError(w, http.StatusBadGateway, "failed to reconstruct Mode2 MDU", metaErr.Error())
+			return
+		}
+	}
+
 	content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, reqRangeStart, reqRangeLen)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1966,17 +2006,6 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Resolve Provider Address for the Header (for Client-Side Signing)
-	providerAddr := cachedProviderAddress(r.Context())
-	if strings.TrimSpace(providerAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
-		return
-	}
-	if isDownloadSession && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
-		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
-		return
-	}
-
 	// Generate Proof Details payload (for receipt submission).
 	manifestPath := filepath.Join(dealDir, "manifest.bin")
 	var proofPayload []byte
@@ -2003,7 +2032,45 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath, blobIndex, absOffset)
+	leafIndex, lerr := leafIndexForBlobIndex(blobIndex, stripe)
+	if lerr != nil {
+		log.Printf("GatewayFetch: failed to map leaf index: %v", lerr)
+		leafIndex = uint64(blobIndex)
+	}
+
+	// Resolve Provider Address for the Header (for Client-Side Signing)
+	providerAddr := cachedProviderAddress(r.Context())
+	if strings.TrimSpace(providerAddr) == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
+		return
+	}
+	if isDownloadSession && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
+		return
+	}
+	if stripe.mode == 2 {
+		slot, serr := slotForLeafIndex(leafIndex, stripe)
+		if serr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to map provider slot", serr.Error())
+			return
+		}
+		providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve providers", err.Error())
+			return
+		}
+		if int(slot) >= len(providers) {
+			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
+			return
+		}
+		expectedProvider := strings.TrimSpace(providers[slot])
+		if expectedProvider == "" || strings.TrimSpace(providerAddr) != expectedProvider {
+			writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedProvider))
+			return
+		}
+	}
+
+	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath, blobIndex, leafIndex, stripe.leafCount, absOffset)
 	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
 		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
@@ -2249,18 +2316,81 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startGlobal := startMdu*uint64(types.BLOBS_PER_MDU) + uint64(startBlob)
-	endGlobal := endMdu*uint64(types.BLOBS_PER_MDU) + uint64(endBlob)
+	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
+	if serr != nil {
+		log.Printf("GatewayPlanRetrievalSession: failed to fetch service hint: %v", serr)
+		serviceHint = ""
+	}
+	stripe, serr := stripeParamsFromHint(serviceHint)
+	if serr != nil {
+		log.Printf("GatewayPlanRetrievalSession: invalid service hint: %v", serr)
+		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
+	}
+	var startSlot uint64
+	if stripe.mode == 2 {
+		startLeaf, lerr := leafIndexForBlobIndex(startBlob, stripe)
+		if lerr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to map start leaf", lerr.Error())
+			return
+		}
+		endLeaf, lerr := leafIndexForBlobIndex(endBlob, stripe)
+		if lerr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to map end leaf", lerr.Error())
+			return
+		}
+		slot, lerr := slotForLeafIndex(startLeaf, stripe)
+		if lerr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to map start slot", lerr.Error())
+			return
+		}
+		endSlot, lerr := slotForLeafIndex(endLeaf, stripe)
+		if lerr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to map end slot", lerr.Error())
+			return
+		}
+		if slot != endSlot {
+			writeJSONError(w, http.StatusBadRequest, "range spans multiple slots", "split into per-slot requests in Mode 2")
+			return
+		}
+		startSlot = slot
+		startBlob = uint32(startLeaf)
+		endBlob = uint32(endLeaf)
+	}
+
+	startGlobal := startMdu*stripe.leafCount + uint64(startBlob)
+	endGlobal := endMdu*stripe.leafCount + uint64(endBlob)
 	if endGlobal < startGlobal {
 		writeJSONError(w, http.StatusInternalServerError, "invalid blob mapping", "")
 		return
 	}
 	blobCount := endGlobal - startGlobal + 1
 
-	providerAddr := cachedProviderAddress(r.Context())
-	if strings.TrimSpace(providerAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
-		return
+	providerAddr := ""
+	if stripe.mode == 2 {
+		providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve providers", err.Error())
+			return
+		}
+		if int(startSlot) >= len(providers) {
+			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
+			return
+		}
+		providerAddr = strings.TrimSpace(providers[startSlot])
+	} else {
+		providerAddr = cachedProviderAddress(r.Context())
+		if strings.TrimSpace(providerAddr) == "" {
+			providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
+				return
+			}
+			if len(providers) == 0 {
+				writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "deal has no assigned providers")
+				return
+			}
+			providerAddr = strings.TrimSpace(providers[0])
+		}
 	}
 
 	type response struct {
@@ -2758,7 +2888,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Gateway-Auth")
 	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
 }
 
@@ -4173,6 +4303,144 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, n, dealID)
 	w.WriteHeader(http.StatusOK)
+}
+
+// SpUploadShard accepts a per-slot shard from a client and stores it in the deal's directory.
+// This supports Mode 2 (StripeReplica) uploads where providers store slot shards.
+func SpUploadShard(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
+	slotStr := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+
+	if dealIDStr == "" || mduIndexStr == "" || slotStr == "" {
+		http.Error(w, "X-Nil-Deal-ID, X-Nil-Mdu-Index, and X-Nil-Slot headers are required", http.StatusBadRequest)
+		return
+	}
+
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		return
+	}
+
+	slot, err := strconv.ParseUint(slotStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid slot", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Deal against Chain
+	_, _, err = fetchDealOwnerAndCID(dealID)
+	if err != nil {
+		log.Printf("SpUploadShard: failed to fetch deal %d: %v", dealID, err)
+		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
+		return
+	}
+
+	if clientManifestRoot == "" {
+		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
+		return
+	}
+
+	parsed, err := parseManifestRoot(clientManifestRoot)
+	if err != nil {
+		http.Error(w, "invalid manifest root", http.StatusBadRequest)
+		return
+	}
+	rootDir := filepath.Join(uploadDir, parsed.Key)
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Max shard size is <= 8 MiB; allow some slack.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+
+	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
+	path := filepath.Join(rootDir, filename)
+
+	f, err := os.Create(path)
+	if err != nil {
+		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	n, err := io.Copy(f, r.Body)
+	if err != nil {
+		http.Error(w, "failed to write file", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, n, dealID, slot)
+	w.WriteHeader(http.StatusOK)
+}
+
+// SpFetchShard serves a stored slot shard for Mode 2 reads/repairs.
+func SpFetchShard(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	mduIndexStr := strings.TrimSpace(q.Get("mdu_index"))
+	slotStr := strings.TrimSpace(q.Get("slot"))
+	rawManifestRoot := strings.TrimSpace(q.Get("manifest_root"))
+
+	if dealIDStr == "" || mduIndexStr == "" || slotStr == "" || rawManifestRoot == "" {
+		http.Error(w, "deal_id, mdu_index, slot, and manifest_root are required", http.StatusBadRequest)
+		return
+	}
+
+	_, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		return
+	}
+
+	_, err = strconv.ParseUint(mduIndexStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid mdu_index", http.StatusBadRequest)
+		return
+	}
+
+	slot, err := strconv.ParseUint(slotStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid slot", http.StatusBadRequest)
+		return
+	}
+
+	parsed, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		http.Error(w, "invalid manifest_root", http.StatusBadRequest)
+		return
+	}
+	rootDir := filepath.Join(uploadDir, parsed.Key)
+	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
+	path := filepath.Join(rootDir, filename)
+
+	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "shard not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if _, err := io.Copy(w, f); err != nil {
+		http.Error(w, "failed to stream shard", http.StatusInternalServerError)
+		return
+	}
 }
 
 // SpUploadManifest accepts a raw manifest blob (128 KiB) and stores it as manifest.bin in the slab directory.

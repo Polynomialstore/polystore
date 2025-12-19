@@ -13,6 +13,8 @@ pub enum CodingError {
     Rs(String),
     #[error("KZG Error: {0}")]
     Kzg(#[from] KzgError),
+    #[error("Invalid RS parameters")]
+    InvalidRsParams,
     #[error("Invalid Input Size")]
     InvalidSize,
 }
@@ -21,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct ExpandedMdu {
-    pub witness: Vec<Vec<u8>>, // 96 commitments (48 bytes each)
-    pub shards: Vec<Vec<u8>>,  // 12 shards of 1MB each
+    pub witness: Vec<Vec<u8>>, // Commitments in slot-major order (48 bytes each)
+    pub shards: Vec<Vec<u8>>,  // Shards per slot (rows * 128 KiB)
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
@@ -54,77 +56,117 @@ pub fn expand_mdu(ctx: &KzgContext, data: &[u8]) -> Result<ExpandedMdu, CodingEr
 
     // Encode raw bytes into a single MDU (field-aligned blobs).
     let encoded = encode_to_mdu(data);
+    expand_mdu_encoded(ctx, &encoded, DATA_SHARDS_NUM, PARITY_SHARDS_NUM)
+}
 
-    // 1. Organize data into 8 Shards of 8 Blobs each
-    let mut shards: Vec<Vec<u8>> = vec![vec![0u8; 1024 * 1024]; SHARDS_NUM];
-
-    // Fill first 8 shards with data (Card Dealing)
-    // Blob i goes to Shard (i % 8), Row (i / 8)
-    for blob_idx in 0..64 {
-        let shard_idx = blob_idx % 8;
-        let row_idx = blob_idx / 8; // 0..7
-
-        let start = blob_idx * BLOB_SIZE;
-        let end = start + BLOB_SIZE;
-        let blob_data = &encoded[start..end];
-
-        let dest_start = row_idx * BLOB_SIZE;
-        let dest_end = dest_start + BLOB_SIZE;
-
-        shards[shard_idx][dest_start..dest_end].copy_from_slice(blob_data);
+pub fn expand_mdu_encoded(
+    ctx: &KzgContext,
+    mdu_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+) -> Result<ExpandedMdu, CodingError> {
+    if mdu_bytes.len() != MDU_SIZE {
+        return Err(CodingError::InvalidSize);
+    }
+    if data_shards == 0 || parity_shards == 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    if BLOBS_PER_MDU % data_shards != 0 {
+        return Err(CodingError::InvalidRsParams);
     }
 
-    // 2. Compute Parity Shards (8..11)
-    let r = ReedSolomon::new(DATA_SHARDS_NUM, PARITY_SHARDS_NUM)
+    let rows = BLOBS_PER_MDU / data_shards;
+    let shards_total = data_shards + parity_shards;
+    let mut shards: Vec<Vec<u8>> = vec![vec![0u8; rows * BLOB_SIZE]; shards_total];
+
+    let r = ReedSolomon::new(data_shards, parity_shards)
         .map_err(|e| CodingError::Rs(format!("{}", e)))?;
 
-    for row_idx in 0..8 {
-        // Collect the 8 data blobs for this row
-        let mut row_shards: Vec<Vec<u8>> = Vec::with_capacity(SHARDS_NUM);
-        for s in 0..DATA_SHARDS_NUM {
-            let start = row_idx * BLOB_SIZE;
-            let blob = shards[s][start..start + BLOB_SIZE].to_vec();
-            row_shards.push(blob);
+    for row_idx in 0..rows {
+        let mut row_shards: Vec<Vec<u8>> = Vec::with_capacity(shards_total);
+        for s in 0..data_shards {
+            let blob_idx = row_idx * data_shards + s;
+            let start = blob_idx * BLOB_SIZE;
+            let end = start + BLOB_SIZE;
+            row_shards.push(mdu_bytes[start..end].to_vec());
         }
-        // Fill parity placeholders
-        for _ in 0..PARITY_SHARDS_NUM {
+        for _ in 0..parity_shards {
             row_shards.push(vec![0u8; BLOB_SIZE]);
         }
 
-        // Encode
         r.encode(&mut row_shards)
             .map_err(|e| CodingError::Rs(format!("{}", e)))?;
 
-        // Write parity back to `shards`
-        for p in 0..PARITY_SHARDS_NUM {
-            let shard_idx = DATA_SHARDS_NUM + p;
-            let start = row_idx * BLOB_SIZE;
-            shards[shard_idx][start..start + BLOB_SIZE].copy_from_slice(&row_shards[shard_idx]);
+        for slot in 0..shards_total {
+            let dest_start = row_idx * BLOB_SIZE;
+            let dest_end = dest_start + BLOB_SIZE;
+            shards[slot][dest_start..dest_end].copy_from_slice(&row_shards[slot]);
         }
     }
 
-    // 3. Commit to EVERYTHING (All 96 Blobs)
-    let mut witness = Vec::with_capacity(96);
-
-    // Data Blobs (0..63)
-    for i in 0..64 {
-        let start = i * BLOB_SIZE;
-        witness.push(
-            ctx.blob_to_commitment(&encoded[start..start + BLOB_SIZE])?
-                .to_vec(),
-        );
-    }
-
-    // Parity Blobs (64..95) - Ordered by Shard then Row
-    for s in DATA_SHARDS_NUM..SHARDS_NUM {
-        for b in 0..8 {
-            let start = b * BLOB_SIZE;
-            let blob = &shards[s][start..start + BLOB_SIZE];
+    let mut witness = Vec::with_capacity(shards_total * rows);
+    for slot in 0..shards_total {
+        for row_idx in 0..rows {
+            let start = row_idx * BLOB_SIZE;
+            let blob = &shards[slot][start..start + BLOB_SIZE];
             witness.push(ctx.blob_to_commitment(blob)?.to_vec());
         }
     }
 
     Ok(ExpandedMdu { witness, shards })
+}
+
+pub fn reconstruct_mdu_from_shards(
+    shards: &mut [Option<Vec<u8>>],
+    data_shards: usize,
+    parity_shards: usize,
+) -> Result<Vec<u8>, CodingError> {
+    if data_shards == 0 || parity_shards == 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    if BLOBS_PER_MDU % data_shards != 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    let shards_total = data_shards + parity_shards;
+    if shards.len() != shards_total {
+        return Err(CodingError::InvalidRsParams);
+    }
+    let rows = BLOBS_PER_MDU / data_shards;
+    let expected_shard_len = rows * BLOB_SIZE;
+
+    let mut present = 0usize;
+    for shard in shards.iter() {
+        if let Some(bytes) = shard {
+            if bytes.len() != expected_shard_len {
+                return Err(CodingError::InvalidSize);
+            }
+            present += 1;
+        }
+    }
+    if present < data_shards {
+        return Err(CodingError::Rs("not enough shards to reconstruct".to_string()));
+    }
+
+    let r = ReedSolomon::new(data_shards, parity_shards)
+        .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+    r.reconstruct(shards)
+        .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+    let mut mdu = vec![0u8; MDU_SIZE];
+    for row_idx in 0..rows {
+        let row_offset = row_idx * BLOB_SIZE;
+        for slot in 0..data_shards {
+            let blob_idx = row_idx * data_shards + slot;
+            let dst = blob_idx * BLOB_SIZE;
+            let shard = shards[slot]
+                .as_ref()
+                .ok_or_else(|| CodingError::Rs("missing data shard after reconstruct".to_string()))?;
+            let src = &shard[row_offset..row_offset + BLOB_SIZE];
+            mdu[dst..dst + BLOB_SIZE].copy_from_slice(src);
+        }
+    }
+
+    Ok(mdu)
 }
 
 #[cfg(test)]
@@ -176,6 +218,55 @@ mod tests {
             let expected = encode_to_mdu_reference(&raw);
             let got = encode_to_mdu(&raw);
             assert_eq!(got, expected, "size={size}");
+        }
+    }
+
+    #[test]
+    fn reconstruct_mdu_from_missing_shards() {
+        let mut mdu = vec![0u8; MDU_SIZE];
+        for (i, byte) in mdu.iter_mut().enumerate() {
+            *byte = (i % 251) as u8;
+        }
+
+        let rows = BLOBS_PER_MDU / DATA_SHARDS_NUM;
+        let shards_total = DATA_SHARDS_NUM + PARITY_SHARDS_NUM;
+        let mut shards_raw: Vec<Vec<u8>> = vec![vec![0u8; rows * BLOB_SIZE]; shards_total];
+        let r = ReedSolomon::new(DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
+        for row_idx in 0..rows {
+            let mut row_shards: Vec<Vec<u8>> = Vec::with_capacity(shards_total);
+            for s in 0..DATA_SHARDS_NUM {
+                let blob_idx = row_idx * DATA_SHARDS_NUM + s;
+                let start = blob_idx * BLOB_SIZE;
+                let end = start + BLOB_SIZE;
+                row_shards.push(mdu[start..end].to_vec());
+            }
+            for _ in 0..PARITY_SHARDS_NUM {
+                row_shards.push(vec![0u8; BLOB_SIZE]);
+            }
+            r.encode(&mut row_shards).unwrap();
+            for slot in 0..shards_total {
+                let dest_start = row_idx * BLOB_SIZE;
+                let dest_end = dest_start + BLOB_SIZE;
+                shards_raw[slot][dest_start..dest_end].copy_from_slice(&row_shards[slot]);
+            }
+        }
+
+        let mut shards: Vec<Option<Vec<u8>>> = shards_raw.into_iter().map(Some).collect();
+
+        shards[1] = None; // drop one data shard
+        shards[10] = None; // drop a parity shard
+
+        let reconstructed = reconstruct_mdu_from_shards(&mut shards, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
+        assert_eq!(reconstructed, mdu);
+    }
+
+    #[test]
+    fn reconstruct_mdu_rejects_invalid_params() {
+        let mut shards = vec![None; 10];
+        let err = reconstruct_mdu_from_shards(&mut shards, 7, 3).unwrap_err();
+        match err {
+            CodingError::InvalidRsParams => {}
+            _ => panic!("expected InvalidRsParams, got {err:?}"),
         }
     }
 }

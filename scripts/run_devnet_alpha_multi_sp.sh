@@ -46,6 +46,30 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
+ensure_nil_core() {
+  local lib_dir="$ROOT_DIR/nil_core/target/release"
+  if [ -f "$lib_dir/libnil_core.a" ] || [ -f "$lib_dir/libnil_core.so" ] || [ -f "$lib_dir/libnil_core.dylib" ]; then
+    return 0
+  fi
+  banner "Building nil_core (native)"
+  (cd "$ROOT_DIR/nil_core" && cargo build --release)
+  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+    local alt=""
+    for ext in a so dylib; do
+      alt=$(ls "$ROOT_DIR"/nil_core/target/*/release/libnil_core."$ext" 2>/dev/null | head -n1 || true)
+      if [ -n "$alt" ]; then
+        mkdir -p "$lib_dir"
+        cp "$alt" "$lib_dir/libnil_core.$ext"
+        break
+      fi
+    done
+  fi
+  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+    echo "nil_core native library not found after build" >&2
+    exit 1
+  fi
+}
+
 wait_for_http() {
   local name="$1"
   local url="$2"
@@ -403,6 +427,7 @@ start_all() {
     fi
   fi
 
+  ensure_nil_core
   ensure_nilchaind
   ensure_nil_cli
   init_chain
