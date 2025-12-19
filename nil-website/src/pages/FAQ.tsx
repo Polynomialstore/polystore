@@ -15,8 +15,22 @@ const faqs = [
         </>
       },
       {
-        q: "What is the 'Nilmanifold'?",
-        a: "It is a precise mathematical metaphor for our network's architecture. In geometry, a Nilmanifold is a compact, homogeneous space derived from a nilpotent Lie group. 'Homogeneous' means the space looks the same from every point—there are no privileged centers. NilStore mirrors this: every node is topologically equal, and data flows fluidly across the network to balance load and heal failures, governed by equations analogous to Ricci Flow (which smooths out irregularities/curvature over time)."
+        q: "Why \"Nil\"?",
+        a: (
+          <>
+            <p>
+              "Nil" signals <strong>zero privileged centers</strong>. We are building a storage network that behaves like
+              a homogeneous space: any node can serve, verify, and be replaced without a central coordinator deciding
+              who is allowed in.
+            </p>
+            <p className="mt-2">
+              Some networks still depend on centralized control planes or gatekeeping infrastructure, while others
+              focus on archival deals where retrieval is outside the protocol. NilStore makes retrieval first-class:
+              serving data is the proof and the payout. That is the "Nil" promise - fully decentralized operations with
+              performance as the currency.
+            </p>
+          </>
+        )
       }
     ]
   },
