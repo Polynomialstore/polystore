@@ -18,7 +18,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 - [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval fees).**
   - Retrieval credits are explicitly **out of scope** for Gamma-4.
 - [ ] **Goal 2: Chain Params & Fees (Retrieval).** (Start Here)
-  - Add: `base_retrieval_fee` (`Coin`), `retrieval_price_per_blob` (`Coin`, 128KiB unit), `retrieval_burn_bps` (`uint64`, default 500 = 5%).
+  - Add: `base_retrieval_fee` (`Coin`, suggested devnet default `0stake`), `retrieval_price_per_blob` (`Coin`, 128KiB unit, suggested devnet default `0stake`), `retrieval_burn_bps` (`uint64`, default 500 = 5%).
 - [x] **Goal 3: Refactor `CreateDeal` (Creation Fee).**
   - Implemented for both `MsgCreateDeal` and `MsgCreateDealFromEvm` (fee collector destination), with unit tests.
 - [x] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
