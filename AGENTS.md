@@ -543,6 +543,48 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 ---
 
+### 11.3 Next Sprint: Devnet Gamma-Delta (Gateway Fallback + Native/WASM Parity)
+
+**Objective:** Close the routing/fallback gap in the client and add automated native↔WASM parity tests for core flows.
+
+**Gateway fallback is only partially done. We have:**
+- [x] Local gateway detection + green‑dot widget (`useLocalGateway`, `GatewayStatusWidget`).
+- [x] OPFS fallback paths in `DealDetail.tsx` for showing local slab/manifest data.
+
+**What’s still missing for a “robust fallback”:**
+- [ ] No unified routing layer that automatically switches upload/fetch between local gateway, direct‑to‑SP, and chain precompile.
+- [ ] No retry policy or error classification to trigger fallback.
+- [ ] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
+
+**Native↔WASM parity tests are not done:**
+- [ ] There are unit tests for WASM pieces (e.g., `Mdu0Builder`), but no automated parity checks comparing native outputs to WASM outputs across key flows (`expand_mdu`, manifest commitments, proofs).
+- [ ] No CI job for parity.
+
+---
+
+### 11.4 PM-Level Backlog (Priority Buckets)
+
+**P0 (Highest):**
+- LibP2P browser.
+- UI/UX overhaul of dashboard.
+
+**P1 (Medium):**
+- Synchronize specs to code + TODOs.
+  - Synchronize whitepaper and litepaper.
+- Improve website overall: audit accessible pages, remove/replace/add necessary pages.
+
+**P2 (Lower):**
+- Mode 2 RS parity.
+- Require regular proofs from SPs.
+- Formalize block rewards.
+- Formalize strikes against SPs who don't give proofs.
+- Strengthen retrieval process against deviations from happy path (including "deputy" system).
+
+**P10 (Lowest):**
+- Revisit retrieval credits later (explicitly out‑of‑scope for Gamma‑4).
+
+---
+
 ### 11.2 Legacy Devnet Gamma Goals (Deferred)
 ---
 
