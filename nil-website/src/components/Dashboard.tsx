@@ -1,6 +1,6 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu, ArrowUpRight } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -272,6 +272,31 @@ export function Dashboard() {
     return deals.find((d) => d.id === targetDealId) || null
   }, [deals, targetDealId])
 
+  const providerEndpointsByAddr = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const p of providers) {
+      if (!p.address) continue
+      const endpoints = Array.isArray(p.endpoints) ? p.endpoints : []
+      map.set(p.address, endpoints.filter((e): e is string => typeof e === 'string'))
+    }
+    return map
+  }, [providers])
+
+  const resolveProviderBase = useCallback(
+    (deal: Deal | null): string | undefined => {
+      if (!deal || !deal.providers || deal.providers.length === 0) return undefined
+      const primary = deal.providers[0]
+      const endpoints = providerEndpointsByAddr.get(primary) ?? []
+      for (const ep of endpoints) {
+        if (/^https?:\/\//i.test(ep)) return ep.replace(/\/$/, '')
+        const url = multiaddrToHttpUrl(ep)
+        if (url) return url
+      }
+      return appConfig.spBase
+    },
+    [providerEndpointsByAddr],
+  )
+
   const contentManifestRoot = stagedUpload?.cid || targetDeal?.cid || ''
 
   useEffect(() => {
@@ -502,31 +527,6 @@ export function Dashboard() {
     if (!Number.isFinite(num)) return '—'
     return `${(num / 100).toFixed(num % 100 === 0 ? 0 : 2)}%`
   }
-
-  const providerEndpointsByAddr = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const p of providers) {
-      if (!p.address) continue
-      const endpoints = Array.isArray(p.endpoints) ? p.endpoints : []
-      map.set(p.address, endpoints.filter((e): e is string => typeof e === 'string'))
-    }
-    return map
-  }, [providers])
-
-  const resolveProviderBase = useCallback(
-    (deal: Deal | null): string | undefined => {
-      if (!deal || !deal.providers || deal.providers.length === 0) return undefined
-      const primary = deal.providers[0]
-      const endpoints = providerEndpointsByAddr.get(primary) ?? []
-      for (const ep of endpoints) {
-        if (/^https?:\/\//i.test(ep)) return ep.replace(/\/$/, '')
-        const url = multiaddrToHttpUrl(ep)
-        if (url) return url
-      }
-      return appConfig.spBase
-    },
-    [providerEndpointsByAddr],
-  )
 
   const providerStatsByAddress = useMemo(() => {
     const byProvider = new Map<string, { assignedDeals: number; activeDeals: number; retrievals: number; bytesServed: number }>()
