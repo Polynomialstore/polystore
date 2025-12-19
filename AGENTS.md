@@ -706,7 +706,26 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 ---
 
-### 11.4 PM-Level Backlog (Priority Buckets)
+### 11.4 Next Sprint: Devnet Gamma‑Mode2 Web Integration (Preliminary Outline)
+
+**Status:** Preliminary outline only (final scope depends on Delta completion and CI stability).
+
+**Prerequisites:** Delta A (routing/fallback) + Delta B (native↔WASM parity) complete and green in CI.
+
+**Scope (two-tier outline):**
+- **C‑lite (minimum viable Mode 2 web enablement):**
+  - Keep existing Mode 2 UI inputs, but enforce strict validation (`K | 64`, `K+M <= providers`, `K,M >= 1`) before allocation.
+  - Ensure `buildServiceHint` emits `rs=K+M` reliably and surface validation errors inline.
+  - Use WASM `expand_mdu_rs(k,m)` for sharding; upload via existing router (gateway or direct SP).
+  - No new retrieval flow changes beyond current behavior (Mode 1 retrieval path remains).
+
+- **C‑full (preferred full integration):**
+  - Slot‑aware upload routing: shard placement and uploads are aligned to assigned provider slots.
+  - Direct‑SP retrieval for Mode 2 with slot‑aware `openRetrievalSession` (chain already enforces).
+  - UI surfacing: show slot/provider mapping in DealDetail and indicate chosen route in downloads.
+  - E2E coverage: extend Mode 2 Playwright spec to assert slot‑aware routing and successful retrieval with gateway optional.
+
+### 11.5 PM-Level Backlog (Priority Buckets)
 
 **P0 (Highest):**
 - LibP2P browser.
