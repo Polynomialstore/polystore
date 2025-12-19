@@ -67,6 +67,7 @@ const wasm = new NilWasm(trustedSetup)
 
 const fixturesDir = path.resolve(repoRoot, 'nil_core', 'fixtures', 'parity')
 const mduBytes = new Uint8Array(await fs.readFile(path.join(fixturesDir, 'mdu_8m.bin')))
+const blobBytes = new Uint8Array(await fs.readFile(path.join(fixturesDir, 'blob_128k.bin')))
 
 const expanded = wasm.expand_file(mduBytes) as { witness: unknown; shards: unknown }
 const witness = (Array.isArray(expanded.witness) ? expanded.witness : []).map(toU8)
@@ -82,6 +83,27 @@ for (const entry of witness) {
 }
 
 const mduRoot = toU8(wasm.compute_mdu_root(witnessFlat))
+const rsK = 4
+const rsM = 2
+const expandedRs = wasm.expand_mdu_rs(mduBytes, rsK, rsM) as { witness: unknown; shards: unknown }
+const rsWitness = (Array.isArray(expandedRs.witness) ? expandedRs.witness : []).map(toU8)
+const rsShards = (Array.isArray(expandedRs.shards) ? expandedRs.shards : []).map(toU8)
+const rsWitnessFlat = new Uint8Array(rsWitness.reduce((acc, cur) => acc + cur.length, 0))
+offset = 0
+for (const entry of rsWitness) {
+  rsWitnessFlat.set(entry, offset)
+  offset += entry.length
+}
+const rsMduRoot = toU8(wasm.compute_mdu_root(rsWitnessFlat))
+
+const blobCommitments = toU8(wasm.commit_blobs(blobBytes))
+if (blobCommitments.length !== 48) {
+  throw new Error(`Expected 48-byte blob commitment, got ${blobCommitments.length}`)
+}
+
+const committed = wasm.commit_mdu(mduBytes) as { witness_flat?: unknown; mdu_root?: unknown }
+const commitWitness = toU8(committed.witness_flat)
+const commitRoot = toU8(committed.mdu_root)
 const rootIndices = pickIndices(4)
 const roots = deriveRoots(mduRoot, rootIndices)
 const rootsFlat = new Uint8Array(roots.length * 32)
@@ -94,6 +116,7 @@ const manifestBlob = toU8(manifest.blob)
 const output = {
   fixture: {
     mdu_bytes: mduBytes.length,
+    blob_bytes: blobBytes.length,
     root_count: roots.length,
     root_indices: rootIndices,
   },
@@ -103,6 +126,24 @@ const output = {
     witness_count: witness.length,
     shard_count: shards.length,
     mdu_root: `0x${Buffer.from(mduRoot).toString('hex')}`,
+  },
+  expand_mdu_rs: {
+    k: rsK,
+    m: rsM,
+    witness_sha256: sha256Chunks(rsWitness),
+    shards_sha256: sha256Chunks(rsShards),
+    witness_count: rsWitness.length,
+    shard_count: rsShards.length,
+    mdu_root: `0x${Buffer.from(rsMduRoot).toString('hex')}`,
+  },
+  blob_commitment: {
+    blob_bytes: blobBytes.length,
+    commitment_hex: `0x${Buffer.from(blobCommitments).toString('hex')}`,
+    commitment_sha256: sha256Hex(blobCommitments),
+  },
+  commit_mdu: {
+    witness_sha256: sha256Hex(commitWitness),
+    mdu_root: `0x${Buffer.from(commitRoot).toString('hex')}`,
   },
   manifest: {
     manifest_root: `0x${Buffer.from(manifestRoot).toString('hex')}`,
