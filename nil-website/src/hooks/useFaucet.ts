@@ -6,6 +6,7 @@ export function useFaucet() {
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
   const [txStatus, setTxStatus] = useState<'idle' | 'pending' | 'confirmed' | 'failed'>('idle')
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
   async function requestFunds(address: string | undefined) {
     if (!address) return
@@ -17,28 +18,48 @@ export function useFaucet() {
         // Convert to Bech32 if it's an 0x address
         const targetAddress = address.startsWith('0x') ? ethToNil(address) : address
 
-        const response = await fetch(`${appConfig.apiBase}/faucet`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: targetAddress })
-        })
-        
-        if (!response.ok) {
-            const err = await response.text()
-            throw new Error(err || 'Faucet request failed')
-        }
-        const json = await response.json().catch(() => ({}))
-        if (json.tx_hash) {
-            setLastTx(json.tx_hash)
-            setTxStatus('pending')
-            const lcd = appConfig.lcdBase
-            if (/localhost|127\.0\.0\.1/i.test(lcd)) {
-                setTimeout(() => setTxStatus('confirmed'), 1500)
-            } else {
-                pollTx(json.tx_hash)
+        const maxAttempts = 5
+        let lastError: Error | null = null
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const response = await fetch(`${appConfig.apiBase}/faucet`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: targetAddress })
+            })
+
+            if (response.ok) {
+                const json = await response.json().catch(() => ({}))
+                if (json.tx_hash) {
+                    setLastTx(json.tx_hash)
+                    setTxStatus('pending')
+                    const lcd = appConfig.lcdBase
+                    if (/localhost|127\.0\.0\.1/i.test(lcd)) {
+                        setTimeout(() => setTxStatus('confirmed'), 1500)
+                    } else {
+                        pollTx(json.tx_hash)
+                    }
+                }
+                return json
             }
+
+            const errText = await response.text().catch(() => '')
+            if (response.status === 429) {
+                const retryAfter = response.headers.get('retry-after')
+                const retrySeconds = retryAfter ? Number.parseFloat(retryAfter) : NaN
+                const waitMs = Number.isFinite(retrySeconds)
+                  ? Math.max(1000, retrySeconds * 1000)
+                  : Math.min(2000 * Math.pow(2, attempt), 30000)
+                await delay(waitMs)
+                lastError = new Error(errText || 'Faucet rate limit exceeded')
+                continue
+            }
+
+            throw new Error(errText || 'Faucet request failed')
         }
-        return json
+
+        if (lastError) throw lastError
+        throw new Error('Faucet request failed')
     } catch (e) {
         console.error(e)
         setTxStatus('failed')

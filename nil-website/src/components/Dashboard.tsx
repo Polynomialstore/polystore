@@ -432,7 +432,7 @@ export function Dashboard() {
     chainId: appConfig.chainId,
   })
 
-  async function fetchBalances(owner: string) {
+  async function fetchBalances(owner: string): Promise<{ atom?: string; stake?: string } | null> {
     try {
       const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${owner}`)
       const json = await res.json()
@@ -441,13 +441,16 @@ export function Dashboard() {
         const hit = bal.find((b: { denom: string; amount: string }) => b.denom === denom)
         return hit ? hit.amount : undefined
       }
-      setBankBalances({
+      const next = {
         atom: getAmt('aatom'),
         stake: getAmt('stake'),
-      })
+      }
+      setBankBalances(next)
+      return next
     } catch (e) {
       console.error('fetchBalances failed', e)
     }
+    return null
   }
 
   async function fetchProviders() {
@@ -605,7 +608,10 @@ export function Dashboard() {
   const handleRequestFunds = async () => {
       try {
           const resp = await requestFunds(address)
-          if (nilAddress) fetchBalances(nilAddress)
+          if (nilAddress) {
+            setStatusMsg('Faucet requested. Waiting for balance...')
+            await waitForStakeBalance(nilAddress)
+          }
           refetchEvm?.()
           setStatusTone('neutral')
           if (resp?.tx_hash) {
@@ -710,6 +716,23 @@ export function Dashboard() {
       }
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
+  }
+
+  async function waitForStakeBalance(owner: string) {
+    const maxAttempts = 60
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const balances = await fetchBalances(owner)
+      const stake = balances?.stake
+      if (stake) {
+        try {
+          if (BigInt(stake) > 0n) return true
+        } catch {
+          return true
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+    return false
   }
 
   const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
