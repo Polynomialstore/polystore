@@ -547,6 +547,11 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Close the routing/fallback gap in the client and add automated native↔WASM parity tests for core flows.
 
+**Critical boundary (do not regress):**
+- The **gateway remains optional**: the browser must be able to fully operate without a local gateway present.
+- All **chain transactions require browser wallet signing** (MetaMask): the gateway must not become a signing authority; it can only (a) serve data-plane operations and (b) provide “plan/trace/status” helpers that the browser can choose to use.
+- The future “gateway GUI” is an **interface/distribution change** for the optional local gateway (status/config/logs and a better UX), not a shift of signing responsibilities away from the browser.
+
 **Gateway fallback is only partially done. We have:**
 - [x] Local gateway detection + green‑dot widget (`useLocalGateway`, `GatewayStatusWidget`).
 - [x] OPFS fallback paths in `DealDetail.tsx` for showing local slab/manifest data.
