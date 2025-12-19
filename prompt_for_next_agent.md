@@ -54,3 +54,4 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 - **Start Stack (Split Mode):** `./scripts/run_local_stack.sh start`.
 - **Run Website Checks:** `sh verify_website_checks.sh`.
 - **Run E2E Test:** `cd nil-website && npx playwright test tests/direct-upload.spec.ts`.
+- **Run Retrieval Session CLI E2E:** `./e2e_open_retrieval_session_cli.sh`.
