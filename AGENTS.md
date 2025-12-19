@@ -514,13 +514,13 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Term deposit destination:** `cost` is transferred to the `nilchain` module account and added to `Deal.escrow_balance` (TVL/accounting).
     - **References:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/economics_gamma4_test.go`.
 
-- [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
+- [x] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
     - **Align spec with current implementation:** denom, fee destinations, and `ceil(...)` rounding MUST be explicitly stated.
     - **Define retrieval economics (no credits for Gamma-4):**
         - **Fees:** `OpenRetrievalSession` MUST (a) charge `base_retrieval_fee` (non-refundable, burned) and (b) preflight+lock the variable portion up-front.
         - **Payout:** on session `COMPLETED`, pay the provider from the locked variable funds and burn a protocol cut (default 5%).
         - **Failure semantics:** if the session expires without completion, refund the locked variable portion back to the Deal.
-- [ ] **Goal 2: Chain Params & Fees.**
+- [x] **Goal 2: Chain Params & Fees.**
     - **Already present (storage lock-in):** `storage_price` (`Dec`), `deal_creation_fee` (`Coin`), `min_duration_blocks` (`uint64`).
     - **Add (retrieval economics):** `base_retrieval_fee` (`Coin`), `retrieval_price_per_blob` (`Coin`, 128KiB unit), `retrieval_burn_bps` (`uint64`, default `500` = 5%).
     - **Param invariants:** non-negative; `Coin` params must use `sdk.DefaultBondDenom`.
@@ -528,7 +528,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Status:** implemented for both `MsgCreateDeal` and `MsgCreateDealFromEvm` (fee collector destination), with unit tests.
 - [x] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
     - **Status:** implemented for both `MsgUpdateDealContent` and `MsgUpdateDealContentFromEvm` (`ceil(price * delta_size * duration)`), with unit tests.
-- [ ] **Goal 5: Retrieval Fees (Lock + Pay Provider + Burn).**
+- [x] **Goal 5: Retrieval Fees (Lock + Pay Provider + Burn).**
     - **Decision:** Retrieval credits are **out of scope** for Gamma-4 (too much state/UX ambiguity). Revisit after economics stabilize.
     - **Pricing unit:** price per **Blob** (128KiB) to avoid per-byte decimals and match `RetrievalSession.blob_count`.
     - **Preflight/lock:** `OpenRetrievalSession` MUST charge `base_retrieval_fee` (non-refundable) and reserve `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance` so providers never serve unpaid sessions.

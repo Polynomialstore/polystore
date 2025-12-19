@@ -391,7 +391,20 @@ The intended end state is: a provider only gets credit for a retrieval once the 
         *   all before `expires_at`.
     *   Only `COMPLETED` sessions increment `DealHeatState.successful_retrievals_total` and contribute to rewards/health.
 
-#### 7.2.1 Legacy: receipt-based liveness (devnet convenience, deprecated)
+#### 7.2.1 Gamma-4 Retrieval Fees (Devnet, Normative)
+
+For Gamma-4, retrieval pricing is **fee-based** (no credits). Fees are charged at session open and settled only on completion:
+
+* **Base fee (anti-spam):** On `MsgOpenRetrievalSession`, the chain MUST charge `base_retrieval_fee` and burn it (non-refundable).
+* **Variable fee (per blob):** On `MsgOpenRetrievalSession`, the chain MUST lock `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance`.
+* **Completion payout:** When a session reaches `COMPLETED`, the chain MUST:
+  * burn `ceil(variable * retrieval_burn_bps / 10000)`, and
+  * transfer the remaining `variable - burn_cut` from the `nilchain` module account to the Provider.
+* **Expiry/refund:** If a session expires without completion, the locked `variable` amount MAY be unlocked by an owner-initiated cancel transaction (base fee remains burned).
+
+Retrieval credits and byte-based allowances are out of scope for Gamma-4 and may be introduced later.
+
+#### 7.2.2 Legacy: receipt-based liveness (devnet convenience, deprecated)
 
 Earlier devnet iterations used per-range user message signatures (`RetrievalReceipt`) and session message signatures (`DownloadSessionReceipt`) to avoid explicit on-chain session state. These remain useful as a reference and may exist as compatibility paths, but the long-lived protocol direction is the on-chain Retrieval Session model above (tx-only user actions, blob-range semantics, explicit status on-chain).
 

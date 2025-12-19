@@ -1510,6 +1510,30 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
 	}
 
+	params := k.GetParams(ctx)
+	baseFee := params.BaseRetrievalFee
+	variableFee := math.ZeroInt()
+	if params.RetrievalPricePerBlob.IsValid() && params.RetrievalPricePerBlob.Amount.IsPositive() {
+		variableFee = params.RetrievalPricePerBlob.Amount.Mul(math.NewIntFromUint64(msg.BlobCount))
+	}
+	totalFee := variableFee.Add(baseFee.Amount)
+	if totalFee.IsPositive() {
+		newEscrow := deal.EscrowBalance.Sub(totalFee)
+		if newEscrow.IsNegative() {
+			return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow insufficient for retrieval fees", msg.DealId)
+		}
+		if baseFee.Amount.IsPositive() {
+			feeCoins := sdk.NewCoins(baseFee)
+			if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, feeCoins); err != nil {
+				return nil, fmt.Errorf("failed to burn base retrieval fee: %w", err)
+			}
+		}
+		deal.EscrowBalance = newEscrow
+		if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+			return nil, fmt.Errorf("failed to update deal escrow: %w", err)
+		}
+	}
+
 	nonceKey := collections.Join(collections.Join(msg.Creator, msg.DealId), msg.Provider)
 	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
@@ -1535,20 +1559,21 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	session := types.RetrievalSession{
-		SessionId:       sessionID,
-		DealId:          msg.DealId,
-		Owner:           msg.Creator,
-		Provider:        msg.Provider,
-		ManifestRoot:    msg.ManifestRoot,
-		StartMduIndex:   msg.StartMduIndex,
-		StartBlobIndex:  msg.StartBlobIndex,
-		BlobCount:       msg.BlobCount,
-		TotalBytes:      totalBytes,
-		Nonce:           msg.Nonce,
-		ExpiresAt:       msg.ExpiresAt,
-		OpenedHeight:    ctx.BlockHeight(),
-		UpdatedHeight:   ctx.BlockHeight(),
-		Status:          types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		SessionId:      sessionID,
+		DealId:         msg.DealId,
+		Owner:          msg.Creator,
+		Provider:       msg.Provider,
+		ManifestRoot:   msg.ManifestRoot,
+		StartMduIndex:  msg.StartMduIndex,
+		StartBlobIndex: msg.StartBlobIndex,
+		BlobCount:      msg.BlobCount,
+		TotalBytes:     totalBytes,
+		Nonce:          msg.Nonce,
+		ExpiresAt:      msg.ExpiresAt,
+		OpenedHeight:   ctx.BlockHeight(),
+		UpdatedHeight:  ctx.BlockHeight(),
+		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		LockedFee:      variableFee,
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -1604,6 +1629,12 @@ func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.Msg
 	}
 	session.UpdatedHeight = ctx.BlockHeight()
 
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		if err := k.settleRetrievalSession(ctx, &session); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
 		return nil, err
 	}
@@ -1615,6 +1646,53 @@ func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.Msg
 	}
 
 	return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
+}
+
+func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgCancelRetrievalSession) (*types.MsgCancelRetrievalSessionResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.SessionId) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+	}
+
+	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+	}
+	if msg.Creator != session.Owner {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only session owner may cancel")
+	}
+
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED ||
+		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED {
+		return &types.MsgCancelRetrievalSessionResponse{Success: true}, nil
+	}
+
+	if !isSessionExpired(ctx, &session) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session not expired")
+	}
+
+	if session.LockedFee.IsPositive() {
+		deal, err := k.Deals.Get(ctx, session.DealId)
+		if err != nil {
+			return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
+		}
+		deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
+		if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+			return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
+		}
+		session.LockedFee = math.ZeroInt()
+	}
+
+	session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED
+	session.UpdatedHeight = ctx.BlockHeight()
+	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
+		return nil, err
+	}
+
+	return &types.MsgCancelRetrievalSessionResponse{Success: true}, nil
 }
 
 func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProof) (*types.MsgSubmitRetrievalSessionProofResponse, error) {
@@ -1729,6 +1807,12 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 	session.UpdatedHeight = ctx.BlockHeight()
 
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		if err := k.settleRetrievalSession(ctx, &session); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
 		return nil, err
 	}
@@ -1771,6 +1855,53 @@ func isSessionExpired(ctx sdk.Context, session *types.RetrievalSession) bool {
 		return false
 	}
 	return uint64(ctx.BlockHeight()) > session.ExpiresAt
+}
+
+func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.RetrievalSession) error {
+	if session == nil || !session.LockedFee.IsPositive() {
+		return nil
+	}
+
+	params := k.GetParams(ctx)
+	burnBps := params.RetrievalBurnBps
+	variable := session.LockedFee
+
+	burn := math.ZeroInt()
+	if burnBps > 0 {
+		bps := math.NewIntFromUint64(burnBps)
+		bpsDiv := math.NewInt(10000)
+		bpsCeil := math.NewInt(9999)
+		burn = variable.Mul(bps).Add(bpsCeil).Quo(bpsDiv)
+		if burn.GT(variable) {
+			burn = variable
+		}
+	}
+
+	providerCut := variable.Sub(burn)
+	if providerCut.IsNegative() {
+		return fmt.Errorf("retrieval payout underflow")
+	}
+
+	if burn.IsPositive() {
+		burnCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, burn))
+		if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, burnCoins); err != nil {
+			return fmt.Errorf("failed to burn retrieval fees: %w", err)
+		}
+	}
+
+	if providerCut.IsPositive() {
+		providerAddr, err := sdk.AccAddressFromBech32(session.Provider)
+		if err != nil {
+			return sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+		}
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, providerCut))
+		if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, coins); err != nil {
+			return fmt.Errorf("failed to pay retrieval fees: %w", err)
+		}
+	}
+
+	session.LockedFee = math.ZeroInt()
+	return nil
 }
 
 func bytesEqual(a, b []byte) bool {

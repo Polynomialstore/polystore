@@ -26,4 +26,14 @@ message Params {
   ];
 
   uint64 min_duration_blocks = 6;
+
+  cosmos.base.v1beta1.Coin base_retrieval_fee = 7 [
+    (gogoproto.nullable) = false
+  ]; // Fixed fee charged on retrieval session open (burned).
+
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob = 8 [
+    (gogoproto.nullable) = false
+  ]; // Variable retrieval price per 128KiB blob (locked on session open).
+
+  uint64 retrieval_burn_bps = 9; // Burn cut in basis points (e.g., 500 = 5%).
 }

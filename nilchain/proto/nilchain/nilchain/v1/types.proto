@@ -100,6 +100,8 @@ message RetrievalSession {
   int64 opened_height = 12;
   int64 updated_height = 13;
   RetrievalSessionStatus status = 14;
+
+  string locked_fee = 15 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Locked variable fee (excludes base fee)
 }
 
 // RetrievalReceipt represents a user's signed confirmation of data retrieval.

@@ -41,6 +41,9 @@ service Msg {
   // MsgConfirmRetrievalSession confirms completion of a retrieval session (proof-of-validation).
   rpc ConfirmRetrievalSession(MsgConfirmRetrievalSession) returns (MsgConfirmRetrievalSessionResponse);
 
+  // MsgCancelRetrievalSession cancels an expired retrieval session and unlocks fees.
+  rpc CancelRetrievalSession(MsgCancelRetrievalSession) returns (MsgCancelRetrievalSessionResponse);
+
   // MsgSubmitRetrievalSessionProof submits proof-of-retrieval for a session (provider action).
   rpc SubmitRetrievalSessionProof(MsgSubmitRetrievalSessionProof) returns (MsgSubmitRetrievalSessionProofResponse);
 
@@ -225,6 +228,19 @@ message MsgConfirmRetrievalSession {
 }
 
 message MsgConfirmRetrievalSessionResponse {
+  bool success = 1;
+}
+
+// MsgCancelRetrievalSession cancels an expired session and unlocks locked fees.
+message MsgCancelRetrievalSession {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgCancelRetrievalSession";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes session_id = 2; // 32-byte session id
+}
+
+message MsgCancelRetrievalSessionResponse {
   bool success = 1;
 }
 
