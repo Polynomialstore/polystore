@@ -254,6 +254,10 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Install Dependencies
+        working-directory: nil-website
+        run: npm ci
+
       - name: Install Playwright Browsers
         working-directory: nil-website
         run: npx playwright install --with-deps

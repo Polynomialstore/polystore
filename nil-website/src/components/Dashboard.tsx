@@ -72,7 +72,8 @@ export function Dashboard() {
         if (eth) {
             try {
                 const hex = await eth.request({ method: 'eth_chainId' })
-                setMetamaskChainId(parseInt(hex, 16))
+                const parsed = typeof hex === 'string' ? parseInt(hex, 16) : NaN
+                setMetamaskChainId(Number.isFinite(parsed) ? parsed : undefined)
             } catch (e) {
                 console.error(e)
             }
@@ -83,7 +84,10 @@ export function Dashboard() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const eth = (window as any).ethereum
     if (eth && eth.on) {
-        const handleChainChanged = (hex: string) => setMetamaskChainId(parseInt(hex, 16))
+        const handleChainChanged = (hex: string) => {
+          const parsed = typeof hex === 'string' ? parseInt(hex, 16) : NaN
+          setMetamaskChainId(Number.isFinite(parsed) ? parsed : undefined)
+        }
         eth.on('chainChanged', handleChainChanged)
         return () => eth.removeListener('chainChanged', handleChainChanged)
     }
@@ -104,8 +108,9 @@ export function Dashboard() {
           body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
         })
         const json = await res.json()
-        const id = parseInt(json.result, 16)
-        setRpcChainId(id)
+        const raw = typeof json?.result === 'string' ? json.result : ''
+        const id = raw ? parseInt(raw, 16) : NaN
+        setRpcChainId(Number.isFinite(id) ? id : null)
       } catch (e) {
         console.error('RPC Check failed', e)
       }
