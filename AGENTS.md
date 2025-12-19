@@ -605,9 +605,37 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Add at least one CI-triggered E2E smoke path where the gateway is down but the browser still succeeds (or vice versa).
   - **Pass gate:** GitHub CI runs the new tests (unit + E2E smoke).
 
-**Native↔WASM parity tests are not done:**
-- [ ] There are unit tests for WASM pieces (e.g., `Mdu0Builder`), but no automated parity checks comparing native outputs to WASM outputs across key flows (`expand_mdu`, manifest commitments, proofs).
-- [ ] No CI job for parity.
+#### 11.3.B Delta Sprint Checklist: Native↔WASM Parity Tests
+
+**Goal:** Add automated parity checks so native (`nil_core`) and browser/WASM (`nil_core` wasm build) produce identical outputs for core flows.
+
+- [ ] **Task 1: Choose parity fixtures + golden outputs.**
+  - Add small deterministic fixtures (e.g., fixed 128KiB blob, fixed 8MiB MDU, and a small multi-file slab) committed to the repo.
+  - Define the exact parity assertions per fixture: hashes/roots/commitments/proof bytes (or stable derived digests).
+  - **Pass gate:** fixtures are stable across platforms and do not require network access.
+
+- [ ] **Task 2: Implement a native parity runner.**
+  - Add a native test/runner that computes the target outputs from `nil_core` (native) for the fixtures.
+  - Prefer a Rust `cargo test` harness in `nil_core` that emits structured JSON for reuse.
+  - **Pass gate:** `cargo test` (or a dedicated `cargo test -p ...`) runs deterministically in CI.
+
+- [ ] **Task 3: Implement a WASM parity runner.**
+  - Add a Node-based runner that loads the `wasm-pack` build and computes the same outputs for the fixtures.
+  - Keep it hermetic: no browser required; use Node + the generated WASM bundle.
+  - **Pass gate:** `node` runner produces identical JSON fields to the native runner.
+
+- [ ] **Task 4: Compare native vs WASM outputs (parity assertion).**
+  - Add a comparator test that fails CI on any mismatch, with a helpful diff.
+  - Start with these flows:
+    - `expand_mdu` outputs (shards + witness digest)
+    - manifest commitment computation
+    - proof generation/verification (or at minimum proof-hash parity if full proofs are non-deterministic)
+  - **Pass gate:** parity suite passes on macOS and Linux CI runners.
+
+- [ ] **Task 5: CI integration.**
+  - Add a dedicated CI job for parity (native + wasm build + parity compare).
+  - Keep runtime bounded (fixtures small; avoid multi-minute tests).
+  - **Pass gate:** parity job runs on every PR/push (GitHub CI).
 
 ---
 
