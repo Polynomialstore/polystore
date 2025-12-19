@@ -87,5 +87,89 @@ test.describe('mode2 stripe', () => {
     const downloaded = Buffer.concat(chunks)
     expect(downloaded.length).toBe(fileBytes.length)
     expect(downloaded.equals(fileBytes)).toBe(true)
+
+    await expect(page.getByText('Receipt submitted on-chain')).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
+  })
+
+  test('mode2 append keeps prior files (expected failure until append supported)', async ({ page }) => {
+    test.fail(true, 'WASM append is not implemented yet')
+    test.setTimeout(600_000)
+
+    const fileA = { name: 'mode2-a.txt', buffer: Buffer.alloc(32 * 1024, 'A') }
+    const fileB = { name: 'mode2-b.txt', buffer: Buffer.alloc(32 * 1024, 'B') }
+
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+
+    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
+      timeout: 60_000,
+      state: 'attached',
+    })
+    const walletAddress = page.getByTestId('wallet-address')
+    if (!(await walletAddress.isVisible().catch(() => false))) {
+      await page.getByTestId('connect-wallet').first().click()
+      await expect(walletAddress).toBeVisible({ timeout: 60_000 })
+    }
+
+    await page.getByTestId('faucet-request').click()
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+
+    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
+    await page.getByTestId('alloc-rs-k').fill('8')
+    await page.getByTestId('alloc-rs-m').fill('4')
+    await page.getByTestId('alloc-submit').click()
+    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+
+    await page.getByTestId('tab-mdu').click()
+    await page.waitForFunction(() => {
+      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
+      return Boolean(select && select.options.length > 1)
+    }, null, { timeout: 180_000 })
+
+    const dealSelect = page.getByTestId('mdu-deal-select')
+    const options = dealSelect.locator('option')
+    const optionCount = await options.count()
+    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
+    if (lastValue) {
+      await dealSelect.selectOption(lastValue)
+    }
+    const dealId = await dealSelect.inputValue()
+    expect(dealId).not.toBe('')
+
+    await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
+
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: fileA.name,
+      mimeType: 'text/plain',
+      buffer: fileA.buffer,
+    })
+    const uploadBtn = page.getByTestId('mdu-upload')
+    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+    await uploadBtn.click()
+    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    const commitBtn = page.getByTestId('mdu-commit')
+    await commitBtn.click()
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: fileB.name,
+      mimeType: 'text/plain',
+      buffer: fileB.buffer,
+    })
+    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+    await uploadBtn.click()
+    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    await commitBtn.click()
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+
+    const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    await dealRow.click()
+    await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
+      timeout: 60_000,
+    })
+    await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileB.name}"]`)).toBeVisible({
+      timeout: 60_000,
+    })
   })
 })
