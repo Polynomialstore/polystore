@@ -561,6 +561,39 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [ ] No retry policy or error classification to trigger fallback.
 - [ ] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
 
+#### 11.3.A Delta Sprint Checklist: Gateway Fallback (Routing + Retry + UX)
+
+**Goal:** Make the web client resilient when the local gateway is missing/flaky, while keeping MetaMask signing in the browser.
+
+- [ ] **Task 1: Transport Router primitives (client-side, GUI-ready).**
+  - Implement a pure TS router module (no React/DOM) that can execute operations via:
+    - `LocalGateway` (optional; localhost) and/or
+    - `DirectSP` (browser → provider).
+  - Add error classification + retry rules (timeout/refused/5xx retryable; 4xx usually not; provider mismatch never retry).
+  - Emit a structured `DecisionTrace` (attempts, errors, chosen backend) that can be rendered in Web UI today and a future gateway GUI later.
+  - **Pass gate:** unit tests cover decisioning for at least: gateway-down, sp-down, timeout, 4xx, provider-mismatch.
+
+- [ ] **Task 2: Integrate router into the two highest-impact flows.**
+  - **Fetch/Retrieval:** browser still does `open/confirm` via MetaMask; data fetch routes via gateway or direct SP as available.
+  - **Upload:** route file/MDU upload via gateway or direct-to-SP, depending on availability + policy.
+  - **Pass gate:** manual smoke: turning off gateway still allows a full “upload → commit → fetch” path; turning off SP still allows the same path if gateway can serve.
+
+- [ ] **Task 3: User-visible fallback UX + manual override.**
+  - Show “current route” + last fallback reason (from `DecisionTrace`).
+  - Add override mode: `Auto` / `Prefer Local Gateway` / `Prefer Direct SP`.
+  - Persist preference (localStorage is fine for Delta).
+  - **Pass gate:** UI reflects live decisions; user override forces route selection.
+
+- [ ] **Task 4: Gateway “GUI-readiness” status surface (minimal).**
+  - Add a stable gateway endpoint (e.g. `/status`) returning: version/build + feature flags/capabilities + health checks.
+  - This is informational only (no signing; no tx broadcast).
+  - **Pass gate:** browser can display “gateway capabilities” when present; safe when absent.
+
+- [ ] **Task 5: Tests + CI coverage.**
+  - Add unit tests for router module.
+  - Add at least one CI-triggered E2E smoke path where the gateway is down but the browser still succeeds (or vice versa).
+  - **Pass gate:** GitHub CI runs the new tests (unit + E2E smoke).
+
 **Native↔WASM parity tests are not done:**
 - [ ] There are unit tests for WASM pieces (e.g., `Mdu0Builder`), but no automated parity checks comparing native outputs to WASM outputs across key flows (`expand_mdu`, manifest commitments, proofs).
 - [ ] No CI job for parity.
