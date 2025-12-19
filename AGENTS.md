@@ -505,11 +505,31 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 
+- **Resolved defaults (already implemented on-chain):**
+    - **Denom:** all fees/deposits are in `sdk.DefaultBondDenom` (`stake`).
+    - **Creation fee:** `Params.deal_creation_fee` is transferred to `authtypes.FeeCollectorName` (fee collector module account).
+    - **Initial escrow:** `initial_escrow_amount` is transferred to the `nilchain` module account (`types.ModuleName`) and recorded in `Deal.escrow_balance`.
+    - **Term deposit trigger:** only on **size increase** (`delta_size = new_size_bytes - old_size_bytes`, else no charge).
+    - **Term deposit formula:** `cost = ceil(storage_price * delta_size * duration_blocks)` where `duration_blocks = deal.end_block - deal.start_block`.
+    - **Term deposit destination:** `cost` is transferred to the `nilchain` module account and added to `Deal.escrow_balance` (TVL/accounting).
+    - **References:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/economics_gamma4_test.go`.
+
 - [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
+    - **Align spec with current implementation:** denom, fee destinations, and `ceil(...)` rounding MUST be explicitly stated.
+    - **Define retrieval economics + credits:** specify params, units, and the exact “charge + consume credit + enforce invariants” logic for Retrieval Sessions completion (`spec.md` §7.2, step 5).
 - [ ] **Goal 2: Chain Params & Fees.**
-- [ ] **Goal 3: Refactor `CreateDeal` (Creation Fee).**
-- [ ] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
+    - **Already present (storage lock-in):** `storage_price` (`Dec`), `deal_creation_fee` (`Coin`), `min_duration_blocks` (`uint64`).
+    - **Add (retrieval economics):** `base_retrieval_fee` (`Coin`), `retrieval_price_per_byte` (`Dec`), `retrieval_credit_rate` (`Dec`).
+    - **Param invariants:** non-negative; `Coin` params must use `sdk.DefaultBondDenom`.
+- [x] **Goal 3: Refactor `CreateDeal` (Creation Fee).**
+    - **Status:** implemented for both `MsgCreateDeal` and `MsgCreateDealFromEvm` (fee collector destination), with unit tests.
+- [x] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
+    - **Status:** implemented for both `MsgUpdateDealContent` and `MsgUpdateDealContentFromEvm` (`ceil(price * delta_size * duration)`), with unit tests.
 - [ ] **Goal 5: Retrieval Credits.**
+    - **Proposed resolution (to remove unit ambiguity):** track `Deal.retrieval_credit_balance` in **base denom units** (`math.Int`), not bytes.
+    - **Accrual:** on successful term deposit, `credit_earned = ceil(term_deposit * retrieval_credit_rate)` and `Deal.retrieval_credit_balance += credit_earned`.
+    - **Consumption (Retrieval Sessions):** on session `COMPLETED`, `retrieval_cost = base_retrieval_fee + ceil(retrieval_price_per_byte * session.total_bytes)`; consume credit first, then `Deal.escrow_balance`; fail completion if insufficient.
+    - **Payout semantics (devnet):** keep collected coins in the `nilchain` module account for now; provider reward plumbing can remain inflationary until payout separation is implemented.
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**
