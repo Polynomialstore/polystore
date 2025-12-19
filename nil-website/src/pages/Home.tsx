@@ -19,13 +19,13 @@ export const Home = () => {
                src="/brand/logo-light-256.png"
                srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain dark:hidden"
+               className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300 opacity-100 dark:opacity-0 rounded-[10px]"
              />
              <img 
                src="/brand/logo-dark-256.png"
                srcSet="/brand/logo-dark-256.png 1x, /brand/logo-dark-512.png 2x"
                alt="NilStore Logo" 
-               className="absolute inset-0 w-full h-full object-contain hidden dark:block"
+               className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300 opacity-0 dark:opacity-100 rounded-[10px]"
              />
           </motion.div>
 
