@@ -1,7 +1,7 @@
-# NilStore Website Specification (v2.5)
+# NilStore Website Specification (v2.7)
 
 **Status:** Living Document
-**Last Updated:** Dec 10, 2025
+**Last Updated:** Dec 18, 2025
 
 ## 1. Project Identity & Architecture
 
@@ -23,16 +23,22 @@
 │   ├── Layout.tsx          # [Shell] Global navigation, footer, and mobile menu
 │   ├── ConnectWallet.tsx   # [Auth] Wallet connection button
 │   ├── StatusBar.tsx       # [Global] Network status indicator
+│   ├── GatewayStatusWidget.tsx # [Global] Local gateway detection widget (green dot)
 │   └── ... (Charts, Maps, etc.)
 ├── context/                # Global State Providers
 │   ├── ProofContext.tsx    # Streaming global ZK proofs
+│   ├── TransportContext.tsx # Route preference + last trace (gateway vs direct SP)
+│   ├── StagingContext.tsx  # IndexedDB-backed staging queue (OPFS paths)
 │   ├── ThemeContext.tsx    # Light/Dark mode logic
 │   ├── Web3Provider.tsx    # Wagmi/Viem/TanStack Query configuration
 │   └── TechnologyContext.tsx # Educational module state
 ├── hooks/                  # Logic Encapsulation
-│   ├── useCreateDeal.ts    # [Tx] Capacity allocation (EIP-712)
-│   ├── useUpdateDeal.ts    # [Tx] Content commitment (EIP-712)
-│   ├── useUpload.ts        # [API] Gateway file processing
+│   ├── useCreateDeal.ts    # [Tx] Create Deal via precompile
+│   ├── useUpdateDealContent.ts # [Tx] Commit manifest_root via precompile
+│   ├── useUpload.ts        # [API] Gateway/SP upload via transport router
+│   ├── useFetch.ts         # [API] Retrieval sessions + data fetch
+│   ├── useTransportRouter.ts # [Router] Gateway/direct SP fallback
+│   ├── useLocalGateway.ts  # [Probe] Local gateway health/capabilities
 │   ├── useProofs.ts        # [Read] Consumes ProofContext
 │   ├── useFaucet.ts        # [API] Testnet token requests
 │   └── useNetwork.ts       # [Web3] Chain switching logic
@@ -44,9 +50,12 @@
 │   ├── Papers.tsx          # Whitepaper/Litepaper renderers
 │   └── ... (Leaderboard, Performance, etc.)
 ├── lib/                    # Utilities (Address conversion, formatting)
+│   ├── storage/            # OPFS adapter + helpers
+│   ├── transport/          # Gateway/direct SP routing + error classification
 ├── config.ts               # Environment configuration
 ├── App.tsx                 # Route definitions & Provider nesting
 ├── main.tsx                # Entry point
+├── workers/                # Web Workers (WASM sharding / gateway harness)
 ```
 
 ### 1.2 Configuration & Environment
@@ -58,11 +67,15 @@ The application uses Vite for building and handling environment variables. Confi
 |:---|:---|:---|
 | `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL. |
 | `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD (Light Client Daemon) URL. |
-| `VITE_GATEWAY_BASE` | `http://localhost:8080` | Storage Gateway URL for file uploads. |
+| `VITE_GATEWAY_BASE` | `http://localhost:8080` | Optional local gateway base (routing + proof relay). |
+| `VITE_SP_BASE` | `http://localhost:8082` | Default Storage Provider base for direct uploads/fetches. |
 | `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
 | `VITE_EVM_RPC` | `http://localhost:8545` | JSON-RPC endpoint for the EVM layer. |
 | `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
 | `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
+| `VITE_NILSTORE_PRECOMPILE` | `0x0000...0900` | NilStore precompile address (create/update/retrieval sessions). |
+| `VITE_E2E` | `0` | Enable injected E2E wallet shim when `1`. |
+| `VITE_E2E_PK` | *(dev key)* | Private key for E2E wallet shim (local/CI only). |
 
 #### Build Configuration
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
@@ -154,8 +167,8 @@ interface StatusSummary {
 *   **Transport:** HTTP (configured via `appConfig.evmRpc`).
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.
-*   **E2E Mode (Target):** When `NIL_E2E=1`, use a deterministic test wallet connector / injected provider shim (no MetaMask extension) to make Playwright runs stable and CI-friendly (recommended env: `NIL_E2E_PK` for the dev private key).
-    *   **Provider API (minimum):** EIP‑1193 `request({ method, params })` supports `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_signTypedData_v4`, and `eth_sendTransaction` (optionally `wallet_switchEthereumChain` as a deterministic no-op/error).
+*   **E2E Mode:** When `VITE_E2E=1`, install a deterministic injected wallet shim (no MetaMask extension) to make Playwright runs stable and CI‑friendly (recommended env: `VITE_E2E_PK` for the dev private key).
+    *   **Provider API (minimum):** EIP‑1193 `request({ method, params })` supports `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_signTypedData_v4`, and `eth_sendTransaction` (optionally `wallet_switchEthereumChain` as a deterministic no‑op/error).
 
 ### 3.2 ProofContext (`src/context/ProofContext.tsx`)
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
@@ -182,38 +195,45 @@ interface StatusSummary {
 
 ## 4. Hooks & Logic Layer
 
-This layer encapsulates business logic, specifically EIP-712 signing and Gateway interactions.
+This layer encapsulates MetaMask transactions, transport routing, and gateway/SP interactions.
 
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
-*   **EIP-712 Signature:**
-    *   **Domain:** `NilStore` (Verifying Contract: `0x0...0`).
-    *   **Type (target):** `CreateDealV2(address creator, uint64 duration, string service_hint, string initial_escrow, string max_monthly_spend, uint64 nonce)` (capacity tiers removed; message name/version bumped to prevent hash collisions).
-        *   **Migration:** During the transition, the chain may accept the legacy CreateDeal typed-data hash to avoid a flag-day across web/scripts.
-    *   **Test vectors (target):** `src/lib/eip712.test.ts` should contain golden vectors shared with the chain verifier to catch drift in field order, domain/version, and string vs `uint256` encoding.
-    *   **Nonce Logic:** Manages local nonce counter in `localStorage` (`nilstore:evmNonces:<addr>`).
-*   **API:** POSTs `{ intent, evm_signature }` to `/gateway/create-deal-evm`.
+*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes the desired replica count.
+*   **Output:** `deal_id` parsed from the `DealCreated` event.
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
 *   **Purpose:** Commits a file Manifest to an existing Deal.
 *   **Input:** `UpdateDealContentInput` (dealId, manifestRoot, sizeBytes).
-*   **EIP-712 Signature:**
-*   **Type (target):** `UpdateContent(address creator, uint64 deal_id, string manifest_root, uint64 size, uint64 nonce)`.
+*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
     *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
-*   **API:** POSTs `{ intent, evm_signature }` to `/gateway/update-deal-content-evm`.
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
-*   **Purpose:** Handles file upload to the Storage Gateway.
+*   **Purpose:** Handles file upload via the transport router (gateway or direct SP).
 *   **Logic:**
     1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
-    2.  Constructs `FormData` with `file`, `owner`, and optional upload controls (`deal_id`, `max_user_mdus`, `file_path`).
-    3.  POSTs to `/gateway/upload` with a bounded timeout (AbortController).
-*   **Returns (target):** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, filePath, filename }`.
-    *   **Compatibility:** Gateway responses may still use legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
-    *   **NilFS invariant (target):** `filePath` is the authoritative identifier for later fetch/prove and MUST be treated as unique within a deal. Re-uploading to the same `filePath` is an overwrite (the gateway must not allow ambiguous duplicates).
+    2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
+    3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
+*   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
+    *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
+    *   **NilFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
 
-### 4.4 `useFaucet` (`src/hooks/useFaucet.ts`)
+### 4.4 `useTransportRouter` (`src/hooks/useTransportRouter.ts`)
+*   **Purpose:** Centralizes routing between local gateway and direct SP endpoints.
+*   **Behavior:** Exposes `listFiles`, `slab`, `plan`, `uploadFile`, `manifestInfo`, `mduKzg` with bounded retries and a `DecisionTrace` for UX.
+*   **Preference:** `auto`, `prefer_gateway`, `prefer_direct_sp` (persisted in localStorage via `TransportContext`).
+
+### 4.5 `useFetch` (`src/hooks/useFetch.ts`)
+*   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission.
+*   **Flow:**
+    1.  Plan blob-range via `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...` (gateway or direct SP).
+    2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
+    3.  Fetch bytes with `X-Nil-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
+    4.  Confirm completion on-chain (`confirmRetrievalSession`).
+    5.  Submit proof relay via `POST /gateway/session-proof` (gateway forwards to provider).
+
+### 4.6 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
 *   **API:** GET `${API_BASE}/request?addr={address}`.
 
@@ -255,11 +275,13 @@ The central hub for deal management.
 *   **Manifest Root Explainer:** Displays `manifest_root` and (if available) `manifest_blob_hex` plus the ordered root vector; optionally builds a debug Merkle tree over MDU roots behind a button (for intuition only; not the on-chain commitment).
     *   **Root Table (MDU #0):** Lists root-table entries (witness + user roots) and maps each entry to its `mdu_index`.
     *   **MDU Inspector:** For a selected MDU, fetches and displays the 64 blob commitments and the derived MDU root.
-*   **APIs:**
+*   **APIs (gateway or direct SP base):**
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
     *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
-    *   **Fetch file (NilFS path):** `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` (downloads by NilFS path; no CID/index fallback).
-        *   `file_path` must be encoded as a query value (`encodeURIComponent` → spaces become `%20`, not `+`). Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch / access denied), `404` (not found/tombstone), `409` (stale `manifest_root` *or* inconsistent NilFS state like ambiguous duplicate paths; refetch Deal from LCD and retry with the latest root).
+    *   **Fetch file (NilFS path):**
+        *   Plan range: `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`.
+        *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-Nil-Session-Id` header (session opened on-chain via MetaMask).
+        *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent NilFS state).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
     *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
@@ -346,18 +368,19 @@ The website depends on the following services (configured in `config.ts`):
 | Service | Config Key | Default |
 |:---|:---|:---|
 | **Cosmos LCD** | `lcdBase` | `http://localhost:1317` |
-| **Storage Gateway** | `gatewayBase` | `http://localhost:8080` |
+| **Storage Gateway (optional)** | `gatewayBase` | `http://localhost:8080` |
+| **Storage Provider (direct)** | `spBase` | `http://localhost:8082` |
 | **EVM JSON-RPC** | `evmRpc` | `http://localhost:8545` |
 
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
-*   `POST /gateway/create-deal-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
-*   `POST /gateway/update-deal-content-evm`: `{intent, evm_signature}` -> `{tx_hash}`.
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
-*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes (encode `file_path` with `encodeURIComponent` so spaces are `%20`; non-200 is JSON `{error,hint}` with remediation).
-*   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (devnet helper; errors are JSON `{error,hint}`; `file_path` is a plain string, not URL-encoded).
-*   `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce`: Returns the last accepted retrieval receipt nonce for the deal owner (client uses `nonce = last_nonce + 1`).
+*   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-Nil-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
+*   `POST /gateway/session-proof`: `{session_id}` -> `{session_id}` (gateway forwards provider proof submission).
+*   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (legacy devnet helper; deprecated).
+*   `GET /gateway/status`: Local gateway status/capabilities (optional).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
 *   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).
@@ -394,27 +417,22 @@ The website depends on the following services (configured in `config.ts`):
 
 ## 8. Spec Compliance & Implementation Reality (Gap Analysis)
 
-**Critical Note:** As of v2.5, the web frontend functions as a **Thin Client**. It deviates from the core `spec.md` "Thick Client" model in the following ways to accommodate browser limitations and UX speed:
+**Critical Note:** As of v2.7, the web frontend is a **Hybrid Client**. It can operate without a local gateway (direct SP + OPFS), but still uses gateway/SP endpoints for server-side sharding/commitments on ingest.
 
 ### 8.1 Data Ingestion (Upload)
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
-*   **Actual:** Client uploads **raw `FormData`** to the **Storage Gateway** (`POST /gateway/upload`). The *Gateway* performs the sharding, KZG commitment generation (Trusted Setup binding), and MDU packing. It returns the Deal `manifest_root` (legacy alias: `cid`) and `size_bytes` to the client.
-*   **Implication:** The client currently trusts the Gateway to generate the correct canonical representation of the data.
+*   **Actual:** Client uploads **raw `FormData`** to a gateway/SP endpoint (`POST /gateway/upload` on `gatewayBase` or `spBase`). The server performs sharding, KZG commitments, and NilFS packing, returning `manifest_root` (legacy alias: `cid`) and `size_bytes`.
+*   **Hybrid state:** WASM/OPFS tooling exists for local slab inspection and future thick-client ingest, but the canonical network ingest path is still server-side.
 
 ### 8.2 Data Retrieval (Download)
-*   **Spec:** Client fetches chunks from SPs (or Gateway acting as SP Proxy), verifies the KZG Triple Proof, and **signs a receipt** (EIP-712).
-*   **Actual (Target v2.6):**
-    1.  Client requests data via `GET /gateway/fetch/...`.
-    2.  Gateway streams bytes + returns `X-Nil-Receipt-*` headers.
-    3.  Client fetches `last_nonce` via `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce`.
-    4.  **Client Signs (v2):** Browser triggers MetaMask to sign a `RetrievalReceipt` typed message that is bound to the submitted proof via `proof_hash`.
-    5.  **Client Submits:** Browser POSTs the signed receipt to `/gateway/receipt` and MUST surface success/failure to the user (no silent failures).
-    5.  Gateway/SP submits proof to chain.
-*   **Implication:** Browser now holds the **Liveness Authority** (signing), even if KZG verification is still delegated/simulated in the short term.
-
-**Receipt v2 (Target):**
-- Typed-data fields include: `deal_id`, `epoch_id`, `provider`, `bytes_served`, `nonce`, `expires_at`, `proof_hash`.
-- `proof_hash := keccak256(canonical(ChainedProof))` (cross-language golden vectors required to prevent drift).
+*   **Spec:** Client fetches chunks from SPs (or gateway acting as SP proxy), verifies the KZG Triple Proof, and confirms success on-chain.
+*   **Actual (Gamma‑4):**
+    1.  Client plans a retrieval session via `GET /gateway/plan-retrieval-session/...` (gateway or direct SP).
+    2.  Client opens the session on-chain (MetaMask `openRetrievalSession`).
+    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑Nil‑Session‑Id` header.
+    4.  Client confirms completion on-chain (`confirmRetrievalSession`).
+    5.  Gateway forwards `POST /gateway/session-proof` to submit provider proofs.
+*   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.
 
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** This component is explicitly a **Simulation/Educational Demo**. It uses SHA-256 for visual feedback and does *not* generate valid NilStore KZG commitments, nor does it perform actual MDU packing compliant with the protocol.
@@ -443,11 +461,12 @@ This sprint prioritizes a clean separation between:
 *   **Node unit tests:** validate domain normalization and controller orchestration (no React/DOM required).
     *   Command: `npm run test:unit`
 *   **Opt-in local-stack e2e (Node):** uses the same TypeScript clients to run:
-    1. Create deal (EIP-712 → `/gateway/create-deal-evm`)
-    2. Upload file (→ `/gateway/upload`)
-    3. Commit content (EIP-712 → `/gateway/update-deal-content-evm`)
-    4. Verify LCD deal state + gateway slab/files
-    *   Command: `NIL_E2E=1 npm run test:unit` (requires `./scripts/run_local_stack.sh start` running)
+    1. Create deal (MetaMask precompile)
+    2. Upload file (→ `/gateway/upload` on gateway or SP)
+    3. Commit content (MetaMask precompile)
+    4. Verify LCD deal state + slab/files
+    *   Command: `VITE_E2E=1 npm run test:unit` (requires `./scripts/run_local_stack.sh start` running)
 *   **Browser smoke e2e (Playwright, target):**
     *   Runs headless against `./scripts/run_local_stack.sh start`.
-    *   Uses a deterministic injected wallet shim when `NIL_E2E=1` (no MetaMask extension automation).
+    *   Uses a deterministic injected wallet shim when `VITE_E2E=1` (no MetaMask extension automation).
+    *   Gateway-absent path: `scripts/e2e_browser_smoke_no_gateway.sh` (direct SP + OPFS).

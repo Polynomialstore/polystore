@@ -9,7 +9,7 @@
 NilStore is a decentralized storage network that unifies **Storage** and **Retrieval** into a single **Demand-Driven Performance Market**. Instead of treating storage audits and user retrievals as separate events, NilStore implements a **Unified Liveness Protocol**: user retrievals *are* storage proofs.
 
 It specifies:
-1.  **Unified Liveness:** Organic user retrieval receipts act as valid storage proofs.
+1.  **Unified Liveness:** Organic user retrieval sessions act as valid storage proofs.
 2.  **Synthetic Challenges:** The system acts as the "User of Last Resort" for cold data.
 3.  **Tiered Rewards:** Storage rewards are tiered by latency.
 4.  **System-Defined Placement:** Deterministic assignment to ensure diversity, optimized by **Service Hints**.
@@ -21,7 +21,7 @@ It specifies:
 
 NilStore’s protocol design is guided by a small set of architectural tenets:
 
-1.  **Retrieval IS Storage:** user retrieval receipts count as valid storage proofs.
+1.  **Retrieval IS Storage:** completed retrieval sessions count as valid storage proofs.
 2.  **The System is the User of Last Resort:** cold data is maintained via synthetic challenges when organic demand is low.
 3.  **Optimization via Hints:** clients express intent (`Hot`/`Cold`) while the chain enforces system-defined placement and diversity.
 4.  **Elasticity is User-Funded:** bandwidth and replication are increased only when the user’s escrow/budget can pay for it.
@@ -97,7 +97,7 @@ This section documents accepted architectural risks and required safeguards.
 
 ### 5.4 Economic Sybil Assumption (Wash-Traffic)
 *   **Risk:** unified liveness could be exploited via fake traffic.
-*   **Safeguard:** (1) retrieval receipts require Data Owner signatures; (2) data is stored as ciphertext; (3) protocol burn/debit ensures wash-trading has a real cost.
+*   **Safeguard:** (1) retrieval sessions require on-chain Data Owner authorization; (2) data is stored as ciphertext; (3) protocol burn/debit ensures wash-trading has a real cost.
 
 ## § 6 Product-Aligned Economics
 *(This section’s economic rationale is expanded in [RFC: Data Granularity & Economic Model](rfcs/rfc-data-granularity-and-economics.md). Legacy “capacity tiers / DealSize” language is deprecated; the normative semantics are **thin provisioning** with a per‑deal hard cap.)*
@@ -133,7 +133,7 @@ The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,38
 To prevent punishment of high-performing nodes during viral events, the protocol supports **Pre-emptive Scaling**.
 
 1.  **Saturation Signal:** An SP submits `MsgSignalSaturation(DealID)`.
-    *   *Condition:* SP must be currently **Platinum/Gold** and have high `ReceiptVolume`.
+    *   *Condition:* SP must be currently **Platinum/Gold** and have high retrieval session volume.
 2.  **Action:** The Chain increases `Deal.CurrentReplication` (e.g., 12 -> 15) and triggers `SystemPlacement` to recruit **Edge** nodes.
 3.  **Incentive:** The signaling SP is NOT penalized. They maintain their tier on manageable traffic, while overflow is routed to new replicas.
 
@@ -163,7 +163,7 @@ To ensure effective throughput scaling, the protocol avoids "bottlenecking" by s
 
 #### 6.2.2 Damping & Hysteresis (Intelligent Triggers)
 To prevent oscillation (rapidly spinning nodes up and down) and account for the cost of data transfer:
-1.  **Trigger:** The protocol tracks the **Exponential Moving Average (EMA)** of `ReceiptVolume`.
+1.  **Trigger:** The protocol tracks the **Exponential Moving Average (EMA)** of retrieval session volume.
     *   **Scale Up:** If `Load > 80%` of current capacity.
     *   **Scale Down:** If `Load < 30%` of current capacity.
 2.  **Minimum TTL (Data Gravity):** New Overlay Replicas have a mandatory **Minimum TTL** (e.g., 24 hours).
@@ -294,6 +294,7 @@ NilStore MAY use a content‑addressed *file* manifest at the application layer 
 *   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
 *   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).
 *   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST (a) require `deal_id` + `owner` for access control and (b) reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`).
+*   Retrieval session enforcement (Gamma‑4): when sessions are enabled, data-plane fetches MUST include `X‑Nil‑Session‑Id`, and the server MUST reject out‑of‑session ranges. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
 *   Non-200 responses MUST be JSON `{ "error": "...", "hint": "..." }` (even if the success path is a byte stream). Missing/invalid `file_path` returns `400` with a remediation hint (call `/gateway/list-files/{manifest_root}` to discover valid paths).
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
@@ -323,7 +324,7 @@ To support the invariants, the protocol uses three challenge families, all bindi
 
 1.  **Synthetic Storage Challenges (System‑Driven)**
     *   For each epoch `e` and `(Deal, Provider)`, the chain derives a finite set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from epoch randomness `R_e`.
-    *   Providers earn storage rewards by satisfying sufficient synthetic coverage over time (direct synthetic proofs or credited retrieval receipts).
+    *   Providers earn storage rewards by satisfying sufficient synthetic coverage over time (direct synthetic proofs or credited retrieval sessions).
 2.  **Retrieval Liveness Challenges (Client / Auditor‑Driven)**
     *   Normal user reads, provider-initiated audits, and third‑party watchers all issue retrieval challenges.
     *   Each retrieval SHOULD map deterministically to a verifiable checkpoint so retrievals can satisfy synthetic demand when aligned with `S_e(D,P)`.
@@ -335,7 +336,7 @@ To support the invariants, the protocol uses three challenge families, all bindi
 1.  **Lookup (Deal):** Given a `deal_id`, the client queries chain state for the corresponding `Deal` and reads `Deal.providers[]`.
 2.  **Resolve (NilFS):** The requested file within the Deal is identified by `file_path` (NilFS). The client mounts the Deal’s NilFS File Table (MDU #0) to map `file_path` → byte offsets / MDU ranges.
 3.  **Selection:** The client selects a single Provider from `Deal.providers[]` (e.g., the nearest or least loaded). In Mode 1, each Provider holds a full replica, so any assigned Provider is sufficient.
-4.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material.
+4.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material. A local gateway may proxy these calls, but it is optional; direct‑to‑provider fetches are first‑class.
 
 In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 will extend this to true parallel, stripe‑aware fetching.
 
@@ -486,11 +487,11 @@ These evidence types collectively support the retrievability invariant: for each
 
 ### 7.6 Proof Demand Policy (Planned, Parameters TBD)
 
-The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval receipts reduce synthetic proof demand**.
+The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval sessions reduce synthetic proof demand**.
 
 This spec intentionally does not lock constants yet, but the target shape is:
-* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.total_mdus` / `allocated_length`), `ServiceHint` (Hot/Cold), and recent receipt volume.
-* **Receipt/session credits:** Completed retrieval sessions (and any legacy receipt paths) contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
+* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.total_mdus` / `allocated_length`), `ServiceHint` (Hot/Cold), and recent retrieval session volume.
+* **Session credits:** Completed retrieval sessions (and any legacy receipt paths) contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
 * **Synthetic fill:** If `credits < required_e(D,P)`, the chain derives and enforces `required_e(D,P) - credits` synthetic challenges for that epoch.
 * **Penalties:** Invalid proofs are slashable immediately; failure to meet quota SHOULD degrade reputation and eventually lead to eviction (a slower penalty path than invalid proof slashing).
 
@@ -560,7 +561,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 
 * **Mode 1 only:** Devnet Alpha does not attempt Mode 2 RS striping, repair, or rebalancing.
 * **No protocol-level Mode 1 replication:** Mode 1 is treated as a single-provider deal. If a user wants redundancy today, they do it out-of-band.
-* **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in receipts (or from an explicit deputy, once specified).
+* **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in the session proof (or from an explicit deputy, once specified).
 * **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
 
 ### C.2 Target matrix
@@ -577,9 +578,9 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
 | Upload/ingest | MUST | upload directed to the assigned provider for the deal |
 | Retrieval by `file_path` + `Range` | MUST | chunked retrievals; max chunk ≤ one blob (`BLOB_SIZE`) |
-| Receipt submission | MUST | per-chunk receipts or session receipts; provider submits to chain |
-| Bundled session receipts | SHOULD | reduce wallet prompts / tx count |
-| Synthetic challenges | DEFER | no hard quotas; receipts are still accepted evidence |
+| Session proof submission | MUST | session-bound proofs; provider submits to chain |
+| Bundled session proofs | SHOULD | reduce wallet prompts / tx count |
+| Synthetic challenges | DEFER | no hard quotas; sessions are still accepted evidence |
 | Deputy / proxy routing | DEFER | tracked as an RFC / later sprint |
 | Repair / rotation / rebalancing | NO | deferred to Mode 2 + deputy + policy |
 | Docker/devnet orchestration | SHOULD | compose scripts to run 1 gateway + N providers |
@@ -590,4 +591,4 @@ Given 3–5 providers with advertised HTTP Multiaddrs:
 1. Create a deal with `replicas=1`.
 2. Upload content to the assigned provider and commit `Deal.manifest_root`.
 3. Fetch a multi-chunk range through the gateway/router from that provider.
-4. Submit a bundled session receipt (or batched receipts) and observe `MsgProveLiveness` succeed on-chain.
+4. Submit a bundled session proof (or batched proofs) and observe `MsgSubmitRetrievalSessionProof` succeed on-chain.

@@ -1,5 +1,5 @@
 # NilStore Litepaper: The Sealing-Free Storage Network
-**Technical Overview v2.6**
+**Technical Overview v2.7**
 
 ## 1. Introduction & Value Proposition
 NilStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
@@ -23,7 +23,8 @@ By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Plac
 Instead of separate "Storage Audits" and "Retrieval Requests," NilStore unifies them.
 
 ### A. The "User is the Auditor"
-*   **Hot Data:** When a user downloads a file, they sign a receipt. This receipt **counts as the Storage Proof** for that epoch. The SP gets paid double (Storage Reward + Bandwidth Fee).
+*   **Hot Data:** When a user downloads a file, they open a **Retrieval Session** on-chain (MetaMask), fetch the data, and confirm completion. The provider submits a session-bound proof; the session completion **counts as the Storage Proof** for that epoch.
+*   **Pricing (Gamma-4):** A base fee is burned on session open and a per-blob fee is locked from escrow and paid to the provider on completion (minus a protocol burn).
 *   **Cold Data:** If no user asks for the file, the **System** acts as the "User of Last Resort," issuing a random challenge. The SP responds to prove liveness.
 
 ### B. The Performance Market (Tiered Rewards)
@@ -40,21 +41,22 @@ We don't ban S3. We just pay for speed.
 *   **Role:** The "Dispatcher."
 *   **Function:** Manages the **Active Provider List**, executes **System-Defined Placement**, and verifies **KZG Proofs**. It calculates reward tiers based on proof inclusion height.
 
-### Layer 2: Settlement (EVM)
-*   **Role:** The "Bank."
-*   **Function:** Hosts the **$STOR** token, Deal NFTs, and DAO governance.
+### Layer 2: EVM Compatibility (MetaMask)
+*   **Role:** Wallet-facing execution inside NilChain (no separate settlement chain in devnet).
+*   **Function:** Hosts EVM-compatible signatures and the NilStore precompile used for retrieval sessions and future contracts.
 
 ---
 
 ## 4. The Lifecycle of a File
 
 ### Step 1: Ingestion
-1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)`.
-2.  **Placement:** The Chain deterministically assigns 12 Providers for **8 MiB MDUs**.
-3.  **Upload:** User streams data to the assigned nodes.
+1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)` (thin-provisioned container).
+2.  **Upload:** User streams data to the assigned nodes and receives a `manifest_root`.
+3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
+4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned across shard indices for 8 MiB MDUs.
 
 ### Step 2: The Loop
-*   **Traffic:** Users request data. SPs serve it and submit receipts.
+*   **Traffic (Mode 1):** Users request data via retrieval sessions. After a successful download, the user confirms the session and the provider submits the session proof for liveness and bandwidth fees.
 *   **Silence:** Chain issues challenges. SPs submit proofs.
 
 ### Step 3: Scaling
@@ -63,9 +65,9 @@ We don't ban S3. We just pay for speed.
 
 ---
 
-## 5. The Economy ($STOR-Only)
-*   **$STOR Token:** The single medium for Staking (Security) and Bandwidth (Utility).
-*   **Burn Mechanism:** A portion of every retrieval fee is **burned**.
+## 5. The Economy (Token-Denominated)
+*   **Token Denom:** The protocol uses the chain’s bond denom (devnet defaults to `stake`; `$STOR` is a future branding choice).
+*   **Burn Mechanism:** A portion of every retrieval fee is **burned** (base fee + configurable burn bps on the variable fee).
 *   **Real Pricing:** Storage and bandwidth are priced by the market to reflect physical infrastructure costs.
 
 ---

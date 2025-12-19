@@ -647,6 +647,10 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - at least one “gateway absent” e2e smoke
     - existing e2e flows remain green
 
+- [x] **Task 6: Spec synchronization (Delta).**
+  - **Docs:** Align `spec.md`, `whitepaper.md`, `litepaper.md`, `nil-website/public/*`, `nil-website/website-spec.md`, and `nil_gateway/nil-gateway-spec.md` with current gateway‑optional, retrieval‑session, and thin‑provisioned flows.
+  - **Pass gate:** No remaining references to receipt‑nonce UX or mandatory gateway signing in spec/docs.
+
 #### 11.3.B Delta Sprint Checklist: Native↔WASM Parity Tests
 
 **Goal:** Add automated parity checks so native (`nil_core`) and browser/WASM (`nil_core` wasm build) produce identical outputs for core flows.

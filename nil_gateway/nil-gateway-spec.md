@@ -8,15 +8,16 @@
 
 `nil_gateway` is a dual-purpose service that acts as:
 1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling NilStore sharding and on-chain storage.
-2.  **Web2 Gateway:** Provides REST endpoints for the `nil-website` frontend (Thin Client) to offload heavy cryptographic operations (MDU packing, KZG commitments) and chain interactions.
+2.  **Optional Web Gateway:** Provides REST endpoints for the `nil-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
 
-In the current **Devnet** architecture, `nil_gateway` serves as a critical bridge, allowing the browser-based frontend to function without a WASM implementation of the core cryptography.
+In the current **Devnet** architecture, the browser can operate without a local gateway (direct SP + MetaMask). The gateway is an **optional sidecar** that improves performance and UX, but it is not a signing authority.
 
 ## 2. Architecture
 
-The service wraps two CLI tools to perform its duties:
-*   **`nil_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation.
-*   **`nilchaind`:** Used for **Transaction Signing**, **Broadcasting**, and **Querying** the Cosmos SDK chain (NilChain).
+The service wraps a mix of native libraries and CLI tools:
+*   **`nil_core` (FFI):** NilFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
+*   **`nil_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation in devnet flows.
+*   **`nilchaind`:** Used for **Querying** and for relaying on-chain transactions that already carry user signatures (e.g., EVM precompile intents). The gateway does **not** replace MetaMask for user authorization.
 
 ### 2.1 Storage Model
 *   **Local Buffer:** Files are uploaded to a local `uploads/` directory.
@@ -48,7 +49,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
 #### Data Ingestion
 *   **`POST /gateway/upload`**
     *   **Input:** Multipart form data (`file`, `owner`, optional `file_path`).
-    *   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`) using `nil_cli` for sharding/KZG. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
+*   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`). Sharding/KZG uses `nil_cli`; NilFS table construction uses `nil_core` FFI. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
         *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
         *   **Uniqueness (target):** `file_path` MUST be unique within a deal. If `deal_id` is provided and the target `file_path` already exists, the gateway MUST overwrite deterministically (update-in-place or tombstone + replace) so later fetch/prove cannot return stale bytes.
@@ -57,26 +58,38 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 
-#### Deal Management (EVM Bridge)
+#### Health & Status
+*   **`GET /health`**
+    *   **Role:** Lightweight liveness probe (200 if gateway is reachable).
+*   **`GET /status`**
+    *   **Role:** Returns gateway capabilities and mode (used by the web UI “green dot”).
+
+#### Deal Management (EVM Bridge, Optional Relay)
 *   **`POST /gateway/create-deal-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
-    *   **Logic:** Forwards the intent to `nilchaind tx nilchain create-deal-from-evm`.
-    *   **Role:** Relays user-signed intents to the Cosmos chain.
+*   **Logic:** Forwards the intent to `nilchaind tx nilchain create-deal-from-evm`.
+*   **Role:** Relays user‑signed intents to the chain for clients that cannot call the precompile directly (MetaMask is the preferred path).
     *   **Semantics (target):** Creates a **thin-provisioned** deal (`manifest_root = empty`, `size = 0`, `total_mdus = 0`) until the first `update-deal-content-evm` commit.
         *   **No tiers:** Capacity-tier fields are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
-    *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
-    *   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal.
+*   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
+*   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal when clients opt into the relay.
 
 #### Data Retrieval & Proofs
+*   **`GET /gateway/plan-retrieval-session/{manifest_root}`**
+    *   **Query Params:** `deal_id`, `owner`, `file_path` (required; optional `range_start`, `range_len`).
+    *   **Logic:** Resolves NilFS offsets and returns a blob-range plan (`start_mdu_index`, `start_blob_index`, `blob_count`) plus the selected provider.
+    *   **Role:** Planning helper for browser/CLI clients before they open a retrieval session on-chain.
+
 *   **`GET /gateway/fetch/{manifest_root}`**
     *   **Query Params (target):** `deal_id`, `owner`, `file_path` (**required**).
     *   **Logic:**
         1.  Verifies `deal_id` exists on-chain and matches `owner`.
-        2.  **Critical:** Calls `submitRetrievalProof` to generate and broadcast a `MsgProveLiveness` transaction on behalf of the provider (system/faucet key).
-        3.  Streams the file content to the response.
-    *   **Role:** Acts as a "Retrieval Proxy" that ensures on-chain proof generation ("Unified Liveness") occurs even for web downloads.
+        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑Nil‑Session‑Id`, and ranges must be within the opened session.
+        3.  Records per-blob proof artifacts for later submission.
+        4.  Streams the file content to the response and sets `X‑Nil‑Provider`.
+    *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
     *   **NilFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
@@ -86,8 +99,18 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway MUST canonicalize `manifest_root` consistently (decode → re-encode) for filesystem paths and logs to avoid duplicate deal directories.
-        *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission may be async in devnet to keep downloads responsive.
+        *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
         *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream) and set `Content-Type: application/json`, e.g. `{ "error": "...", "hint": "..." }`.
+
+*   **`POST /gateway/session-proof`**
+    *   **Input:** `{ "session_id": "0x..." }`.
+    *   **Logic:** Aggregates recorded per-blob proofs for the session and forwards them to `/sp/session-proof` (provider submission).
+    *   **Role:** Relay helper for browsers that cannot submit provider proofs directly.
+
+*   **`POST /sp/session-proof`** *(Provider API)*
+    *   **Input:** `{ "session_id": "0x..." }`.
+    *   **Logic:** Provider submits `MsgSubmitRetrievalSessionProof` on-chain.
+    *   **Role:** Canonical proof submission path.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
@@ -135,13 +158,13 @@ These endpoints support the `nil-website` "Thin Client" flow.
 To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` takes several shortcuts:
 
 1.  **The "Faucet Relayer":**
-    *   Transactions generated by the Gateway (like `create-deal-from-evm` or `submit-retrieval-proof`) are typically signed and broadcast by a local **`faucet`** key.
-    *   This acts as a "Meta-Transaction" layer, sponsoring gas for web users.
+    *   The gateway can relay user‑signed intents (e.g., `create-deal-from-evm`, `update-deal-content-evm`) and submit provider proofs using a local key.
+    *   This acts as a "Meta-Transaction" layer, sponsoring gas for web users while keeping user authorization in MetaMask.
 
 2.  **Triple Proof Generation:**
-    *   The `submitRetrievalProof` logic uses `nilchaind sign-retrieval-receipt --offline` to generate cryptographic proofs.
+    *   Session‑proof submission uses on‑disk NilFS slabs to build `ChainedProof` objects for the requested blob range.
     *   **Target (NilFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
-    *   **Gap:** In a production "Thick Client", the browser would generate these proofs locally or verify them from a remote SP. Here, the Gateway generates *and* submits them, effectively simulating a "perfect" SP.
+    *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**
     *   The Gateway currently acts as the *sole* Storage Provider for the devnet web interface. It does not distribute data to other nodes; it merely simulates the lifecycle of a storage deal backed by its local filesystem.

@@ -1,8 +1,8 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v2.6 - Elastic Performance)**
+**(White Paper v2.7 - Retrieval Sessions)**
 
-**Date:** 2025-12-04
+**Date:** 2025-12-18
 **Authors:** NilStore Core Team
 
 ## Abstract
@@ -28,10 +28,11 @@ Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is ineffi
 
 ### 2.1 Hot Data (Path A)
 1.  **User Request:** "I need chunk #50."
-2.  **Service:** SP sends data + KZG Proof.
-3.  **Receipt:** User signs the receipt.
-4.  **Consensus:** SP submits the receipt to the chain.
-5.  **Result:** SP earns **Storage Reward** (for proving liveness) AND **Bandwidth Fee** (for serving user).
+2.  **Session Open (MetaMask):** User opens a retrieval session on-chain, locking a per-blob fee and burning a base fee.
+3.  **Service:** SP sends data + KZG Proof bound to the `session_id`.
+4.  **Session Confirm (MetaMask):** User confirms the session on-chain after a successful download.
+5.  **Consensus:** SP submits proof-of-retrieval for the session; the chain settles payment.
+6.  **Result:** SP earns **Storage Reward** (for liveness) AND **Bandwidth Fee** (less a protocol burn).
 
 ### 2.2 Cold Data (Path B)
 1.  **System Silence:** No user asks for data.
@@ -42,16 +43,16 @@ Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is ineffi
 
 ### 2.3 On-Chain Observability in Mode 1
 
-In the current **FullReplica (Mode 1)** implementation, retrieval events are surfaced on-chain via **Retrieval Receipts**:
+In the current **FullReplica (Mode 1)** implementation, retrieval events are surfaced on-chain via **Retrieval Sessions**:
 
-*   **User Signature:** After verifying a KZG proof for a served chunk, the Data Owner signs a receipt containing `{deal_id, epoch_id, provider, bytes_served}` and the proof details. This prevents SP-only self-dealing.
-*   **Provider Submission:** The Storage Provider wraps the receipt in `MsgProveLiveness` and submits it to the chain. The module verifies:
+*   **User Authorization:** The Data Owner opens and confirms a retrieval session on-chain (EVM precompile / MetaMask).
+*   **Provider Submission:** The Storage Provider submits a session-bound `MsgSubmitRetrievalSessionProof` containing chained proofs for the served blob range. The module verifies:
     *   Provider is assigned to the Deal.
-    *   The KZG proof is valid for the challenged MDU.
-    *   The signature corresponds to the Deal Owner’s key.
+    *   The proof is valid for the declared blob range.
+    *   The session is `OPEN` and later confirmed by the owner.
 *   **Proof Stream:** The chain aggregates a compact stream of `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) which can be rendered in dashboards to show liveness and performance over time.
 
-Future StripeReplica modes preserve this pattern but allow multiple Providers to contribute receipts for different stripes of the same file.
+Future StripeReplica modes preserve this pattern but allow multiple Providers to contribute sessions for different stripes of the same file.
 
 ### 2.4 Retrievability & Self-Healing Invariants
 
@@ -75,7 +76,7 @@ Devnet and testnet implementations approximate this model (e.g., simpler challen
 
 ### 3.1 The Saturation Signal
 If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Saturation Signal** to the chain.
-*   **Condition:** The SP must be in good standing (Platinum/Gold) and show high receipt volume.
+*   **Condition:** The SP must be in good standing (Platinum/Gold) and show high retrieval session volume.
 *   **Response:** The Chain verifies the user has **Budget Available** in their escrow.
 *   **Action:** The Chain spawns **Hot Replicas** on new Edge nodes to absorb the load. The original SP is *not* penalized.
 
@@ -93,14 +94,15 @@ NilStore supports two redundancy modes conceptually:
 *   **Mode 2 – StripeReplica (Planned):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer.
 
 ### Step 1: Ingestion & Placement
-1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)`.
+1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)` which creates a thin-provisioned container.
+1.  **Commit Content:** After upload, the user commits the returned `manifest_root` via `MsgUpdateDealContent` (the Deal is empty until this commit).
 2.  **Assignment:**
     *   In the current **FullReplica (Mode 1)** implementation, the chain deterministically assigns a set of SPs to hold *full replicas* of the file (targeting 12 in the general case, capped by the number of available providers).
     *   In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned into stripes across shard indices for 8 MiB MDUs.
 3.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file. SPs signal saturation. Chain checks `MaxSpend`.
+*   **Scenario 1 (Viral):** Users swarm the file via retrieval sessions. SPs signal saturation. Chain checks `MaxSpend`.
     *   In **Mode 1**, the chain increases `Deal.CurrentReplication` and assigns additional Providers to store full replicas.
     *   In **Mode 2**, the chain spawns additional **Stripe-Aligned** overlays, recruiting new Providers per shard index.
 *   **Scenario 2 (Archive):** File sits idle. Chain issues Beacon challenges.
