@@ -574,9 +574,20 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - **Pass gate:** unit tests cover decisioning for at least: gateway-down, sp-down, timeout, 4xx, provider-mismatch.
 
 - [ ] **Task 2: Integrate router into the two highest-impact flows.**
-  - **Fetch/Retrieval:** browser still does `open/confirm` via MetaMask; data fetch routes via gateway or direct SP as available.
-  - **Upload:** route file/MDU upload via gateway or direct-to-SP, depending on availability + policy.
-  - **Pass gate:** manual smoke: turning off gateway still allows a full “upload → commit → fetch” path; turning off SP still allows the same path if gateway can serve.
+  - **Target: all user-visible network paths** (so the web app never “half-breaks” when the gateway is missing).
+  - **Upload (data plane):** route file/MDU upload via gateway or direct-to-SP, depending on availability + policy.
+  - **Fetch/Retrieval (data plane):**
+    - Browser still does `open/confirm` via MetaMask (no gateway signing).
+    - Retrieval “plan” selection should work with or without gateway (e.g., gateway plan endpoint when available; otherwise derive provider+range from on-chain deal/provider state and/or SP capabilities).
+    - Actual byte streaming routes via gateway *or* direct SP.
+  - **Deal content observables (data plane):** ensure these work with gateway absent by routing:
+    - `listFiles` (NilFS file list) via gateway or direct SP (when possible), otherwise fall back to OPFS/local slab when available.
+    - `slab/manifest` layout fetch via gateway or OPFS fallback (already partially present in `DealDetail.tsx`; router should unify the selection).
+  - **Provider discovery (control plane):** ensure provider endpoint discovery works without gateway (use LCD queries for providers + endpoints; gateway is optional).
+  - **Pass gate:** manual smoke:
+    - Gateway off: full “upload → commit → fetch” still works end-to-end.
+    - Gateway off: Deal Explorer still shows something reasonable (OPFS fallback and/or direct SP list/slab).
+    - SP off: same still works if gateway can serve the bytes.
 
 - [ ] **Task 3: User-visible fallback UX + manual override.**
   - Show “current route” + last fallback reason (from `DecisionTrace`).
