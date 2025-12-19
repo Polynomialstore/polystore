@@ -505,10 +505,11 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 
-- [ ] **Goal 1: Chain Params & Fees.**
-- [ ] **Goal 2: Refactor `CreateDeal` (Creation Fee).**
-- [ ] **Goal 3: Refactor `UpdateDealContent` (Term Deposit).**
-- [ ] **Goal 4: Retrieval Credits.**
+- [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
+- [ ] **Goal 2: Chain Params & Fees.**
+- [ ] **Goal 3: Refactor `CreateDeal` (Creation Fee).**
+- [ ] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
+- [ ] **Goal 5: Retrieval Credits.**
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**

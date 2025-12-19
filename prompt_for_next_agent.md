@@ -15,10 +15,11 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 **Objective:** Implement the "Lock-in" pricing model on-chain, requiring `UpdateDealContent` to pay for storage duration upfront.
 
-- [ ] **Goal 1: Chain Params & Fees.** (Start Here)
-- [ ] **Goal 2: Refactor `CreateDeal` (Creation Fee).**
-- [ ] **Goal 3: Refactor `UpdateDealContent` (Term Deposit).**
-- [ ] **Goal 4: Retrieval Credits.**
+- [ ] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
+- [ ] **Goal 2: Chain Params & Fees.** (Start Here)
+- [ ] **Goal 3: Refactor `CreateDeal` (Creation Fee).**
+- [ ] **Goal 4: Refactor `UpdateDealContent` (Term Deposit).**
+- [ ] **Goal 5: Retrieval Credits.**
 
 ## 3. Backlog & "Eventual" Goals (Deferred)
 
