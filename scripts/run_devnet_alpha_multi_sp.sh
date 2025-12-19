@@ -151,8 +151,8 @@ PY
 
 ensure_nilchaind() {
   banner "Building nilchaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/nilchaind)
 }
 
 ensure_nil_cli() {
