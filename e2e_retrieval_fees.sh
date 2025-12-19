@@ -24,6 +24,14 @@ require_cmd() {
   fi
 }
 
+run_yes() {
+  set +o pipefail
+  yes | "$@"
+  local status=$?
+  set -o pipefail
+  return $status
+}
+
 banner() {
   printf '\n>>> %s\n' "$*"
 }
@@ -92,6 +100,9 @@ pushd "$CORE_DIR" >/dev/null
 cargo build --release
 popd >/dev/null
 
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
+export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
+
 banner "Building nilchaind"
 pushd "$CHAIN_DIR" >/dev/null
 export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
@@ -106,9 +117,9 @@ rm -rf "$HOME_DIR"
 "$BINARY" config set client keyring-backend test --home "$HOME_DIR"
 
 banner "Creating accounts"
-yes | "$BINARY" keys add alice --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
+run_yes "$BINARY" keys add alice --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
 for i in {1..3}; do
-  yes | "$BINARY" keys add "provider$i" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
+  run_yes "$BINARY" keys add "provider$i" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
 done
 
 ALICE_ADDR=$("$BINARY" keys show alice -a --home "$HOME_DIR" --keyring-backend test | tail -n 1)
@@ -118,7 +129,7 @@ for i in {1..3}; do
   "$BINARY" genesis add-genesis-account "$PROV_ADDR" 1000000000token,200000000stake --home "$HOME_DIR"
 done
 
-"$BINARY" genesis gentx alice 100000000stake --chain-id "$CHAIN_ID" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
+run_yes "$BINARY" genesis gentx alice 100000000stake --chain-id "$CHAIN_ID" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
 "$BINARY" genesis collect-gentxs --home "$HOME_DIR" >/dev/null 2>&1
 
 python3 - "$HOME_DIR/config/genesis.json" <<'PY' || true
@@ -148,6 +159,7 @@ PY
 
 sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "1s"/' "$HOME_DIR/config/config.toml"
 sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0token"/' "$HOME_DIR/config/app.toml"
+sed -i.bak '/\[api\]/,/\[/{s/^enable = false/enable = true/;}' "$HOME_DIR/config/app.toml"
 
 banner "Starting chain"
 export KZG_TRUSTED_SETUP="$TRUSTED_SETUP"
@@ -160,7 +172,7 @@ wait_for_lcd 40 1 || { echo "LCD failed to start"; exit 1; }
 
 banner "Registering providers"
 for i in {1..3}; do
-  yes | "$BINARY" tx nilchain register-provider General 1000000000 \
+  run_yes "$BINARY" tx nilchain register-provider General 1000000000 \
     --from "provider$i" \
     --endpoint "/ip4/127.0.0.1/tcp/8082/http" \
     --chain-id "$CHAIN_ID" \
@@ -169,7 +181,7 @@ done
 sleep 2
 
 banner "Creating deal"
-CREATE_RES=$(yes | "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "General" \
+CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "General" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 CREATE_TX=$(wait_for_tx "$CREATE_HASH" 30 1) || { echo "CreateDeal tx not found"; exit 1; }
@@ -187,7 +199,7 @@ PY
 SIZE_BYTES=131072
 
 banner "Updating deal content"
-yes | "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" \
+run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
@@ -214,7 +226,7 @@ PY
 BLOB_COUNT=2
 
 banner "Opening retrieval session"
-yes | "$BINARY" tx nilchain open-retrieval-session \
+run_yes "$BINARY" tx nilchain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -228,7 +240,7 @@ yes | "$BINARY" tx nilchain open-retrieval-session \
 SESSION_ID=""
 for i in {1..30}; do
   SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
-  SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select(.deal_id == ($deal|tonumber)) | .session_id' | head -n 1)
+  SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .session_id' | head -n 1)
   if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
     break
   fi
@@ -257,7 +269,7 @@ banner "Waiting for expiry at height > $EXPIRES_AT"
 wait_for_height $((EXPIRES_AT + 1)) 60 1 || { echo "Expiry height not reached"; exit 1; }
 
 banner "Canceling retrieval session"
-yes | "$BINARY" tx nilchain cancel-retrieval-session "$SESSION_ID" \
+run_yes "$BINARY" tx nilchain cancel-retrieval-session "$SESSION_ID" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 

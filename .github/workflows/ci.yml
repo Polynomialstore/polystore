@@ -167,6 +167,11 @@ jobs:
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
           scripts/e2e_lifecycle.sh
 
+      - name: Run Retrieval Fees E2E Script
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          ./e2e_retrieval_fees.sh
+
   # ------------------------------------------------------------------
   # SMART CONTRACTS (Foundry)
   # ------------------------------------------------------------------
