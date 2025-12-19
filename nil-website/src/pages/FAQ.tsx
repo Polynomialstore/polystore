@@ -11,7 +11,7 @@ const faqs = [
         q: "What is NilStore?",
         a: <>
           NilStore is a decentralized storage network that works like a public cloud (think S3) but runs on a community of independent nodes.
-          Unlike other networks that rely on expensive hardware, NilStore uses advanced mathematics (Zero-Knowledge proofs) to ensure your data is safe, retrievable, and censorship-resistant.
+          Unlike other networks that rely on expensive sealing hardware, NilStore uses <strong>KZG commitments</strong> and erasure coding to keep data verifiable, retrievable, and censorship-resistant.
         </>
       },
       {
@@ -60,7 +60,7 @@ const faqs = [
     questions: [
       {
         q: "What are KZG Commitments?",
-        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a file. We can compress an 8 MiB chunk of data into a tiny 48-byte signature. This signature mathematically proves the data exists and hasn't been tampered with, without needing to reveal the whole file. It's the magic that makes our network so lightweight."
+        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a blob. NilStore commits to each 128 KiB blob with a 48-byte commitment. 64 blobs make up an 8 MiB MDU, and the deal’s manifest root binds all MDUs together for efficient verification."
       },
       {
         q: "What is 'Proof-of-Delayed-Encode' (PoDE)?",
@@ -68,11 +68,11 @@ const faqs = [
       },
       {
         q: "What is Unified Liveness?",
-        a: "In most networks, 'serving a user' and 'proving you have data' are separate tasks. In NilStore, they are the same. When a user downloads a file, the receipt they sign acts as a cryptographic proof of storage. This eliminates wasted compute power and aligns incentives: the best way to earn storage rewards is to be a fast, reliable CDN."
+        a: "In most networks, 'serving a user' and 'proving you have data' are separate tasks. In NilStore, they are the same. Retrieval sessions are opened on-chain; providers serve data with KZG proofs, and confirmed sessions become the liveness signal used for rewards."
       },
       {
         q: "Why 8 MiB Data Units?",
-        a: "We use 8 MiB Mega-Data Units (MDUs) to optimize throughput. Larger units mean fewer on-chain transactions per Terabyte, allowing the network to scale to Petabytes without clogging the blockchain."
+        a: "We use 8 MiB Mega-Data Units (MDUs) to optimize throughput. Each MDU is 64 × 128 KiB blobs, which aligns with KZG verification while keeping on-chain updates compact."
       },
       {
         q: "Can I delete my data?",
@@ -110,19 +110,19 @@ const faqs = [
     icon: <Coins className="w-5 h-5 text-yellow-500" />,
     questions: [
       {
-        q: "How do I earn $STOR?",
+        q: "How do I earn rewards?",
         a: <>
-          You can join the network as a Storage Provider. You earn $STOR tokens in two ways:
+          You can join the network as a Storage Provider. You earn tokens in two ways:
           <ul className="list-disc list-inside mt-2 space-y-1">
-            <li><strong>Capacity Rewards:</strong> For storing data and passing daily verification proofs.</li>
-            <li><strong>Bandwidth Fees:</strong> For delivering data quickly to users.</li>
+            <li><strong>Performance Rewards:</strong> For serving retrieval sessions quickly (tiered by latency).</li>
+            <li><strong>Bandwidth Fees:</strong> For delivering verified data during retrieval sessions.</li>
           </ul>
-          Join our 'Store Wars' testnet to start earning today.
+          On devnet the base denom is <strong>stake</strong>; token branding is still evolving.
         </>
       },
       {
         q: "What happens if a node goes offline?",
-        a: "We use Erasure Coding (like RAID for the internet). A file is split into many shards (e.g., 12). We only need a subset (e.g., 9) to recover the file. If a node disappears, the network detects it, slashes their collateral (burns their tokens), and automatically pays another node to reconstruct the missing shard."
+        a: "We use Erasure Coding (like RAID for the internet). A file is striped across K+M slots (default 8+4). Any K slots can reconstruct the data, so the network can repair missing shards and keep deals healthy."
       }
     ]
   }

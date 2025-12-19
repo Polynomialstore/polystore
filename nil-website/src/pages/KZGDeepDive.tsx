@@ -44,7 +44,8 @@ export const KZGDeepDive = () => {
             <Zap className="w-5 h-5 text-yellow-500" /> 2. The Commitment (Atomic Blob)
           </h3>
           <p className="text-muted-foreground mb-6">
-            We divide data into <strong>1 MB Atomic Blobs</strong>. Each blob is treated as a polynomial $P(x)$. We evaluate this polynomial at the secret $\tau$ to get a single 48-byte Commitment.
+            We divide data into <strong>128 KiB Atomic Blobs</strong>. Each blob is treated as a polynomial $P(x)$. We
+            evaluate this polynomial at the secret $\tau$ to get a single 48-byte Commitment.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6 mb-6">
@@ -53,8 +54,8 @@ export const KZGDeepDive = () => {
               className="bg-primary/5 p-6 rounded-2xl text-center border border-primary/20"
             >
               <h4 className="font-bold text-lg text-primary mb-2">Atomic Blob</h4>
-              <div className="text-4xl font-bold my-4 text-foreground">1 MB</div>
-              <p className="text-sm text-muted-foreground">32,768 Field Elements</p>
+              <div className="text-4xl font-bold my-4 text-foreground">128 KiB</div>
+              <p className="text-sm text-muted-foreground">4,096 Field Elements</p>
             </motion.div>
             <motion.div 
               whileHover={{ scale: 1.02 }}

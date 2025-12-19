@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Trophy, Medal, Award, HardDrive, Activity, Server } from "lucide-react";
+import { appConfig } from "../config";
 
 interface Provider {
   address: string;
@@ -14,7 +15,7 @@ export const Leaderboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:1317/nilchain/nilchain/v1/providers')
+    fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
       .then(res => res.json())
       .then(data => {
         setProviders(data.providers || []);
@@ -34,17 +35,17 @@ export const Leaderboard = () => {
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-bold mb-4 text-foreground">Storage Providers Network</h1>
         <p className="text-xl text-muted-foreground">
-          Active nodes powering the NilStore decentralized cloud.
+          Active providers registered on-chain. Ranked by reported capacity and status.
         </p>
       </div>
 
       {loading ? (
-        <div className="text-center text-muted-foreground animate-pulse">Syncing with Nilchain Testnet...</div>
+        <div className="text-center text-muted-foreground animate-pulse">Syncing with nilchain LCD...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ranked.length === 0 ? (
              <div className="col-span-full text-center py-12 bg-card rounded-2xl border border-border text-muted-foreground">
-               No providers detected. Ensure local testnet is running.
+               No providers detected. Ensure the devnet hub is running and providers are registered.
              </div>
           ) : (
             ranked.map((node, index) => (

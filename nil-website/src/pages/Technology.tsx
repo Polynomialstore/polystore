@@ -11,6 +11,9 @@ export const Technology = () => {
         <p className="text-xl text-muted-foreground leading-relaxed">
           NilStore is not just "Dropbox on Blockchain". It fundamentally reimagines the storage lifecycle to eliminate the "Sealing Latency" that plagues other decentralized networks.
         </p>
+        <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+          Clients can run fully in-browser using WASM and MetaMask for signing. The local gateway is optional routing and caching infrastructure, but it never signs transactions on a user’s behalf.
+        </p>
       </div>
 
       <div className="space-y-24">

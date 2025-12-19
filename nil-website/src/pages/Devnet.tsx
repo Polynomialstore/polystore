@@ -52,7 +52,7 @@ export function Devnet() {
       '# On your provider machine (repo checked out):',
       'PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init',
       '',
-      '# Ask the hub operator to fund your nil1 address with aatom (gas), then:',
+      '# Ask the hub operator to fund your nil1 address with stake (gas), then:',
       `HUB_NODE="tcp://<hub-host>:26657" \\`,
       `HUB_LCD="${appConfig.lcdBase}" \\`,
       `CHAIN_ID="${appConfig.cosmosChainId}" \\`,

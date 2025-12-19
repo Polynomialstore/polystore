@@ -29,6 +29,9 @@ export const EconomyDashboard = () => {
                       <strong> Agent-Based Simulation (ABS)</strong> of the NilStore economy running over 
                       {data.length} epochs (virtual days).
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      Figures are illustrative; devnet currently uses <span className="font-mono">stake</span> as the base denom.
+                    </p>
           
                     <div className="bg-card border border-border p-6 rounded-xl text-sm space-y-4">
                       <h3 className="font-bold text-card-foreground flex items-center gap-2">
@@ -37,7 +40,7 @@ export const EconomyDashboard = () => {
                       <ul className="space-y-2 text-muted-foreground list-disc list-inside">
                         <li><strong>Storage Growth:</strong> Agents (simulated users) upload files based on an adoption curve.</li>
                         <li><strong>Tiered Minting:</strong> Providers earn Platinum (1.0x), Gold (0.8x), or Silver (0.2x) rewards based on latency.</li>
-                        <li><strong>Latency Slashing:</strong> Slow nodes (Silver) face higher slash risk, driving a market evolution toward Platinum performance.</li>
+                        <li><strong>Integrity Slashing:</strong> Invalid proofs are slashed; slow nodes earn less, pushing the market toward high performance.</li>
                       </ul>
                     </div>
                   </motion.div>
@@ -55,15 +58,15 @@ export const EconomyDashboard = () => {
                   
                   <MetricCard 
                       title="Circulating Supply" 
-                      value={`${(data[data.length-1].supply / 1000000).toFixed(2)}M NIL`} 
-                      sub="Inflationary Reward"
+                      value={`${(data[data.length-1].supply / 1000000).toFixed(2)}M NIL (sim)`} 
+                      sub="Simulated reward mint"
                       icon={<Coins className="text-yellow-600 dark:text-yellow-400"/>} 
                       delay={0.2}
                   />
                   <MetricCard 
                       title="Total Burned" 
                       value={`${data[data.length-1].slashed.toLocaleString()} NIL`} 
-                      sub="Deflationary Slash"
+                      sub="Simulated burn"
                       icon={<AlertTriangle className="text-red-500 dark:text-red-400"/>} 
                       delay={0.3}
                   />
@@ -183,7 +186,7 @@ export const EconomyDashboard = () => {
                           <tr>
                             <th className="px-6 py-3">Epoch</th>
                             <th className="px-6 py-3">Storage (GB)</th>
-                            <th className="px-6 py-3">Supply (NIL)</th>
+                            <th className="px-6 py-3">Supply (Sim)</th>
                             <th className="px-6 py-3">Rewards</th>
                             <th className="px-6 py-3">Burned</th>
                           </tr>

@@ -26,7 +26,7 @@ export const ShardingDeepDive = () => {
             <File className="w-5 h-5 text-blue-500" /> 8 MiB Mega-Data Units (MDUs)
           </h3>
           <p className="text-muted-foreground mb-6">
-            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>8 MiB (8,388,608 bytes)</strong> Mega-Data Units. This size optimizes batch verification throughput and aligns with our tiered reward structure.
+            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>8 MiB (8,388,608 bytes)</strong> Mega-Data Units. Each MDU contains <strong>64 × 128 KiB blobs</strong>, the atomic unit of KZG verification.
           </p>
           
           <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-3xl border">
@@ -74,7 +74,7 @@ export const ShardingDeepDive = () => {
             <Layers className="w-5 h-5 text-purple-500" /> Mode 2: StripeReplica (RS(K, K+M))
           </h3>
           <p className="text-muted-foreground mb-6">
-            Each 8 MiB MDU is encoded with Reed-Solomon across <strong>N = K+M provider slots</strong> (default <strong>N=12</strong>). Each slot stores <strong>8 MiB / K</strong> bytes per MDU (default <strong>1 MiB</strong> when <strong>K=8</strong>).
+            Each 8 MiB MDU is encoded with Reed-Solomon across <strong>N = K+M provider slots</strong> (default <strong>N=12</strong>). Each slot stores <strong>8 MiB / K</strong> bytes per MDU (default <strong>1 MiB</strong> when <strong>K=8</strong>), aligned to <strong>128 KiB blobs</strong> for shared-nothing verification.
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <p className="text-sm text-muted-foreground mb-4">
@@ -132,7 +132,7 @@ export const ShardingDeepDive = () => {
             </h3>
             <div className="bg-card p-6 rounded-xl border border-border mb-6">
               <p className="text-muted-foreground mb-4">
-                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each 8 MiB data unit to an integer modulo a massive prime number $r$. This is the input to our commitment scheme.
+                Cryptographic proofs (KZG) work on numbers, not raw bytes. We map each 128 KiB blob to a field element modulo a massive prime number $r$. 64 blobs make up a single 8 MiB MDU.
               </p>
               <div className="font-mono bg-background/50 text-foreground p-4 rounded-lg text-sm overflow-x-auto mb-4 border border-border shadow-inner">
                 r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001

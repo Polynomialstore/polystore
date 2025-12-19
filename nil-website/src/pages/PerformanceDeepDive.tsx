@@ -67,7 +67,7 @@ export const PerformanceDeepDive = () => {
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <Server className="w-4 h-4 text-cyan-400" />
                 <span className="font-bold text-foreground">Local NVMe Node</span>
-                <span className="text-xs text-muted-foreground ml-auto font-mono text-cyan-400">Reward: 1.0 NIL</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-cyan-400">Reward: 1.0x</span>
               </div>
               <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
@@ -86,7 +86,7 @@ export const PerformanceDeepDive = () => {
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <HardDrive className="w-4 h-4 text-yellow-400" />
                 <span className="font-bold text-foreground">Standard HDD Node</span>
-                <span className="text-xs text-muted-foreground ml-auto font-mono text-yellow-400">Reward: 0.8 NIL</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-yellow-400">Reward: 0.8x</span>
               </div>
               <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
@@ -105,7 +105,7 @@ export const PerformanceDeepDive = () => {
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <Cloud className="w-4 h-4 text-red-500" />
                 <span className="font-bold text-foreground">S3 Wrapper / Cold</span>
-                <span className="text-xs text-muted-foreground ml-auto font-mono text-red-500">Reward: 0.0 NIL</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono text-red-500">Reward: 0.0x</span>
               </div>
               <div className="w-full bg-secondary/30 h-10 rounded-r-full relative flex items-center px-2">
                 <motion.div 
@@ -130,27 +130,34 @@ export const PerformanceDeepDive = () => {
         {/* Section 2: Fair Exchange */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Trophy className="w-5 h-5 text-purple-500" /> Fair Exchange: Incremental Signing
+            <Trophy className="w-5 h-5 text-purple-500" /> Fair Exchange: Retrieval Sessions
           </h3>
           <p className="text-muted-foreground mb-6">
-            Speed is worthless if the user refuses to pay. To prevent "Free Riders" (users who download data but don't sign the receipt), NilStore uses an <strong>Incremental Signing Protocol</strong> (Tit-for-Tat).
+            Speed is worthless if the user refuses to pay. NilStore uses <strong>retrieval sessions</strong>: users open a
+            session on-chain, lock a base fee plus a per-blob budget, and only release payment when the session is confirmed.
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm grid md:grid-cols-3 gap-4 text-center">
             <div className="p-4 bg-secondary/20 rounded-lg">
                 <div className="text-lg font-bold text-foreground mb-1">Step 1</div>
-                <div className="text-sm text-muted-foreground">Provider sends <strong>Chunk 1</strong> (e.g. 10MB).</div>
+                <div className="text-sm text-muted-foreground">
+                  User opens a session and locks the <strong>base fee</strong> + <strong>per-blob budget</strong>.
+                </div>
             </div>
             <div className="p-4 bg-secondary/20 rounded-lg">
                 <div className="text-lg font-bold text-foreground mb-1">Step 2</div>
-                <div className="text-sm text-muted-foreground">User verifies & <strong>Signs Receipt</strong>.</div>
+                <div className="text-sm text-muted-foreground">
+                  Provider serves data with the session ID and proves the blobs served.
+                </div>
             </div>
             <div className="p-4 bg-secondary/20 rounded-lg">
                 <div className="text-lg font-bold text-foreground mb-1">Step 3</div>
-                <div className="text-sm text-muted-foreground">Provider unlocks <strong>Chunk 2</strong>.</div>
+                <div className="text-sm text-muted-foreground">
+                  User confirms the session to release payment; unused budget can be refunded on expiry.
+                </div>
             </div>
           </div>
           <p className="text-sm text-muted-foreground mt-4 italic text-center">
-            This reduces the "At-Risk" capital to near zero. Trust is established byte-by-byte.
+            This keeps provider risk bounded and removes the need for signed receipts.
           </p>
         </section>
       </motion.div>

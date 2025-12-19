@@ -84,7 +84,7 @@ export const AdversarialSimulation = () => {
                 <ShieldAlert className="w-5 h-5 text-yellow-500"/> Economic Defense
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                The simulation proves that while S3 storage is cheaper per GB, the <strong>Bandwidth Egress Costs</strong> required to answer challenges, combined with <strong>Tiered Reward Penalties</strong> (dropping from Platinum to Gold), make the attack net-negative.
+                The simulation proves that while S3 storage is cheaper per GB, the <strong>Bandwidth Egress Costs</strong> required to serve retrieval sessions, combined with <strong>Tiered Reward Penalties</strong> (dropping from Platinum to Gold), make the attack net-negative.
             </p>
             <div className="text-xs font-mono bg-background/50 p-2 rounded border border-border">
                 PROFIT = REWARDS - (STORAGE_COST + EGRESS_COST)
@@ -174,7 +174,7 @@ export const AdversarialSimulation = () => {
             <div className="mb-4 p-3 bg-purple-500/10 w-fit rounded-lg"><Clock className="w-6 h-6 text-purple-500" /></div>
             <h4 className="font-bold text-foreground mb-2">2. The Execution</h4>
             <p className="text-sm text-muted-foreground">
-                Every epoch, the network challenges the nodes. The Honest node replies instantly (&lt;1s). The Attacker must fetch data, incurring latency (&gt;1s) and Egress Fees ($0.05/GB).
+                Every epoch, the simulation generates retrieval sessions. The Honest node replies instantly (&lt;1s). The Attacker must fetch data on demand, incurring latency (&gt;1s) and egress fees ($0.05/GB).
             </p>
         </div>
         <div className="p-6 rounded-xl border border-border bg-card">

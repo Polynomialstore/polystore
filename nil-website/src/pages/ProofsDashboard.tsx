@@ -119,8 +119,9 @@ export const ProofsDashboard = () => {
             <h1 className="text-3xl md:text-4xl font-bold text-foreground">KZG Proofs Observatory</h1>
           </div>
           <p className="text-sm md:text-base text-muted-foreground">
-            Live view of retrieval and liveness proofs flowing through the NilStore network. Each proof represents a
-            verified KZG opening against a stored MDU, acting as a storage and retrieval audit for an active deal.
+            Live view of retrieval-session proofs and liveness attestations flowing through the NilStore network. Each
+            proof represents a verified KZG opening against a stored MDU and is classified into a latency tier for the
+            Performance Market.
           </p>
         </div>
         <div className="text-xs text-muted-foreground">
@@ -140,7 +141,7 @@ export const ProofsDashboard = () => {
           icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
           title="Valid Proofs"
           value={totalValid}
-          sub="Successful liveness attestations"
+          sub="Confirmed retrieval sessions"
         />
         <SummaryCard
           icon={<XCircle className="w-5 h-5 text-red-400" />}
@@ -300,7 +301,7 @@ export const ProofsDashboard = () => {
               {recentProofs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-4 text-center text-muted-foreground">
-                    No proofs recorded yet. Store a file and retrieve it via the dashboard to see live KZG proofs here.
+                    No proofs recorded yet. Open a retrieval session from the dashboard to see live KZG proofs here.
                   </td>
                 </tr>
               ) : (
@@ -370,4 +371,3 @@ const SummaryCard = ({ title, value, sub, icon }: SummaryCardProps) => (
     <div className="p-2 rounded-lg bg-secondary/40 flex items-center justify-center">{icon}</div>
   </div>
 )
-

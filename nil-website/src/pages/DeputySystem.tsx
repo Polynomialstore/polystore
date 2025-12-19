@@ -44,6 +44,7 @@ export const DeputySystem = () => {
           </h3>
           <p className="text-muted-foreground mb-6">
             Instead of a judge, the user summons a <strong>Deputy</strong> (a random third-party node) to fetch the file for them.
+            This mechanism is planned as part of the retrieval resilience roadmap.
           </p>
           
           <div className="bg-secondary/30 p-8 rounded-2xl border border-border relative overflow-hidden">
@@ -53,7 +54,7 @@ export const DeputySystem = () => {
                 <div className="flex items-center gap-4">
                     <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center font-bold shrink-0">1</div>
                     <div className="bg-background/80 p-4 rounded-lg border border-border flex-1">
-                        <strong>Escalation:</strong> User fails to connect. User broadcasts a bounty: "Pay 5 NIL to fetch Chunk X from Provider Y."
+                        <strong>Escalation:</strong> User fails to connect. User broadcasts a bounty: "Pay 5 tokens (example) to fetch Chunk X from Provider Y."
                     </div>
                 </div>
 
@@ -87,7 +88,7 @@ export const DeputySystem = () => {
             <ShieldCheck className="w-5 h-5 text-blue-500" /> Audit Debt: Forced Participation
           </h3>
           <p className="text-muted-foreground mb-6">
-            Where do Deputies come from? We <strong>conscript</strong> them. To earn mining rewards, every Storage Provider must perform X audits (act as a Deputy) per epoch. This ensures a constant, decentralized "Police Force" patroling the network.
+            Where do Deputies come from? We <strong>conscript</strong> them. In the proposed model, every Storage Provider must perform a fixed number of audits (act as a Deputy) per epoch to stay eligible for rewards.
           </p>
         </section>
 
