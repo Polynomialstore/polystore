@@ -306,7 +306,7 @@ export function Dashboard() {
     [providerEndpointsByAddr],
   )
 
-  const contentManifestRoot = stagedUpload?.cid || targetDeal?.cid || ''
+  const contentManifestRoot = targetDeal?.cid || ''
 
   useEffect(() => {
     setStagedUpload(null)
@@ -319,7 +319,7 @@ export function Dashboard() {
   }, [targetDealId])
 
   useEffect(() => {
-    const manifestRoot = stagedUpload?.cid || targetDeal?.cid
+    const manifestRoot = targetDeal?.cid
     const owner = nilAddress || targetDeal?.owner || ''
     if (!manifestRoot || !targetDealId || !owner) {
       setContentFiles(null)
@@ -390,7 +390,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, stagedUpload?.cid, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
+  }, [nilAddress, resolveProviderBase, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
   useEffect(() => {
     if (address) {
