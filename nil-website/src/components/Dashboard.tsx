@@ -1021,7 +1021,7 @@ export function Dashboard() {
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                               <select 
                                   value={targetDealId} 
-                                  onChange={e => setTargetDealId(e.target.value)}
+                                  onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                                   data-testid="content-deal-select"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                               >
@@ -1288,7 +1288,7 @@ export function Dashboard() {
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                         <select 
                             value={targetDealId} 
-                            onChange={e => setTargetDealId(e.target.value)}
+                            onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                             data-testid="mdu-deal-select"
                             className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                         >
@@ -1551,7 +1551,7 @@ export function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(deal.id); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(String(deal.id ?? '')); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                                   className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
                                 >
                                   Upload to deal
