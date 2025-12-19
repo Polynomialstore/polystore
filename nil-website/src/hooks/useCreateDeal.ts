@@ -3,13 +3,15 @@ import { appConfig } from '../config'
 import { encodeFunctionData, decodeEventLog, numberToHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
+import { buildServiceHint } from '../lib/serviceHint'
 
 export interface CreateDealInput {
   creator: string
   duration: number
   initialEscrow: string
   maxMonthlySpend: string
-  replication: number
+  replication?: number
+  serviceHint?: string
 }
 
 export function useCreateDeal() {
@@ -22,8 +24,10 @@ export function useCreateDeal() {
     try {
       const evmAddress = String(input.creator || '')
       if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
-      const replicas = Number.isFinite(input.replication) && input.replication > 0 ? input.replication : 1
-      const serviceHint = `General:replicas=${replicas}`
+      const replicas = Number.isFinite(input.replication) && (input.replication ?? 0) > 0 ? input.replication : 1
+      const serviceHint = input.serviceHint && input.serviceHint.trim().length > 0
+        ? input.serviceHint.trim()
+        : buildServiceHint('General', { replicas })
 
       const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {

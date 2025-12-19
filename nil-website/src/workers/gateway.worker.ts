@@ -189,8 +189,15 @@ self.onmessage = async (event) => {
             }
             case 'initMdu0Builder': {
                 if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
-                const { maxUserMdus } = payload;
-                mdu0BuilderInstance = new WasmMdu0Builder(BigInt(maxUserMdus)); 
+                const { maxUserMdus, commitmentsPerMdu } = payload as { maxUserMdus: number; commitmentsPerMdu?: number };
+                if (commitmentsPerMdu && Number(commitmentsPerMdu) > 0) {
+                    mdu0BuilderInstance = WasmMdu0Builder.new_with_commitments(
+                        BigInt(maxUserMdus),
+                        BigInt(commitmentsPerMdu),
+                    );
+                } else {
+                    mdu0BuilderInstance = new WasmMdu0Builder(BigInt(maxUserMdus));
+                }
                 result = 'Mdu0Builder initialized';
                 break;
             }
@@ -278,6 +285,35 @@ self.onmessage = async (event) => {
                 const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
                 result = { witness_flat: witnessFlat, mdu_root: rootBytes };
+                break;
+            }
+            case 'expandMduRs': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { data, k, m } = payload as { data: Uint8Array; k: number; m: number };
+                if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
+                const expanded = nilWasmInstance.expand_mdu_rs(data, Number(k), Number(m)) as unknown;
+                const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
+                const witnessRaw = (parsed as { witness?: unknown[] }).witness ?? [];
+                const shardsRaw = (parsed as { shards?: unknown[] }).shards ?? [];
+
+                const witnessList: Uint8Array[] = witnessRaw.map((w) =>
+                    w instanceof Uint8Array ? w : new Uint8Array(w as ArrayBufferLike),
+                );
+                const shardsList: Uint8Array[] = shardsRaw.map((s) =>
+                    s instanceof Uint8Array ? s : new Uint8Array(s as ArrayBufferLike),
+                );
+
+                const witnessFlat = new Uint8Array(witnessList.length * 48);
+                let offset = 0;
+                for (const w of witnessList) {
+                    witnessFlat.set(w, offset);
+                    offset += w.length;
+                }
+
+                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+
+                result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards: shardsList };
                 break;
             }
             case 'computeManifest': {

@@ -7,7 +7,7 @@ import { normalizeDealId } from '../lib/dealId'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { resolveProviderEndpoint } from '../lib/providerDiscovery'
+import { resolveProviderEndpoint, resolveProviderEndpointByAddress } from '../lib/providerDiscovery'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -232,7 +232,11 @@ export function useFetch() {
         receiptsTotal: 2,
       }))
 
+      const providerEndpoint = provider
+        ? await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
+        : null
       const serviceBase =
+        providerEndpoint?.baseUrl ||
         serviceOverride ||
         planResult.trace.chosen?.endpoint ||
         (planResult.backend === 'direct_sp' ? directBase : appConfig.gatewayBase) ||
