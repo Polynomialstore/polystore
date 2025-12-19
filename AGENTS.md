@@ -565,29 +565,61 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Goal:** Make the web client resilient when the local gateway is missing/flaky, while keeping MetaMask signing in the browser.
 
-- [ ] **Task 1: Transport Router primitives (client-side, GUI-ready).**
-  - Implement a pure TS router module (no React/DOM) that can execute operations via:
-    - `LocalGateway` (optional; localhost) and/or
-    - `DirectSP` (browser → provider).
-  - Add error classification + retry rules (timeout/refused/5xx retryable; 4xx usually not; provider mismatch never retry).
-  - Emit a structured `DecisionTrace` (attempts, errors, chosen backend) that can be rendered in Web UI today and a future gateway GUI later.
-  - **Pass gate:** unit tests cover decisioning for at least: gateway-down, sp-down, timeout, 4xx, provider-mismatch.
+- [ ] **Task 1: Transport Router primitives (client-side; no React; GUI-ready traces).**
+  - **New module (pure TS):** `nil-website/src/lib/transport/`
+    - `types.ts`: shared types for routing/trace/errors (no DOM).
+    - `errors.ts`: error normalization + classification.
+    - `router.ts`: policy engine (`Auto`/`PreferGateway`/`PreferDirectSP`) and bounded retries.
+    - `adapters/gateway.ts`: local gateway adapter (HTTP calls).
+    - `adapters/sp.ts`: direct-to-SP adapter (HTTP calls).
+    - `adapters/index.ts`: adapter registry and helpers.
+  - **Core contract (keep stable):**
+    - `TransportOp = 'upload' | 'fetch' | 'listFiles' | 'slab' | 'plan'`
+    - `RoutePreference = 'auto' | 'prefer_gateway' | 'prefer_direct_sp'`
+    - `DecisionTrace` should be JSON-serializable and include:
+      - `op`, `preference`, `startedAtMs`, `finishedAtMs`
+      - `attempts[]`: `{ backend, endpoint, ok, status?, errorClass?, errorMessage?, elapsedMs }`
+      - `chosen`: `{ backend, endpoint } | null`
+    - `ErrorClass` (minimum): `timeout`, `connection_refused`, `dns`, `http_4xx`, `http_5xx`, `cors`, `provider_mismatch`, `invalid_response`, `unknown`
+  - **Retry policy (deterministic and bounded):**
+    - Retryable: `timeout`, `connection_refused`, `dns`, `http_5xx`
+    - Not retryable: `http_4xx`, `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
+    - Defaults: `maxAttemptsPerBackend=1`, `maxTotalAttempts=2`, `timeoutMs=10_000` (tunable per op).
+  - **Pass gate:** new unit tests in `nil-website/src/lib/transport/router.test.ts` (runs under `npm run test:unit`) cover:
+    - gateway-down → direct SP chosen
+    - SP-down → gateway chosen (if preference says so / if gateway available)
+    - timeout classification
+    - 4xx no-retry behavior
+    - provider mismatch is terminal
 
-- [ ] **Task 2: Integrate router into the two highest-impact flows.**
-  - **Target: all user-visible network paths** (so the web app never “half-breaks” when the gateway is missing).
-  - **Upload (data plane):** route file/MDU upload via gateway or direct-to-SP, depending on availability + policy.
+- [ ] **Task 2: Integrate router across all user-visible network paths (Web UI never half-breaks).**
+  - **New hook:** `nil-website/src/hooks/useTransportRouter.ts`
+    - Owns current `RoutePreference` (localStorage) + exposes `lastDecisionTrace` for UI.
+    - Wraps calls like `transport.fetch(...)`, `transport.upload(...)`, `transport.listFiles(...)`, `transport.slab(...)`.
+  - **Upload (data plane):**
+    - Update `nil-website/src/hooks/useUpload.ts` (or the calling path in `Dashboard.tsx`) to call router:
+      - Try `LocalGatewayAdapter.upload` first when gateway healthy, otherwise `DirectSPAdapter.upload`.
+      - Preserve existing semantics: same returned fields (`manifest_root`, `cid`, `size_bytes`, etc.).
   - **Fetch/Retrieval (data plane):**
-    - Browser still does `open/confirm` via MetaMask (no gateway signing).
-    - Retrieval “plan” selection should work with or without gateway (e.g., gateway plan endpoint when available; otherwise derive provider+range from on-chain deal/provider state and/or SP capabilities).
-    - Actual byte streaming routes via gateway *or* direct SP.
-  - **Deal content observables (data plane):** ensure these work with gateway absent by routing:
-    - `listFiles` (NilFS file list) via gateway or direct SP (when possible), otherwise fall back to OPFS/local slab when available.
-    - `slab/manifest` layout fetch via gateway or OPFS fallback (already partially present in `DealDetail.tsx`; router should unify the selection).
-  - **Provider discovery (control plane):** ensure provider endpoint discovery works without gateway (use LCD queries for providers + endpoints; gateway is optional).
-  - **Pass gate:** manual smoke:
-    - Gateway off: full “upload → commit → fetch” still works end-to-end.
-    - Gateway off: Deal Explorer still shows something reasonable (OPFS fallback and/or direct SP list/slab).
-    - SP off: same still works if gateway can serve the bytes.
+    - Update `nil-website/src/hooks/useFetch.ts` to route the byte stream fetch:
+      - MetaMask signing remains in-browser for `openRetrievalSession` and `confirmRetrievalSession` (no gateway signing).
+      - Replace the direct `fetchUrl` assembly with a router call:
+        - Gateway route: `/gateway/fetch/...` (current behavior).
+        - Direct-SP route: provider HTTP endpoint (multiaddr-derived) for fetch if supported by SP.
+    - **Retrieval plan selection without gateway:**
+      - If gateway provides a plan endpoint: use it opportunistically.
+      - Otherwise: derive provider endpoint by querying the deal + provider endpoints via LCD, and compute blob-range from NilFS file record (gateway or OPFS).
+  - **Deal content observables (data plane):**
+    - Update `nil-website/src/components/DealDetail.tsx` to unify list/slab selection via router:
+      - `listFiles`: try gateway, then direct SP (if available), then OPFS fallback.
+      - `slab/layout`: try gateway, then OPFS fallback (already partially implemented; route choice should be centralized).
+  - **Provider discovery (control plane):**
+    - Add/extend a small LCD provider client helper (web) so direct SP endpoints can be discovered without gateway.
+  - **Pass gate:** manual smoke matrix (document in PR description):
+    - Gateway OFF: full “upload → commit → fetch” works end-to-end (browser direct SP + MetaMask).
+    - Gateway OFF: Deal Explorer shows OPFS slab/list when available; otherwise shows a clear “no source available” state (not a silent failure).
+    - Gateway ON: continues to work as today.
+    - (Optional) SP OFF: if gateway can serve bytes, router falls back and succeeds.
 
 - [ ] **Task 3: User-visible fallback UX + manual override.**
   - Show “current route” + last fallback reason (from `DecisionTrace`).
@@ -595,47 +627,78 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Persist preference (localStorage is fine for Delta).
   - **Pass gate:** UI reflects live decisions; user override forces route selection.
 
-- [ ] **Task 4: Gateway “GUI-readiness” status surface (minimal).**
-  - Add a stable gateway endpoint (e.g. `/status`) returning: version/build + feature flags/capabilities + health checks.
-  - This is informational only (no signing; no tx broadcast).
-  - **Pass gate:** browser can display “gateway capabilities” when present; safe when absent.
+- [ ] **Task 4: Gateway “GUI-readiness” status surface (minimal, informational only).**
+  - **Gateway change:** add `GET /status` (or extend `/health`) to return JSON with:
+    - `version`, `git_sha`, `build_time` (best-effort)
+    - `mode` (router/SP/etc), `listening_addr`
+    - `capabilities`: `{ upload: bool, fetch: bool, list_files: bool, slab: bool, retrieval_plan: bool }`
+    - `deps`: `{ lcd_reachable: bool, sp_reachable: bool }` (best-effort probes)
+  - **Browser change:** `useLocalGateway` should prefer `/status` when available and fall back to `/health`.
+  - **Pass gate:** browser shows “Gateway present + capabilities” (or “Gateway absent”) without throwing.
 
 - [ ] **Task 5: Tests + CI coverage.**
-  - Add unit tests for router module.
-  - Add at least one CI-triggered E2E smoke path where the gateway is down but the browser still succeeds (or vice versa).
-  - **Pass gate:** GitHub CI runs the new tests (unit + E2E smoke).
+  - **Unit tests:** router tests live under `nil-website/src/lib/transport/*.test.ts` so `npm run test:unit` covers them.
+  - **E2E (browser) smoke:** add a Playwright spec that runs the “direct path” with the gateway disabled.
+    - Add stack control: update `scripts/run_local_stack.sh` to honor `NIL_DISABLE_GATEWAY=1` (do not start gateway; keep chain + SP + web).
+    - New test: `nil-website/tests/fallback-no-gateway.spec.ts` runs `upload → commit → fetch` with `NIL_DISABLE_GATEWAY=1`.
+  - **CI integration:** extend `.github/workflows/ci.yml` e2e job to run the new Playwright test (or run an additional e2e script) with the gateway disabled.
+  - **Pass gate:** GitHub CI runs:
+    - unit tests (`npm run test:unit`)
+    - at least one “gateway absent” e2e smoke
+    - existing e2e flows remain green
 
 #### 11.3.B Delta Sprint Checklist: Native↔WASM Parity Tests
 
 **Goal:** Add automated parity checks so native (`nil_core`) and browser/WASM (`nil_core` wasm build) produce identical outputs for core flows.
 
-- [ ] **Task 1: Choose parity fixtures + golden outputs.**
-  - Add small deterministic fixtures (e.g., fixed 128KiB blob, fixed 8MiB MDU, and a small multi-file slab) committed to the repo.
-  - Define the exact parity assertions per fixture: hashes/roots/commitments/proof bytes (or stable derived digests).
-  - **Pass gate:** fixtures are stable across platforms and do not require network access.
+- [ ] **Task 1: Choose parity fixtures + “what exactly must match”.**
+  - **Fixtures directory:** `nil_core/fixtures/parity/`
+    - `blob_128k.bin` (deterministic bytes)
+    - `mdu_8m.bin` (deterministic bytes; can be repeated pattern)
+    - `slab_small/` (few small files → deterministic layout inputs)
+    - `trusted_setup.txt` (or reference existing setup path; ensure CI can access deterministically)
+  - **Define stable parity outputs** (prefer digests over raw large bytes):
+    - `expand_mdu`:
+      - `witness_mdu_hash` (e.g., sha256 of witness bytes)
+      - `shards_hashes[]` (sha256 per shard, or one aggregate sha256 over concatenation with length prefixes)
+    - Manifest commitment computation:
+      - `manifest_root` (48 bytes hex)
+      - `manifest_blob_hash` (sha256)
+    - Proof generation / verification:
+      - If proofs are deterministic: compare proof bytes hashes.
+      - If proofs are not deterministic: compare `proof_hash` + `verify(proof)==true` (and ensure `proof_hash` is computed deterministically from canonical fields).
+  - **Pass gate:** fixtures + output spec are committed and documented in `nil_core/fixtures/parity/README.md`.
 
-- [ ] **Task 2: Implement a native parity runner.**
-  - Add a native test/runner that computes the target outputs from `nil_core` (native) for the fixtures.
-  - Prefer a Rust `cargo test` harness in `nil_core` that emits structured JSON for reuse.
-  - **Pass gate:** `cargo test` (or a dedicated `cargo test -p ...`) runs deterministically in CI.
+- [ ] **Task 2: Implement native parity runner (Rust).**
+  - Add a small Rust binary: `nil_core/src/bin/parity_native.rs`
+    - Reads fixtures from `nil_core/fixtures/parity/`.
+    - Emits a single JSON blob to stdout with the fields defined above.
+    - Must not require network or wall-clock randomness.
+  - Add a Rust unit test that runs the binary logic in-process (optional) to keep coverage.
+  - **Pass gate:** `cd nil_core && cargo run --release --bin parity_native` produces JSON on Linux/macOS and is stable across runs.
 
-- [ ] **Task 3: Implement a WASM parity runner.**
-  - Add a Node-based runner that loads the `wasm-pack` build and computes the same outputs for the fixtures.
-  - Keep it hermetic: no browser required; use Node + the generated WASM bundle.
-  - **Pass gate:** `node` runner produces identical JSON fields to the native runner.
+- [ ] **Task 3: Implement WASM parity runner (Node).**
+  - Build wasm using the repo’s existing pattern:
+    - `cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core`
+  - Add Node runner script: `nil-website/scripts/parity_wasm.ts`
+    - Imports the wasm bundle and computes the same JSON output for the same fixtures.
+    - Uses Node fs to read fixture bytes; does not require a browser.
+  - **Pass gate:** `cd nil-website && tsx scripts/parity_wasm.ts` prints JSON matching the native schema.
 
-- [ ] **Task 4: Compare native vs WASM outputs (parity assertion).**
-  - Add a comparator test that fails CI on any mismatch, with a helpful diff.
-  - Start with these flows:
-    - `expand_mdu` outputs (shards + witness digest)
-    - manifest commitment computation
-    - proof generation/verification (or at minimum proof-hash parity if full proofs are non-deterministic)
-  - **Pass gate:** parity suite passes on macOS and Linux CI runners.
+- [ ] **Task 4: Compare native vs WASM outputs (single parity assertion).**
+  - Add comparator script: `tools/parity/compare_parity.ts` (or keep in `nil-website/scripts/`).
+    - Runs native runner, runs wasm runner, compares JSON fields, prints a readable diff, exits non-zero on mismatch.
+  - Make mismatch output actionable (show which field mismatched + expected/actual digests).
+  - **Pass gate:** running the comparator locally fails fast on any mismatch and is easy to debug.
 
-- [ ] **Task 5: CI integration.**
-  - Add a dedicated CI job for parity (native + wasm build + parity compare).
-  - Keep runtime bounded (fixtures small; avoid multi-minute tests).
-  - **Pass gate:** parity job runs on every PR/push (GitHub CI).
+- [ ] **Task 5: CI integration (dedicated parity job).**
+  - Extend `.github/workflows/ci.yml` with a new job `native-wasm-parity` that:
+    - Sets up Rust + Node.
+    - Builds native `nil_core` and runs `cargo run --release --bin parity_native > native.json`.
+    - Builds wasm via `wasm-pack` and runs the Node wasm runner > wasm.json.
+    - Runs the comparator and fails CI on mismatch.
+  - Keep runtime bounded (fixtures small; limit blobs; avoid full 8MiB if too slow in CI).
+  - **Pass gate:** parity job runs on every PR/push and stays under a few minutes.
 
 ---
 
