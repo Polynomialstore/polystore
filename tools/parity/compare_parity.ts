@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { isDeepStrictEqual } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -32,10 +33,21 @@ const wasm = JSON.parse(wasmRaw) as Record<string, unknown>
 
 const fields = [
   'fixture.mdu_bytes',
+  'fixture.blob_bytes',
   'fixture.root_count',
+  'fixture.root_indices',
   'expand_mdu.witness_sha256',
   'expand_mdu.shards_sha256',
   'expand_mdu.mdu_root',
+  'expand_mdu_rs.k',
+  'expand_mdu_rs.m',
+  'expand_mdu_rs.witness_sha256',
+  'expand_mdu_rs.shards_sha256',
+  'expand_mdu_rs.mdu_root',
+  'blob_commitment.commitment_hex',
+  'blob_commitment.commitment_sha256',
+  'commit_mdu.witness_sha256',
+  'commit_mdu.mdu_root',
   'manifest.manifest_root',
   'manifest.manifest_blob_sha256',
 ]
@@ -44,8 +56,10 @@ const diffs: string[] = []
 for (const field of fields) {
   const left = getPath(native, field)
   const right = getPath(wasm, field)
-  if (left !== right) {
-    diffs.push(`${field}: native=${String(left)} wasm=${String(right)}`)
+  if (!isDeepStrictEqual(left, right)) {
+    const leftText = typeof left === 'string' ? left : JSON.stringify(left)
+    const rightText = typeof right === 'string' ? right : JSON.stringify(right)
+    diffs.push(`${field}: native=${leftText} wasm=${rightText}`)
   }
 }
 

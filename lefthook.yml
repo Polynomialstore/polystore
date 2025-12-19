@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    lint:
+      run: npm run lint
+      root: nil-website
+
+pre-push:
+  commands:
+    build:
+      run: npm run build
+      root: nil-website

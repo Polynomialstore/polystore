@@ -80,8 +80,8 @@ export function StatusBar() {
       <label className="flex items-center gap-2">
         <span className="opacity-75">Preference</span>
         <select
-          value={preference}
-          onChange={(e) => setPreference(e.target.value as typeof preference)}
+          value={preference ?? 'auto'}
+          onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
           className="bg-background border border-border rounded px-2 py-1 text-xs"
         >
           <option value="auto">Auto</option>

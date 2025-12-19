@@ -582,8 +582,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - `chosen`: `{ backend, endpoint } | null`
     - `ErrorClass` (minimum): `timeout`, `connection_refused`, `dns`, `http_4xx`, `http_5xx`, `cors`, `provider_mismatch`, `invalid_response`, `unknown`
   - **Retry policy (deterministic and bounded):**
-    - Retryable: `timeout`, `connection_refused`, `dns`, `http_5xx`
-    - Not retryable: `http_4xx`, `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
+    - Retryable: `timeout`, `connection_refused`, `dns`, `http_5xx`, `http_429` (rate limit)
+      - `http_429` uses exponential backoff (bounded; e.g., 250ms → 1s → 2s).
+    - Not retryable: `http_4xx` (except 429), `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
     - Defaults: `maxAttemptsPerBackend=1`, `maxTotalAttempts=2`, `timeoutMs=10_000` (tunable per op).
   - **Pass gate:** new unit tests in `nil-website/src/lib/transport/router.test.ts` (runs under `npm run test:unit`) cover:
     - gateway-down → direct SP chosen
@@ -671,6 +672,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - Proof generation / verification:
       - If proofs are deterministic: compare proof bytes hashes.
       - If proofs are not deterministic: compare `proof_hash` + `verify(proof)==true` (and ensure `proof_hash` is computed deterministically from canonical fields).
+  - **Indices selection:** use a fixed‑seed PRNG to pick non‑trivial `mdu_index`/`blob_index` (avoid 0), so parity runs are deterministic but closer to realistic randomness.
   - **Pass gate:** fixtures + output spec are committed and documented in `nil_core/fixtures/parity/README.md`.
 
 - [x] **Task 2: Implement native parity runner (Rust).**
@@ -782,6 +784,25 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Validate: on-chain deal providers list length == N, manifest root updated, retrieval returns correct bytes.
 
 ---
+
+### 11.4.1 Next Sprint: Devnet Gamma‑Mode2 Web Integration (Preliminary Outline)
+
+**Status:** Preliminary outline only (final scope depends on Delta completion and CI stability).
+
+**Prerequisites:** Delta A (routing/fallback) + Delta B (native↔WASM parity) complete and green in CI.
+
+**Scope (two-tier outline):**
+- **C‑lite (minimum viable Mode 2 web enablement):**
+  - Keep existing Mode 2 UI inputs, but enforce strict validation (`K | 64`, `K+M <= providers`, `K,M >= 1`) before allocation.
+  - Ensure `buildServiceHint` emits `rs=K+M` reliably and surface validation errors inline.
+  - Use WASM `expand_mdu_rs(k,m)` for sharding; upload via existing router (gateway or direct SP).
+  - No new retrieval flow changes beyond current behavior (Mode 1 retrieval path remains).
+
+- **C‑full (preferred full integration):**
+  - Slot‑aware upload routing: shard placement and uploads are aligned to assigned provider slots.
+  - Direct‑SP retrieval for Mode 2 with slot‑aware `openRetrievalSession` (chain already enforces).
+  - UI surfacing: show slot/provider mapping in DealDetail and indicate chosen route in downloads.
+  - E2E coverage: extend Mode 2 Playwright spec to assert slot‑aware routing and successful retrieval with gateway optional.
 
 ### 11.5 PM-Level Backlog (Priority Buckets)
 

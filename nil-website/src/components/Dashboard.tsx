@@ -306,7 +306,7 @@ export function Dashboard() {
     [providerEndpointsByAddr],
   )
 
-  const contentManifestRoot = stagedUpload?.cid || targetDeal?.cid || ''
+  const contentManifestRoot = targetDeal?.cid || ''
 
   useEffect(() => {
     setStagedUpload(null)
@@ -319,7 +319,7 @@ export function Dashboard() {
   }, [targetDealId])
 
   useEffect(() => {
-    const manifestRoot = stagedUpload?.cid || targetDeal?.cid
+    const manifestRoot = targetDeal?.cid
     const owner = nilAddress || targetDeal?.owner || ''
     if (!manifestRoot || !targetDealId || !owner) {
       setContentFiles(null)
@@ -390,7 +390,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, stagedUpload?.cid, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
+  }, [nilAddress, resolveProviderBase, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
   useEffect(() => {
     if (address) {
@@ -432,7 +432,7 @@ export function Dashboard() {
     chainId: appConfig.chainId,
   })
 
-  async function fetchBalances(owner: string) {
+  async function fetchBalances(owner: string): Promise<{ atom?: string; stake?: string } | null> {
     try {
       const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${owner}`)
       const json = await res.json()
@@ -441,13 +441,16 @@ export function Dashboard() {
         const hit = bal.find((b: { denom: string; amount: string }) => b.denom === denom)
         return hit ? hit.amount : undefined
       }
-      setBankBalances({
+      const next = {
         atom: getAmt('aatom'),
         stake: getAmt('stake'),
-      })
+      }
+      setBankBalances(next)
+      return next
     } catch (e) {
       console.error('fetchBalances failed', e)
     }
+    return null
   }
 
   async function fetchProviders() {
@@ -605,7 +608,10 @@ export function Dashboard() {
   const handleRequestFunds = async () => {
       try {
           const resp = await requestFunds(address)
-          if (nilAddress) fetchBalances(nilAddress)
+          if (nilAddress) {
+            setStatusMsg('Faucet requested. Waiting for balance...')
+            await waitForStakeBalance(nilAddress)
+          }
           refetchEvm?.()
           setStatusTone('neutral')
           if (resp?.tx_hash) {
@@ -710,6 +716,23 @@ export function Dashboard() {
       }
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
+  }
+
+  async function waitForStakeBalance(owner: string) {
+    const maxAttempts = 60
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const balances = await fetchBalances(owner)
+      const stake = balances?.stake
+      if (stake) {
+        try {
+          if (BigInt(stake) > 0n) return true
+        } catch {
+          return true
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+    return false
   }
 
   const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
@@ -918,8 +941,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
                             <input
-                              value={duration}
-                              onChange={(e) => setDuration(e.target.value)}
+                              defaultValue={duration ?? ''}
+                              onChange={(e) => setDuration(e.target.value ?? '')}
                               data-testid="alloc-duration"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -927,8 +950,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
                             <input
-                              value={initialEscrow}
-                              onChange={(e) => setInitialEscrow(e.target.value)}
+                              defaultValue={initialEscrow ?? ''}
+                              onChange={(e) => setInitialEscrow(e.target.value ?? '')}
                               data-testid="alloc-initial-escrow"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -936,8 +959,8 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
                             <input
-                              value={maxMonthlySpend}
-                              onChange={(e) => setMaxMonthlySpend(e.target.value)}
+                              defaultValue={maxMonthlySpend ?? ''}
+                              onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
                               data-testid="alloc-max-monthly-spend"
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
@@ -945,8 +968,10 @@ export function Dashboard() {
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
                             <select
-                                value={redundancyMode}
-                                onChange={(e) => setRedundancyMode(e.target.value as 'mode1' | 'mode2')}
+                                defaultValue={redundancyMode || 'mode1'}
+                                onChange={(e) =>
+                                  setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode1')
+                                }
                                 data-testid="alloc-redundancy-mode"
                                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             >
@@ -961,8 +986,8 @@ export function Dashboard() {
                                   type="number"
                                   min={1}
                                   max={12}
-                                  value={replication}
-                                  onChange={e => setReplication(e.target.value)}
+                                  defaultValue={replication ?? ''}
+                                  onChange={e => setReplication(e.target.value ?? '')}
                                   data-testid="alloc-replication"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                               />
@@ -975,8 +1000,8 @@ export function Dashboard() {
                                       type="number"
                                       min={1}
                                       max={64}
-                                      value={rsK}
-                                      onChange={e => setRsK(e.target.value)}
+                                      defaultValue={rsK ?? ''}
+                                      onChange={e => setRsK(e.target.value ?? '')}
                                       data-testid="alloc-rs-k"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                                   />
@@ -987,8 +1012,8 @@ export function Dashboard() {
                                       type="number"
                                       min={1}
                                       max={64}
-                                      value={rsM}
-                                      onChange={e => setRsM(e.target.value)}
+                                      defaultValue={rsM ?? ''}
+                                      onChange={e => setRsM(e.target.value ?? '')}
                                       data-testid="alloc-rs-m"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                                   />
@@ -1017,7 +1042,7 @@ export function Dashboard() {
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                               <select 
-                                  value={targetDealId} 
+                                  value={targetDealId ?? ''} 
                                   onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                                   data-testid="content-deal-select"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
@@ -1284,7 +1309,7 @@ export function Dashboard() {
                     <label className="space-y-1">
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
                         <select 
-                            value={targetDealId} 
+                            value={targetDealId ?? ''} 
                             onChange={e => setTargetDealId(String(e.target.value ?? ''))}
                             data-testid="mdu-deal-select"
                             className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"

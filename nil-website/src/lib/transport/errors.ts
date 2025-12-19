@@ -41,13 +41,20 @@ export function classifyError(err: unknown): { errorClass: ErrorClass; status?: 
 }
 
 export function classifyStatus(status: number): ErrorClass {
+  if (status === 429) return 'http_429'
   if (status >= 500) return 'http_5xx'
   if (status >= 400) return 'http_4xx'
   return 'unknown'
 }
 
 export function isRetryable(errorClass: ErrorClass): boolean {
-  return errorClass === 'timeout' || errorClass === 'connection_refused' || errorClass === 'dns' || errorClass === 'http_5xx'
+  return (
+    errorClass === 'timeout' ||
+    errorClass === 'connection_refused' ||
+    errorClass === 'dns' ||
+    errorClass === 'http_5xx' ||
+    errorClass === 'http_429'
+  )
 }
 
 export function isTerminal(errorClass: ErrorClass): boolean {

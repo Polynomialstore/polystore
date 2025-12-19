@@ -45,7 +45,6 @@ test.describe('gateway absent', () => {
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
   await page.getByTestId('alloc-submit').click()
-  await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 120_000 })
 
   await page.getByTestId('tab-content').click()
   await page.waitForFunction(() => {

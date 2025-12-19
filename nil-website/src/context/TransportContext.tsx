@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from 'react'
+import { appConfig } from '../config'
 import type { DecisionTrace, RoutePreference } from '../lib/transport/types'
 
 interface TransportContextType {
@@ -14,6 +15,7 @@ const PREF_KEY = 'nil_transport_preference'
 
 function getInitialPreference(): RoutePreference {
   if (typeof window === 'undefined') return 'auto'
+  if (appConfig.gatewayDisabled) return 'prefer_direct_sp'
   const raw = window.localStorage.getItem(PREF_KEY)
   if (raw === 'prefer_gateway' || raw === 'prefer_direct_sp' || raw === 'auto') return raw
   return 'auto'

@@ -10,16 +10,31 @@ interface GatewayStatusWidgetProps {
 }
 
 export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollInterval, className }) => {
-  const { status, url, error } = useLocalGateway(pollInterval);
+  const { status, url, error, details } = useLocalGateway(pollInterval);
 
   let icon, colorClass, text, tooltip;
+  const caps =
+    details?.capabilities
+      ? Object.entries(details.capabilities)
+          .filter(([, enabled]) => enabled)
+          .map(([name]) => name)
+          .join(', ')
+      : '';
+  const deps =
+    details?.deps
+      ? Object.entries(details.deps)
+          .map(([name, ok]) => `${name}:${ok ? 'ok' : 'fail'}`)
+          .join(', ')
+      : '';
 
   switch (status) {
     case 'connected':
       icon = <Wifi className="w-4 h-4" />;
       colorClass = 'text-green-500';
       text = 'Connected';
-      tooltip = `Local Gateway connected at ${url}`;
+      tooltip = `Local Gateway connected at ${url}${
+        details?.mode ? ` (mode=${details.mode})` : ''
+      }${caps ? ` | caps: ${caps}` : ''}${deps ? ` | deps: ${deps}` : ''}`;
       break;
     case 'connecting':
       icon = <Loader2 className="w-4 h-4 animate-spin" />;

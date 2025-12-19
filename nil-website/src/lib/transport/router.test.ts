@@ -53,6 +53,31 @@ test('executeWithFallback does not retry 4xx on the same backend', async () => {
   assert.equal(gatewayAttempts, 1)
 })
 
+test('executeWithFallback retries on 429 with the same backend', async () => {
+  let attempts = 0
+  const candidates: TransportCandidate<string>[] = [
+    {
+      backend: 'gateway',
+      endpoint: 'http://gateway',
+      execute: async () => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new TransportError('rate limited', 'http_429', 429)
+        }
+        return 'ok'
+      },
+    },
+  ]
+
+  const result = await executeWithFallback('plan', candidates, {
+    preference: 'auto',
+    maxAttemptsPerBackend: 2,
+  })
+  assert.equal(result.backend, 'gateway')
+  assert.equal(attempts, 2)
+  assert.equal(result.trace.attempts[0]?.errorClass, 'http_429')
+})
+
 test('executeWithFallback treats provider mismatch as terminal', async () => {
   let spCalled = false
   const candidates: TransportCandidate<string>[] = [
