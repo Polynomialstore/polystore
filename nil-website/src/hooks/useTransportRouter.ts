@@ -140,7 +140,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const directBase = resolveDirectBase(req.directBase)
@@ -192,7 +192,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const directBase = resolveDirectBase(req.directBase)
@@ -250,7 +250,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
     const directBase = resolveDirectBase(req.directBase) ?? appConfig.spBase
@@ -305,7 +305,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const directBase = resolveDirectBase(req.directBase)
@@ -359,7 +359,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const directBase = resolveDirectBase(req.directBase)
@@ -415,7 +415,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace, wrapExecute])
+  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const fetchRange = useCallback(async (req: FetchRangeRequest): Promise<TransportOutcome<{ bytes: Uint8Array; provider: string }>> => {
     if (!Number.isFinite(req.rangeLen) || req.rangeLen <= 0) {
@@ -496,7 +496,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [preference, recordTrace])
+  }, [recordTrace, resolveDirectBase, resolvePreference])
 
   return useMemo(() => ({
     preference,
