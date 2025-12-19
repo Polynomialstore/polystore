@@ -26,7 +26,7 @@ export const Security = () => {
             <Server className="w-5 h-5 text-amber-400 mt-0.5" />
             <div>
               <div className="font-semibold text-foreground">Untrusted Providers</div>
-              <p>Storage providers can be malicious, lazy, or economically rational. Proofs must stand alone.</p>
+              <p>Storage providers must regularly prove they have the data they are supposed to have or they are slashed and automatically replaced.</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
