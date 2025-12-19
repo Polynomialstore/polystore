@@ -41,9 +41,9 @@ Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is ineffi
 4.  **Consensus:** SP submits proof to chain.
 5.  **Result:** SP earns **Storage Reward** (for proving liveness).
 
-### 2.3 On-Chain Observability in Mode 1
+### 2.3 On-Chain Observability (Modes 1 + 2)
 
-In the current **FullReplica (Mode 1)** implementation, retrieval events are surfaced on-chain via **Retrieval Sessions**:
+Retrieval events are surfaced on-chain via **Retrieval Sessions** in both redundancy modes:
 
 *   **User Authorization:** The Data Owner opens and confirms a retrieval session on-chain (EVM precompile / MetaMask).
 *   **Provider Submission:** The Storage Provider submits a session-bound `MsgSubmitRetrievalSessionProof` containing chained proofs for the served blob range. The module verifies:
@@ -52,7 +52,7 @@ In the current **FullReplica (Mode 1)** implementation, retrieval events are sur
     *   The session is `OPEN` and later confirmed by the owner.
 *   **Proof Stream:** The chain aggregates a compact stream of `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) which can be rendered in dashboards to show liveness and performance over time.
 
-Future StripeReplica modes preserve this pattern but allow multiple Providers to contribute sessions for different stripes of the same file.
+Mode 2 uses the same session flow but proofs are slot-aware: multiple Providers can contribute sessions for different stripes under the same Deal.
 
 ### 2.4 Retrievability & Self-Healing Invariants
 
@@ -91,14 +91,14 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 NilStore supports two redundancy modes conceptually:
 
 *   **Mode 1 – FullReplica (Alpha, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
-*   **Mode 2 – StripeReplica (Planned):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer.
+*   **Mode 2 – StripeReplica (Implemented):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer (RS(K, K+M)).
 
 ### Step 1: Ingestion & Placement
 1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)` which creates a thin-provisioned container.
 1.  **Commit Content:** After upload, the user commits the returned `manifest_root` via `MsgUpdateDealContent` (the Deal is empty until this commit).
 2.  **Assignment:**
     *   In the current **FullReplica (Mode 1)** implementation, the chain deterministically assigns a set of SPs to hold *full replicas* of the file (targeting 12 in the general case, capped by the number of available providers).
-    *   In the planned **StripeReplica (Mode 2)** design, these assignments are further partitioned into stripes across shard indices for 8 MiB MDUs.
+    *   In **StripeReplica (Mode 2)**, the chain assigns an ordered slot list of size `N = K+M` (e.g., 8+4). Metadata MDUs are replicated to all slots, while user data MDUs are striped per slot.
 3.  **Upload:** User uploads data.
 
 ### Step 2: The Liveness Loop

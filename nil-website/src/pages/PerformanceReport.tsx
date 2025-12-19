@@ -4,6 +4,15 @@ import performanceData from "../data/performance_metrics.json";
 
 export const PerformanceReport = () => {
   const { runs, analysis, meta } = performanceData;
+  const avgBlockTime =
+    runs.length > 0
+      ? runs.reduce((sum, run) => sum + run.results.avg_block_time_sec, 0) / runs.length
+      : 0;
+  const totalTxs = runs.reduce((sum, run) => sum + run.results.total_txs, 0);
+  const peakTps = runs.reduce((max, run) => {
+    const tps = run.results.duration_sec > 0 ? run.results.total_txs / run.results.duration_sec : 0;
+    return Math.max(max, tps);
+  }, 0);
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
@@ -30,28 +39,28 @@ export const PerformanceReport = () => {
 
       {/* Aggregate Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16">
-        <StatCard 
-          label="Avg Block Time" 
-          value="1.02s" 
-          icon={<Zap className="w-5 h-5 text-yellow-500" />} 
+        <StatCard
+          label="Avg Block Time"
+          value={avgBlockTime > 0 ? `${avgBlockTime.toFixed(3)}s` : '—'}
+          icon={<Zap className="w-5 h-5 text-yellow-500" />}
           delay={0.1}
         />
-        <StatCard 
-          label="Peak TPS (Sim)" 
-          value="~120" 
-          icon={<Activity className="w-5 h-5 text-green-500" />} 
+        <StatCard
+          label="Peak TPS (Sim)"
+          value={peakTps > 0 ? `~${peakTps.toFixed(1)}` : '—'}
+          icon={<Activity className="w-5 h-5 text-green-500" />}
           delay={0.2}
         />
-        <StatCard 
-          label="Total Tx Processed" 
-          value="570" 
-          icon={<Database className="w-5 h-5 text-blue-500" />} 
+        <StatCard
+          label="Total Tx Processed"
+          value={totalTxs > 0 ? totalTxs.toLocaleString() : '—'}
+          icon={<Database className="w-5 h-5 text-blue-500" />}
           delay={0.3}
         />
-        <StatCard 
-          label="Success Rate" 
-          value="100%" 
-          icon={<CheckCircle2 className="w-5 h-5 text-purple-500" />} 
+        <StatCard
+          label="Success Rate"
+          value="100%"
+          icon={<CheckCircle2 className="w-5 h-5 text-purple-500" />}
           delay={0.4}
         />
       </div>
@@ -94,7 +103,7 @@ export const PerformanceReport = () => {
                 <div className="w-full bg-secondary h-2 rounded-full mt-3 overflow-hidden">
                   <div className="h-full bg-primary w-[95%]" /> {/* Visual representation of consistency */}
                 </div>
-                <p className="text-[10px] text-right mt-1 text-muted-foreground">Target: 1.00s</p>
+                <p className="text-[10px] text-right mt-1 text-muted-foreground">Devnet target: ~1s cadence</p>
               </div>
             </div>
           </motion.div>

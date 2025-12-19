@@ -39,7 +39,8 @@ export const EconomyDashboard = () => {
                       </h3>
                       <ul className="space-y-2 text-muted-foreground list-disc list-inside">
                         <li><strong>Storage Growth:</strong> Agents (simulated users) upload files based on an adoption curve.</li>
-                        <li><strong>Tiered Minting:</strong> Providers earn Platinum (1.0x), Gold (0.8x), or Silver (0.2x) rewards based on latency.</li>
+                        <li><strong>Performance Rewards:</strong> Providers earn tiered rewards (Platinum/Gold/Silver) based on retrieval latency.</li>
+                        <li><strong>Retrieval Fees:</strong> Sessions lock fees up-front; a protocol burn cuts in on payouts, so demand directly funds bandwidth.</li>
                         <li><strong>Integrity Slashing:</strong> Invalid proofs are slashed; slow nodes earn less, pushing the market toward high performance.</li>
                       </ul>
                     </div>
@@ -66,7 +67,7 @@ export const EconomyDashboard = () => {
                   <MetricCard 
                       title="Total Burned" 
                       value={`${data[data.length-1].slashed.toLocaleString()} NIL`} 
-                      sub="Simulated burn"
+                      sub="Slashing + retrieval burn"
                       icon={<AlertTriangle className="text-red-500 dark:text-red-400"/>} 
                       delay={0.3}
                   />

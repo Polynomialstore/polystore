@@ -121,7 +121,7 @@ export const ProofsDashboard = () => {
           <p className="text-sm md:text-base text-muted-foreground">
             Live view of retrieval-session proofs and liveness attestations flowing through the NilStore network. Each
             proof represents a verified KZG opening against a stored MDU and is classified into a latency tier for the
-            Performance Market.
+            Performance Market. Synthetic challenges appear when demand is low.
           </p>
         </div>
         <div className="text-xs text-muted-foreground">
@@ -189,7 +189,7 @@ export const ProofsDashboard = () => {
                     </span>
                   </div>
                   <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div className={`h_full ${row.color}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-full ${row.color}`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )

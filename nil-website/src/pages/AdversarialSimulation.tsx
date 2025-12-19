@@ -10,7 +10,7 @@ export const AdversarialSimulation = () => {
   const chartData = data.map(d => ({
     epoch: d.epoch,
     Honest: d.honest.balance,
-    Attacker: d.attacker.balance,
+    Remote: d.attacker.balance,
     honestTier: d.honest.tier,
     attackerTier: d.attacker.tier
   }));
@@ -25,14 +25,13 @@ export const AdversarialSimulation = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <h1 className="text-5xl font-bold mb-6 text-foreground">The "Lazy Provider" Attack</h1>
+          <h1 className="text-5xl font-bold mb-6 text-foreground">Archived Incentive Simulation</h1>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/40 text-xs text-muted-foreground mb-4">
-            Archived: incentive simulation (not the active threat model)
+            Remote storage vs local NVMe (not an active threat model)
           </div>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Can a storage node cheat by outsourcing storage to a cheap, slow, centralized cloud service (like S3) instead of using high-performance local hardware? 
-            <br/>
-            <strong>Spoiler: The math makes it unprofitable.</strong>
+            This archived simulation compares a local NVMe provider against a remote-storage provider (e.g., S3-backed).
+            The takeaway: latency tiers and bandwidth costs make remote-only strategies uncompetitive in the long run.
           </p>
         </motion.div>
       </div>
@@ -60,13 +59,13 @@ export const AdversarialSimulation = () => {
           </div>
         </div>
 
-        {/* Attacker Stats */}
+        {/* Remote Storage Stats */}
         <div className="bg-card p-6 rounded-xl border border-border shadow-sm">
           <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
             <Wifi className="text-red-500 w-6 h-6" />
             <div>
-                <h3 className="text-lg font-bold text-foreground">Lazy Provider (S3)</h3>
-                <p className="text-xs text-muted-foreground">Low Cost, High Latency</p>
+                <h3 className="text-lg font-bold text-foreground">Remote Storage (S3)</h3>
+                <p className="text-xs text-muted-foreground">Lower Cost, Higher Latency</p>
             </div>
           </div>
           <div className="space-y-4">
@@ -84,10 +83,10 @@ export const AdversarialSimulation = () => {
         {/* Analysis Card */}
         <div className="bg-secondary/20 p-6 rounded-xl border border-border flex flex-col justify-center">
             <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-yellow-500"/> Economic Defense
+                <ShieldAlert className="w-5 h-5 text-yellow-500"/> Incentive Check
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                The simulation proves that while S3 storage is cheaper per GB, the <strong>Bandwidth Egress Costs</strong> required to serve retrieval sessions, combined with <strong>Tiered Reward Penalties</strong> (dropping from Platinum to Gold), make the attack net-negative.
+                Even if remote storage is cheaper per GB, the <strong>egress costs</strong> and <strong>tier penalties</strong> from slower retrievals erode margins and make the strategy unattractive over time.
             </p>
             <div className="text-xs font-mono bg-background/50 p-2 rounded border border-border">
                 PROFIT = REWARDS - (STORAGE_COST + EGRESS_COST)
@@ -106,7 +105,7 @@ export const AdversarialSimulation = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-red-500 rounded-full"></span>
-                    <span className="text-muted-foreground">Attacker</span>
+                    <span className="text-muted-foreground">Remote</span>
                 </div>
             </div>
         </div>
@@ -153,7 +152,7 @@ export const AdversarialSimulation = () => {
                     />
                     <Area 
                         type="monotone" 
-                        dataKey="Attacker" 
+                        dataKey="Remote" 
                         stackId="2" // Separate stacks to compare lines, actually we want comparison not stacking.
                         stroke="#ef4444" 
                         fill="#ef4444" 
@@ -170,21 +169,21 @@ export const AdversarialSimulation = () => {
             <div className="mb-4 p-3 bg-blue-500/10 w-fit rounded-lg"><Database className="w-6 h-6 text-blue-500" /></div>
             <h4 className="font-bold text-foreground mb-2">1. The Setup</h4>
             <p className="text-sm text-muted-foreground">
-                We simulate 100 epochs. The Honest Node pays for NVMe ($0.02/GB). The Attacker uses S3 ($0.004/GB). The Attacker seems to have a cost advantage.
+                We simulate 100 epochs. The Honest Node pays for NVMe ($0.02/GB). The Remote Node uses S3 ($0.004/GB), so it appears cheaper at rest.
             </p>
         </div>
         <div className="p-6 rounded-xl border border-border bg-card">
             <div className="mb-4 p-3 bg-purple-500/10 w-fit rounded-lg"><Clock className="w-6 h-6 text-purple-500" /></div>
             <h4 className="font-bold text-foreground mb-2">2. The Execution</h4>
             <p className="text-sm text-muted-foreground">
-                Every epoch, the simulation generates retrieval sessions. The Honest node replies instantly (&lt;1s). The Attacker must fetch data on demand, incurring latency (&gt;1s) and egress fees ($0.05/GB).
+                Every epoch, the simulation generates retrieval sessions. The Honest node replies instantly (&lt;1s). The Remote node must fetch data on demand, incurring latency (&gt;1s) and egress fees ($0.05/GB).
             </p>
         </div>
         <div className="p-6 rounded-xl border border-border bg-card">
             <div className="mb-4 p-3 bg-green-500/10 w-fit rounded-lg"><ShieldAlert className="w-6 h-6 text-green-500" /></div>
             <h4 className="font-bold text-foreground mb-2">3. The Result</h4>
             <p className="text-sm text-muted-foreground">
-                The Honest node earns Platinum rewards. The Attacker falls to Gold/Silver due to latency and bleeds money on egress fees. The chart shows the divergence.
+                The Honest node earns Platinum rewards. The Remote node falls to Gold/Silver due to latency and bleeds money on egress fees. The chart shows the divergence.
             </p>
         </div>
       </div>

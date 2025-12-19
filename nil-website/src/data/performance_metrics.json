@@ -36,5 +36,5 @@
       }
     }
   ],
-  "analysis": "The NilChain consensus layer demonstrated linear scalability under load. Despite a 4x increase in transaction volume and 2.5x increase in active validator set size (Providers), the average block time remained constant at ~1.03s, well within the 1s target timeout config. Throughput scaling was handled without mempool congestion."
+  "analysis": "Local devnet runs show a stable block cadence under load. This keeps latency-tier windows predictable for the performance market while the chain absorbs increased transaction volume. These are chain-throughput benchmarks, not storage deadlines."
 }

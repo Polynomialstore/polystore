@@ -122,7 +122,7 @@ export const PerformanceDeepDive = () => {
 
           <div className="mt-12 p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm text-muted-foreground">
             <p>
-              <strong>Market Logic:</strong> Slow providers aren't banned; they just earn less. This implicitly filters out "Lazy Providers" (S3 wrappers) because the bandwidth costs of fetching data remotely destroy their margins when combined with lower Gold/Silver tier rewards.
+              <strong>Market Logic:</strong> Slow providers aren't banned; they just earn less. The market rewards low-latency service without brittle slashing rules, and real-time demand naturally pressures providers to keep hot data local.
             </p>
           </div>
         </section>
@@ -157,7 +157,7 @@ export const PerformanceDeepDive = () => {
             </div>
           </div>
           <p className="text-sm text-muted-foreground mt-4 italic text-center">
-            This keeps provider risk bounded and removes the need for signed receipts.
+            This keeps provider risk bounded while keeping payment confirmation explicit and on-chain.
           </p>
         </section>
       </motion.div>

@@ -58,6 +58,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 
+*   **`POST /sp/upload_shard`** *(Mode 2 Provider API)*
+    *   **Input:** Raw shard bytes (body) with headers:
+        * `X-Nil-Deal-ID` (uint64), `X-Nil-Mdu-Index` (uint64), `X-Nil-Slot` (uint64), `X-Nil-Manifest-Root` (`0x` + 96 hex).
+    *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
+    *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica). Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
+
 #### Health & Status
 *   **`GET /health`**
     *   **Role:** Lightweight liveness probe (200 if gateway is reachable).
@@ -90,6 +96,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
         3.  Records per-blob proof artifacts for later submission.
         4.  Streams the file content to the response and sets `X‑Nil‑Provider`.
     *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
+    *   **Mode 2 behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
     *   **NilFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
@@ -111,6 +118,11 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** `{ "session_id": "0x..." }`.
     *   **Logic:** Provider submits `MsgSubmitRetrievalSessionProof` on-chain.
     *   **Role:** Canonical proof submission path.
+
+*   **`GET /sp/shard`** *(Mode 2 Provider API)*
+    *   **Query Params:** `deal_id`, `manifest_root`, `mdu_index`, `slot`.
+    *   **Logic:** Streams `mdu_<index>_slot_<slot>.bin` from the provider’s storage root.
+    *   **Role:** Used by gateways/clients to reconstruct Mode 2 MDUs when local shards are missing.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.

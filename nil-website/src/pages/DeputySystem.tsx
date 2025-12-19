@@ -27,8 +27,8 @@ export const DeputySystem = () => {
           </h3>
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div className="bg-card p-6 rounded-xl border border-border">
-                <h4 className="font-bold text-foreground mb-2">Lazy Provider</h4>
-                <p className="text-sm text-muted-foreground">Accepts the deal to earn storage rewards, but blocks user IPs to save bandwidth. Claims "The user is lying."</p>
+                <h4 className="font-bold text-foreground mb-2">Unresponsive Provider</h4>
+                <p className="text-sm text-muted-foreground">Accepts the deal to earn rewards, but refuses retrievals to save bandwidth. Claims "The user is lying."</p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">
                 <h4 className="font-bold text-foreground mb-2">Malicious User</h4>
