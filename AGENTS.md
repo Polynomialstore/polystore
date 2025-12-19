@@ -534,6 +534,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Preflight/lock:** `OpenRetrievalSession` MUST charge `base_retrieval_fee` (non-refundable) and reserve `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance` so providers never serve unpaid sessions.
     - **Completion payout:** on session `COMPLETED`, burn `burn_cut = ceil(variable * retrieval_burn_bps / 10000)` and transfer `provider_cut = variable - burn_cut` from `nilchain` module account to provider.
     - **Refund:** if a session expires/cancels without completion, refund only the locked `variable` amount back to `Deal.escrow_balance` (base fee remains burned/spent).
+    - **Refund mechanism:** implement `MsgCancelRetrievalSession` (owner-only) to unlock `variable` after expiry; do not rely on an expensive “scan all sessions” EndBlocker sweep for devnet.
 
 - [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**
