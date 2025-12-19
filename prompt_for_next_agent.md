@@ -40,6 +40,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 
 1.  **Run Gamma-4 smoke checks:** `go test ./x/nilchain/keeper` (retrieval fee tests included).
 2.  **Optional UX/CLI:** add a `cancel-retrieval-session` CLI command if needed for devnet ops.
+3.  **Coverage expansion note:** If you want me to expand coverage further, I can add a CLI-level integration test around open-retrieval-session with a local chain harness.
 
 ## 5. Key Files
 
