@@ -36,6 +36,18 @@ type UploadRequest = {
 }
 type ManifestInfoRequest = { manifestRoot: string; owner?: string; dealId?: string; directBase?: string; preference?: RoutePreference }
 type MduKzgRequest = { manifestRoot: string; owner?: string; dealId?: string; mduIndex: number; directBase?: string; preference?: RoutePreference }
+type FetchRangeRequest = {
+  manifestRoot: string
+  owner: string
+  dealId: string
+  filePath: string
+  rangeStart: number
+  rangeLen: number
+  sessionId: string
+  expectedProvider?: string
+  directBase?: string
+  preference?: RoutePreference
+}
 
 export function useTransportRouter() {
   const { preference, lastTrace, setLastTrace, setPreference } = useTransportContext()
@@ -99,6 +111,7 @@ export function useTransportRouter() {
       const result = await executeWithFallback('list_files', candidates, {
         preference: req.preference ?? preference,
         timeoutMs: 10_000,
+        maxAttemptsPerBackend: 2,
       })
       recordTrace(result.trace)
       return result
@@ -144,6 +157,7 @@ export function useTransportRouter() {
       const result = await executeWithFallback('slab', candidates, {
         preference: req.preference ?? preference,
         timeoutMs: 10_000,
+        maxAttemptsPerBackend: 2,
       })
       recordTrace(result.trace)
       return result
@@ -195,6 +209,7 @@ export function useTransportRouter() {
       const result = await executeWithFallback('plan', candidates, {
         preference: req.preference ?? preference,
         timeoutMs: 10_000,
+        maxAttemptsPerBackend: 2,
       })
       recordTrace(result.trace)
       return result
@@ -289,6 +304,7 @@ export function useTransportRouter() {
       const result = await executeWithFallback('manifest_info', candidates, {
         preference: req.preference ?? preference,
         timeoutMs: 10_000,
+        maxAttemptsPerBackend: 2,
       })
       recordTrace(result.trace)
       return result
@@ -338,6 +354,7 @@ export function useTransportRouter() {
       const result = await executeWithFallback('mdu_kzg', candidates, {
         preference: req.preference ?? preference,
         timeoutMs: 30_000,
+        maxAttemptsPerBackend: 2,
       })
       recordTrace(result.trace)
       return result
@@ -346,6 +363,81 @@ export function useTransportRouter() {
       throw err
     }
   }, [preference, recordTrace, wrapExecute])
+
+  const fetchRange = useCallback(async (req: FetchRangeRequest): Promise<TransportOutcome<{ bytes: Uint8Array; provider: string }>> => {
+    if (!Number.isFinite(req.rangeLen) || req.rangeLen <= 0) {
+      throw new Error('rangeLen must be > 0')
+    }
+
+    const normalizeBase = (base: string) => base.replace(/\/$/, '')
+    const rangeEnd = req.rangeStart + req.rangeLen - 1
+
+    const buildUrl = (base: string) => {
+      const q = new URLSearchParams({
+        deal_id: req.dealId,
+        owner: req.owner,
+        file_path: req.filePath,
+      })
+      return `${normalizeBase(base)}/gateway/fetch/${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
+    }
+
+    const executeFetch = async (base: string, signal: AbortSignal) => {
+      const res = await fetch(buildUrl(base), {
+        method: 'GET',
+        signal,
+        headers: {
+          Range: `bytes=${req.rangeStart}-${rangeEnd}`,
+          'X-Nil-Session-Id': req.sessionId,
+        },
+      })
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        throw new TransportError(txt || `fetch failed (${res.status})`, classifyStatus(res.status), res.status)
+      }
+
+      const provider = String(res.headers.get('X-Nil-Provider') || '')
+      if (!provider) {
+        throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+      }
+      if (req.expectedProvider && provider !== req.expectedProvider) {
+        throw new TransportError(
+          `provider mismatch: expected ${req.expectedProvider} got ${provider}`,
+          'provider_mismatch',
+        )
+      }
+
+      return { bytes: new Uint8Array(await res.arrayBuffer()), provider }
+    }
+
+    const candidates: TransportCandidate<{ bytes: Uint8Array; provider: string }>[] = [
+      {
+        backend: 'gateway' as const,
+        endpoint: appConfig.gatewayBase,
+        execute: async (signal) => executeFetch(appConfig.gatewayBase, signal),
+      },
+    ]
+
+    if (req.directBase && req.directBase !== appConfig.gatewayBase) {
+      candidates.push({
+        backend: 'direct_sp' as const,
+        endpoint: req.directBase,
+        execute: async (signal) => executeFetch(req.directBase!, signal),
+      })
+    }
+
+    try {
+      const result = await executeWithFallback('fetch', candidates, {
+        preference: req.preference ?? preference,
+        timeoutMs: 30_000,
+        maxAttemptsPerBackend: 2,
+      })
+      recordTrace(result.trace)
+      return result
+    } catch (err) {
+      if (err instanceof TransportTraceError) recordTrace(err.trace)
+      throw err
+    }
+  }, [preference, recordTrace])
 
   return useMemo(() => ({
     preference,
@@ -357,5 +449,6 @@ export function useTransportRouter() {
     uploadFile,
     manifestInfo,
     mduKzg,
-  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg])
+    fetchRange,
+  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg, fetchRange])
 }

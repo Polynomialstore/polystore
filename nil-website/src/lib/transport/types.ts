@@ -15,6 +15,7 @@ export type ErrorClass =
   | 'timeout'
   | 'connection_refused'
   | 'dns'
+  | 'http_429'
   | 'http_4xx'
   | 'http_5xx'
   | 'cors'

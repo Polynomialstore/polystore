@@ -1,6 +1,7 @@
 import type {
   BackendName,
   DecisionTrace,
+  ErrorClass,
   RoutePreference,
   TransportCandidate,
   TransportFailure,
@@ -23,6 +24,19 @@ export class TransportTraceError extends TransportError {
     super(message, 'unknown')
     this.trace = trace
   }
+}
+
+function backoffMs(errorClass: ErrorClass, attempt: number): number {
+  if (errorClass !== 'http_429') return 0
+  const baseMs = 250
+  const maxMs = 2000
+  const exp = Math.min(baseMs * 2 ** Math.max(0, attempt - 1), maxMs)
+  return exp
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function orderCandidates<T>(
@@ -49,8 +63,8 @@ export async function executeWithFallback<T>(
   const attempts: DecisionTrace['attempts'] = []
 
   let totalAttempts = 0
-  const maxTotal = opts.maxTotalAttempts ?? ordered.length
   const maxPerBackend = opts.maxAttemptsPerBackend ?? 1
+  const maxTotal = opts.maxTotalAttempts ?? ordered.length * maxPerBackend
 
   for (const candidate of ordered) {
     let backendAttempts = 0
@@ -112,6 +126,13 @@ export async function executeWithFallback<T>(
 
         if (!isRetryable(errorClass)) {
           break
+        }
+
+        if (backendAttempts < maxPerBackend && totalAttempts < maxTotal) {
+          const delayMs = backoffMs(errorClass, backendAttempts)
+          if (delayMs > 0) {
+            await sleep(delayMs)
+          }
         }
       } finally {
         if (timeoutId) {

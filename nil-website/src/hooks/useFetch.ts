@@ -235,15 +235,11 @@ export function useFetch() {
       const providerEndpoint = provider
         ? await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
         : null
-      const serviceBase =
+      const fetchDirectBase =
         providerEndpoint?.baseUrl ||
-        serviceOverride ||
-        planResult.trace.chosen?.endpoint ||
-        (planResult.backend === 'direct_sp' ? directBase : appConfig.gatewayBase) ||
-        appConfig.gatewayBase
-
-      const fetchParams = new URLSearchParams({ deal_id: dealId, owner, file_path: filePath })
-      const fetchUrl = `${serviceBase}/gateway/fetch/${manifestRoot}?${fetchParams.toString()}`
+        (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
+        (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
+        (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
 
       const parts: Uint8Array[] = []
       let bytesFetched = 0
@@ -251,21 +247,27 @@ export function useFetch() {
 
       for (let idx = 0; idx < chunks.length; idx++) {
         const c = chunks[idx]
-        const end = c.rangeStart + c.rangeLen - 1
 
-        const res = await fetch(fetchUrl, { headers: { Range: `bytes=${c.rangeStart}-${end}`, 'X-Nil-Session-Id': sessionId } })
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          throw new Error(decodeHttpError(text) || `fetch failed (${res.status})`)
+        const rangeResult = await transport.fetchRange({
+          manifestRoot,
+          owner,
+          dealId,
+          filePath,
+          rangeStart: c.rangeStart,
+          rangeLen: c.rangeLen,
+          sessionId,
+          expectedProvider: provider,
+          directBase: fetchDirectBase,
+          preference: preferenceOverride,
+        })
+
+        const hProvider = rangeResult.data.provider
+        if (!observedProvider) observedProvider = hProvider
+        if (observedProvider !== hProvider) {
+          throw new Error(`provider mismatch during download: ${observedProvider} vs ${hProvider}`)
         }
 
-        const hProvider = String(res.headers.get('X-Nil-Provider') || '')
-        if (!hProvider) throw new Error('gateway did not provide X-Nil-Provider')
-        if (!observedProvider) observedProvider = hProvider
-        if (observedProvider !== hProvider) throw new Error(`provider mismatch during download: ${observedProvider} vs ${hProvider}`)
-        if (provider !== hProvider) throw new Error(`provider mismatch during download: expected ${provider} got ${hProvider}`)
-
-        const buf = new Uint8Array(await res.arrayBuffer())
+        const buf = rangeResult.data.bytes
         parts.push(buf)
         bytesFetched += buf.byteLength
 
