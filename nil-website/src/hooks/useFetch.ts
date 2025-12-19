@@ -305,7 +305,7 @@ export function useFetch() {
         const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId }),
+          body: JSON.stringify({ session_id: sessionId, provider }),
         })
         if (!proofRes.ok) {
           const text = await proofRes.text().catch(() => '')

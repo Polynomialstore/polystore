@@ -80,7 +80,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
   const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
   const [currentManifestBlob, setCurrentManifestBlob] = useState<Uint8Array | null>(null);
-  const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+  const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error' | 'skipped'>('idle')
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [slotBases, setSlotBases] = useState<string[]>([])
@@ -179,9 +179,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     if (!isCommitSuccess) return;
     if (!currentManifestRoot || !dealId) return;
-    const commitKey = commitHash || currentManifestRoot;
-    if (lastCommitRef.current === commitKey) return;
-    lastCommitRef.current = commitKey;
+    if (lastCommitRef.current === currentManifestRoot) return;
+    lastCommitRef.current = currentManifestRoot;
     onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
@@ -431,8 +430,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const spBase = appConfig.spBase.replace(/\/$/, '')
     if (!gatewayBase || gatewayBase === spBase) return
     if (appConfig.gatewayDisabled) {
-      setMirrorStatus('success')
-      setMirrorError('Gateway disabled; mirror skipped')
+      setMirrorStatus('skipped')
+      setMirrorError('Gateway disabled')
       addLog('> Gateway mirror skipped (disabled).')
       return
     }
@@ -444,8 +443,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     try {
       const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
       if (!health.ok) {
-        setMirrorStatus('success')
-        setMirrorError(`Gateway unavailable (${health.status}); mirror skipped`)
+        setMirrorStatus('skipped')
+        setMirrorError(`Gateway unavailable (${health.status})`)
         addLog('> Gateway not reachable; mirror skipped.')
         return
       }
@@ -484,11 +483,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       setMirrorStatus('success')
+      setMirrorError(null)
       addLog('> Mirrored slab to local gateway.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      setMirrorStatus('success')
-      setMirrorError(`Gateway not reachable; mirror skipped (${msg})`)
+      setMirrorStatus('skipped')
+      setMirrorError(msg)
       addLog(`> Gateway mirror skipped: ${msg}`)
     }
   }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
@@ -1422,8 +1422,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {mirrorStatus !== 'idle' && (
-              <div className="text-[11px] text-muted-foreground">
-                Gateway mirror: {mirrorStatus}
+              <div
+                className={`text-[11px] ${
+                  mirrorStatus === 'error' ? 'text-red-500' : mirrorStatus === 'skipped' ? 'text-muted-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
                 {mirrorError ? ` (${mirrorError})` : ''}
               </div>
             )}
@@ -1444,11 +1448,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     fileSize: totalSize
                 });
               }}
-              disabled={isCommitPending || isCommitConfirming || isCommitSuccess}
+              disabled={isCommitPending || isCommitConfirming || (isCommitSuccess && lastCommitRef.current === currentManifestRoot)}
               data-testid="mdu-commit"
               className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
             >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isCommitSuccess ? 'Committed!' : 'Commit to Chain'}
+              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : (isCommitSuccess && lastCommitRef.current === currentManifestRoot) ? 'Committed!' : 'Commit to Chain'}
             </button>
             
             {commitHash && (
