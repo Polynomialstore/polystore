@@ -1,5 +1,5 @@
-import type { LcdDeal } from '../domain/lcd'
-import { normalizeLcdDealsResponse } from '../domain/lcd'
+import type { LcdDeal, LcdParams } from '../domain/lcd'
+import { normalizeLcdDealsResponse, normalizeLcdParamsResponse } from '../domain/lcd'
 
 export async function lcdFetchDeals(
   lcdBase: string,
@@ -13,3 +13,14 @@ export async function lcdFetchDeals(
   return normalizeLcdDealsResponse(json)
 }
 
+export async function lcdFetchParams(
+  lcdBase: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<LcdParams | null> {
+  const res = await fetchFn(`${lcdBase}/nilchain/nilchain/v1/params`)
+  if (!res.ok) {
+    throw new Error(`LCD params returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  return normalizeLcdParamsResponse(json)
+}

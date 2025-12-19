@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -273,4 +276,197 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
+}
+
+func CmdOpenRetrievalSession() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "open-retrieval-session",
+		Short: "Open a retrieval session for a blob range",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			dealId, err := cmd.Flags().GetUint64("deal-id")
+			if err != nil {
+				return err
+			}
+			provider, err := cmd.Flags().GetString("provider")
+			if err != nil {
+				return err
+			}
+			manifestHex, err := cmd.Flags().GetString("manifest-root")
+			if err != nil {
+				return err
+			}
+			manifestRoot, err := decodeHexBytes(manifestHex, 48)
+			if err != nil {
+				return err
+			}
+			startMduIndex, err := cmd.Flags().GetUint64("start-mdu-index")
+			if err != nil {
+				return err
+			}
+			startBlobIndex, err := cmd.Flags().GetUint32("start-blob-index")
+			if err != nil {
+				return err
+			}
+			blobCount, err := cmd.Flags().GetUint64("blob-count")
+			if err != nil {
+				return err
+			}
+			nonce, err := cmd.Flags().GetUint64("nonce")
+			if err != nil {
+				return err
+			}
+			if nonce == 0 && !cmd.Flags().Changed("nonce") {
+				nonce = uint64(time.Now().UnixNano())
+			}
+			expiresAt, err := cmd.Flags().GetUint64("expires-at")
+			if err != nil {
+				return err
+			}
+
+			if strings.TrimSpace(provider) == "" {
+				return fmt.Errorf("provider is required")
+			}
+			if blobCount == 0 {
+				return fmt.Errorf("blob-count must be > 0")
+			}
+
+			msg := types.MsgOpenRetrievalSession{
+				Creator:        clientCtx.GetFromAddress().String(),
+				DealId:         dealId,
+				Provider:       provider,
+				ManifestRoot:   manifestRoot,
+				StartMduIndex:  startMduIndex,
+				StartBlobIndex: startBlobIndex,
+				BlobCount:      blobCount,
+				Nonce:          nonce,
+				ExpiresAt:      expiresAt,
+			}
+
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+
+	cmd.Flags().Uint64("deal-id", 0, "Deal ID")
+	cmd.Flags().String("provider", "", "Assigned provider address")
+	cmd.Flags().String("manifest-root", "", "Manifest root (48-byte hex)")
+	cmd.Flags().Uint64("start-mdu-index", 0, "Starting MDU index")
+	cmd.Flags().Uint32("start-blob-index", 0, "Starting blob index within the MDU")
+	cmd.Flags().Uint64("blob-count", 0, "Number of blobs in the retrieval range")
+	cmd.Flags().Uint64("nonce", 0, "Nonce (monotonic per owner/deal/provider)")
+	cmd.Flags().Uint64("expires-at", 0, "Expiry block height (0 = no expiry)")
+	_ = cmd.MarkFlagRequired("deal-id")
+	_ = cmd.MarkFlagRequired("provider")
+	_ = cmd.MarkFlagRequired("manifest-root")
+	_ = cmd.MarkFlagRequired("blob-count")
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdCancelRetrievalSession() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cancel-retrieval-session [session-id]",
+		Short: "Cancel an expired retrieval session and unlock fees",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			sessionID, err := decodeSessionID(args[0])
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgCancelRetrievalSession{
+				Creator:   clientCtx.GetFromAddress().String(),
+				SessionId: sessionID,
+			}
+
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func decodeHexBytes(value string, expectedLen int) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("hex value is required")
+	}
+	raw := strings.TrimPrefix(trimmed, "0x")
+	if len(raw)%2 != 0 || !isHexString(raw) {
+		return nil, fmt.Errorf("invalid hex value: %s", value)
+	}
+	bz, err := hex.DecodeString(raw)
+	if err != nil {
+		return nil, err
+	}
+	if expectedLen > 0 && len(bz) != expectedLen {
+		return nil, fmt.Errorf("expected %d bytes, got %d", expectedLen, len(bz))
+	}
+	return bz, nil
+}
+
+func decodeSessionID(value string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("session id is required")
+	}
+
+	raw := strings.TrimPrefix(trimmed, "0x")
+	if trimmed != raw || len(raw) == 64 {
+		if isHexString(raw) {
+			bz, err := hex.DecodeString(raw)
+			if err == nil {
+				if len(bz) != 32 {
+					return nil, fmt.Errorf("session id must be 32 bytes")
+				}
+				return bz, nil
+			}
+		}
+	}
+
+	for _, decoder := range []func(string) ([]byte, error){
+		base64.StdEncoding.DecodeString,
+		base64.RawStdEncoding.DecodeString,
+	} {
+		if bz, err := decoder(trimmed); err == nil {
+			if len(bz) != 32 {
+				return nil, fmt.Errorf("session id must be 32 bytes")
+			}
+			return bz, nil
+		}
+	}
+
+	if isHexString(raw) {
+		if bz, err := hex.DecodeString(raw); err == nil {
+			if len(bz) != 32 {
+				return nil, fmt.Errorf("session id must be 32 bytes")
+			}
+			return bz, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid session id: expected hex or base64")
+}
+
+func isHexString(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			return false
+		}
+	}
+	return true
 }

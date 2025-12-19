@@ -20,15 +20,17 @@ func GetTxCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(CmdProveLivenessLocal())
-    cmd.AddCommand(CmdSignRetrievalReceipt())
-    cmd.AddCommand(CmdSubmitRetrievalProof())
-    cmd.AddCommand(CmdRegisterProvider())
-    cmd.AddCommand(CmdCreateDeal())
-    cmd.AddCommand(CmdUpdateDealContent())
-    cmd.AddCommand(CmdCreateDealFromEvm())
-    cmd.AddCommand(CmdUpdateDealContentFromEvm())
-    cmd.AddCommand(CmdSignalSaturation())
-    cmd.AddCommand(CmdAddCredit())
-    cmd.AddCommand(CmdWithdrawRewards())
+	cmd.AddCommand(CmdSignRetrievalReceipt())
+	cmd.AddCommand(CmdSubmitRetrievalProof())
+	cmd.AddCommand(CmdOpenRetrievalSession())
+	cmd.AddCommand(CmdCancelRetrievalSession())
+	cmd.AddCommand(CmdRegisterProvider())
+	cmd.AddCommand(CmdCreateDeal())
+	cmd.AddCommand(CmdUpdateDealContent())
+	cmd.AddCommand(CmdCreateDealFromEvm())
+	cmd.AddCommand(CmdUpdateDealContentFromEvm())
+	cmd.AddCommand(CmdSignalSaturation())
+	cmd.AddCommand(CmdAddCredit())
+	cmd.AddCommand(CmdWithdrawRewards())
 	return cmd
 }

@@ -14,6 +14,17 @@ export interface LcdDeal {
   providers?: string[]
 }
 
+export interface LcdCoin {
+  amount: string
+  denom: string
+}
+
+export interface LcdParams {
+  base_retrieval_fee: LcdCoin
+  retrieval_price_per_blob: LcdCoin
+  retrieval_burn_bps: string
+}
+
 type UnknownRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -61,3 +72,23 @@ export function normalizeLcdDealsResponse(payload: unknown): LcdDeal[] {
   return out
 }
 
+function normalizeLcdCoin(input: unknown): LcdCoin {
+  if (!isRecord(input)) {
+    return { amount: '0', denom: '' }
+  }
+  return {
+    amount: asString(input['amount'], '0'),
+    denom: asString(input['denom'], ''),
+  }
+}
+
+export function normalizeLcdParamsResponse(payload: unknown): LcdParams | null {
+  if (!isRecord(payload)) return null
+  const params = payload['params']
+  if (!isRecord(params)) return null
+  return {
+    base_retrieval_fee: normalizeLcdCoin(params['base_retrieval_fee']),
+    retrieval_price_per_blob: normalizeLcdCoin(params['retrieval_price_per_blob']),
+    retrieval_burn_bps: asString(params['retrieval_burn_bps'], '0'),
+  }
+}

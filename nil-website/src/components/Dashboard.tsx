@@ -15,9 +15,9 @@ import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
 import { injectedConnector } from '../lib/web3Config'
 import { formatUnits } from 'viem'
-import { lcdFetchDeals } from '../api/lcdClient'
+import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
-import type { LcdDeal as Deal } from '../domain/lcd'
+import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 
@@ -150,6 +150,8 @@ export function Dashboard() {
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
   const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
   const [retrievalSessionsError, setRetrievalSessionsError] = useState<string | null>(null)
+  const [retrievalParams, setRetrievalParams] = useState<LcdParams | null>(null)
+  const [retrievalParamsError, setRetrievalParamsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (allDeals.length === 0) {
@@ -226,6 +228,32 @@ export function Dashboard() {
       window.clearInterval(interval)
     }
   }, [nilAddress])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function refreshParams() {
+      try {
+        const params = await lcdFetchParams(appConfig.lcdBase)
+        if (!cancelled) {
+          setRetrievalParams(params)
+          setRetrievalParamsError(null)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setRetrievalParams(null)
+          setRetrievalParamsError(e instanceof Error ? e.message : 'Failed to fetch retrieval params')
+        }
+      }
+    }
+
+    refreshParams()
+    const interval = window.setInterval(refreshParams, 30000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [])
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -454,6 +482,21 @@ export function Dashboard() {
     return '—'
   }
 
+  function formatCoin(coin?: { amount: string; denom: string } | null): string {
+    if (!coin) return '—'
+    const amount = String(coin.amount || '')
+    const denom = String(coin.denom || '')
+    if (!amount && !denom) return '—'
+    if (!denom) return amount || '0'
+    return `${amount || '0'} ${denom}`
+  }
+
+  function formatBps(value: unknown): string {
+    const num = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(num)) return '—'
+    return `${(num / 100).toFixed(num % 100 === 0 ? 0 : 2)}%`
+  }
+
   const providerStatsByAddress = useMemo(() => {
     const byProvider = new Map<string, { assignedDeals: number; activeDeals: number; retrievals: number; bytesServed: number }>()
 
@@ -476,6 +519,10 @@ export function Dashboard() {
 
     return byProvider
   }, [allDeals, dealHeatById])
+
+  const retrievalFeeNote = retrievalParams
+    ? 'Base fee burned on session open. Variable fee locked until completion or cancel.'
+    : 'Loading retrieval parameters...'
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -1209,6 +1256,32 @@ export function Dashboard() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Retrieval Fees (Gamma-4)
+        </div>
+        <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
+            <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
+            <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
+            <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
+          </div>
+        </div>
+        <div className="px-6 pb-4 text-xs text-muted-foreground">
+          {retrievalFeeNote}
+          {retrievalParamsError ? (
+            <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
