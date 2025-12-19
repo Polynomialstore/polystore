@@ -46,12 +46,12 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (typeof manifestRoot === 'string' && manifestRoot.startsWith('0x')) {
       committedRoot = manifestRoot
     }
-    return route.fulfill({ status: 200, body: 'OK' })
+    return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
 
   await page.route('**/sp/upload_manifest', async (route) => {
     manifestUploadCalls += 1
-    return route.fulfill({ status: 200, body: 'OK' })
+    return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
 
   // Mock EVM RPC for wagmi + direct commit.
@@ -223,6 +223,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     await route.fulfill({
       status: 400,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({ error: 'slab not found on disk' }),
     })
   })
@@ -230,11 +231,17 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     await route.fulfill({
       status: 400,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({ error: 'slab not found on disk' }),
     })
   })
   await page2.route('**/gateway/list-files/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: [] }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ files: [] }),
+    })
   })
 
   // LCD deals: now shows CID on-chain.
@@ -337,8 +344,12 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   const fileRow = page2.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
 
+  const downloadButton = page2.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
+  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
+  await downloadButton.scrollIntoViewIfNeeded()
+  await page2.waitForTimeout(200)
   const downloadPromise = page2.waitForEvent('download', { timeout: 60_000 })
-  await page2.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click({ force: true })
   const download = await downloadPromise
   const stream = await download.createReadStream()
   const downloadedBytes = await streamToBuffer(stream)

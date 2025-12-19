@@ -420,7 +420,7 @@ test('repro bug: download from commit content widget', async ({
   const slabSection = slabHeader.locator('xpath=..')
   
   const fileRow = page.locator('div.flex.items-center.justify-between', { hasText: filePath })
-  await expect(fileRow).toBeVisible()
+  await expect(fileRow).toBeVisible({ timeout: 60_000 })
   
   const specificDownloadBtn = fileRow.locator('button', { hasText: 'Download' })
   

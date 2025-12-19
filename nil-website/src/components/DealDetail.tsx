@@ -90,7 +90,12 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
-  const transport = useTransportRouter()
+  const {
+    slab: fetchSlabLayout,
+    listFiles: listFilesTransport,
+    manifestInfo: manifestInfoTransport,
+    mduKzg: mduKzgTransport,
+  } = useTransportRouter()
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -165,7 +170,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     return () => {
       canceled = true
     }
-  }, [resolveProviderHttpBase, transport])
+  }, [])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -288,7 +293,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       setGatewaySlabStatus('unknown')
       setSlabSource('none')
       const directBase = resolveProviderHttpBase()
-      const result = await transport.slab({
+      const result = await fetchSlabLayout({
         manifestRoot: cid,
         dealId: String(dealId || ''),
         owner: String(owner || ''),
@@ -343,14 +348,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingSlab(false)
     }
-  }, [])
+  }, [fetchSlabLayout, resolveProviderHttpBase])
 
   const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
       const directBase = resolveProviderHttpBase()
-      const result = await transport.listFiles({
+      const result = await listFilesTransport({
         manifestRoot: cid,
         dealId,
         owner,
@@ -381,7 +386,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
-  }, [fetchLocalFiles, resolveProviderHttpBase, transport])
+  }, [fetchLocalFiles, resolveProviderHttpBase, listFilesTransport])
 
   const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
@@ -390,7 +395,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     setMerkleError(null)
     try {
       const directBase = resolveProviderHttpBase()
-      const result = await transport.manifestInfo({
+      const result = await manifestInfoTransport({
         manifestRoot: cid,
         dealId: dealId ? String(dealId) : undefined,
         owner,
@@ -460,14 +465,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingManifestInfo(false)
     }
-  }, [])
+  }, [manifestInfoTransport, resolveProviderHttpBase])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
     setMduKzgError(null)
     try {
       const directBase = resolveProviderHttpBase()
-      const result = await transport.mduKzg({
+      const result = await mduKzgTransport({
         manifestRoot: cid,
         mduIndex,
         dealId: dealId ? String(dealId) : undefined,
@@ -571,9 +576,10 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
-      void fetchSlab(deal.cid, deal.id, nilAddress)
-      void fetchFiles(deal.cid, deal.id, nilAddress)
-      void fetchManifestInfo(deal.cid, deal.id, nilAddress)
+      const owner = nilAddress || deal.owner
+      void fetchSlab(deal.cid, deal.id, owner)
+      void fetchFiles(deal.cid, deal.id, owner)
+      void fetchManifestInfo(deal.cid, deal.id, owner)
     } else {
       void fetchLocalFiles(deal.id)
       void fetchLocalSlabLayout(deal.id)
@@ -581,7 +587,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     }
     setFileActionError(null)
     void fetchHeat(deal.id)
-  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchLocalSlabLayout, fetchManifestInfo, fetchSlab, nilAddress])
+  }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchLocalSlabLayout, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">

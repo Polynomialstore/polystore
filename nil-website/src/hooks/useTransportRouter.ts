@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react'
 import { appConfig } from '../config'
 import {
   gatewayFetchSlabLayout,
@@ -7,11 +8,11 @@ import {
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
-import type { GatewayPlanResponse } from '../api/gatewayClient'
-import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
+import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
-import type { DecisionTrace, TransportOutcome, RoutePreference } from '../lib/transport/types'
+import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 
 type ListFilesRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
@@ -39,9 +40,9 @@ type MduKzgRequest = { manifestRoot: string; owner?: string; dealId?: string; md
 export function useTransportRouter() {
   const { preference, lastTrace, setLastTrace, setPreference } = useTransportContext()
 
-  const recordTrace = (trace: DecisionTrace) => setLastTrace(trace)
+  const recordTrace = useCallback((trace: DecisionTrace) => setLastTrace(trace), [setLastTrace])
 
-  const coerceHttpError = (err: unknown): never => {
+  const coerceHttpError = useCallback((err: unknown): never => {
     if (err instanceof TransportError) {
       throw err
     }
@@ -52,22 +53,29 @@ export function useTransportRouter() {
       throw new TransportError(msg, classifyStatus(status), status)
     }
     throw err instanceof Error ? err : new Error(msg)
-  }
+  }, [])
 
-  async function listFiles(req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> {
-    const candidates = [
+  const wrapExecute = useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn()
+    } catch (err) {
+      return coerceHttpError(err)
+    }
+  }, [coerceHttpError])
+
+  const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
+    const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayListFiles(appConfig.gatewayBase, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayListFiles(appConfig.gatewayBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       },
     ]
@@ -75,15 +83,14 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: req.directBase,
-        execute: async () => {
-          try {
-            return await gatewayListFiles(req.directBase!, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayListFiles(req.directBase!, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       })
     }
@@ -99,22 +106,21 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  async function slab(req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> {
-    const candidates = [
+  const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
+    const candidates: TransportCandidate<SlabLayoutData>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchSlabLayout(appConfig.gatewayBase, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchSlabLayout(appConfig.gatewayBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       },
     ]
@@ -122,15 +128,14 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: req.directBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchSlabLayout(req.directBase!, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchSlabLayout(req.directBase!, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       })
     }
@@ -146,25 +151,24 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  async function plan(req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> {
-    const candidates = [
+  const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
+    const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayPlanRetrievalSession(appConfig.gatewayBase, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayPlanRetrievalSession(appConfig.gatewayBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
               filePath: req.filePath,
               rangeStart: req.rangeStart,
               rangeLen: req.rangeLen,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       },
     ]
@@ -172,18 +176,17 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: req.directBase,
-        execute: async () => {
-          try {
-            return await gatewayPlanRetrievalSession(req.directBase!, req.manifestRoot, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayPlanRetrievalSession(req.directBase!, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
               filePath: req.filePath,
               rangeStart: req.rangeStart,
               rangeLen: req.rangeLen,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       })
     }
@@ -199,24 +202,23 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  async function uploadFile(req: UploadRequest) {
-    const candidates = [
+  const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
+    const candidates: TransportCandidate<UploadResult>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayUpload(appConfig.gatewayBase, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayUpload(appConfig.gatewayBase, {
               file: req.file,
               owner: req.owner,
               dealId: req.dealId,
               maxUserMdus: req.maxUserMdus,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       },
     ]
@@ -225,17 +227,16 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
-        execute: async () => {
-          try {
-            return await gatewayUpload(directBase, {
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayUpload(directBase, {
               file: req.file,
               owner: req.owner,
               dealId: req.dealId,
               maxUserMdus: req.maxUserMdus,
-            })
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            }),
+          )
         },
       })
     }
@@ -248,23 +249,22 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  async function manifestInfo(req: ManifestInfoRequest) {
-    const candidates = [
+  const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
+    const candidates: TransportCandidate<ManifestInfoData>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchManifestInfo(
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchManifestInfo(
               appConfig.gatewayBase,
               req.manifestRoot,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            )
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            ),
+          )
         },
       },
     ]
@@ -272,16 +272,15 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: req.directBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchManifestInfo(
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchManifestInfo(
               req.directBase!,
               req.manifestRoot,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            )
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            ),
+          )
         },
       })
     }
@@ -297,24 +296,23 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  async function mduKzg(req: MduKzgRequest) {
-    const candidates = [
+  const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
+    const candidates: TransportCandidate<MduKzgData>[] = [
       {
         backend: 'gateway' as const,
         endpoint: appConfig.gatewayBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchMduKzg(
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchMduKzg(
               appConfig.gatewayBase,
               req.manifestRoot,
               req.mduIndex,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            )
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            ),
+          )
         },
       },
     ]
@@ -322,17 +320,16 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: req.directBase,
-        execute: async () => {
-          try {
-            return await gatewayFetchMduKzg(
+        execute: async (signal) => {
+          void signal
+          return wrapExecute(() =>
+            gatewayFetchMduKzg(
               req.directBase!,
               req.manifestRoot,
               req.mduIndex,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            )
-          } catch (err) {
-            coerceHttpError(err)
-          }
+            ),
+          )
         },
       })
     }
@@ -348,9 +345,9 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }
+  }, [preference, recordTrace, wrapExecute])
 
-  return {
+  return useMemo(() => ({
     preference,
     lastTrace,
     setPreference,
@@ -360,5 +357,5 @@ export function useTransportRouter() {
     uploadFile,
     manifestInfo,
     mduKzg,
-  }
+  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg])
 }

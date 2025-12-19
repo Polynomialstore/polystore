@@ -76,6 +76,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0 }],
       }),
@@ -84,7 +85,12 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
 
   // Simulate the gateway being reachable but not having the slab on disk.
   await page.route('**/gateway/slab/**', async (route) => {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'slab not found on disk' }),
+    })
   })
 
   // Plan-retrieval-session must go to the SP base (8082), not the gateway base (8080).
@@ -92,13 +98,19 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     const url = route.request().url()
     if (url.includes(':8080/')) {
       gatewayPlanCalls += 1
-      return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+      return route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'slab not found on disk' }),
+      })
     }
     if (url.includes(':8082/')) {
       spPlanCalls += 1
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({
           deal_id: Number(dealId),
           owner: nilAddress,
@@ -113,7 +125,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
         }),
       })
     }
-    return route.fulfill({ status: 500, body: 'unexpected plan url' })
+    return route.fulfill({ status: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'unexpected plan url' })
   })
 
   await page.route('**/gateway/fetch/**', async (route) => {
@@ -133,7 +145,12 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     const url = route.request().url()
     if (url.includes(':8080/')) gatewayProofCalls += 1
     if (url.includes(':8082/')) spProofCalls += 1
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ ok: true }),
+    })
   })
 
   // EVM RPC mocks (same approach as other specs).
@@ -252,8 +269,10 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
   // Trigger SP download (wallet interactive).
+  const downloadButton = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
+  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
   const download = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click()
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
 

@@ -78,6 +78,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         manifest_root: manifestRoot,
         mdu_size_bytes: 8 * 1024 * 1024,
@@ -101,6 +102,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0 }],
       }),
@@ -112,6 +114,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         deal_id: Number(dealId),
         owner: nilAddress,
@@ -144,7 +147,12 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     const url = route.request().url()
     if (url.includes(':8080/')) gatewayProofCalls += 1
     if (url.includes(':8082/')) spProofCalls += 1
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ ok: true }),
+    })
   })
 
   // Debug raw fetch path (gateway "cache" shortcut in debug mode)
@@ -152,7 +160,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     gatewayRawCalls += 1
     await route.fulfill({
       status: 200,
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'application/octet-stream', 'Access-Control-Allow-Origin': '*' },
       body: fileBytes,
     })
   })
@@ -282,9 +290,12 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
   await expect(fileRow).toContainText('File cache: no')
 
+  const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
+
   // Browser Download: should fall back to SP retrieval (plan session) and then cache the bytes.
   const download1 = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click()
   const dl1 = await download1
   expect(await streamToBuffer(await dl1.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBeGreaterThan(0)
@@ -294,7 +305,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
 
   // Browser Download again: should use cached bytes (no extra plan calls).
   const download2 = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click()
   const dl2 = await download2
   expect(await streamToBuffer(await dl2.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBe(planCallsAfterFirst)
@@ -304,15 +315,17 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   await expect(fileRow).toContainText('File cache: no')
 
   const download3 = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click()
   const dl3 = await download3
   expect(await streamToBuffer(await dl3.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBeGreaterThan(planCallsAfterFirst)
 
   // Gateway raw fetch path should not require a plan call.
   const planCallsBeforeGateway = planCalls
+  const rawDownloadButton = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
+  await expect(rawDownloadButton).toBeVisible({ timeout: 60_000 })
   const download4 = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`).click()
+  await rawDownloadButton.click()
   const dl4 = await download4
   expect(await streamToBuffer(await dl4.createReadStream())).toEqual(fileBytes)
   expect(gatewayRawCalls).toBe(1)

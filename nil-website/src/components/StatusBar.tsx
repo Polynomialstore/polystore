@@ -61,7 +61,8 @@ export function StatusBar() {
 
   const lastRoute = lastTrace?.chosen?.backend ? lastTrace.chosen.backend.replace('_', ' ') : '—'
   const lastFailure = lastTrace?.attempts.find((a) => !a.ok)
-  const lastReason = lastFailure?.errorMessage ? ` (${lastFailure.errorMessage})` : ''
+  const lastReason =
+    lastTrace?.chosen && lastFailure?.errorMessage ? ` (${lastFailure.errorMessage})` : ''
 
   return (
     <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">

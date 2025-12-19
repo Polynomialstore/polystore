@@ -146,7 +146,7 @@ export function Dashboard() {
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
-  const transport = useTransportRouter()
+  const { listFiles, slab } = useTransportRouter()
 
   const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
@@ -311,7 +311,8 @@ export function Dashboard() {
 
   useEffect(() => {
     const manifestRoot = stagedUpload?.cid || targetDeal?.cid
-    if (!manifestRoot || !targetDealId || !nilAddress) {
+    const owner = nilAddress || targetDeal?.owner || ''
+    if (!manifestRoot || !targetDealId || !owner) {
       setContentFiles(null)
       setContentFilesError(null)
       setContentFilesLoading(false)
@@ -331,16 +332,16 @@ export function Dashboard() {
       try {
         const directBase = resolveProviderBase(targetDeal)
         const [filesResult, slabResult] = await Promise.allSettled([
-          transport.listFiles({
+          listFiles({
             manifestRoot,
             dealId: targetDealId,
-            owner: nilAddress,
+            owner,
             directBase,
           }),
-          transport.slab({
+          slab({
             manifestRoot,
             dealId: targetDealId,
-            owner: nilAddress,
+            owner,
             directBase,
           }),
         ])
@@ -380,7 +381,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, stagedUpload?.cid, targetDeal?.cid, targetDealId, transport])
+  }, [nilAddress, resolveProviderBase, stagedUpload?.cid, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
   useEffect(() => {
     if (address) {

@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
+const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 
-test('gateway absent: dashboard upload falls back to direct SP', async ({ page }) => {
+test.describe('gateway absent', () => {
+  test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
+
+  test('gateway absent: dashboard upload falls back to direct SP', async ({ page }) => {
   test.setTimeout(300_000)
 
   page.on('pageerror', (err) => {
@@ -60,5 +64,6 @@ test('gateway absent: dashboard upload falls back to direct SP', async ({ page }
   })
 
   await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 120_000 })
-  await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
+    await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
+  })
 })

@@ -41,6 +41,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   let planCalls = 0
   let gatewayProofCalls = 0
   let spProofCalls = 0
+  let listFilesCalls = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     await route.fulfill({
@@ -70,19 +71,75 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     })
   })
 
-  await page.route('**/gateway/list-files/**', async (route) => {
+  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ providers: [] }),
+    })
+  })
+
+  await page.route('**/nilchain/nilchain/v1/proofs', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ proof: [] }),
+    })
+  })
+
+  await page.route('**/health', async (route) => {
+    await route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'not running' })
+  })
+  await page.route('**/status', async (route) => {
+    await route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'not running' })
+  })
+
+  await page.route('**/gateway/list-files/**', async (route) => {
+    listFilesCalls += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0 }],
       }),
     })
   })
 
+  await page.route('**/gateway/manifest-info/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        manifest_root: manifestRoot,
+        manifest_blob_hex: `0x${'00'.repeat(48)}`,
+        total_mdus: 3,
+        witness_mdus: 1,
+        user_mdus: 1,
+        roots: [],
+      }),
+    })
+  })
+  await page.route('**/gateway/mdu-kzg/**', async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'not implemented in test' }),
+    })
+  })
+
   // Gateway slab can be missing; this test is about the Browser download behavior.
   await page.route('**/gateway/slab/**', async (route) => {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'slab not found on disk' }),
+    })
   })
 
   await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
@@ -90,6 +147,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         deal_id: Number(dealId),
         owner: nilAddress,
@@ -122,7 +180,12 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     const url = route.request().url()
     if (url.includes(':8080/')) gatewayProofCalls += 1
     if (url.includes(':8082/')) spProofCalls += 1
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ ok: true }),
+    })
   })
 
   // EVM RPC mocks
@@ -249,9 +312,12 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+  await expect.poll(() => listFilesCalls, { timeout: 60_000 }).toBeGreaterThan(0)
 
+  const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
   const download = page.waitForEvent('download', { timeout: 60_000 })
-  await page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).click()
+  await downloadButton.click()
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
   expect(planCalls).toBeGreaterThan(0)

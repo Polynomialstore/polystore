@@ -43,6 +43,7 @@ export function TransportProvider({ children }: { children: React.ReactNode }) {
   return <TransportContext.Provider value={value}>{children}</TransportContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTransportContext(): TransportContextType {
   const ctx = useContext(TransportContext)
   if (!ctx) throw new Error('useTransportContext must be used within TransportProvider')

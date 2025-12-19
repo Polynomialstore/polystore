@@ -52,18 +52,38 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
 
   // Gateway has no slab; list-files empty to force OPFS file parsing.
   await page.route('**/gateway/slab/**', async (route) => {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'slab not found on disk' }),
+    })
   })
   await page.route('**/gateway/list-files/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: [] }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ files: [] }),
+    })
   })
 
   // These endpoints fail on gateway; Deal Explorer should compute from OPFS instead.
   await page.route('**/gateway/manifest-info/**', async (route) => {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'slab not found on disk' }),
+    })
   })
   await page.route('**/gateway/mdu-kzg/**', async (route) => {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'slab not found on disk' }) })
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'slab not found on disk' }),
+    })
   })
 
   // Minimal injected wallet so the dashboard shows deals.
