@@ -26,6 +26,9 @@ export const AdversarialSimulation = () => {
           transition={{ duration: 0.6 }}
         >
           <h1 className="text-5xl font-bold mb-6 text-foreground">The "Lazy Provider" Attack</h1>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/40 text-xs text-muted-foreground mb-4">
+            Archived: incentive simulation (not the active threat model)
+          </div>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             Can a storage node cheat by outsourcing storage to a cheap, slow, centralized cloud service (like S3) instead of using high-performance local hardware? 
             <br/>

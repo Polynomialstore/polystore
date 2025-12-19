@@ -13,6 +13,7 @@ import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
 import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
+import { Security } from "./pages/Security";
 import { PerformanceReport } from "./pages/PerformanceReport";
 import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
 import { ProofsDashboard } from "./pages/ProofsDashboard";
@@ -42,7 +43,8 @@ function App() {
                 <Route path="s3-adapter" element={<S3AdapterDocs />} />
                 <Route path="governance" element={<GovernanceDocs />} />
                 <Route path="economy" element={<EconomyDashboard />} />
-                <Route path="security" element={<AdversarialSimulation />} />
+                <Route path="security" element={<Security />} />
+                <Route path="adversarial-simulation" element={<AdversarialSimulation />} />
                 <Route path="litepaper" element={<Litepaper />} />
                 <Route path="whitepaper" element={<Whitepaper />} />
                 <Route path="faq" element={<FAQ />} />
