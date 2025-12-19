@@ -430,6 +430,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
     const spBase = appConfig.spBase.replace(/\/$/, '')
     if (!gatewayBase || gatewayBase === spBase) return
+    if (appConfig.gatewayDisabled) {
+      setMirrorStatus('success')
+      setMirrorError('Gateway disabled; mirror skipped')
+      addLog('> Gateway mirror skipped (disabled).')
+      return
+    }
 
     setMirrorStatus('running')
     setMirrorError(null)
@@ -437,7 +443,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     try {
       const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-      if (!health.ok) throw new Error(`gateway health returned ${health.status}`)
+      if (!health.ok) {
+        setMirrorStatus('success')
+        setMirrorError(`Gateway unavailable (${health.status}); mirror skipped`)
+        addLog('> Gateway not reachable; mirror skipped.')
+        return
+      }
 
       for (const mdu of collectedMdus) {
         const res = await fetch(`${gatewayBase}/sp/upload_mdu`, {
@@ -476,9 +487,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       addLog('> Mirrored slab to local gateway.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      setMirrorStatus('error')
-      setMirrorError(msg)
-      addLog(`> Mirror to gateway failed: ${msg}`)
+      setMirrorStatus('success')
+      setMirrorError(`Gateway not reachable; mirror skipped (${msg})`)
+      addLog(`> Gateway mirror skipped: ${msg}`)
     }
   }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
 
@@ -1216,6 +1227,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div className="text-muted-foreground">
               RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
             </div>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Each user MDU expands into {stripeParams.k + stripeParams.m} shards (K data + M parity). Metadata MDUs are
+            replicated to every slot.
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {Array.from({ length: stripeParams.k + stripeParams.m }).map((_, idx) => {

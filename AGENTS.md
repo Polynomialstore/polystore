@@ -763,6 +763,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] **Task 3: Mode 2 retrieval aggregator.**
   - Gateways reconstruct MDUs from per-slot shards when local slab bytes are missing.
   - Fetches slot shards via `/sp/shard` and reassembles blob-aligned MDUs for streaming/proofs.
+- [ ] **Task 4: Gateway Mode 2 mirror support (UI + router).**
+  - Allow the browser to mirror Mode 2 slabs into the local gateway (optional), with clear UI feedback when the gateway is offline or disabled.
+  - Keep gateway-first flows intact; treat mirror as best-effort.
 
 #### 11.4.D Browser (User UX)
 - [x] **Task 1: RS selector in Create Deal.**
@@ -775,6 +778,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] **Task 3: Mode 2 retrieval path.**
   - Slot-aware fetch via provider endpoints and gateway reconstruction when needed.
   - Verify proofs against Mode 2 Merkle ordering with dynamic leaf counts.
+- [ ] **Task 4: WASM append (multi-file).**
+  - Load existing MDU #0 + witness MDUs from OPFS and append new FileRecords without dropping prior files.
+  - Recompute roots/manifest and persist the updated slab back to OPFS.
 
 #### 11.4.E Tests (Unit + E2E)
 - [x] **Unit:** nil_core RS param + decode tests (missing shards, invalid K|64).
