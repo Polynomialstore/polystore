@@ -582,8 +582,9 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - `chosen`: `{ backend, endpoint } | null`
     - `ErrorClass` (minimum): `timeout`, `connection_refused`, `dns`, `http_4xx`, `http_5xx`, `cors`, `provider_mismatch`, `invalid_response`, `unknown`
   - **Retry policy (deterministic and bounded):**
-    - Retryable: `timeout`, `connection_refused`, `dns`, `http_5xx`
-    - Not retryable: `http_4xx`, `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
+    - Retryable: `timeout`, `connection_refused`, `dns`, `http_5xx`, `http_429` (rate limit)
+      - `http_429` uses exponential backoff (bounded; e.g., 250ms → 1s → 2s).
+    - Not retryable: `http_4xx` (except 429), `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
     - Defaults: `maxAttemptsPerBackend=1`, `maxTotalAttempts=2`, `timeoutMs=10_000` (tunable per op).
   - **Pass gate:** new unit tests in `nil-website/src/lib/transport/router.test.ts` (runs under `npm run test:unit`) cover:
     - gateway-down → direct SP chosen
