@@ -100,8 +100,8 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   **Market:**
     *   **Re-branding:** [ ] Update copy to "Nilmanifold" & "Homogeneity".
     *   Announce the "Genesis Block."
-    *   **Web2 Wrapper:** [ ] Documentation for S3 Adapter.
-    *   **Governance:** [ ] Documentation for DAO & Council.
+*   **Web2 Wrapper:** [x] Documentation for S3 Adapter.
+*   **Governance:** [x] Documentation for DAO & Council.
     *   Focus on the "Web2 Wrapper" (S3 compatibility) to attract actual users, not just crypto speculators.
 
 ---
@@ -119,12 +119,12 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   [x] **Genesis:** Update `genesis.json` generation to include EVM parameters (ChainID, Gas Limits). (Auto-generated usually).
 
 ### Step 2: Smart Contract Deployment
-*   [ ] **Deploy `NilBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
-*   [ ] **Test Interaction:** Verify that calling the contract from MetaMask works.
+*   [x] **Deploy `NilBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
+*   [x] **Test Interaction:** Verify that calling the contract from MetaMask works.
 
 ### Step 3: Frontend Integration
-*   [ ] **Wallet Connection:** Add `wagmi` / `viem` to `nil-website`.
-*   [ ] **"Connect MetaMask" Button:** Allow users to see their balance and interact with the bridge contract.
+*   [x] **Wallet Connection:** Add `wagmi` / `viem` to `nil-website`.
+*   [x] **"Connect MetaMask" Button:** Allow users to see their balance and interact with the bridge contract.
 
 ---
 
@@ -219,14 +219,14 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
 ### 5. Work Stream: Protocol Cleanup (Dynamic Sizing)
-*   [ ] **Proto:** Remove `DealSize` enum and `deal_size` field from `types.proto`.
-*   [ ] **Logic:** Update `MsgCreateDeal` to ignore tier, defaulting to a "Thin Provisioned" state (0 bytes).
-*   [ ] **CLI:** Remove `tier` argument from `nil-cli create-deal`.
-*   [ ] **Web:** Remove Tier selection from Dashboard UI (`Dashboard.tsx`).
-*   [ ] **Web:** Remove Tier display from `DealDetail.tsx`.
+*   [x] **Proto:** Remove `DealSize` enum and `deal_size` field from `types.proto`.
+*   [x] **Logic:** Update `MsgCreateDeal` to ignore tier, defaulting to a "Thin Provisioned" state (0 bytes).
+*   [x] **CLI:** Remove `tier` argument from `nil-cli create-deal`.
+*   [x] **Web:** Remove Tier selection from Dashboard UI (`Dashboard.tsx`).
+*   [x] **Web:** Remove Tier display from `DealDetail.tsx`.
 
 ### 6. Work Stream: UI Polish
-*   [ ] **DealDetail:** Refactor `DealDetail.tsx` to use semantic Tailwind classes (support Light Mode).
+*   [x] **DealDetail:** Refactor `DealDetail.tsx` to use semantic Tailwind classes (support Light Mode).
 *   [ ] **Visualization:** Update Deal Explorer to visualize "Stripe Layout" (12 columns) instead of just linear blobs.
 
 ## Winter Roadmap: StripeReplica & Thick Client (Phase 3)
@@ -1182,7 +1182,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
     - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
 
-- [ ] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
+- [x] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
     - **Change:** For a fixed fixture file, assert:
         1. WASM `expand_file` MDUs/roots/commitments equal `nil_cli shard` output,
         2. resulting ManifestRoot equals canonical gateway ingest ManifestRoot.
