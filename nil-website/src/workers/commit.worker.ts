@@ -18,7 +18,7 @@ function initializeWasm(): Promise<void> {
 
   const wasmUrl = new URL('/wasm/nil_core_bg.wasm', self.location.origin)
   wasmInitPromise = (async () => {
-    await init(wasmUrl)
+    await init({ module_or_path: wasmUrl })
     wasmInitialized = true
   })().catch((err) => {
     wasmInitError = err
@@ -65,4 +65,3 @@ self.onmessage = async (event) => {
     ;(self as unknown as Worker).postMessage({ id, type: 'error', payload: message || 'Unknown worker error' })
   }
 }
-

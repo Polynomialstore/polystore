@@ -59,7 +59,7 @@ function deriveRoots(base: Uint8Array, indices: number[]): Uint8Array[] {
 
 const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
-await init(wasmBuffer)
+await init({ module_or_path: wasmBuffer })
 
 const trustedSetupPath = path.resolve(repoRoot, 'nilchain', 'trusted_setup.txt')
 const trustedSetup = await fs.readFile(trustedSetupPath)

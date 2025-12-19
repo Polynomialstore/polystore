@@ -15,7 +15,7 @@ test('Mdu0Builder WASM', async () => {
     const wasmBuffer = await fs.readFile(wasmPath);
     
     // Initialize WASM with the buffer
-    await init(wasmBuffer);
+    await init({ module_or_path: wasmBuffer });
 
     const maxUserMdus = 100n;
     const mdu = new WasmMdu0Builder(maxUserMdus);
