@@ -1,11 +1,7 @@
 name: Repro Bug E2E
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  push
 
 jobs:
   e2e-repro:
