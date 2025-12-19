@@ -29,6 +29,7 @@ DENOM="${NIL_DENOM:-stake}"
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
+NIL_GATEWAY_BIN="$ROOT_DIR/nil_gateway/nil_gateway"
 TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
@@ -158,6 +159,11 @@ ensure_nilchaind() {
 ensure_nil_cli() {
   banner "Building nil_cli (release)"
   (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+}
+
+ensure_nil_gateway() {
+  banner "Building nil_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/nil_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NIL_GATEWAY_BIN" .)
 }
 
 ensure_metadata() {
@@ -342,7 +348,7 @@ start_provider() {
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_PROVIDER_KEY="$key" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$GO_BIN" run . \
+      "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/$key.log" 2>&1 &
     echo $! >"$PID_DIR/$key.pid"
   )
@@ -360,7 +366,7 @@ start_router() {
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$GO_BIN" run . \
+      "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/router.log" 2>&1 &
     echo $! >"$PID_DIR/router.pid"
   )
@@ -430,6 +436,7 @@ start_all() {
   ensure_nil_core
   ensure_nilchaind
   ensure_nil_cli
+  ensure_nil_gateway
   init_chain
   start_chain
   start_faucet

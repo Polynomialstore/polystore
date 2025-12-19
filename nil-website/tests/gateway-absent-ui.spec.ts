@@ -29,7 +29,7 @@ test.describe('gateway absent', () => {
   const walletAddress = page.getByTestId('wallet-address')
   if (!(await walletAddress.isVisible().catch(() => false))) {
     const connectButton = page.getByTestId('connect-wallet').first()
-    await connectButton.click()
+    await connectButton.click({ force: true })
     await expect(walletAddress).toBeVisible({ timeout: 60_000 })
   }
 
