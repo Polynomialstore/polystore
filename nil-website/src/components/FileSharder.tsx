@@ -84,6 +84,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [slotBases, setSlotBases] = useState<string[]>([])
+  const [slotProviders, setSlotProviders] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<{ index: number; shards: Uint8Array[] }[]>([])
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
@@ -145,6 +146,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!dealId) {
         setStripeParams(null)
         setSlotBases([])
+        setSlotProviders([])
         return
       }
       try {
@@ -156,11 +158,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (!cancelled) setStripeParams(null)
         }
         const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
-        if (!cancelled) setSlotBases(endpoints.map((e) => e.baseUrl))
+        if (!cancelled) {
+          setSlotBases(endpoints.map((e) => e.baseUrl))
+          setSlotProviders(endpoints.map((e) => e.provider))
+        }
       } catch {
         if (!cancelled) {
           setStripeParams(null)
           setSlotBases([])
+          setSlotProviders([])
         }
       }
     }
@@ -1203,6 +1209,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
              </span>
           </div>
       </div>
+      {isMode2 && stripeParams && (
+        <div className="rounded-lg border border-border bg-card/70 p-3 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold text-foreground">Mode 2 Slots</div>
+            <div className="text-muted-foreground">
+              RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: stripeParams.k + stripeParams.m }).map((_, idx) => {
+              const provider = slotProviders[idx] || 'unassigned'
+              const base = slotBases[idx] || ''
+              return (
+                <div key={`slot-${idx}`} className="rounded border border-border bg-secondary/40 p-2">
+                  <div className="text-[10px] uppercase text-muted-foreground">Slot {idx}</div>
+                  <div className="font-mono text-[10px] text-foreground break-all">{provider}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground break-all">
+                    {base || 'missing endpoint'}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Dropzone */}
       <div

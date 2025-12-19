@@ -13,6 +13,7 @@ import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOp
 import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
+import { parseServiceHint } from '../lib/serviceHint'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -64,6 +65,8 @@ interface ProviderInfo {
 }
 
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
+  const serviceHint = parseServiceHint(deal?.service_hint)
+  const isMode2 = serviceHint.mode === 'mode2'
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
@@ -662,6 +665,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                   </div>
                 </div>
                 <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Redundancy</div>
+                  <div className="bg-secondary/50 border border-border rounded px-2 py-1 text-[11px] text-foreground">
+                    {isMode2 && serviceHint.rsK && serviceHint.rsM
+                      ? `Mode 2 • RS(${serviceHint.rsK},${serviceHint.rsM})`
+                      : `Mode 1 • Replicas ${serviceHint.replicas ?? '—'}`}
+                  </div>
+                </div>
+                <div className="space-y-1">
                   <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
                   <div className="grid grid-cols-2 gap-2">
                       <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
@@ -679,10 +690,13 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                   <div className="bg-secondary/50 border border-border rounded p-2">
                     {deal.providers && deal.providers.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {deal.providers.map((p: string) => (
+                          {deal.providers.map((p: string, idx: number) => (
                             <div key={p} className="space-y-1">
                               <div className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                                 <Server className="w-3 h-3" />
+                                {isMode2 && (
+                                  <span className="text-[10px] text-muted-foreground">Slot {idx}</span>
+                                )}
                                 {p}
                                 {providersByAddr[p]?.status && (
                                   <span className="text-muted-foreground">({providersByAddr[p]?.status})</span>

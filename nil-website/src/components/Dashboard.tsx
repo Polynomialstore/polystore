@@ -13,7 +13,7 @@ import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
-import { buildServiceHint } from '../lib/serviceHint'
+import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { injectedConnector } from '../lib/web3Config'
 import { formatUnits } from 'viem'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
@@ -63,6 +63,7 @@ export function Dashboard() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
+  const providerCount = providers.length
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
   const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
@@ -280,6 +281,27 @@ export function Dashboard() {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
   }, [deals, targetDealId])
+  const targetDealService = useMemo(
+    () => parseServiceHint(targetDeal?.service_hint),
+    [targetDeal?.service_hint],
+  )
+  const isTargetDealMode2 = targetDealService.mode === 'mode2'
+  const mode2Config = useMemo(() => {
+    if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
+    const k = Number(rsK)
+    const m = Number(rsM)
+    if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
+      return { slots: null, error: 'Enter numeric K and M values.' }
+    }
+    const slots = k + m
+    if (64 % k !== 0) {
+      return { slots, error: 'K must divide 64.' }
+    }
+    if (providerCount > 0 && slots > providerCount) {
+      return { slots, error: `Need ${slots} providers (K+M); only ${providerCount} available.` }
+    }
+    return { slots, error: null }
+  }, [providerCount, redundancyMode, rsK, rsM])
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -646,6 +668,17 @@ export function Dashboard() {
             setStatusMsg('Mode 2 requires K to divide 64.')
             return
           }
+          const slots = k + m
+          if (providerCount === 0) {
+            setStatusTone('error')
+            setStatusMsg('Provider list not loaded yet. Retry in a few seconds.')
+            return
+          }
+          if (slots > providerCount) {
+            setStatusTone('error')
+            setStatusMsg(`Mode 2 requires ${slots} providers (K+M), but only ${providerCount} are available.`)
+            return
+          }
           const n = k + m
           serviceHint = buildServiceHint('General', { replicas: n, rsK: k, rsM: m })
         } else {
@@ -667,7 +700,7 @@ export function Dashboard() {
           await fetchBalances(nilAddress)
           // Auto-switch to content tab and pre-fill deal ID
           setTargetDealId(String(res.deal_id))
-          setActiveTab('content')
+          setActiveTab(redundancyMode === 'mode2' ? 'mdu' : 'content')
         }
       } catch (e) {
         setStatusTone('error')
@@ -1020,6 +1053,16 @@ export function Dashboard() {
                               </label>
                           </div>
                         )}
+                        {redundancyMode === 'mode2' && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Slots required: <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                            {' '}• Providers available:{' '}
+                            <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                            {mode2Config.error && (
+                              <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
+                            )}
+                          </div>
+                        )}
                     </div>
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-xs text-muted-foreground">
@@ -1027,7 +1070,7 @@ export function Dashboard() {
                         </div>
                         <button
                             onClick={handleCreateDeal}
-                            disabled={dealLoading}
+                            disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
                             data-testid="alloc-submit"
                             className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
@@ -1066,6 +1109,17 @@ export function Dashboard() {
                               • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
                             </div>
                           )}
+                          {isTargetDealMode2 && (
+                            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300 flex items-center justify-between gap-2">
+                              <span>Mode 2 deals require Local MDU (WASM). Gateway upload is disabled for this deal.</span>
+                              <button
+                                onClick={() => setActiveTab('mdu')}
+                                className="text-[11px] font-semibold underline"
+                              >
+                                Open MDU tab
+                              </button>
+                            </div>
+                          )}
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                                   <Upload className="w-3 h-3 text-primary" />
@@ -1074,7 +1128,7 @@ export function Dashboard() {
                               <input
                                   type="file"
                                   onChange={handleFileChange}
-                                  disabled={uploadLoading || !targetDealId}
+                                  disabled={uploadLoading || !targetDealId || isTargetDealMode2}
                                   data-testid="content-file-input"
                                   className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
                               />
@@ -1288,7 +1342,7 @@ export function Dashboard() {
                           </div>
                           <button
                               onClick={() => stagedUpload && handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)}
-                              disabled={updateLoading || !stagedUpload || !targetDealId}
+                              disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
                               data-testid="content-commit"
                               className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                           >
