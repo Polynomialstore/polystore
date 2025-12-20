@@ -35,20 +35,20 @@ async function createClient(): Promise<import('libp2p').Libp2p> {
     throw new Error('libp2p transport is disabled')
   }
 
-  const [{ createLibp2p }, { webSockets }, { noise }, { mplex }, { createEd25519PeerId }] = await Promise.all([
+  const [{ createLibp2p }, { webSockets }, { noise }, { mplex }, { generateKeyPair }] = await Promise.all([
     import('libp2p'),
     import('@libp2p/websockets'),
     import('@chainsafe/libp2p-noise'),
     import('@libp2p/mplex'),
-    import('@libp2p/peer-id-factory'),
+    import('@libp2p/crypto/keys'),
   ])
 
-  const peerId = await createEd25519PeerId()
+  const privateKey = await generateKeyPair('Ed25519')
   const bootstrapList = appConfig.p2pBootstrap
   const peerDiscovery = bootstrapList.length > 0 ? [ (await import('@libp2p/bootstrap')).bootstrap({ list: bootstrapList }) ] : undefined
 
   const node = await createLibp2p({
-    peerId,
+    privateKey,
     transports: [webSockets()],
     connectionEncrypters: [noise()],
     streamMuxers: [mplex()],
