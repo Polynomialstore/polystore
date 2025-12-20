@@ -179,6 +179,13 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
 
 This section norms the **Blob-Aligned Striping** model required for Mode 2 operation, resolving the conflict between cryptographic verification (KZG) and network distribution (Erasure Coding).
 
+### 8.0 Mode 2 Ingestion (Gateway-Optional)
+Mode 2 deals require **client-side RS(K, K+M) encoding** of each SP‑MDU before upload. In devnet, this is performed by:
+* **Browser/WASM** (worker + OPFS) or **CLI** tooling.
+* The **local gateway is optional** and MUST NOT sign on the user’s behalf.
+
+**Devnet requirement:** the default `/gateway/upload` path is **disabled for Mode 2** deals. Clients MUST upload per‑slot shards **directly** to the assigned providers; a gateway may optionally **mirror/cache** those shards for convenience, but is not required for correctness.
+
 ### 8.1 The "Aligned" Striping Model
 
 To enable **Shared-Nothing Verification** (where a provider can verify their own shard without network communication), the atomic unit of striping must match the atomic unit of KZG verification: the **Blob**.
@@ -352,6 +359,7 @@ For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → 
 Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed system at the deal layer and cache aggressively:
 * **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify NilFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
 * **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
+* **Browser caching:** when running in-browser, clients SHOULD persist slabs in OPFS to enable gateway‑absent reads and multi‑tab continuity.
 * **Data caching:** cache reconstructed plaintext files (or reconstructed SP‑MDUs) behind an LRU keyed by `(deal_id, Deal.current_gen, file_path, byte_range)` to avoid repeated network fetches; revalidation can be performed by re-checking on-chain `Deal.manifest_root` and (optionally) re-verifying proofs on cache fill.
 
 ### 7.2 Control Plane: Retrieval Sessions, Proof-of-Retrieval, and Completion (Planned → Mandated)
@@ -576,9 +584,9 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
 | Mode 1 replication (`providers[]` length > 1) | NO | Devnet Alpha uses `replicas=1` in `ServiceHint` |
 | Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` |
-| Gateway role | MUST | routes/proxies to the assigned provider; SHOULD not read local deal bytes |
+| Gateway role | OPTIONAL | routing + cache helper; direct‑to‑provider is first‑class and preferred for Mode 2 |
 | Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
-| Upload/ingest | MUST | upload directed to the assigned provider for the deal |
+| Upload/ingest | MUST | per‑slot upload to assigned providers; Mode 2 encoding is client‑side (WASM/CLI); gateway mirroring optional |
 | Retrieval by `file_path` + `Range` | MUST | chunked retrievals; max chunk ≤ one blob (`BLOB_SIZE`) |
 | Session proof submission | MUST | session-bound proofs; provider submits to chain |
 | Bundled session proofs | SHOULD | reduce wallet prompts / tx count |

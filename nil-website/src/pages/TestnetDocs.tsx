@@ -96,7 +96,10 @@ export const TestnetDocs = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Faucet + Deal)</h2>
           <p className="text-muted-foreground">
-            With the faucet running, the Dashboard now lets you connect MetaMask, request funds (0x or nil1 address), and submit a storage deal directly from the browser. Deals are broadcast by the faucet service using its local keyring for now.
+            With the faucet running, the Dashboard lets you connect MetaMask, request funds (0x or nil1 address), and create deals directly from the browser. All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile; the faucet only dispenses test funds.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            The browser client can shard and commit using WASM + OPFS. The local gateway is optional routing/cache infrastructure, and Mode 2 deals require client-side RS encoding with direct uploads to assigned providers.
           </p>
           <div className="bg-secondary/10 rounded-xl p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
             <p>$ # in nil_faucet/</p>

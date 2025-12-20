@@ -8,6 +8,9 @@ export const S3AdapterDocs = () => {
         <p className="text-xl text-muted-foreground">
           NilStore provides a native Go-based adapter (`nil_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
         </p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          The gateway is optional for browser-native clients (WASM + OPFS), but it remains the easiest path for Web2/S3 compatibility and large-volume ingestion.
+        </p>
       </div>
 
       <div className="grid gap-12">
