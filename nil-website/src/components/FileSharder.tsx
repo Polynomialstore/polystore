@@ -6,7 +6,9 @@ import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
-import { writeManifestRoot, writeMdu } from '../lib/storage/OpfsAdapter';
+import { readMdu, writeManifestRoot, writeMdu } from '../lib/storage/OpfsAdapter';
+import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
@@ -120,6 +122,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const etaLastTickMsRef = useRef<number | null>(null);
   const etaLastRawMsRef = useRef<number | null>(null);
   const lastCommitRef = useRef<string | null>(null);
+  const lastCommitTxRef = useRef<string | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -178,8 +181,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   useEffect(() => {
     if (!isCommitSuccess) return;
-    if (!currentManifestRoot || !dealId) return;
-    if (lastCommitRef.current === currentManifestRoot) return;
+    if (!currentManifestRoot || !dealId || !commitHash) return;
+    if (lastCommitTxRef.current === commitHash) return;
+    lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
@@ -442,6 +446,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     try {
       let mirrorMduPath = '/sp/upload_mdu'
+      let mirrorShardPath = '/sp/upload_shard'
       let mirrorManifestPath = '/sp/upload_manifest'
 
       const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
@@ -449,6 +454,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const payload = await statusRes.json().catch(() => null)
         if (payload && typeof payload === 'object' && payload.mode === 'router') {
           mirrorMduPath = '/gateway/mirror_mdu'
+          mirrorShardPath = '/gateway/mirror_shard'
           mirrorManifestPath = '/gateway/mirror_manifest'
           addLog('> Gateway router detected; using mirror endpoints.')
         }
@@ -467,7 +473,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
-      for (const mdu of collectedMdus) {
+      const witnessCount = shardProgress.totalWitnessMdus
+      const metadataMdus = isMode2
+        ? collectedMdus.filter((mdu) => mdu.index <= witnessCount)
+        : collectedMdus
+
+      for (const mdu of metadataMdus) {
         const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
           method: 'POST',
           headers: {
@@ -500,16 +511,60 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         throw new Error(txt || `gateway upload_manifest failed (${manifestRes.status})`)
       }
 
+      if (isMode2 && mode2Shards.length > 0) {
+        for (const mdu of mode2Shards) {
+          const slabIndex = 1 + witnessCount + mdu.index
+          for (let slot = 0; slot < mdu.shards.length; slot++) {
+            const shard = mdu.shards[slot]
+            if (!shard) {
+              throw new Error(`missing shard for slot ${slot}`)
+            }
+            const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
+              method: 'POST',
+              headers: {
+                'X-Nil-Deal-ID': dealId,
+                'X-Nil-Mdu-Index': String(slabIndex),
+                'X-Nil-Slot': String(slot),
+                'X-Nil-Manifest-Root': manifestRoot,
+                'Content-Type': 'application/octet-stream',
+              },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              body: new Blob([shard as any]),
+            })
+            if (!res.ok) {
+              const txt = await res.text().catch(() => '')
+              throw new Error(txt || `gateway upload_shard failed (${res.status})`)
+            }
+          }
+        }
+      }
+
       setMirrorStatus('success')
       setMirrorError(null)
       addLog('> Mirrored slab to local gateway.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      setMirrorStatus('error')
-      setMirrorError(msg)
-      addLog(`> Gateway mirror failed: ${msg}`)
+      const isNetwork = /Failed to fetch|NetworkError|fetch failed/i.test(msg)
+      if (isNetwork) {
+        setMirrorStatus('skipped')
+        setMirrorError('Gateway not reachable')
+        addLog('> Gateway not reachable; mirror skipped.')
+      } else {
+        setMirrorStatus('error')
+        setMirrorError(msg)
+        addLog(`> Gateway mirror failed: ${msg}`)
+      }
     }
-  }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
+  }, [
+    addLog,
+    collectedMdus,
+    currentManifestBlob,
+    currentManifestRoot,
+    dealId,
+    isMode2,
+    mode2Shards,
+    shardProgress.totalWitnessMdus,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -620,12 +675,55 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const buffer = await file.arrayBuffer();
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
-    const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
-    const totalUserChunks = Math.ceil(bytes.length / RawMduCapacity);
+    const RawMduCapacity = RAW_MDU_CAPACITY;
     const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
     const rsK = useMode2 ? stripeParams!.k : 0
     const rsM = useMode2 ? stripeParams!.m : 0
     const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64
+
+    let baseMdu0Bytes: Uint8Array | null = null
+    let existingUserMdus: { index: number; data: Uint8Array }[] = []
+    let existingUserCount = 0
+    let existingMaxEnd = 0
+    let appendStartOffset = 0
+
+    if (useMode2) {
+      try {
+        const mdu0 = await readMdu(dealId, 0)
+        if (mdu0) {
+          const files = parseNilfsFilesFromMdu0(mdu0)
+          if (files.length > 0) {
+            const existing = await inferWitnessCountFromOpfs(dealId, files)
+            if (existing.userCount > 0) {
+              baseMdu0Bytes = mdu0
+              existingUserCount = existing.userCount
+              existingMaxEnd = existing.maxEnd
+              appendStartOffset = existing.userCount * RawMduCapacity
+              for (let i = 0; i < existing.userCount; i++) {
+                const mdu = await readMdu(dealId, existing.slabStartIdx + i)
+                if (!mdu) {
+                  throw new Error(`missing local MDU: mdu_${existing.slabStartIdx + i}.bin`)
+                }
+                existingUserMdus.push({ index: i, data: mdu })
+              }
+              addLog(`> Mode 2 append: found ${existing.userCount} existing user MDUs; starting new file at ${formatBytes(appendStartOffset)}.`)
+            }
+          }
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        addLog(`> Mode 2 append: failed to load existing slab (${msg}).`)
+        baseMdu0Bytes = null
+        existingUserMdus = []
+        existingUserCount = 0
+        existingMaxEnd = 0
+        appendStartOffset = 0
+      }
+    }
+
+    const newUserChunks = Math.ceil(bytes.length / RawMduCapacity)
+    const totalUserChunks = existingUserCount + newUserChunks
+    const totalFileBytes = appendStartOffset + bytes.length
     const witnessBytesPerMdu = leafCount * 48; // commitments per MDU * 48 bytes
     const witnessMduCount = Math.max(1, Math.ceil((witnessBytesPerMdu * totalUserChunks) / RawMduCapacity));
     addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
@@ -671,7 +769,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
 
     const userPayloads: number[] = [];
-    for (let i = 0; i < totalUserChunks; i++) {
+    for (let i = 0; i < existingUserCount; i++) {
+      const start = i * RawMduCapacity;
+      const end = Math.min(start + RawMduCapacity, existingMaxEnd);
+      userPayloads.push(Math.max(0, end - start));
+    }
+    for (let i = 0; i < newUserChunks; i++) {
       const start = i * RawMduCapacity;
       const end = Math.min(start + RawMduCapacity, bytes.length);
       userPayloads.push(Math.max(0, end - start));
@@ -692,6 +795,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       blobsInCurrentMdu: 0,
       workDone: 0,
       workTotal,
+      fileBytesTotal: totalFileBytes,
       totalUserMdus: totalUserChunks,
       totalWitnessMdus: witnessMduCount,
       currentOpStartedAtMs: null,
@@ -717,7 +821,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const commitmentsPerMdu = useMode2
           ? (rsK + rsM) * (64 / rsK)
           : undefined
-        await workerClient.initMdu0Builder(totalUserChunks, commitmentsPerMdu);
+        const appendMode2 = useMode2 && baseMdu0Bytes && existingUserCount > 0
+        if (appendMode2 && baseMdu0Bytes) {
+          const mdu0Copy = new Uint8Array(baseMdu0Bytes)
+          await workerClient.loadMdu0Builder(mdu0Copy, totalUserChunks, commitmentsPerMdu);
+        } else {
+          await workerClient.initMdu0Builder(totalUserChunks, commitmentsPerMdu);
+        }
 
         let mdusCommitted = 0;
         let workCommitted = 0;
@@ -740,6 +850,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
         for (let i = 0; i < totalUserChunks; i++) {
             const opStart = performance.now();
+            const isExisting = appendMode2 && i < existingUserCount;
             const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0);
             const workTotalThisMdu = weightedWorkForMdu(nonTrivialBlobs);
             setShardProgress((p) => ({
@@ -757,20 +868,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
             );
 
-            const encodeStart = performance.now();
-            const start = i * RawMduCapacity;
-            const end = Math.min(start + RawMduCapacity, bytes.length);
-            const rawChunk = bytes.subarray(start, end);
+            let rawChunk = new Uint8Array();
+            let encodedMdu: Uint8Array;
+            let encodeMs = 0;
 
-            const encodedMdu = encodeToMdu(rawChunk);
+            if (isExisting) {
+              encodedMdu = existingUserMdus[i].data;
+            } else {
+              const newIndex = i - existingUserCount;
+              const start = newIndex * RawMduCapacity;
+              const end = Math.min(start + RawMduCapacity, bytes.length);
+              rawChunk = bytes.subarray(start, end);
+              const encodeStart = performance.now();
+              encodedMdu = encodeToMdu(rawChunk);
+              encodeMs = performance.now() - encodeStart;
+            }
+
             userMdus.push({ index: i, data: encodedMdu });
-            const encodeMs = performance.now() - encodeStart;
             const copyStart = performance.now();
             const chunkCopy = new Uint8Array(encodedMdu);
             const copyMs = performance.now() - copyStart;
 
             if (useMode2) {
-              addLog(`> Sharding User MDU #${i} (RS ${rsK}+${rsM})...`);
+              addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})...`);
               const wasmStart = performance.now();
               const result = await workerClient.expandMduRs(chunkCopy, rsK, rsM);
               const wasmMs = performance.now() - wasmStart;
@@ -780,12 +900,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const witnessFlat = toU8(result.witness_flat);
               witnessDataBlobs.push(witnessFlat);
               const shardsList = result.shards.map((s) => toU8(s));
-              mode2UserShards.push({ index: i, shards: shardsList });
+              if (!isExisting) {
+                mode2UserShards.push({ index: i, shards: shardsList });
+              }
 
               const opMs = performance.now() - opStart;
               console.log('[perf] user mdu (mode2)', {
                 i,
-                rawBytes: rawChunk.byteLength,
+                rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
                 encodeMs,
                 copyMs,
                 wasmMs,
@@ -1003,7 +1125,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
         }
 
-        await workerClient.appendFileToMdu0(file.name, file.size, 0);
+        const fileStartOffset = appendMode2 ? appendStartOffset : 0;
+        await workerClient.appendFileToMdu0(file.name, file.size, fileStartOffset);
 
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
@@ -1135,7 +1258,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
         addLog(
           useMode2
-            ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} striped user MDUs`
+            ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} new striped user MDUs`
             : `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`,
         );
 
@@ -1175,7 +1298,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [isConnected, wasmStatus, wasmError, addLog, resetUpload, stripeParams]);
+  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {

@@ -201,6 +201,19 @@ self.onmessage = async (event) => {
                 result = 'Mdu0Builder initialized';
                 break;
             }
+            case 'loadMdu0Builder': {
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const { data, maxUserMdus, commitmentsPerMdu } = payload as {
+                    data: Uint8Array;
+                    maxUserMdus: number;
+                    commitmentsPerMdu?: number;
+                };
+                if (!(data instanceof Uint8Array)) throw new Error('MDU0 data must be a Uint8Array');
+                const commitments = commitmentsPerMdu && Number(commitmentsPerMdu) > 0 ? commitmentsPerMdu : 0;
+                mdu0BuilderInstance = WasmMdu0Builder.load(data, BigInt(maxUserMdus), BigInt(commitments));
+                result = 'Mdu0Builder loaded';
+                break;
+            }
             case 'appendFileToMdu0': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 const { path, size, startOffset } = payload;

@@ -154,6 +154,13 @@ impl WasmMdu0Builder {
         WasmMdu0Builder { inner: Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu) }
     }
 
+    #[wasm_bindgen]
+    pub fn load(data: &[u8], max_user_mdus: u64, commitments_per_mdu: u64) -> Result<WasmMdu0Builder, JsValue> {
+        let builder = Mdu0Builder::load_with_commitments(data, max_user_mdus, commitments_per_mdu)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(WasmMdu0Builder { inner: builder })
+    }
+
     pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {
         let mut path_bytes = [0u8; 40];
         let bytes = path.as_bytes();
