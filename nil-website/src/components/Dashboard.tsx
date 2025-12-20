@@ -277,6 +277,24 @@ export function Dashboard() {
     return counts
   }, [dealHeatById, deals])
 
+  const dealSummary = useMemo(() => {
+    let active = 0
+    let totalBytes = 0
+    for (const deal of deals) {
+      if (String(deal.cid || '').trim()) active += 1
+      const sizeNum = Number(deal.size)
+      if (Number.isFinite(sizeNum) && sizeNum > 0) totalBytes += sizeNum
+    }
+    const retrievals = Object.values(retrievalCountsByDeal).reduce((sum, count) => sum + (Number(count) || 0), 0)
+    return {
+      total: deals.length,
+      active,
+      allocated: Math.max(0, deals.length - active),
+      totalBytes,
+      retrievals,
+    }
+  }, [deals, retrievalCountsByDeal])
+
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -843,59 +861,70 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
-        <div>
-            <h2 className="text-2xl font-bold text-foreground">My Storage Deals</h2>
-            <p className="text-muted-foreground text-sm mt-1">Manage your active file contracts</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-3">
-                <button 
-                    onClick={handleRequestFunds}
-                    disabled={faucetLoading}
-                    data-testid="faucet-request"
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
-                >
-                    {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
-                    {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
-                </button>
-                {faucetTx && (
-                  <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
-                    <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate max-w-[120px]" title={faucetTx}>
-                        Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
-                    </span>
-                    <span className="opacity-75">({faucetTxStatus})</span>
-                  </div>
-                )}
-                <div className="text-right">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
-                    <div className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10" data-testid="cosmos-identity">
-                        {nilAddress}
-                    </div>
-                </div>
+      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">My Storage Deals</h2>
+              <p className="text-muted-foreground text-sm mt-1">Allocate, commit, and retrieve data across the network.</p>
             </div>
-        </div>
-      </div>
-
-      {statusMsg && (
-        <div className={`rounded-lg border px-4 py-3 text-sm ${
-          statusTone === 'error'
-            ? 'border-destructive/50 bg-destructive/10 text-destructive'
-            : statusTone === 'success'
-            ? 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400'
-            : 'border-border bg-secondary/50 text-muted-foreground'
-        }`}>
-          {statusMsg}
-        </div>
-      )}
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-card rounded-xl border border-border p-6 space-y-4 shadow-sm">
-          <div className="flex items-center gap-2 text-foreground font-semibold">
-            <Coins className="w-4 h-4 text-yellow-500" />
-            Wallet & Funds
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+                Chain ID <span className="font-mono text-foreground">{activeChainId}</span>
+              </span>
+              <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+                Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
+              </span>
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="bg-secondary/50 border border-border rounded-lg p-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Total Deals</div>
+              <div className="text-lg font-semibold text-foreground">{dealSummary.total}</div>
+            </div>
+            <div className="bg-secondary/50 border border-border rounded-lg p-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Active Deals</div>
+              <div className="text-lg font-semibold text-foreground">{dealSummary.active}</div>
+            </div>
+            <div className="bg-secondary/50 border border-border rounded-lg p-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Retrievals</div>
+              <div className="text-lg font-semibold text-foreground">{dealSummary.retrievals}</div>
+            </div>
+            <div className="bg-secondary/50 border border-border rounded-lg p-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Stored</div>
+              <div className="text-lg font-semibold text-foreground">{formatBytes(dealSummary.totalBytes)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-foreground font-semibold">
+              <Coins className="w-4 h-4 text-yellow-500" />
+              Wallet & Funds
+            </div>
+            <button
+              onClick={handleRequestFunds}
+              disabled={faucetLoading}
+              data-testid="faucet-request"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
+            >
+              {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
+              {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
+            </button>
+          </div>
+
+          {faucetTx && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
+              <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate max-w-[160px]" title={faucetTx}>
+                Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
+              </span>
+              <span className="opacity-75">({faucetTxStatus})</span>
+            </div>
+          )}
+
           <div className="text-sm text-muted-foreground space-y-3">
             <div className="font-mono text-primary break-all">Address: {address || nilAddress}</div>
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -919,51 +948,98 @@ export function Dashboard() {
                 </div>
               </div>
             </div>
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
+              <div
+                className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10"
+                data-testid="cosmos-identity"
+              >
+                {nilAddress}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-                <button
+              <button
                 onClick={() => disconnect()}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
-                >
+              >
                 Disconnect
-                </button>
-                <span className="text-border">|</span>
-                <button
+              </button>
+              <span className="text-border">|</span>
+              <button
                 onClick={() => switchNetwork()}
                 className="text-xs text-primary hover:text-primary/80 underline"
-                >
+              >
                 Force Switch Network
-                </button>
+              </button>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="bg-card rounded-xl border border-border p-0 overflow-hidden flex flex-col shadow-sm">
-          {/* Tabs */}
-          <div className="flex border-b border-border">
-              <button 
-                onClick={() => setActiveTab('alloc')}
-                data-testid="tab-alloc"
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'alloc' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
-              >
-                  <HardDrive className="w-4 h-4" />
-                  1. Alloc Capacity
-              </button>
-              <button 
-                onClick={() => setActiveTab('content')}
-                data-testid="tab-content"
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'content' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
-              >
-                  <Database className="w-4 h-4" />
-                  2. Commit Content
-              </button>
-              <button 
-                onClick={() => setActiveTab('mdu')}
-                data-testid="tab-mdu"
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'mdu' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
-              >
-                  <Cpu className="w-4 h-4" />
-                  Local MDU (WASM)
-              </button>
+      {statusMsg && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          statusTone === 'error'
+            ? 'border-destructive/50 bg-destructive/10 text-destructive'
+            : statusTone === 'success'
+            ? 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400'
+            : 'border-border bg-secondary/50 text-muted-foreground'
+        }`}>
+          {statusMsg}
+        </div>
+      )}
+
+      <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+        <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal Workflow</div>
+            <h3 className="text-lg font-semibold text-foreground">Allocate → Commit → Retrieve</h3>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Use the tabs to move between allocation, content, and local MDU flows.
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row">
+          <div className="flex lg:flex-col border-b lg:border-b-0 lg:border-r border-border">
+            <button 
+              onClick={() => setActiveTab('alloc')}
+              data-testid="tab-alloc"
+              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
+                activeTab === 'alloc'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+              }`}
+            >
+              <span className="text-[10px] font-semibold text-muted-foreground">STEP 1</span>
+              <HardDrive className="w-4 h-4" />
+              Allocate Capacity
+            </button>
+            <button 
+              onClick={() => setActiveTab('content')}
+              data-testid="tab-content"
+              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
+                activeTab === 'content'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+              }`}
+            >
+              <span className="text-[10px] font-semibold text-muted-foreground">STEP 2</span>
+              <Database className="w-4 h-4" />
+              Commit Content
+            </button>
+            <button 
+              onClick={() => setActiveTab('mdu')}
+              data-testid="tab-mdu"
+              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
+                activeTab === 'mdu'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+              }`}
+            >
+              <span className="text-[10px] font-semibold text-muted-foreground">STEP 3</span>
+              <Cpu className="w-4 h-4" />
+              Local MDU (WASM)
+            </button>
           </div>
 
           <div className="p-6 flex-1">
