@@ -13,9 +13,9 @@ export const Security = () => {
           <h1 className="text-4xl font-bold text-foreground">Security & Threat Model</h1>
         </div>
         <p className="text-muted-foreground text-lg leading-relaxed">
-          NilStore assumes untrusted providers and adversarial networks. Security is enforced by on-chain deal state,
-          KZG commitments, and retrieval-session accounting. This page summarizes the threat model and the concrete
-          mechanisms that keep storage and retrieval verifiable.
+          NilStore assumes untrusted providers, adversarial clients, and unreliable networks. Security is enforced by
+          on-chain deal state, KZG commitments, Merkle inclusion proofs, and retrieval-session accounting. This page
+          summarizes the threat model and the concrete mechanisms that keep storage and retrieval verifiable.
         </p>
       </div>
 
@@ -26,7 +26,7 @@ export const Security = () => {
             <Server className="w-5 h-5 text-amber-400 mt-0.5" />
             <div>
               <div className="font-semibold text-foreground">Untrusted Providers</div>
-              <p>Storage providers must regularly prove they have the data they are supposed to have or they are slashed and automatically replaced.</p>
+              <p>Providers are assumed to be rational or malicious; they only get paid when they serve valid proofs.</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -48,6 +48,13 @@ export const Security = () => {
             <div>
               <div className="font-semibold text-foreground">Client Keys Stay Local</div>
               <p>All on-chain actions require the user wallet; gateways never sign on the user’s behalf.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Lock className="w-5 h-5 text-indigo-400 mt-0.5" />
+            <div>
+              <div className="font-semibold text-foreground">Adversarial Clients</div>
+              <p>Users can attempt to grief providers; sessions lock fees so providers never serve unfunded requests.</p>
             </div>
           </div>
         </div>
@@ -72,12 +79,59 @@ export const Security = () => {
       </div>
 
       <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+        <h2 className="text-2xl font-bold text-foreground mb-6">Default Verification: Triple Proof</h2>
+        <div className="grid md:grid-cols-3 gap-6 text-sm text-muted-foreground">
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground">Hop 1: Manifest Inclusion</div>
+            <p>
+              The manifest root is a 48-byte KZG commitment over the ordered MDU root vector. Proofs show that a
+              specific MDU root is bound to the manifest root.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground">Hop 2: Blob Inclusion</div>
+            <p>
+              Each MDU root is a Merkle root over 64 blob commitments. A Merkle path proves the requested blob
+              commitment is inside the MDU.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground">Hop 3: Blob Opening</div>
+            <p>
+              A KZG opening proves the delivered data matches the blob commitment. The full chain binds bytes to the
+              deal.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+        <h2 className="text-2xl font-bold text-foreground mb-6">NilFS: Filesystem on Slab</h2>
+        <div className="grid md:grid-cols-2 gap-6 text-sm text-muted-foreground">
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground">MDU #0 Super-Manifest</div>
+            <p>
+              NilFS stores a file table and a root table inside MDU #0. File records map paths to logical offsets, and
+              root entries map those offsets to user data MDUs.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground">Witness + User MDUs</div>
+            <p>
+              Witness MDUs store blob commitments. User MDUs store the actual encrypted data. The manifest root binds
+              all MDU roots, so every byte can be verified without trusting a server.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-6">Threats & Mitigations</h2>
         <div className="grid md:grid-cols-2 gap-6">
           <ThreatCard
             icon={<AlertTriangle className="w-5 h-5 text-amber-400" />}
             title="Invalid Proofs / Fraudulent Claims"
-            body="All proofs are verified on-chain against the manifest root. Invalid proofs are rejected and subject to slashing; providers only earn on valid proofs."
+            body="All proofs are verified on-chain against the manifest root. Invalid proofs are rejected; providers only earn on valid proofs."
           />
           <ThreatCard
             icon={<WifiOff className="w-5 h-5 text-red-400" />}
