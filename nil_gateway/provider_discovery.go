@@ -29,10 +29,16 @@ type providerBaseCacheEntry struct {
 	expires time.Time
 }
 
+type providerP2PCacheEntry struct {
+	addrs   []string
+	expires time.Time
+}
+
 var (
 	dealProviderCache  sync.Map // map[uint64]*dealProviderCacheEntry
 	dealHintCache      sync.Map // map[uint64]*dealHintCacheEntry
 	providerBaseCache  sync.Map // map[string]*providerBaseCacheEntry
+	providerP2PCache   sync.Map // map[string]*providerP2PCacheEntry
 	providerCacheTTL   = 30 * time.Second
 	dealProviderTTL    = 10 * time.Second
 	dealHintTTL        = 10 * time.Second
@@ -328,4 +334,48 @@ func resolveProviderHTTPBaseURL(ctx context.Context, providerAddr string) (strin
 	}
 
 	return "", fmt.Errorf("%w for provider %s", errNoHTTPMultiaddr, key)
+}
+
+func p2pMultiaddrsFromEndpoints(endpoints []string) []string {
+	out := make([]string, 0, len(endpoints))
+	for _, ep := range endpoints {
+		trimmed := strings.TrimSpace(ep)
+		if trimmed == "" {
+			continue
+		}
+		if !strings.Contains(trimmed, "/p2p/") {
+			continue
+		}
+		if !strings.Contains(trimmed, "/ws") && !strings.Contains(trimmed, "/wss") {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func resolveProviderP2PAddrs(ctx context.Context, providerAddr string) ([]string, error) {
+	key := strings.TrimSpace(providerAddr)
+	if key == "" {
+		return nil, fmt.Errorf("provider address is required")
+	}
+
+	if cachedAny, ok := providerP2PCache.Load(key); ok {
+		cached := cachedAny.(*providerP2PCacheEntry)
+		if time.Now().Before(cached.expires) {
+			return cached.addrs, nil
+		}
+	}
+
+	endpoints, err := fetchProviderEndpointsFromLCD(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	addrs := p2pMultiaddrsFromEndpoints(endpoints)
+	providerP2PCache.Store(key, &providerP2PCacheEntry{
+		addrs:   addrs,
+		expires: time.Now().Add(providerCacheTTL),
+	})
+	return addrs, nil
 }

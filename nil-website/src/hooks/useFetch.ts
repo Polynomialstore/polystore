@@ -8,6 +8,7 @@ import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import { resolveProviderEndpoint, resolveProviderEndpointByAddress } from '../lib/providerDiscovery'
+import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -167,7 +168,12 @@ export function useFetch() {
         serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
-      const directP2p = directEndpoint?.p2pAddr
+      let gatewayP2p: string | undefined
+      if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !directEndpoint?.p2pAddr) {
+        const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
+        gatewayP2p = addrs[0]
+      }
+      const directP2p = directEndpoint?.p2pAddr || gatewayP2p
       const planResult = await transport.plan({
         manifestRoot,
         owner,

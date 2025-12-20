@@ -10,15 +10,33 @@ import (
 )
 
 type gatewayStatusResponse struct {
-	Version        string            `json:"version"`
-	GitSHA         string            `json:"git_sha"`
-	BuildTime      string            `json:"build_time"`
-	Mode           string            `json:"mode"`
-	ListeningAddr  string            `json:"listening_addr"`
-	ProviderBase   string            `json:"provider_base,omitempty"`
-	Capabilities   map[string]bool   `json:"capabilities"`
-	Dependencies   map[string]bool   `json:"deps"`
-	Extra          map[string]string `json:"extra,omitempty"`
+	Version       string            `json:"version"`
+	GitSHA        string            `json:"git_sha"`
+	BuildTime     string            `json:"build_time"`
+	Mode          string            `json:"mode"`
+	ListeningAddr string            `json:"listening_addr"`
+	ProviderBase  string            `json:"provider_base,omitempty"`
+	P2PAddrs      []string          `json:"p2p_addrs,omitempty"`
+	Capabilities  map[string]bool   `json:"capabilities"`
+	Dependencies  map[string]bool   `json:"deps"`
+	Extra         map[string]string `json:"extra,omitempty"`
+}
+
+func parseP2PAddrList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
 }
 
 func GatewayStatus(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +87,17 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"lcd_reachable": pingURL(r.Context(), lcdBase+"/cosmos/base/tendermint/v1beta1/node_info"),
 			"sp_reachable":  pingURL(r.Context(), strings.TrimRight(providerBase, "/")+"/health"),
 		},
+	}
+	p2pAddrs := parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
+	if len(p2pAddrs) == 0 {
+		if providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context())); providerAddr != "" {
+			if addrs, err := resolveProviderP2PAddrs(r.Context(), providerAddr); err == nil {
+				p2pAddrs = addrs
+			}
+		}
+	}
+	if len(p2pAddrs) > 0 {
+		status.P2PAddrs = p2pAddrs
 	}
 
 	w.Header().Set("Content-Type", "application/json")
