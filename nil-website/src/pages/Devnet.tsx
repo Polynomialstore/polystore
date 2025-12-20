@@ -80,6 +80,7 @@ export function Devnet() {
         </h1>
         <p className="mt-3 text-muted-foreground">
           Join a shared devnet as a Storage Provider (SP), or verify which providers are currently registered on-chain.
+          Browser clients can operate without a user gateway, but providers must still run their gateway service.
         </p>
       </div>
 
@@ -91,7 +92,7 @@ export function Devnet() {
           </div>
           <div className="mt-4 grid md:grid-cols-2 gap-4 text-sm">
             <div className="bg-secondary/20 border border-border rounded-lg p-4">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Gateway Router</div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Gateway Router (Optional)</div>
               <div className="font-mono text-foreground">{appConfig.gatewayBase}</div>
             </div>
             <div className="bg-secondary/20 border border-border rounded-lg p-4">
@@ -118,7 +119,7 @@ export function Devnet() {
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             Providers must register reachable HTTP endpoints (Multiaddr) and run the provider gateway. The hub operator must
-            share a `NIL_GATEWAY_SP_AUTH` token.
+            share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
           </p>
           <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-lg p-4 overflow-x-auto text-muted-foreground">
             {joinSnippet}
