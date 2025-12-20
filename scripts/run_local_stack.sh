@@ -19,6 +19,7 @@ export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
+GATEWAY_BIN="$LOG_DIR/nil_gateway"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
@@ -210,6 +211,14 @@ ensure_nilchaind() {
 ensure_nil_cli() {
   banner "Building nil_cli (release)"
   (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+}
+
+ensure_nil_gateway() {
+  if [ -x "$GATEWAY_BIN" ]; then
+    return 0
+  fi
+  banner "Building nil_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
 }
 
 register_demo_provider() {
@@ -421,14 +430,16 @@ start_faucet() {
 start_sp_gateway() {
   banner "Starting SP gateway service (Port 8082)"
   ensure_nil_cli
+  ensure_nil_gateway
   (
     cd "$ROOT_DIR/nil_gateway"
     # SP Mode (default), Listen on 8082, Uploads to uploads_sp
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
       NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER_MODE="0" \
+    NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-0}" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
-      "$GO_BIN" run . \
+      "$GATEWAY_BIN" \
       >"$LOG_DIR/gateway_sp.log" 2>&1 &
     echo $! > "$PID_DIR/gateway_sp.pid"
   )
@@ -453,14 +464,16 @@ start_user_gateway() {
 
   banner "Starting User gateway service (Port 8080)"
   ensure_nil_cli
+  ensure_nil_gateway
   (
     cd "$ROOT_DIR/nil_gateway"
     # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER_MODE="1" \
+    NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-0}" NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-}" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
-      "$GO_BIN" run . \
+      "$GATEWAY_BIN" \
       >"$LOG_DIR/gateway_user.log" 2>&1 &
     echo $! > "$PID_DIR/gateway_user.pid"
   )

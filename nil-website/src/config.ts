@@ -4,6 +4,8 @@ const GATEWAY_BASE = import.meta.env.VITE_GATEWAY_BASE || 'http://localhost:8080
 const SP_BASE = import.meta.env.VITE_SP_BASE || 'http://localhost:8082'
 const GATEWAY_DISABLED = import.meta.env.VITE_DISABLE_GATEWAY === '1'
 const P2P_ENABLED = import.meta.env.VITE_P2P_ENABLED === '1'
+const P2P_BOOTSTRAP = import.meta.env.VITE_P2P_BOOTSTRAP || ''
+const P2P_PROTOCOL = import.meta.env.VITE_P2P_PROTOCOL || '/nilstore/http/1.0.0'
 const COSMOS_CHAIN_ID = import.meta.env.VITE_COSMOS_CHAIN_ID || '31337'
 const BRIDGE_ADDRESS = import.meta.env.VITE_BRIDGE_ADDRESS || '0x0000000000000000000000000000000000000000'
 const NILSTORE_PRECOMPILE =
@@ -18,6 +20,8 @@ export const appConfig = {
   spBase: SP_BASE.replace(/\/$/, ''),
   gatewayDisabled: GATEWAY_DISABLED,
   p2pEnabled: P2P_ENABLED,
+  p2pBootstrap: P2P_BOOTSTRAP.split(',').map((value: string) => value.trim()).filter(Boolean),
+  p2pProtocol: P2P_PROTOCOL.trim() || '/nilstore/http/1.0.0',
   cosmosChainId: COSMOS_CHAIN_ID,
   bridgeAddress: BRIDGE_ADDRESS,
   nilstorePrecompile: NILSTORE_PRECOMPILE.trim(),

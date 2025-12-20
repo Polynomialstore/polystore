@@ -17,6 +17,7 @@ function getInitialPreference(): RoutePreference {
   if (typeof window === 'undefined') return 'auto'
   if (appConfig.gatewayDisabled) return 'prefer_direct_sp'
   const raw = window.localStorage.getItem(PREF_KEY)
+  if (raw === 'prefer_p2p') return appConfig.p2pEnabled ? raw : 'auto'
   if (raw === 'prefer_gateway' || raw === 'prefer_direct_sp' || raw === 'auto') return raw
   return 'auto'
 }

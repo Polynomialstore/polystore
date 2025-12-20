@@ -88,7 +88,10 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"sp_reachable":  pingURL(r.Context(), strings.TrimRight(providerBase, "/")+"/health"),
 		},
 	}
-	p2pAddrs := parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
+	p2pAddrs := getP2PAnnounceAddrs()
+	if len(p2pAddrs) == 0 {
+		p2pAddrs = parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
+	}
 	if len(p2pAddrs) == 0 {
 		if providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context())); providerAddr != "" {
 			if addrs, err := resolveProviderP2PAddrs(r.Context(), providerAddr); err == nil {

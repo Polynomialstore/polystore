@@ -93,13 +93,17 @@ NilStore supports two redundancy modes conceptually:
 *   **Mode 1 – FullReplica (Alpha, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
 *   **Mode 2 – StripeReplica (Implemented):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer (RS(K, K+M)).
 
+Clients may run fully in-browser using WASM and OPFS for local slab storage, or use the Go gateway/S3 adapter and CLI. The gateway is optional routing + caching infrastructure and never signs on behalf of the user; all on-chain actions require a wallet signature.
+
 ### Step 1: Ingestion & Placement
 1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)` which creates a thin-provisioned container.
 1.  **Commit Content:** After upload, the user commits the returned `manifest_root` via `MsgUpdateDealContent` (the Deal is empty until this commit).
 2.  **Assignment:**
     *   In the current **FullReplica (Mode 1)** implementation, the chain deterministically assigns a set of SPs to hold *full replicas* of the file (targeting 12 in the general case, capped by the number of available providers).
     *   In **StripeReplica (Mode 2)**, the chain assigns an ordered slot list of size `N = K+M` (e.g., 8+4). Metadata MDUs are replicated to all slots, while user data MDUs are striped per slot.
-3.  **Upload:** User uploads data.
+3.  **Upload:** 
+    *   **Mode 1:** upload via gateway/CLI or browser; any assigned Provider can accept the full MDU stream.
+    *   **Mode 2:** the client performs RS(K, K+M) encoding per SP‑MDU (WASM/CLI) and uploads per‑slot shards directly to assigned Providers. A gateway may optionally mirror/cache, but it is not required for correctness.
 
 ### Step 2: The Liveness Loop
 *   **Scenario 1 (Viral):** Users swarm the file via retrieval sessions. SPs signal saturation. Chain checks `MaxSpend`.

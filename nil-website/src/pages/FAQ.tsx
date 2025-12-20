@@ -15,6 +15,13 @@ const faqs = [
         </>
       },
       {
+        q: "Do I need to run a gateway?",
+        a: <>
+          No. The browser client can shard and commit using WASM + OPFS and interact with providers directly. Gateways are optional
+          routing and caching helpers (and power the S3 adapter), but they never sign on your behalf—your wallet signs all on-chain actions.
+        </>
+      },
+      {
         q: "Why \"Nil\"?",
         a: (
           <>
@@ -191,7 +198,7 @@ const AccordionItem = ({ question, answer }: { question: string, answer: React.R
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="p-4 pt-0 text-muted-foreground text-sm leading-relaxed border-t border-border/50 mt-2">
+            <div className="p-8 text-muted-foreground text-sm leading-relaxed border-t border-border/50 mt-2">
               {answer}
             </div>
           </motion.div>

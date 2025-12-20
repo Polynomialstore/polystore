@@ -15,9 +15,24 @@ import { executeWithFallback, TransportTraceError } from '../lib/transport/route
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange } from '../lib/transport/libp2pClient'
+import type { P2pTarget } from '../lib/multiaddr'
 
-type ListFilesRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
-type SlabRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
+type ListFilesRequest = {
+  manifestRoot: string
+  owner: string
+  dealId: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
+type SlabRequest = {
+  manifestRoot: string
+  owner: string
+  dealId: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
 type PlanRequest = {
   manifestRoot: string
   owner: string
@@ -26,6 +41,7 @@ type PlanRequest = {
   rangeStart?: number
   rangeLen?: number
   directBase?: string
+  p2pTarget?: P2pTarget
   preference?: RoutePreference
 }
 type UploadRequest = {
@@ -34,9 +50,25 @@ type UploadRequest = {
   dealId?: string
   maxUserMdus?: number
   directBase?: string
+  p2pTarget?: P2pTarget
 }
-type ManifestInfoRequest = { manifestRoot: string; owner?: string; dealId?: string; directBase?: string; preference?: RoutePreference }
-type MduKzgRequest = { manifestRoot: string; owner?: string; dealId?: string; mduIndex: number; directBase?: string; preference?: RoutePreference }
+type ManifestInfoRequest = {
+  manifestRoot: string
+  owner?: string
+  dealId?: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
+type MduKzgRequest = {
+  manifestRoot: string
+  owner?: string
+  dealId?: string
+  mduIndex: number
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
 type FetchRangeRequest = {
   manifestRoot: string
   owner: string
@@ -47,7 +79,7 @@ type FetchRangeRequest = {
   sessionId: string
   expectedProvider?: string
   directBase?: string
-  directP2p?: string
+  p2pTarget?: P2pTarget
   preference?: RoutePreference
 }
 
@@ -78,8 +110,15 @@ export function useTransportRouter() {
   }, [coerceHttpError])
 
   const resolvePreference = useCallback(
-    (override?: RoutePreference): RoutePreference =>
-      appConfig.gatewayDisabled ? 'prefer_direct_sp' : override ?? preference,
+    (override?: RoutePreference): RoutePreference => {
+      const candidate = override ?? preference
+      if (appConfig.gatewayDisabled) {
+        if (candidate === 'prefer_p2p' && appConfig.p2pEnabled) return 'prefer_p2p'
+        return 'prefer_direct_sp'
+      }
+      if (candidate === 'prefer_p2p' && !appConfig.p2pEnabled) return 'auto'
+      return candidate
+    },
     [preference],
   )
 
@@ -425,7 +464,7 @@ export function useTransportRouter() {
     }
 
     const directBase = resolveDirectBase(req.directBase)
-    const directP2p = req.directP2p?.trim()
+    const directP2p = req.p2pTarget?.multiaddr?.trim()
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 

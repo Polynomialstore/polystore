@@ -3,6 +3,7 @@ import type { Libp2p } from 'libp2p'
 import { webSockets } from '@libp2p/websockets'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
+import { mplex } from '@libp2p/mplex'
 import { multiaddr } from '@multiformats/multiaddr'
 import { Uint8ArrayList } from 'uint8arraylist'
 
@@ -31,11 +32,18 @@ let nodePromise: Promise<Libp2p> | null = null
 
 async function getLibp2pNode(): Promise<Libp2p> {
   if (!nodePromise) {
-    nodePromise = createLibp2p({
-      transports: [webSockets()],
-      connectionEncrypters: [noise()],
-      streamMuxers: [yamux()],
-    })
+    nodePromise = (async () => {
+      const node = await createLibp2p({
+        transports: [webSockets()],
+        connectionEncrypters: [noise()],
+        streamMuxers: [yamux(), mplex()],
+        connectionGater: {
+          denyDialMultiaddr: async () => false,
+        },
+      })
+      await node.start()
+      return node
+    })()
   }
   return nodePromise
 }

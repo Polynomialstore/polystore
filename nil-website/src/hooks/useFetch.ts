@@ -7,8 +7,14 @@ import { normalizeDealId } from '../lib/dealId'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { resolveProviderEndpoint, resolveProviderEndpointByAddress } from '../lib/providerDiscovery'
+import {
+  resolveProviderEndpoint,
+  resolveProviderEndpointByAddress,
+  resolveProviderP2pEndpoint,
+  resolveProviderP2pEndpointByAddress,
+} from '../lib/providerDiscovery'
 import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
+import { multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -165,15 +171,24 @@ export function useFetch() {
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
       const preferenceOverride: RoutePreference | undefined =
-        serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
+        serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
+          ? 'prefer_direct_sp'
+          : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
+      const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
-      let gatewayP2p: string | undefined
-      if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !directEndpoint?.p2pAddr) {
+      let gatewayP2pTarget: ReturnType<typeof multiaddrToP2pTarget> | undefined
+      if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !p2pEndpoint?.target) {
         const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
-        gatewayP2p = addrs[0]
+        for (const addr of addrs) {
+          const target = multiaddrToP2pTarget(addr)
+          if (target) {
+            gatewayP2pTarget = target
+            break
+          }
+        }
       }
-      const directP2p = directEndpoint?.p2pAddr || gatewayP2p
+      const planP2pTarget = p2pEndpoint?.target || gatewayP2pTarget || undefined
       const planResult = await transport.plan({
         manifestRoot,
         owner,
@@ -182,6 +197,7 @@ export function useFetch() {
         rangeStart: wantRangeStart,
         rangeLen: effectiveRangeLen,
         directBase,
+        p2pTarget: planP2pTarget,
         preference: preferenceOverride,
       })
       const planJson = planResult.data
@@ -242,12 +258,18 @@ export function useFetch() {
       const providerEndpoint = provider
         ? await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
         : null
+      const providerP2pEndpoint = provider
+        ? await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
+        : null
+      const fetchP2pTarget =
+        providerP2pEndpoint?.target ||
+        (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
+        gatewayP2pTarget
       const fetchDirectBase =
         providerEndpoint?.baseUrl ||
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
         (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
         (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
-      const fetchDirectP2p = providerEndpoint?.p2pAddr || directP2p
 
       const parts: Uint8Array[] = []
       let bytesFetched = 0
@@ -266,7 +288,7 @@ export function useFetch() {
           sessionId,
           expectedProvider: provider,
           directBase: fetchDirectBase,
-          directP2p: fetchDirectP2p,
+          p2pTarget: fetchP2pTarget,
           preference: preferenceOverride,
         })
 

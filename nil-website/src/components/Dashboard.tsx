@@ -21,7 +21,7 @@ import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
-import { multiaddrToHttpUrl } from '../lib/multiaddr'
+import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 
 interface Provider {
   address: string
@@ -346,6 +346,20 @@ export function Dashboard() {
     [providerEndpointsByAddr],
   )
 
+  const resolveProviderP2pTarget = useCallback(
+    (deal: Deal | null) => {
+      if (!deal || !deal.providers || deal.providers.length === 0) return undefined
+      const primary = deal.providers[0]
+      const endpoints = providerEndpointsByAddr.get(primary) ?? []
+      for (const ep of endpoints) {
+        const target = multiaddrToP2pTarget(ep)
+        if (target) return target
+      }
+      return undefined
+    },
+    [providerEndpointsByAddr],
+  )
+
   const contentManifestRoot = targetDeal?.cid || ''
 
   useEffect(() => {
@@ -380,18 +394,21 @@ export function Dashboard() {
       setContentSlabError(null)
       try {
         const directBase = resolveProviderBase(targetDeal)
+        const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(targetDeal) : undefined
         const [filesResult, slabResult] = await Promise.allSettled([
           listFiles({
             manifestRoot,
             dealId: targetDealId,
             owner,
             directBase,
+            p2pTarget,
           }),
           slab({
             manifestRoot,
             dealId: targetDealId,
             owner,
             directBase,
+            p2pTarget,
           }),
         ])
 
@@ -430,7 +447,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
+  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
   useEffect(() => {
     if (address) {
