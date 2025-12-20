@@ -4,6 +4,7 @@ import { webSockets } from '@libp2p/websockets'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { multiaddr } from '@multiformats/multiaddr'
+import { Uint8ArrayList } from 'uint8arraylist'
 
 const P2P_PROTOCOL = '/nilstore/fetch/1.0.0'
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -32,7 +33,7 @@ async function getLibp2pNode(): Promise<Libp2p> {
   if (!nodePromise) {
     nodePromise = createLibp2p({
       transports: [webSockets()],
-      connectionEncryption: [noise()],
+      connectionEncrypters: [noise()],
       streamMuxers: [yamux()],
     })
   }
@@ -49,15 +50,16 @@ function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
   return out
 }
 
-async function readAll(source: AsyncIterable<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+async function readAll(source: AsyncIterable<Uint8Array | Uint8ArrayList>, maxBytes: number): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []
   let total = 0
   for await (const chunk of source) {
-    total += chunk.length
+    const view = chunk instanceof Uint8Array ? chunk : chunk.subarray()
+    total += view.length
     if (total > maxBytes) {
       throw new Error(`libp2p response too large (${total} bytes)`)
     }
-    chunks.push(chunk)
+    chunks.push(view)
   }
   return concatChunks(chunks, total)
 }
@@ -132,12 +134,10 @@ export async function libp2pFetchRange(
     download_session: req.downloadSession,
   }
   const encoded = new TextEncoder().encode(JSON.stringify(payload))
-  await abortable(signal, stream.sink((async function* () { yield encoded })()))
+  stream.send(encoded)
+  await abortable(signal, stream.close())
 
-  const bytes = await abortable(signal, readAll(stream.source, MAX_RESPONSE_BYTES))
+  const bytes = await abortable(signal, readAll(stream, MAX_RESPONSE_BYTES))
   const parsed = parseResponse(bytes)
-  if (typeof stream.close === 'function') {
-    await stream.close()
-  }
   return parsed
 }
