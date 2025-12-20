@@ -81,6 +81,15 @@ export const workerClient = {
     return sendMessageToWorker('initMdu0Builder', { maxUserMdus, commitmentsPerMdu }) as Promise<string>;
   },
 
+  // Load an existing MDU #0 builder from bytes
+  async loadMdu0Builder(data: Uint8Array, maxUserMdus: number, commitmentsPerMdu?: number): Promise<string> {
+    return sendMessageToWorker(
+      'loadMdu0Builder',
+      { data, maxUserMdus, commitmentsPerMdu },
+      [data.buffer],
+    ) as Promise<string>;
+  },
+
   // Append a file entry to the MDU #0 builder in the worker
   async appendFileToMdu0(path: string, size: number, startOffset: number): Promise<string> {
     return sendMessageToWorker('appendFileToMdu0', { path, size, startOffset }) as Promise<string>;

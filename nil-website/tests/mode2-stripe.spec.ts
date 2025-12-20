@@ -92,8 +92,8 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
   })
 
-  test('mode2 append keeps prior files (expected failure until append supported)', async ({ page }) => {
-    test.fail(true, 'WASM append is not implemented yet')
+  test('mode2 append keeps prior files', async ({ page }) => {
+    test.slow()
     test.setTimeout(600_000)
 
     const fileA = { name: 'mode2-a.txt', buffer: Buffer.alloc(32 * 1024, 'A') }

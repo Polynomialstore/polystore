@@ -35,6 +35,14 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 
 	shards := make([][]byte, stripe.k)
 	for slot := uint64(0); slot < stripe.k; slot++ {
+		localPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot))
+		if localBytes, err := os.ReadFile(localPath); err == nil && len(localBytes) > 0 {
+			shards[slot] = localBytes
+			continue
+		} else if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+
 		base, err := resolveProviderHTTPBaseURL(ctx, providers[slot])
 		if err != nil {
 			return "", err
