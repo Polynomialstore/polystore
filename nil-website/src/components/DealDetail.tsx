@@ -11,7 +11,7 @@ import { deleteCachedFile, hasCachedFile, readCachedFile, readMdu, readManifestR
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
-import { multiaddrToHttpUrl } from '../lib/multiaddr'
+import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
 
@@ -129,6 +129,15 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       if (httpUrl) return httpUrl
     }
     return appConfig.spBase
+  }, [primaryProvider, providersByAddr])
+
+  const resolveProviderP2pTarget = useCallback(() => {
+    const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
+    for (const ep of endpoints) {
+      const target = multiaddrToP2pTarget(ep)
+      if (target) return target
+    }
+    return undefined
   }, [primaryProvider, providersByAddr])
 
   useEffect(() => {
@@ -309,11 +318,13 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
       setGatewaySlabStatus('unknown')
       setSlabSource('none')
       const directBase = resolveProviderHttpBase()
+      const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget() : undefined
       const result = await fetchSlabLayout({
         manifestRoot: cid,
         dealId: String(dealId || ''),
         owner: String(owner || ''),
         directBase,
+        p2pTarget,
       })
       setSlab(result.data)
       setSlabSource('gateway')
@@ -364,18 +375,20 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingSlab(false)
     }
-  }, [fetchSlabLayout, resolveProviderHttpBase])
+  }, [fetchSlabLayout, resolveProviderHttpBase, resolveProviderP2pTarget])
 
   const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
       const directBase = resolveProviderHttpBase()
+      const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget() : undefined
       const result = await listFilesTransport({
         manifestRoot: cid,
         dealId,
         owner,
         directBase,
+        p2pTarget,
       })
       const list = result.data
       if (list.length > 0) {
@@ -402,7 +415,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingFiles(false)
     }
-  }, [fetchLocalFiles, resolveProviderHttpBase, listFilesTransport])
+  }, [fetchLocalFiles, resolveProviderHttpBase, resolveProviderP2pTarget, listFilesTransport])
 
   const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
@@ -411,11 +424,13 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     setMerkleError(null)
     try {
       const directBase = resolveProviderHttpBase()
+      const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget() : undefined
       const result = await manifestInfoTransport({
         manifestRoot: cid,
         dealId: dealId ? String(dealId) : undefined,
         owner,
         directBase,
+        p2pTarget,
       })
       setManifestInfo(result.data)
     } catch (e) {
@@ -481,19 +496,21 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     } finally {
       setLoadingManifestInfo(false)
     }
-  }, [manifestInfoTransport, resolveProviderHttpBase])
+  }, [manifestInfoTransport, resolveProviderHttpBase, resolveProviderP2pTarget])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
     setMduKzgError(null)
     try {
       const directBase = resolveProviderHttpBase()
+      const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget() : undefined
       const result = await mduKzgTransport({
         manifestRoot: cid,
         mduIndex,
         dealId: dealId ? String(dealId) : undefined,
         owner,
         directBase,
+        p2pTarget,
       })
       setMduKzg(result.data)
     } catch (e) {

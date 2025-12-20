@@ -7,9 +7,9 @@ export type TransportOp =
   | 'manifest_info'
   | 'mdu_kzg'
 
-export type RoutePreference = 'auto' | 'prefer_gateway' | 'prefer_direct_sp'
+export type RoutePreference = 'auto' | 'prefer_gateway' | 'prefer_direct_sp' | 'prefer_p2p'
 
-export type BackendName = 'gateway' | 'direct_sp'
+export type BackendName = 'gateway' | 'direct_sp' | 'libp2p'
 
 export type ErrorClass =
   | 'timeout'

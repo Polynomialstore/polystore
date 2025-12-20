@@ -7,7 +7,12 @@ import { normalizeDealId } from '../lib/dealId'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { resolveProviderEndpoint, resolveProviderEndpointByAddress } from '../lib/providerDiscovery'
+import {
+  resolveProviderEndpoint,
+  resolveProviderEndpointByAddress,
+  resolveProviderP2pEndpoint,
+  resolveProviderP2pEndpointByAddress,
+} from '../lib/providerDiscovery'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -166,7 +171,9 @@ export function useFetch() {
       const preferenceOverride: RoutePreference | undefined =
         serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
+      const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
+      const planP2pTarget = p2pEndpoint?.target
       const planResult = await transport.plan({
         manifestRoot,
         owner,
@@ -175,6 +182,7 @@ export function useFetch() {
         rangeStart: wantRangeStart,
         rangeLen: effectiveRangeLen,
         directBase,
+        p2pTarget: planP2pTarget,
         preference: preferenceOverride,
       })
       const planJson = planResult.data
@@ -235,6 +243,12 @@ export function useFetch() {
       const providerEndpoint = provider
         ? await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
         : null
+      const providerP2pEndpoint = provider
+        ? await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
+        : null
+      const fetchP2pTarget =
+        providerP2pEndpoint?.target ||
+        (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined)
       const fetchDirectBase =
         providerEndpoint?.baseUrl ||
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
@@ -258,6 +272,7 @@ export function useFetch() {
           sessionId,
           expectedProvider: provider,
           directBase: fetchDirectBase,
+          p2pTarget: fetchP2pTarget,
           preference: preferenceOverride,
         })
 

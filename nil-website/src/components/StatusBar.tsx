@@ -87,6 +87,7 @@ export function StatusBar() {
           <option value="auto">Auto</option>
           <option value="prefer_gateway">Prefer gateway</option>
           <option value="prefer_direct_sp">Prefer direct SP</option>
+          {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
         </select>
       </label>
     </div>
