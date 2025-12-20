@@ -160,6 +160,7 @@ test.describe('mode2 stripe', () => {
     await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
     await uploadBtn.click()
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    await expect(commitBtn).toBeEnabled({ timeout: 15_000 })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 

@@ -353,24 +353,31 @@ func merkleRootAndPath(leaves [][32]byte, leafIndex int) ([]byte, [][]byte) {
 	path := make([][]byte, 0, 10)
 
 	for len(level) > 1 {
-		sibling := idx ^ 1
-		if sibling >= 0 && sibling < len(level) {
+		if idx%2 == 0 {
+			if idx+1 < len(level) {
+				h := make([]byte, 32)
+				copy(h, level[idx+1][:])
+				path = append(path, h)
+			}
+		} else {
 			h := make([]byte, 32)
-			copy(h, level[sibling][:])
+			copy(h, level[idx-1][:])
 			path = append(path, h)
 		}
 
 		next := make([][32]byte, 0, (len(level)+1)/2)
 		for i := 0; i < len(level); i += 2 {
 			left := level[i]
-			right := left
 			if i+1 < len(level) {
-				right = level[i+1]
+				right := level[i+1]
+				var pair [64]byte
+				copy(pair[:32], left[:])
+				copy(pair[32:], right[:])
+				next = append(next, blake2s.Sum256(pair[:]))
+				continue
 			}
-			var pair [64]byte
-			copy(pair[:32], left[:])
-			copy(pair[32:], right[:])
-			next = append(next, blake2s.Sum256(pair[:]))
+			// rs_merkle propagates the left node when no sibling exists.
+			next = append(next, left)
 		}
 		level = next
 		idx /= 2
