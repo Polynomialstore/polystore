@@ -106,7 +106,7 @@ func TestP2PFetch_EndToEnd(t *testing.T) {
 	fileContent := []byte("Hello libp2p transport")
 	manifestRoot := buildTestSlab(t, filePath, fileContent)
 
-	const dealID = 1
+	dealID := uint64(1)
 	dealStates := map[uint64]struct{ Owner string; CID string }{
 		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
@@ -146,7 +146,7 @@ func TestP2PFetch_EndToEnd(t *testing.T) {
 
 	req := p2pFetchRequest{
 		ManifestRoot: manifestRoot.Canonical,
-		DealID:       dealID,
+		DealID:       &dealID,
 		Owner:        owner,
 		FilePath:     filePath,
 		RangeStart:   0,

@@ -42,3 +42,8 @@ export function multiaddrToP2pTarget(ep: string): P2pTarget | null {
 
   return { multiaddr: s, peerId }
 }
+
+export function multiaddrToP2pWsAddr(ep: string): string | null {
+  const target = multiaddrToP2pTarget(ep)
+  return target ? target.multiaddr : null
+}

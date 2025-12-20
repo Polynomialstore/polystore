@@ -46,11 +46,17 @@ export function orderCandidates<T>(
   if (preference === 'auto') {
     return candidates
   }
-  const preferred: BackendName =
-    preference === 'prefer_gateway' ? 'gateway' : preference === 'prefer_p2p' ? 'libp2p' : 'direct_sp'
+  const preferred =
+    preference === 'prefer_gateway'
+      ? new Set<BackendName>(['gateway'])
+      : preference === 'prefer_p2p'
+        ? new Set<BackendName>(['libp2p'])
+        : new Set<BackendName>(['direct_sp'])
   return [...candidates].sort((a, b) => {
     if (a.backend === b.backend) return 0
-    return a.backend === preferred ? -1 : 1
+    if (preferred.has(a.backend) && !preferred.has(b.backend)) return -1
+    if (!preferred.has(a.backend) && preferred.has(b.backend)) return 1
+    return 0
   })
 }
 

@@ -52,6 +52,9 @@ async function createClient(): Promise<import('libp2p').Libp2p> {
     transports: [webSockets()],
     connectionEncrypters: [noise()],
     streamMuxers: [mplex()],
+    connectionGater: {
+      denyDialMultiaddr: async () => false,
+    },
     peerDiscovery,
   })
 

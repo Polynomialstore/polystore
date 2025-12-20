@@ -13,6 +13,8 @@ import {
   resolveProviderP2pEndpoint,
   resolveProviderP2pEndpointByAddress,
 } from '../lib/providerDiscovery'
+import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
+import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -169,11 +171,24 @@ export function useFetch() {
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
       const preferenceOverride: RoutePreference | undefined =
-        serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
+        serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
+          ? 'prefer_direct_sp'
+          : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
-      const planP2pTarget = p2pEndpoint?.target
+      let gatewayP2pTarget: P2pTarget | undefined
+      if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !p2pEndpoint?.target) {
+        const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
+        for (const addr of addrs) {
+          const target = multiaddrToP2pTarget(addr)
+          if (target) {
+            gatewayP2pTarget = target
+            break
+          }
+        }
+      }
+      const planP2pTarget = p2pEndpoint?.target || gatewayP2pTarget || undefined
       const planResult = await transport.plan({
         manifestRoot,
         owner,
@@ -248,7 +263,8 @@ export function useFetch() {
         : null
       const fetchP2pTarget =
         providerP2pEndpoint?.target ||
-        (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined)
+        (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
+        gatewayP2pTarget
       const fetchDirectBase =
         providerEndpoint?.baseUrl ||
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||

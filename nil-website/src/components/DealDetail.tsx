@@ -111,6 +111,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     listFiles: listFilesTransport,
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
+    lastTrace,
   } = useTransportRouter()
 
   // Filter proofs for this deal
@@ -118,6 +119,22 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
+  const lastRouteLabel = useMemo(() => {
+    const backend = lastTrace?.chosen?.backend
+    return backend ? backend.replace('_', ' ') : ''
+  }, [lastTrace])
+  const lastAttemptSummary = useMemo(() => {
+    if (!lastTrace?.attempts?.length) return ''
+    return lastTrace.attempts
+      .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}`)
+      .join(',')
+  }, [lastTrace])
+  const lastFailureSummary = useMemo(() => {
+    const failed = lastTrace?.attempts?.find((attempt) => !attempt.ok)
+    if (!failed) return ''
+    const msg = failed.errorMessage ? `:${failed.errorMessage}` : ''
+    return `${failed.backend}${msg}`
+  }, [lastTrace])
 
   const resolveProviderHttpBase = useCallback((): string => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -768,6 +785,16 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                               Receipt failed{receiptError ? `: ${receiptError}` : ''}
                             </span>
                           )}
+                        </div>
+                      )}
+                      {lastRouteLabel && (
+                        <div
+                          className="text-[11px] text-muted-foreground"
+                          data-testid="transport-route"
+                          data-transport-attempts={lastAttemptSummary}
+                          data-transport-failure={lastFailureSummary}
+                        >
+                          Route: {lastRouteLabel}
                         </div>
                       )}
 

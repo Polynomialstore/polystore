@@ -384,7 +384,9 @@ func main() {
 		log.Fatalf("failed to start libp2p server: %v", err)
 	}
 	if p2pServer != nil {
-		log.Printf("LibP2P listening on %s", strings.Join(p2pAnnounceAddrs(p2pServer.host), ", "))
+		addrs := p2pAnnounceAddrs(p2pServer.host)
+		setP2PAnnounceAddrs(addrs)
+		log.Printf("LibP2P listening on %s", strings.Join(addrs, ", "))
 	}
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")

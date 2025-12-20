@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	libp2p "github.com/libp2p/go-libp2p"
@@ -33,17 +34,17 @@ const (
 )
 
 type p2pFetchRequest struct {
-	ManifestRoot    string `json:"manifest_root"`
-	DealID          uint64 `json:"deal_id"`
-	Owner           string `json:"owner"`
-	FilePath        string `json:"file_path"`
-	RangeStart      uint64 `json:"range_start"`
-	RangeLen        uint64 `json:"range_len"`
-	DownloadSession string `json:"download_session,omitempty"`
-	OnchainSession  string `json:"onchain_session,omitempty"`
-	ReqSig          string `json:"req_sig,omitempty"`
-	ReqNonce        uint64 `json:"req_nonce,omitempty"`
-	ReqExpiresAt    uint64 `json:"req_expires_at,omitempty"`
+	ManifestRoot    string  `json:"manifest_root"`
+	DealID          *uint64 `json:"deal_id"`
+	Owner           string  `json:"owner"`
+	FilePath        string  `json:"file_path"`
+	RangeStart      uint64  `json:"range_start"`
+	RangeLen        uint64  `json:"range_len"`
+	DownloadSession string  `json:"download_session,omitempty"`
+	OnchainSession  string  `json:"onchain_session,omitempty"`
+	ReqSig          string  `json:"req_sig,omitempty"`
+	ReqNonce        uint64  `json:"req_nonce,omitempty"`
+	ReqExpiresAt    uint64  `json:"req_expires_at,omitempty"`
 }
 
 type p2pFetchResponse struct {
@@ -57,6 +58,33 @@ type p2pFetchResponse struct {
 
 type p2pServer struct {
 	host host.Host
+}
+
+var (
+	p2pAnnounceMu     sync.RWMutex
+	p2pAnnounceCached []string
+)
+
+func setP2PAnnounceAddrs(addrs []string) {
+	if len(addrs) == 0 {
+		return
+	}
+	copied := make([]string, len(addrs))
+	copy(copied, addrs)
+	p2pAnnounceMu.Lock()
+	p2pAnnounceCached = copied
+	p2pAnnounceMu.Unlock()
+}
+
+func getP2PAnnounceAddrs() []string {
+	p2pAnnounceMu.RLock()
+	defer p2pAnnounceMu.RUnlock()
+	if len(p2pAnnounceCached) == 0 {
+		return nil
+	}
+	copied := make([]string, len(p2pAnnounceCached))
+	copy(copied, p2pAnnounceCached)
+	return copied
 }
 
 func (s *p2pServer) Close() error {
@@ -152,7 +180,7 @@ func readP2PFetchRequest(r io.Reader) (*p2pFetchRequest, error) {
 	if req.ManifestRoot == "" {
 		return nil, errors.New("manifest_root is required")
 	}
-	if req.DealID == 0 {
+	if req.DealID == nil {
 		return nil, errors.New("deal_id is required")
 	}
 	if req.Owner == "" {
@@ -173,8 +201,12 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 		Headers: make(map[string]string),
 	}
 
+	dealID := uint64(0)
+	if req.DealID != nil {
+		dealID = *req.DealID
+	}
 	q := url.Values{}
-	q.Set("deal_id", fmt.Sprintf("%d", req.DealID))
+	q.Set("deal_id", fmt.Sprintf("%d", dealID))
 	q.Set("owner", req.Owner)
 	q.Set("file_path", req.FilePath)
 

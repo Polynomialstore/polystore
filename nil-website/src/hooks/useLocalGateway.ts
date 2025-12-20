@@ -11,6 +11,7 @@ interface LocalGatewayDetails {
   mode?: string;
   capabilities?: Record<string, boolean>;
   deps?: Record<string, boolean>;
+  p2p_addrs?: string[];
 }
 
 interface LocalGatewayInfo {

@@ -8,20 +8,13 @@ import {
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
-import {
-  p2pGatewayFetchManifestInfo,
-  p2pGatewayFetchMduKzg,
-  p2pGatewayFetchRange,
-  p2pGatewayFetchSlabLayout,
-  p2pGatewayListFiles,
-  p2pGatewayPlanRetrievalSession,
-} from '../api/p2pGatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
+import { libp2pFetchRange } from '../lib/transport/libp2pClient'
 import type { P2pTarget } from '../lib/multiaddr'
 
 type ListFilesRequest = {
@@ -140,7 +133,6 @@ export function useTransportRouter() {
 
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -173,13 +165,6 @@ export function useTransportRouter() {
         },
       })
     }
-    if (appConfig.p2pEnabled && p2pTarget) {
-      candidates.push({
-        backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) => p2pGatewayListFiles(p2pTarget, req.manifestRoot, { dealId: req.dealId, owner: req.owner }, signal),
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for list files')
     }
@@ -200,7 +185,6 @@ export function useTransportRouter() {
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<SlabLayoutData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -233,19 +217,6 @@ export function useTransportRouter() {
         },
       })
     }
-    if (appConfig.p2pEnabled && p2pTarget) {
-      candidates.push({
-        backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) =>
-          p2pGatewayFetchSlabLayout(
-            p2pTarget,
-            req.manifestRoot,
-            { dealId: req.dealId, owner: req.owner },
-            signal,
-          ),
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for slab')
     }
@@ -266,7 +237,6 @@ export function useTransportRouter() {
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -303,25 +273,6 @@ export function useTransportRouter() {
             }),
           )
         },
-      })
-    }
-    if (appConfig.p2pEnabled && p2pTarget) {
-      candidates.push({
-        backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) =>
-          p2pGatewayPlanRetrievalSession(
-            p2pTarget,
-            req.manifestRoot,
-            {
-              dealId: req.dealId,
-              owner: req.owner,
-              filePath: req.filePath,
-              rangeStart: req.rangeStart,
-              rangeLen: req.rangeLen,
-            },
-            signal,
-          ),
       })
     }
     if (candidates.length === 0) {
@@ -399,7 +350,6 @@ export function useTransportRouter() {
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<ManifestInfoData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -434,19 +384,6 @@ export function useTransportRouter() {
         },
       })
     }
-    if (appConfig.p2pEnabled && p2pTarget) {
-      candidates.push({
-        backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) =>
-          p2pGatewayFetchManifestInfo(
-            p2pTarget,
-            req.manifestRoot,
-            req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            signal,
-          ),
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for manifest info')
     }
@@ -467,7 +404,6 @@ export function useTransportRouter() {
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<MduKzgData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -504,20 +440,6 @@ export function useTransportRouter() {
         },
       })
     }
-    if (appConfig.p2pEnabled && p2pTarget) {
-      candidates.push({
-        backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) =>
-          p2pGatewayFetchMduKzg(
-            p2pTarget,
-            req.manifestRoot,
-            req.mduIndex,
-            req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            signal,
-          ),
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for MDU KZG')
     }
@@ -542,7 +464,7 @@ export function useTransportRouter() {
     }
 
     const directBase = resolveDirectBase(req.directBase)
-    const p2pTarget = req.p2pTarget
+    const directP2p = req.p2pTarget?.multiaddr?.trim()
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
@@ -600,25 +522,42 @@ export function useTransportRouter() {
         execute: async (signal) => executeFetch(directBase, signal),
       })
     }
-    if (appConfig.p2pEnabled && p2pTarget) {
+    if (directP2p && appConfig.p2pEnabled) {
       candidates.push({
         backend: 'libp2p' as const,
-        endpoint: p2pTarget.multiaddr,
-        execute: async (signal) =>
-          p2pGatewayFetchRange(
-            p2pTarget,
-            {
-              manifestRoot: req.manifestRoot,
-              owner: req.owner,
-              dealId: req.dealId,
-              filePath: req.filePath,
-              rangeStart: req.rangeStart,
-              rangeEnd,
-              sessionId: req.sessionId,
-              expectedProvider: req.expectedProvider,
-            },
-            signal,
-          ),
+        endpoint: directP2p,
+        execute: async (signal) => {
+          const result = await libp2pFetchRange(directP2p, {
+            manifestRoot: req.manifestRoot,
+            dealId: req.dealId,
+            owner: req.owner,
+            filePath: req.filePath,
+            rangeStart: req.rangeStart,
+            rangeLen: req.rangeLen,
+            sessionId: req.sessionId,
+          }, signal)
+
+          if (result.status < 200 || result.status >= 300) {
+            throw new TransportError(
+              result.error || `libp2p fetch failed (${result.status})`,
+              classifyStatus(result.status),
+              result.status,
+            )
+          }
+
+          const provider = String(result.headers['X-Nil-Provider'] || '')
+          if (!provider) {
+            throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+          }
+          if (req.expectedProvider && provider !== req.expectedProvider) {
+            throw new TransportError(
+              `provider mismatch: expected ${req.expectedProvider} got ${provider}`,
+              'provider_mismatch',
+            )
+          }
+
+          return { bytes: result.body, provider }
+        },
       })
     }
     if (candidates.length === 0) {

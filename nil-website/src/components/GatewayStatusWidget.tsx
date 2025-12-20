@@ -26,6 +26,7 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
           .map(([name, ok]) => `${name}:${ok ? 'ok' : 'fail'}`)
           .join(', ')
       : '';
+  const p2p = details?.p2p_addrs?.length ? details.p2p_addrs.join(', ') : '';
 
   switch (status) {
     case 'connected':
@@ -34,7 +35,7 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
       text = 'Connected';
       tooltip = `Local Gateway connected at ${url}${
         details?.mode ? ` (mode=${details.mode})` : ''
-      }${caps ? ` | caps: ${caps}` : ''}${deps ? ` | deps: ${deps}` : ''}`;
+      }${caps ? ` | caps: ${caps}` : ''}${deps ? ` | deps: ${deps}` : ''}${p2p ? ` | p2p: ${p2p}` : ''}`;
       break;
     case 'connecting':
       icon = <Loader2 className="w-4 h-4 animate-spin" />;
