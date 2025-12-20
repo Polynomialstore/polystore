@@ -45,12 +45,7 @@ async function createClient(): Promise<import('libp2p').Libp2p> {
 
   const peerId = await createEd25519PeerId()
   const bootstrapList = appConfig.p2pBootstrap
-  const peerDiscovery = [] as unknown[]
-
-  if (bootstrapList.length > 0) {
-    const { bootstrap } = await import('@libp2p/bootstrap')
-    peerDiscovery.push(bootstrap({ list: bootstrapList }))
-  }
+  const peerDiscovery = bootstrapList.length > 0 ? [ (await import('@libp2p/bootstrap')).bootstrap({ list: bootstrapList }) ] : undefined
 
   const node = await createLibp2p({
     peerId,
@@ -58,9 +53,6 @@ async function createClient(): Promise<import('libp2p').Libp2p> {
     connectionEncrypters: [noise()],
     streamMuxers: [mplex()],
     peerDiscovery,
-    connectionManager: {
-      autoDial: false,
-    },
   })
 
   await node.start()
@@ -94,9 +86,9 @@ function decodeBody(bodyBase64?: string): Uint8Array {
   return uint8FromString(bodyBase64, 'base64')
 }
 
-async function readSingleMessage(source: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+async function readSingleMessage(source: AsyncIterable<{ subarray: (begin?: number, end?: number) => Uint8Array }>): Promise<Uint8Array> {
   for await (const msg of source) {
-    return msg
+    return msg.subarray()
   }
   return new Uint8Array()
 }
@@ -111,7 +103,6 @@ export async function p2pRequest(target: P2pTarget, req: P2pRequest, signal?: Ab
 
   const client = await getClient()
   const { multiaddr } = await import('@multiformats/multiaddr')
-  const { pipe } = await import('it-pipe')
   const lp = await import('it-length-prefixed')
 
   const request: P2pWireRequest = {
@@ -126,9 +117,13 @@ export async function p2pRequest(target: P2pTarget, req: P2pRequest, signal?: Ab
   const operation = async (): Promise<P2pResponse> => {
     const stream = await client.dialProtocol(multiaddr(target.multiaddr), appConfig.p2pProtocol)
 
-    await pipe([payload], lp.encode(), stream.sink)
+    const encoded = lp.encode([payload])
+    for (const chunk of encoded) {
+      stream.send(chunk)
+    }
+    await stream.close()
 
-    const responseBytes = await pipe(stream.source, lp.decode(), readSingleMessage)
+    const responseBytes = await readSingleMessage(lp.decode(stream))
     const responseJson = JSON.parse(uint8ToString(responseBytes)) as P2pWireResponse
     if (!responseJson || typeof responseJson.status !== 'number') {
       throw new Error('Invalid libp2p response')
