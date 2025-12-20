@@ -14,7 +14,7 @@ import {
   resolveProviderP2pEndpointByAddress,
 } from '../lib/providerDiscovery'
 import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
-import { multiaddrToP2pTarget } from '../lib/multiaddr'
+import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 
@@ -177,7 +177,7 @@ export function useFetch() {
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
-      let gatewayP2pTarget: ReturnType<typeof multiaddrToP2pTarget> | undefined
+      let gatewayP2pTarget: P2pTarget | undefined
       if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !p2pEndpoint?.target) {
         const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
         for (const addr of addrs) {
