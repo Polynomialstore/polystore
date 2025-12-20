@@ -18,3 +18,15 @@ export function multiaddrToHttpUrl(ep: string): string | null {
   if (!hostProto || !host) return null
   return `${isHttps ? 'https' : 'http'}://${host}:${port}`
 }
+
+export function multiaddrToP2pWsAddr(ep: string): string | null {
+  const s = String(ep || '').trim()
+  if (!s.startsWith('/')) return null
+  if (!s.includes('/p2p/')) return null
+
+  const parts = s.split('/').filter(Boolean)
+  const hasWs = parts.includes('ws') || parts.includes('wss')
+  if (!hasWs) return null
+
+  return s
+}

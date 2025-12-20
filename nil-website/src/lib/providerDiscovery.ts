@@ -1,9 +1,10 @@
 import { lcdFetchDeal, lcdFetchProviders } from '../api/lcdClient'
-import { multiaddrToHttpUrl } from './multiaddr'
+import { multiaddrToHttpUrl, multiaddrToP2pWsAddr } from './multiaddr'
 
 export interface ProviderEndpoint {
   provider: string
   baseUrl: string
+  p2pAddr?: string
 }
 
 export async function resolveProviderEndpoint(
@@ -18,13 +19,20 @@ export async function resolveProviderEndpoint(
   const entry = providers.find((p) => p.address === provider)
   if (!entry?.endpoints || entry.endpoints.length === 0) return null
 
+  let baseUrl = ''
+  let p2pAddr: string | undefined
   for (const ep of entry.endpoints) {
-    const url = multiaddrToHttpUrl(ep)
-    if (url) {
-      return { provider, baseUrl: url }
+    if (!baseUrl) {
+      const url = multiaddrToHttpUrl(ep)
+      if (url) baseUrl = url
+    }
+    if (!p2pAddr) {
+      const addr = multiaddrToP2pWsAddr(ep)
+      if (addr) p2pAddr = addr
     }
   }
-  return null
+  if (!baseUrl && !p2pAddr) return null
+  return { provider, baseUrl, p2pAddr }
 }
 
 export async function resolveProviderEndpoints(
@@ -45,14 +53,18 @@ export async function resolveProviderEndpoints(
       continue
     }
     let baseUrl = ''
+    let p2pAddr: string | undefined
     for (const ep of entry.endpoints) {
-      const url = multiaddrToHttpUrl(ep)
-      if (url) {
-        baseUrl = url
-        break
+      if (!baseUrl) {
+        const url = multiaddrToHttpUrl(ep)
+        if (url) baseUrl = url
+      }
+      if (!p2pAddr) {
+        const addr = multiaddrToP2pWsAddr(ep)
+        if (addr) p2pAddr = addr
       }
     }
-    out.push({ provider, baseUrl })
+    out.push({ provider, baseUrl, p2pAddr })
   }
   return out
 }
@@ -66,11 +78,18 @@ export async function resolveProviderEndpointByAddress(
   const providers = await lcdFetchProviders(lcdBase)
   const entry = providers.find((p) => p.address === addr)
   if (!entry?.endpoints || entry.endpoints.length === 0) return null
+  let baseUrl = ''
+  let p2pAddr: string | undefined
   for (const ep of entry.endpoints) {
-    const url = multiaddrToHttpUrl(ep)
-    if (url) {
-      return { provider: addr, baseUrl: url }
+    if (!baseUrl) {
+      const url = multiaddrToHttpUrl(ep)
+      if (url) baseUrl = url
+    }
+    if (!p2pAddr) {
+      const addr = multiaddrToP2pWsAddr(ep)
+      if (addr) p2pAddr = addr
     }
   }
-  return null
+  if (!baseUrl && !p2pAddr) return null
+  return { provider: addr, baseUrl, p2pAddr }
 }

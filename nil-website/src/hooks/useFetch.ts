@@ -167,6 +167,7 @@ export function useFetch() {
         serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
+      const directP2p = directEndpoint?.p2pAddr
       const planResult = await transport.plan({
         manifestRoot,
         owner,
@@ -240,6 +241,7 @@ export function useFetch() {
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
         (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
         (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
+      const fetchDirectP2p = providerEndpoint?.p2pAddr || directP2p
 
       const parts: Uint8Array[] = []
       let bytesFetched = 0
@@ -258,6 +260,7 @@ export function useFetch() {
           sessionId,
           expectedProvider: provider,
           directBase: fetchDirectBase,
+          directP2p: fetchDirectP2p,
           preference: preferenceOverride,
         })
 

@@ -9,7 +9,7 @@ export type TransportOp =
 
 export type RoutePreference = 'auto' | 'prefer_gateway' | 'prefer_direct_sp'
 
-export type BackendName = 'gateway' | 'direct_sp'
+export type BackendName = 'gateway' | 'direct_sp' | 'libp2p'
 
 export type ErrorClass =
   | 'timeout'

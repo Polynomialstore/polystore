@@ -14,6 +14,7 @@ import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
+import { libp2pFetchRange } from '../lib/transport/libp2pClient'
 
 type ListFilesRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
 type SlabRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
@@ -46,6 +47,7 @@ type FetchRangeRequest = {
   sessionId: string
   expectedProvider?: string
   directBase?: string
+  directP2p?: string
   preference?: RoutePreference
 }
 
@@ -478,6 +480,44 @@ export function useTransportRouter() {
         backend: 'direct_sp' as const,
         endpoint: directBase,
         execute: async (signal) => executeFetch(directBase, signal),
+      })
+    }
+    if (directP2p && appConfig.p2pEnabled) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: directP2p,
+        execute: async (signal) => {
+          const result = await libp2pFetchRange(directP2p, {
+            manifestRoot: req.manifestRoot,
+            dealId: req.dealId,
+            owner: req.owner,
+            filePath: req.filePath,
+            rangeStart: req.rangeStart,
+            rangeLen: req.rangeLen,
+            sessionId: req.sessionId,
+          }, signal)
+
+          if (result.status < 200 || result.status >= 300) {
+            throw new TransportError(
+              result.error || `libp2p fetch failed (${result.status})`,
+              classifyStatus(result.status),
+              result.status,
+            )
+          }
+
+          const provider = String(result.headers['X-Nil-Provider'] || '')
+          if (!provider) {
+            throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+          }
+          if (req.expectedProvider && provider !== req.expectedProvider) {
+            throw new TransportError(
+              `provider mismatch: expected ${req.expectedProvider} got ${provider}`,
+              'provider_mismatch',
+            )
+          }
+
+          return { bytes: result.body, provider }
+        },
       })
     }
     if (candidates.length === 0) {
