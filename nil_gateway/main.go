@@ -379,6 +379,14 @@ func main() {
 		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	}
 
+	p2pServer, err := startLibp2pServerFromEnv(context.Background())
+	if err != nil {
+		log.Fatalf("failed to start libp2p server: %v", err)
+	}
+	if p2pServer != nil {
+		log.Printf("LibP2P listening on %s", strings.Join(p2pAnnounceAddrs(p2pServer.host), ", "))
+	}
+
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, r))
