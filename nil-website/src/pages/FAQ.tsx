@@ -191,7 +191,7 @@ const AccordionItem = ({ question, answer }: { question: string, answer: React.R
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="p-4 pt-0 text-muted-foreground text-sm leading-relaxed border-t border-border/50 mt-2">
+            <div className="p-8 text-muted-foreground text-sm leading-relaxed border-t border-border/50 mt-2">
               {answer}
             </div>
           </motion.div>
