@@ -64,6 +64,10 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
     *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica). Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
 
+*   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
+    *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
+    *   **Role:** Optional browser-side mirroring into a local gateway/router cache (used when the gateway is running in router mode and `/sp/*` endpoints are not exposed).
+
 #### Health & Status
 *   **`GET /health`**
     *   **Role:** Lightweight liveness probe (200 if gateway is reachable).

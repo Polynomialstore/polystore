@@ -166,7 +166,7 @@ export function useFetch() {
       const preferenceOverride: RoutePreference | undefined =
         serviceOverride && serviceOverride !== appConfig.gatewayBase ? 'prefer_direct_sp' : undefined
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
-      const directBase = serviceOverride || directEndpoint?.baseUrl
+      const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
       const planResult = await transport.plan({
         manifestRoot,
         owner,
@@ -305,7 +305,7 @@ export function useFetch() {
         const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId }),
+          body: JSON.stringify({ session_id: sessionId, provider }),
         })
         if (!proofRes.ok) {
           const text = await proofRes.text().catch(() => '')

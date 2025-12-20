@@ -53,4 +53,7 @@ wait_for_http "provider #1" "http://localhost:8091/gateway/upload" "200,405" 60 
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
 
 echo "==> Running Playwright (Mode 2 StripeReplica)..."
-(cd "$ROOT_DIR/nil-website" && npx playwright install --with-deps && npm run test:e2e -- tests/mode2-stripe.spec.ts)
+if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
+  (cd "$ROOT_DIR/nil-website" && npx playwright install --with-deps chromium)
+fi
+(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/mode2-stripe.spec.ts)

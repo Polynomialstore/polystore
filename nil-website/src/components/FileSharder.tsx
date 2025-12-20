@@ -80,10 +80,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
   const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
   const [currentManifestBlob, setCurrentManifestBlob] = useState<Uint8Array | null>(null);
-  const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+  const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error' | 'skipped'>('idle')
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [slotBases, setSlotBases] = useState<string[]>([])
+  const [slotProviders, setSlotProviders] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<{ index: number; shards: Uint8Array[] }[]>([])
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
@@ -145,6 +146,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!dealId) {
         setStripeParams(null)
         setSlotBases([])
+        setSlotProviders([])
         return
       }
       try {
@@ -156,11 +158,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (!cancelled) setStripeParams(null)
         }
         const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
-        if (!cancelled) setSlotBases(endpoints.map((e) => e.baseUrl))
+        if (!cancelled) {
+          setSlotBases(endpoints.map((e) => e.baseUrl))
+          setSlotProviders(endpoints.map((e) => e.provider))
+        }
       } catch {
         if (!cancelled) {
           setStripeParams(null)
           setSlotBases([])
+          setSlotProviders([])
         }
       }
     }
@@ -173,9 +179,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     if (!isCommitSuccess) return;
     if (!currentManifestRoot || !dealId) return;
-    const commitKey = commitHash || currentManifestRoot;
-    if (lastCommitRef.current === commitKey) return;
-    lastCommitRef.current = commitKey;
+    if (lastCommitRef.current === currentManifestRoot) return;
+    lastCommitRef.current = currentManifestRoot;
     onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
@@ -424,17 +429,46 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
     const spBase = appConfig.spBase.replace(/\/$/, '')
     if (!gatewayBase || gatewayBase === spBase) return
+    if (appConfig.gatewayDisabled) {
+      setMirrorStatus('skipped')
+      setMirrorError('Gateway disabled')
+      addLog('> Gateway mirror skipped (disabled).')
+      return
+    }
 
     setMirrorStatus('running')
     setMirrorError(null)
     addLog(`> Mirroring slab to local gateway (${gatewayBase})...`)
 
     try {
-      const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-      if (!health.ok) throw new Error(`gateway health returned ${health.status}`)
+      let mirrorMduPath = '/sp/upload_mdu'
+      let mirrorManifestPath = '/sp/upload_manifest'
+
+      const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+      if (statusRes.ok) {
+        const payload = await statusRes.json().catch(() => null)
+        if (payload && typeof payload === 'object' && payload.mode === 'router') {
+          mirrorMduPath = '/gateway/mirror_mdu'
+          mirrorManifestPath = '/gateway/mirror_manifest'
+          addLog('> Gateway router detected; using mirror endpoints.')
+        }
+      } else if (statusRes.status !== 404) {
+        setMirrorStatus('skipped')
+        setMirrorError(`Gateway unavailable (${statusRes.status})`)
+        addLog('> Gateway not reachable; mirror skipped.')
+        return
+      } else {
+        const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+        if (!health.ok) {
+          setMirrorStatus('skipped')
+          setMirrorError(`Gateway unavailable (${health.status})`)
+          addLog('> Gateway not reachable; mirror skipped.')
+          return
+        }
+      }
 
       for (const mdu of collectedMdus) {
-        const res = await fetch(`${gatewayBase}/sp/upload_mdu`, {
+        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
           method: 'POST',
           headers: {
             'X-Nil-Deal-ID': dealId,
@@ -451,7 +485,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
-      const manifestRes = await fetch(`${gatewayBase}/sp/upload_manifest`, {
+      const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
         method: 'POST',
         headers: {
           'X-Nil-Deal-ID': dealId,
@@ -467,12 +501,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       setMirrorStatus('success')
+      setMirrorError(null)
       addLog('> Mirrored slab to local gateway.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setMirrorStatus('error')
       setMirrorError(msg)
-      addLog(`> Mirror to gateway failed: ${msg}`)
+      addLog(`> Gateway mirror failed: ${msg}`)
     }
   }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
 
@@ -1178,6 +1213,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   };
 
+  const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
+
   return (
     <div className="w-full space-y-6">
       {!isConnected ? (
@@ -1203,6 +1240,35 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
              </span>
           </div>
       </div>
+      {isMode2 && stripeParams && (
+        <div className="rounded-lg border border-border bg-card/70 p-3 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold text-foreground">Mode 2 Slots</div>
+            <div className="text-muted-foreground">
+              RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
+            </div>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Each user MDU expands into {stripeParams.k + stripeParams.m} shards (K data + M parity). Metadata MDUs are
+            replicated to every slot.
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: stripeParams.k + stripeParams.m }).map((_, idx) => {
+              const provider = slotProviders[idx] || 'unassigned'
+              const base = slotBases[idx] || ''
+              return (
+                <div key={`slot-${idx}`} className="rounded border border-border bg-secondary/40 p-2">
+                  <div className="text-[10px] uppercase text-muted-foreground">Slot {idx}</div>
+                  <div className="font-mono text-[10px] text-foreground break-all">{provider}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground break-all">
+                    {base || 'missing endpoint'}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Dropzone */}
       <div
@@ -1376,8 +1442,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {mirrorStatus !== 'idle' && (
-              <div className="text-[11px] text-muted-foreground">
-                Gateway mirror: {mirrorStatus}
+              <div
+                className={`text-[11px] ${mirrorStatus === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}
+              >
+                Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
                 {mirrorError ? ` (${mirrorError})` : ''}
               </div>
             )}
@@ -1398,11 +1466,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     fileSize: totalSize
                 });
               }}
-              disabled={isCommitPending || isCommitConfirming || isCommitSuccess}
+              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted}
               data-testid="mdu-commit"
               className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
             >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isCommitSuccess ? 'Committed!' : 'Commit to Chain'}
+              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isAlreadyCommitted ? 'Committed!' : 'Commit to Chain'}
             </button>
             
             {commitHash && (

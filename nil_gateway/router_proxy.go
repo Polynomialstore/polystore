@@ -319,7 +319,39 @@ func RouterGatewaySubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 }
 
 func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
-	RouterGatewayFetch(w, r)
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "failed to read body", err.Error())
+		return
+	}
+
+	var env struct {
+		SessionID string `json:"session_id"`
+		Provider  string `json:"provider"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {session_id, provider}")
+		return
+	}
+
+	providerAddr := strings.TrimSpace(env.Provider)
+	if providerAddr == "" {
+		writeJSONError(w, http.StatusBadRequest, "provider is required", "")
+		return
+	}
+
+	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
+		return
+	}
+	forwardJSONToProviderBase(w, r, baseURL, "/sp/session-proof", body)
 }
 
 func isGatewayRouterMode() bool {
