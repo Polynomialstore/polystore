@@ -865,8 +865,8 @@ export function Dashboard() {
         <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">My Storage Deals</h2>
-              <p className="text-muted-foreground text-sm mt-1">Allocate, commit, and retrieve data across the network.</p>
+              <h2 className="text-2xl font-bold text-foreground">Deal Library</h2>
+              <p className="text-muted-foreground text-sm mt-1">Create a deal (bucket), then upload, commit, and retrieve files.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
@@ -991,11 +991,11 @@ export function Dashboard() {
       <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal Workflow</div>
-            <h3 className="text-lg font-semibold text-foreground">Allocate → Commit → Retrieve</h3>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal Actions</div>
+            <h3 className="text-lg font-semibold text-foreground">Create → Upload → Commit</h3>
           </div>
           <div className="text-xs text-muted-foreground">
-            Use the tabs to move between allocation, content, and local MDU flows.
+            Pick a deal, then choose how you want to upload or shard.
           </div>
         </div>
 
@@ -1012,7 +1012,7 @@ export function Dashboard() {
             >
               <span className="text-[10px] font-semibold text-muted-foreground">STEP 1</span>
               <HardDrive className="w-4 h-4" />
-              Allocate Capacity
+              Create Deal
             </button>
             <button 
               onClick={() => setActiveTab('content')}
@@ -1025,7 +1025,7 @@ export function Dashboard() {
             >
               <span className="text-[10px] font-semibold text-muted-foreground">STEP 2</span>
               <Database className="w-4 h-4" />
-              Commit Content
+              Upload &amp; Commit
             </button>
             <button 
               onClick={() => setActiveTab('mdu')}
@@ -1045,7 +1045,7 @@ export function Dashboard() {
           <div className="p-6 flex-1">
             {activeTab === 'alloc' ? (
                 <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">Reserve storage space on the network by creating a "Container".</p>
+                    <p className="text-xs text-muted-foreground">Create a new deal (bucket) that will hold your files.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
@@ -1150,7 +1150,7 @@ export function Dashboard() {
                             data-testid="alloc-submit"
                             className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                         >
-                            {dealLoading ? 'Allocating...' : 'Allocate'}
+                            {dealLoading ? 'Creating...' : 'Create Deal'}
                         </button>
                     </div>
                 </div>
@@ -1467,6 +1467,152 @@ export function Dashboard() {
         </div>
       </div>
 
+      {loading ? (
+        <div className="text-center py-24">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Syncing with NilChain...</p>
+        </div>
+      ) : deals.length === 0 ? (
+        <div className="bg-card rounded-xl p-16 text-center border border-border border-dashed shadow-sm">
+            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-6">
+                <HardDrive className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium text-foreground mb-2">No deals yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Create a deal above, then upload files into it.</p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-3 border-b border-border bg-muted/50">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
+              <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
+            </div>
+            <table className="min-w-full divide-y divide-border" data-testid="deals-table">
+                <thead className="bg-muted/50">
+                    <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                    {deals.map((deal) => (
+                    <tr
+                      key={deal.id}
+                      data-testid={`deal-row-${deal.id}`}
+                      className="hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedDeal(deal)}
+                    >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
+                            <td
+                              className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
+                              title={deal.cid}
+                              data-testid={`deal-manifest-${deal.id}`}
+                            >
+                              {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
+                              {(() => {
+                                const sizeNum = Number(deal.size)
+                                if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
+                                return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
+                              })()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                                {deal.cid ? (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
+                                        Active
+                                    </span>
+                                ) : (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
+                                        Allocated
+                                    </span>
+                                )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
+                              {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
+                            </td>
+                            <td
+                              className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
+                              data-testid={`deal-retrievals-${deal.id}`}
+                            >
+                              {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setTargetDealId(String(deal.id ?? '')); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                              >
+                                Upload to deal
+                              </button>
+                            </td>
+                    </tr>
+                    ))}
+                </tbody>
+            </table>
+          </div>
+
+          {selectedDeal && (
+            <DealDetail 
+                deal={selectedDeal} 
+                onClose={() => setSelectedDeal(null)} 
+                nilAddress={nilAddress} 
+            />
+          )}
+
+          {proofs.length > 0 && (
+            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span>Liveness &amp; Performance</span>
+                {proofsLoading && <span className="text-[10px] text-muted-foreground">Syncing proofs…</span>}
+              </div>
+              <table className="min-w-full divide-y divide-border text-xs">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Block</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Valid</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {(() => {
+                    const myDealIds = new Set(deals.map((d) => d.id))
+                    const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
+                    return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
+                      <tr key={p.id} className="hover:bg-muted/50 transition-colors">
+                        <td className="px-4 py-2 text-foreground">
+                          {p.dealId ? `#${p.dealId}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-primary">
+                          {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {p.blockHeight || 0}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                            p.valid
+                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+                          }`}>
+                            {p.valid ? 'OK' : 'FAIL'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
       <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Providers (Deals &amp; Retrievals)
@@ -1630,149 +1776,6 @@ export function Dashboard() {
         </table>
       </div>
 
-      {loading ? (
-        <div className="text-center py-24">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Syncing with NilChain...</p>
-        </div>
-      ) : deals.length === 0 ? (
-        <div className="bg-card rounded-xl p-16 text-center border border-border border-dashed shadow-sm">
-            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-6">
-                <HardDrive className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">No active deals</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Alloc capacity above to get started.</p>
-        </div>
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
-                  <thead className="bg-muted/50">
-                      <tr>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                      {deals.map((deal) => (
-                      <tr
-                        key={deal.id}
-                        data-testid={`deal-row-${deal.id}`}
-                        className="hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => setSelectedDeal(deal)}
-                      >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
-                                title={deal.cid}
-                                data-testid={`deal-manifest-${deal.id}`}
-                              >
-                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                                {(() => {
-                                  const sizeNum = Number(deal.size)
-                                  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
-                                  return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
-                                })()}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                  {deal.cid ? (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                                          Active
-                                      </span>
-                                  ) : (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                                          Allocated
-                                      </span>
-                                  )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
-                                {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
-                              </td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
-                                data-testid={`deal-retrievals-${deal.id}`}
-                              >
-                                {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setTargetDealId(String(deal.id ?? '')); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                  className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                                >
-                                  Upload to deal
-                                </button>
-                              </td>
-                      </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </div>
-
-          {/* Deal Details */}
-          {selectedDeal && (
-            <DealDetail 
-                deal={selectedDeal} 
-                onClose={() => setSelectedDeal(null)} 
-                nilAddress={nilAddress} 
-            />
-          )}
-
-          {/* Liveness & Performance */}
-          {proofs.length > 0 && (
-            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                <span>Liveness &amp; Performance</span>
-                {proofsLoading && <span className="text-[10px] text-muted-foreground">Syncing proofs…</span>}
-              </div>
-              <table className="min-w-full divide-y divide-border text-xs">
-                <thead className="bg-muted/30">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Block</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Valid</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(() => {
-                    const myDealIds = new Set(deals.map((d) => d.id))
-                    const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
-                    return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-4 py-2 text-foreground">
-                          {p.dealId ? `#${p.dealId}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-primary">
-                          {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {p.blockHeight || 0}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
-                            p.valid
-                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
-                          }`}>
-                            {p.valid ? 'OK' : 'FAIL'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
     </div>
   )
 }
