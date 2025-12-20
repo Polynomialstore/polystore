@@ -8,15 +8,38 @@ import {
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
+import {
+  p2pGatewayFetchManifestInfo,
+  p2pGatewayFetchMduKzg,
+  p2pGatewayFetchRange,
+  p2pGatewayFetchSlabLayout,
+  p2pGatewayListFiles,
+  p2pGatewayPlanRetrievalSession,
+} from '../api/p2pGatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
+import type { P2pTarget } from '../lib/multiaddr'
 
-type ListFilesRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
-type SlabRequest = { manifestRoot: string; owner: string; dealId: string; directBase?: string; preference?: RoutePreference }
+type ListFilesRequest = {
+  manifestRoot: string
+  owner: string
+  dealId: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
+type SlabRequest = {
+  manifestRoot: string
+  owner: string
+  dealId: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
 type PlanRequest = {
   manifestRoot: string
   owner: string
@@ -25,6 +48,7 @@ type PlanRequest = {
   rangeStart?: number
   rangeLen?: number
   directBase?: string
+  p2pTarget?: P2pTarget
   preference?: RoutePreference
 }
 type UploadRequest = {
@@ -33,9 +57,25 @@ type UploadRequest = {
   dealId?: string
   maxUserMdus?: number
   directBase?: string
+  p2pTarget?: P2pTarget
 }
-type ManifestInfoRequest = { manifestRoot: string; owner?: string; dealId?: string; directBase?: string; preference?: RoutePreference }
-type MduKzgRequest = { manifestRoot: string; owner?: string; dealId?: string; mduIndex: number; directBase?: string; preference?: RoutePreference }
+type ManifestInfoRequest = {
+  manifestRoot: string
+  owner?: string
+  dealId?: string
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
+type MduKzgRequest = {
+  manifestRoot: string
+  owner?: string
+  dealId?: string
+  mduIndex: number
+  directBase?: string
+  p2pTarget?: P2pTarget
+  preference?: RoutePreference
+}
 type FetchRangeRequest = {
   manifestRoot: string
   owner: string
@@ -46,6 +86,7 @@ type FetchRangeRequest = {
   sessionId: string
   expectedProvider?: string
   directBase?: string
+  p2pTarget?: P2pTarget
   preference?: RoutePreference
 }
 
@@ -76,8 +117,15 @@ export function useTransportRouter() {
   }, [coerceHttpError])
 
   const resolvePreference = useCallback(
-    (override?: RoutePreference): RoutePreference =>
-      appConfig.gatewayDisabled ? 'prefer_direct_sp' : override ?? preference,
+    (override?: RoutePreference): RoutePreference => {
+      const candidate = override ?? preference
+      if (appConfig.gatewayDisabled) {
+        if (candidate === 'prefer_p2p' && appConfig.p2pEnabled) return 'prefer_p2p'
+        return 'prefer_direct_sp'
+      }
+      if (candidate === 'prefer_p2p' && !appConfig.p2pEnabled) return 'auto'
+      return candidate
+    },
     [preference],
   )
 
@@ -92,6 +140,7 @@ export function useTransportRouter() {
 
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -124,6 +173,13 @@ export function useTransportRouter() {
         },
       })
     }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) => p2pGatewayListFiles(p2pTarget, req.manifestRoot, { dealId: req.dealId, owner: req.owner }, signal),
+      })
+    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for list files')
     }
@@ -144,6 +200,7 @@ export function useTransportRouter() {
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<SlabLayoutData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -176,6 +233,19 @@ export function useTransportRouter() {
         },
       })
     }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) =>
+          p2pGatewayFetchSlabLayout(
+            p2pTarget,
+            req.manifestRoot,
+            { dealId: req.dealId, owner: req.owner },
+            signal,
+          ),
+      })
+    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for slab')
     }
@@ -196,6 +266,7 @@ export function useTransportRouter() {
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -232,6 +303,25 @@ export function useTransportRouter() {
             }),
           )
         },
+      })
+    }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) =>
+          p2pGatewayPlanRetrievalSession(
+            p2pTarget,
+            req.manifestRoot,
+            {
+              dealId: req.dealId,
+              owner: req.owner,
+              filePath: req.filePath,
+              rangeStart: req.rangeStart,
+              rangeLen: req.rangeLen,
+            },
+            signal,
+          ),
       })
     }
     if (candidates.length === 0) {
@@ -309,6 +399,7 @@ export function useTransportRouter() {
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<ManifestInfoData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -343,6 +434,19 @@ export function useTransportRouter() {
         },
       })
     }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) =>
+          p2pGatewayFetchManifestInfo(
+            p2pTarget,
+            req.manifestRoot,
+            req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
+            signal,
+          ),
+      })
+    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for manifest info')
     }
@@ -363,6 +467,7 @@ export function useTransportRouter() {
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const candidates: TransportCandidate<MduKzgData>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
@@ -399,6 +504,20 @@ export function useTransportRouter() {
         },
       })
     }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) =>
+          p2pGatewayFetchMduKzg(
+            p2pTarget,
+            req.manifestRoot,
+            req.mduIndex,
+            req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
+            signal,
+          ),
+      })
+    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for MDU KZG')
     }
@@ -423,6 +542,7 @@ export function useTransportRouter() {
     }
 
     const directBase = resolveDirectBase(req.directBase)
+    const p2pTarget = req.p2pTarget
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
@@ -478,6 +598,27 @@ export function useTransportRouter() {
         backend: 'direct_sp' as const,
         endpoint: directBase,
         execute: async (signal) => executeFetch(directBase, signal),
+      })
+    }
+    if (appConfig.p2pEnabled && p2pTarget) {
+      candidates.push({
+        backend: 'libp2p' as const,
+        endpoint: p2pTarget.multiaddr,
+        execute: async (signal) =>
+          p2pGatewayFetchRange(
+            p2pTarget,
+            {
+              manifestRoot: req.manifestRoot,
+              owner: req.owner,
+              dealId: req.dealId,
+              filePath: req.filePath,
+              rangeStart: req.rangeStart,
+              rangeEnd,
+              sessionId: req.sessionId,
+              expectedProvider: req.expectedProvider,
+            },
+            signal,
+          ),
       })
     }
     if (candidates.length === 0) {

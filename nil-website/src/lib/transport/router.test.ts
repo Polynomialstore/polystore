@@ -131,3 +131,27 @@ test('executeWithFallback classifies timeouts and falls back', async () => {
   const timeoutAttempt = result.trace.attempts.find((a) => a.errorClass === 'timeout')
   assert.equal(Boolean(timeoutAttempt), true)
 })
+
+test('executeWithFallback honors prefer_p2p ordering', async () => {
+  const candidates: TransportCandidate<string>[] = [
+    {
+      backend: 'gateway',
+      endpoint: 'http://gateway',
+      execute: async () => 'gateway',
+    },
+    {
+      backend: 'direct_sp',
+      endpoint: 'http://sp',
+      execute: async () => 'sp',
+    },
+    {
+      backend: 'libp2p',
+      endpoint: '/ip4/127.0.0.1/tcp/9090/ws/p2p/12D3KooWExample',
+      execute: async () => 'p2p',
+    },
+  ]
+
+  const result = await executeWithFallback('plan', candidates, { preference: 'prefer_p2p' })
+  assert.equal(result.backend, 'libp2p')
+  assert.equal(result.data, 'p2p')
+})
