@@ -98,7 +98,6 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   **Validate:**
     *   Slow rollout of the "Lattice" (limit the number of nodes initially).
 *   **Market:**
-    *   **Re-branding:** [x] Update copy to "Nilmanifold" & "Homogeneity".
     *   Announce the "Genesis Block."
 *   **Web2 Wrapper:** [x] Documentation for S3 Adapter.
 *   **Governance:** [x] Documentation for DAO & Council.
