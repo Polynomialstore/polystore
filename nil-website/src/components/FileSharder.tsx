@@ -505,9 +505,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       addLog('> Mirrored slab to local gateway.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      setMirrorStatus('skipped')
+      setMirrorStatus('error')
       setMirrorError(msg)
-      addLog(`> Gateway mirror skipped: ${msg}`)
+      addLog(`> Gateway mirror failed: ${msg}`)
     }
   }, [addLog, collectedMdus, currentManifestBlob, currentManifestRoot, dealId]);
 
@@ -1213,6 +1213,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   };
 
+  const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
+
   return (
     <div className="w-full space-y-6">
       {!isConnected ? (
@@ -1441,9 +1443,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             {mirrorStatus !== 'idle' && (
               <div
-                className={`text-[11px] ${
-                  mirrorStatus === 'error' ? 'text-red-500' : mirrorStatus === 'skipped' ? 'text-muted-foreground' : 'text-muted-foreground'
-                }`}
+                className={`text-[11px] ${mirrorStatus === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}
               >
                 Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
                 {mirrorError ? ` (${mirrorError})` : ''}
@@ -1466,11 +1466,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     fileSize: totalSize
                 });
               }}
-              disabled={isCommitPending || isCommitConfirming || (isCommitSuccess && lastCommitRef.current === currentManifestRoot)}
+              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted}
               data-testid="mdu-commit"
               className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
             >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : (isCommitSuccess && lastCommitRef.current === currentManifestRoot) ? 'Committed!' : 'Commit to Chain'}
+              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isAlreadyCommitted ? 'Committed!' : 'Commit to Chain'}
             </button>
             
             {commitHash && (
