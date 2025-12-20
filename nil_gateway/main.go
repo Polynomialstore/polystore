@@ -348,6 +348,9 @@ func main() {
 		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-proof", RouterGatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	} else {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
@@ -371,6 +374,9 @@ func main() {
 		r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
 		r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 		r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	}
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")

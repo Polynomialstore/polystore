@@ -441,16 +441,34 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     addLog(`> Mirroring slab to local gateway (${gatewayBase})...`)
 
     try {
-      const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-      if (!health.ok) {
+      let mirrorMduPath = '/sp/upload_mdu'
+      let mirrorManifestPath = '/sp/upload_manifest'
+
+      const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+      if (statusRes.ok) {
+        const payload = await statusRes.json().catch(() => null)
+        if (payload && typeof payload === 'object' && payload.mode === 'router') {
+          mirrorMduPath = '/gateway/mirror_mdu'
+          mirrorManifestPath = '/gateway/mirror_manifest'
+          addLog('> Gateway router detected; using mirror endpoints.')
+        }
+      } else if (statusRes.status !== 404) {
         setMirrorStatus('skipped')
-        setMirrorError(`Gateway unavailable (${health.status})`)
+        setMirrorError(`Gateway unavailable (${statusRes.status})`)
         addLog('> Gateway not reachable; mirror skipped.')
         return
+      } else {
+        const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+        if (!health.ok) {
+          setMirrorStatus('skipped')
+          setMirrorError(`Gateway unavailable (${health.status})`)
+          addLog('> Gateway not reachable; mirror skipped.')
+          return
+        }
       }
 
       for (const mdu of collectedMdus) {
-        const res = await fetch(`${gatewayBase}/sp/upload_mdu`, {
+        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
           method: 'POST',
           headers: {
             'X-Nil-Deal-ID': dealId,
@@ -467,7 +485,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
-      const manifestRes = await fetch(`${gatewayBase}/sp/upload_manifest`, {
+      const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
         method: 'POST',
         headers: {
           'X-Nil-Deal-ID': dealId,
