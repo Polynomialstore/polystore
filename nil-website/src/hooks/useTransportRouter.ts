@@ -425,6 +425,7 @@ export function useTransportRouter() {
     }
 
     const directBase = resolveDirectBase(req.directBase)
+    const directP2p = req.directP2p?.trim()
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
