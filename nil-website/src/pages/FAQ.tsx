@@ -15,6 +15,13 @@ const faqs = [
         </>
       },
       {
+        q: "Do I need to run a gateway?",
+        a: <>
+          No. The browser client can shard and commit using WASM + OPFS and interact with providers directly. Gateways are optional
+          routing and caching helpers (and power the S3 adapter), but they never sign on your behalf—your wallet signs all on-chain actions.
+        </>
+      },
+      {
         q: "Why \"Nil\"?",
         a: (
           <>

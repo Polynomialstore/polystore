@@ -59,14 +59,20 @@ Concretely, the mainnet Mode 1 design adds:
 *   **Role:** Wallet-facing execution inside NilChain (no separate settlement chain in devnet).
 *   **Function:** Hosts EVM-compatible signatures and the NilStore precompile used for retrieval sessions and future contracts.
 
+### Client Layer: Browser + Gateway (Optional)
+*   **Browser/WASM:** Generates shards and proofs locally and stores slabs in OPFS.
+*   **Gateway/CLI:** Optional routing + caching infrastructure (also powers the S3 adapter). Gateways never sign on behalf of users.
+
 ---
 
 ## 4. The Lifecycle of a File
 
 ### Step 1: Ingestion
 1.  **Deal:** User sends `MsgCreateDeal(Hint: "Hot", MaxSpend: 100)` (thin-provisioned container).
-2.  **Upload:** User streams data to the assigned nodes and receives a `manifest_root`.
-3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
+2.  **Upload:** 
+    * **Mode 1:** upload via gateway/CLI or browser; any assigned Provider can accept the full MDU stream.
+    * **Mode 2:** the client performs RS(K, K+M) encoding per SP‑MDU (WASM/CLI) and uploads per‑slot shards directly to assigned Providers.
+3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root` (gateway optional, user signs via wallet).
 4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In **StripeReplica (Mode 2)**, the Chain assigns an ordered slot list of size `N = K+M`, replicating metadata to all slots while striping user data per slot.
 
 ### Step 2: The Loop
