@@ -98,7 +98,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   **Validate:**
     *   Slow rollout of the "Lattice" (limit the number of nodes initially).
 *   **Market:**
-    *   **Re-branding:** [ ] Update copy to "Nilmanifold" & "Homogeneity".
+    *   **Re-branding:** [x] Update copy to "Nilmanifold" & "Homogeneity".
     *   Announce the "Genesis Block."
 *   **Web2 Wrapper:** [x] Documentation for S3 Adapter.
 *   **Governance:** [x] Documentation for DAO & Council.
@@ -227,7 +227,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 
 ### 6. Work Stream: UI Polish
 *   [x] **DealDetail:** Refactor `DealDetail.tsx` to use semantic Tailwind classes (support Light Mode).
-*   [ ] **Visualization:** Update Deal Explorer to visualize "Stripe Layout" (12 columns) instead of just linear blobs.
+*   [x] **Visualization:** Update Deal Explorer to visualize "Stripe Layout" (12 columns) instead of just linear blobs.
 
 ## Winter Roadmap: StripeReplica & Thick Client (Phase 3)
 

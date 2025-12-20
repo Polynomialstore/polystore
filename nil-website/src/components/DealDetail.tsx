@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
@@ -67,6 +67,19 @@ interface ProviderInfo {
 export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2'
+  const stripeLayout = useMemo(() => {
+    const k = serviceHint.rsK ?? 8
+    const m = serviceHint.rsM ?? 4
+    const slots = k + m
+    const rows = Math.max(1, Math.ceil(64 / k))
+    return {
+      k,
+      m,
+      slots,
+      rows,
+      isMode2: serviceHint.mode === 'mode2' && Boolean(serviceHint.rsK && serviceHint.rsM),
+    }
+  }, [serviceHint.mode, serviceHint.rsK, serviceHint.rsM])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
@@ -1381,16 +1394,60 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                               </div>
 
                               <div className="bg-background/50 border border-border rounded p-2">
-                                <div className="text-[10px] text-muted-foreground uppercase">Commitments</div>
-                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-64 overflow-auto pr-1">
-                                  {mduKzg.blobs.map((c, idx) => (
-                                    <div key={idx} className="flex items-center justify-between gap-2">
-                                      <div className="text-[10px] text-muted-foreground">#{idx}</div>
-                                      <div className="font-mono text-[10px] text-foreground truncate" title={c}>
-                                        {shortHex(c, 18, 10)}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-[10px] text-muted-foreground uppercase">Stripe Layout</div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {stripeLayout.slots} slots ({stripeLayout.k}+{stripeLayout.m})
+                                  </div>
+                                </div>
+                                {!stripeLayout.isMode2 && (
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    Mode 1 deals replicate full MDUs; stripe view is illustrative.
+                                  </div>
+                                )}
+                                <div
+                                  className="mt-2 grid gap-1"
+                                  style={{ gridTemplateColumns: `repeat(${stripeLayout.slots}, minmax(0, 1fr))` }}
+                                >
+                                  {Array.from({ length: stripeLayout.rows * stripeLayout.slots }).map((_, cellIndex) => {
+                                    const row = Math.floor(cellIndex / stripeLayout.slots)
+                                    const col = cellIndex % stripeLayout.slots
+                                    const isDataSlot = col < stripeLayout.k
+                                    const dataIndex = row * stripeLayout.k + col
+                                    const hasBlob = isDataSlot && dataIndex < mduKzg.blobs.length
+                                    const label = hasBlob ? `#${dataIndex}` : isDataSlot ? '-' : 'P'
+                                    const title = hasBlob
+                                      ? `Blob ${dataIndex}: ${mduKzg.blobs[dataIndex]}`
+                                      : isDataSlot
+                                        ? 'Empty data slot'
+                                        : `Parity slot ${col - stripeLayout.k + 1}`
+                                    return (
+                                      <div
+                                        key={`stripe-${row}-${col}`}
+                                        title={title}
+                                        className={[
+                                          'flex items-center justify-center rounded-sm border border-border/40 text-[9px] font-mono',
+                                          hasBlob
+                                            ? 'bg-blue-500/50 text-blue-50'
+                                            : isDataSlot
+                                              ? 'bg-muted/30 text-muted-foreground'
+                                              : 'bg-emerald-500/30 text-emerald-200',
+                                        ].join(' ')}
+                                      >
+                                        {label}
                                       </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+                                  <div className="inline-flex items-center gap-1">
+                                    <span className="h-2 w-2 rounded-sm bg-blue-500/70" />
+                                    Data blob
+                                  </div>
+                                  <div className="inline-flex items-center gap-1">
+                                    <span className="h-2 w-2 rounded-sm bg-emerald-500/60" />
+                                    {stripeLayout.isMode2 ? 'Parity shard' : 'Replica slot'}
+                                  </div>
                                 </div>
                               </div>
                             </div>

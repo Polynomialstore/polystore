@@ -19,9 +19,8 @@ const faqs = [
         a: (
           <>
             <p>
-              "Nil" signals <strong>zero privileged centers</strong>. We are building a storage network that behaves like
-              a homogeneous space: any node can serve, verify, and be replaced without a central coordinator deciding
-              who is allowed in.
+              "Nil" points to a <strong>Nilmanifold</strong>: a <strong>homogeneous space</strong> with zero privileged centers.
+              In NilStore, any node can serve, verify, and be replaced without a central coordinator deciding who is allowed in.
             </p>
             <p className="mt-2">
               Some networks still depend on centralized control planes or gatekeeping infrastructure, while others
