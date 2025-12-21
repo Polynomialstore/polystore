@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test'
+import crypto from 'node:crypto'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
+
+function cachedFileNameForPath(filePath: string): string {
+  const normalized = String(filePath ?? '')
+  const digest = crypto.createHash('sha256').update(Buffer.from(normalized, 'utf8')).digest('hex')
+  return `filecache_${digest}.bin`
+}
 
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
@@ -74,22 +81,29 @@ test.describe('mode2 stripe', () => {
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
 
-    const downloadPromise = page.waitForEvent('download', { timeout: 120_000 })
     await downloadBtn.click()
-    const download = await downloadPromise
-    const stream = await download.createReadStream()
-    const chunks: Buffer[] = []
-    if (stream) {
-      for await (const chunk of stream) {
-        chunks.push(Buffer.from(chunk as Uint8Array))
-      }
-    }
-    const downloaded = Buffer.concat(chunks)
+
+    await expect(page.getByText(/Receipt submitted on-chain|Receipt failed/i)).toBeVisible({ timeout: 360_000 })
+    await expect(page.getByText('Receipt submitted on-chain')).toBeVisible({ timeout: 1_000 })
+    await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
+    await expect(page.getByText(/Download failed/i)).toHaveCount(0)
+
+    const cacheName = cachedFileNameForPath(filePath)
+    const cachedBytes = await page.evaluate(
+      async ({ dealId, cacheName }) => {
+        const root = await navigator.storage.getDirectory()
+        const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+        const fh = await dealDir.getFileHandle(cacheName, { create: false })
+        const file = await fh.getFile()
+        const buf = await file.arrayBuffer()
+        return Array.from(new Uint8Array(buf))
+      },
+      { dealId, cacheName },
+    )
+
+    const downloaded = Buffer.from(cachedBytes)
     expect(downloaded.length).toBe(fileBytes.length)
     expect(downloaded.equals(fileBytes)).toBe(true)
-
-    await expect(page.getByText('Receipt submitted on-chain')).toBeVisible({ timeout: 180_000 })
-    await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
   })
 
   test('mode2 append keeps prior files', async ({ page }) => {
