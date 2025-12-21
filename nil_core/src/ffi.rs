@@ -747,6 +747,15 @@ pub extern "C" fn nil_mdu0_builder_new(max_user_mdus: u64) -> *mut Mdu0Builder {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_new_with_commitments(
+    max_user_mdus: u64,
+    commitments_per_mdu: u64,
+) -> *mut Mdu0Builder {
+    let builder = Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu);
+    Box::into_raw(Box::new(builder))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_mdu0_builder_free(ptr: *mut Mdu0Builder) {
     if ptr.is_null() {
         return;
@@ -763,6 +772,23 @@ pub extern "C" fn nil_mdu0_builder_load(data_ptr: *const u8, len: usize, max_use
     }
     let slice = unsafe { std::slice::from_raw_parts(data_ptr, len) };
     match Mdu0Builder::load(slice, max_user_mdus) {
+        Ok(builder) => Box::into_raw(Box::new(builder)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_builder_load_with_commitments(
+    data_ptr: *const u8,
+    len: usize,
+    max_user_mdus: u64,
+    commitments_per_mdu: u64,
+) -> *mut Mdu0Builder {
+    if data_ptr.is_null() || len != crate::builder::MDU_SIZE {
+        return std::ptr::null_mut();
+    }
+    let slice = unsafe { std::slice::from_raw_parts(data_ptr, len) };
+    match Mdu0Builder::load_with_commitments(slice, max_user_mdus, commitments_per_mdu) {
         Ok(builder) => Box::into_raw(Box::new(builder)),
         Err(_) => std::ptr::null_mut(),
     }

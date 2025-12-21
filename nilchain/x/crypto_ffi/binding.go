@@ -84,14 +84,16 @@ int nil_verify_chained_proof(
     const unsigned char* blob_proof
 );
 
-typedef void* Mdu0BuilderPtr;
-Mdu0BuilderPtr nil_mdu0_builder_new(unsigned long long max_user_mdus);
-void nil_mdu0_builder_free(Mdu0BuilderPtr ptr);
-Mdu0BuilderPtr nil_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
-int nil_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
-int nil_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
-int nil_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
-int nil_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
+	typedef void* Mdu0BuilderPtr;
+	Mdu0BuilderPtr nil_mdu0_builder_new(unsigned long long max_user_mdus);
+	Mdu0BuilderPtr nil_mdu0_builder_new_with_commitments(unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	void nil_mdu0_builder_free(Mdu0BuilderPtr ptr);
+	Mdu0BuilderPtr nil_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
+	Mdu0BuilderPtr nil_mdu0_builder_load_with_commitments(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	int nil_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
+	int nil_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
+	int nil_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
+	int nil_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
 unsigned long long nil_mdu0_get_witness_count(Mdu0BuilderPtr ptr);
 unsigned int nil_mdu0_get_record_count(Mdu0BuilderPtr ptr);
 
@@ -146,11 +148,32 @@ func NewMdu0Builder(maxUserMdus uint64) *Mdu0Builder {
 	return &Mdu0Builder{ptr: ptr}
 }
 
+func NewMdu0BuilderWithCommitments(maxUserMdus uint64, commitmentsPerMdu uint64) *Mdu0Builder {
+	ptr := C.nil_mdu0_builder_new_with_commitments(C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
+	return &Mdu0Builder{ptr: ptr}
+}
+
 func LoadMdu0Builder(data []byte, maxUserMdus uint64) (*Mdu0Builder, error) {
 	if len(data) != types.MDU_SIZE {
 		return nil, errors.New("invalid size")
 	}
 	ptr := C.nil_mdu0_builder_load((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus))
+	if ptr == nil {
+		return nil, errors.New("failed to load builder")
+	}
+	return &Mdu0Builder{ptr: ptr}, nil
+}
+
+func LoadMdu0BuilderWithCommitments(data []byte, maxUserMdus uint64, commitmentsPerMdu uint64) (*Mdu0Builder, error) {
+	if len(data) != types.MDU_SIZE {
+		return nil, errors.New("invalid size")
+	}
+	ptr := C.nil_mdu0_builder_load_with_commitments(
+		(*C.uchar)(unsafe.Pointer(&data[0])),
+		C.size_t(len(data)),
+		C.ulonglong(maxUserMdus),
+		C.ulonglong(commitmentsPerMdu),
+	)
 	if ptr == nil {
 		return nil, errors.New("failed to load builder")
 	}
