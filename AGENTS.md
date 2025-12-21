@@ -800,23 +800,23 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - Gateway and Browser SHOULD aim for byte-identical artifacts for the same input (do not block the sprint if strict identity is infeasible; cryptographic roots/commitments must match).
 
 #### 11.4.2.A Canonical artifact spec (shared contract)
-- [ ] Define `mode2-artifacts-v1` naming + bytes contract (deal-scoped dirs, stable filenames, deterministic shard ordering).
-- [ ] Publish golden vectors (small set) used by: `nil_core` tests, gateway tests, and web unit tests.
+- [x] Define `mode2-artifacts-v1` naming + bytes contract (deal-scoped dirs, stable filenames, deterministic shard ordering).
+- [x] Publish golden vectors (small set) used by: `nil_core` tests, gateway tests, and web unit tests.
 
 #### 11.4.2.B Gateway Mode 2 ingest (preferred path when present)
-- [ ] Extend `/status` to advertise `capabilities.mode2_rs=true` and `extra.rs_profile`, `extra.artifact_spec`.
-- [ ] Implement `/gateway/upload` support for Mode 2 deals: pack → witness → RS encode → store artifacts under `uploads/deals/<deal_id>/<manifest_root_key>/` → upload slot shards to providers.
-- [ ] Ensure fetch/retrieval path can reconstruct missing slots (≤ `M`) and still produce valid proofs against the on-chain root.
+- [x] Extend `/status` to advertise `capabilities.mode2_rs=true` and `extra.rs_profile`, `extra.artifact_spec`.
+- [x] Implement `/gateway/upload` support for Mode 2 deals: pack → witness → RS encode → store artifacts under `uploads/deals/<deal_id>/<manifest_root_key>/` → upload slot shards to providers.
+- [x] Ensure fetch/retrieval path can reconstruct missing slots (≤ `M`) and still produce valid proofs against the on-chain root.
 
 #### 11.4.2.C Browser Mode 2 ingest (fallback default)
-- [ ] Make the UI default to Mode 2, selecting **gateway Mode 2** when reachable+capable, otherwise **browser/WASM Mode 2** (not Mode 1).
-- [ ] Ensure browser writes the same artifact set to OPFS using the same filenames and ordering as the gateway contract.
+- [x] Make the UI default to Mode 2, selecting **gateway Mode 2** when reachable+capable, otherwise **browser/WASM Mode 2** (not Mode 1).
+- [x] Ensure browser writes the same artifact set to OPFS using the same filenames and ordering as the gateway contract.
 
 #### 11.4.2.D Fast test gates (thorough + efficient)
-- [ ] **Unit (Rust):** deterministic RS encode/decode + leaf ordering + witness commitment counts for default `K=8,M=4` (fast, no network).
-- [ ] **Unit (Go):** gateway Mode 2 ingest produces expected artifact hashes for golden fixtures (avoid spinning external processes when possible).
-- [ ] **Parity:** golden fixture yields matching roots and (ideally) byte-identical artifacts between native/gateway and WASM/browser implementations.
-- [ ] **Integration (minimal):** upload → commit → fetch correct bytes; simulate up to `M` missing shards and confirm reconstruction + verification succeeds.
+- [x] **Unit (Rust):** deterministic RS encode/decode + leaf ordering + witness commitment counts for default `K=8,M=4` (fast, no network).
+- [x] **Unit (Go):** gateway Mode 2 ingest produces expected artifact hashes for golden fixtures (avoid spinning external processes when possible).
+- [x] **Parity:** golden fixture yields matching roots and (ideally) byte-identical artifacts between native/gateway and WASM/browser implementations.
+- [x] **Integration (minimal):** upload → commit → fetch correct bytes; simulate up to `M` missing shards and confirm reconstruction + verification succeeds.
 
 ### 11.4.1 Next Sprint: Devnet Gamma‑Mode2 Web Integration (Preliminary Outline)
 
