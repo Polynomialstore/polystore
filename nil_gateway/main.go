@@ -1391,11 +1391,11 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-			return
+		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+				return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
@@ -1608,11 +1608,11 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-			return
+		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+				return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
@@ -1851,11 +1851,11 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-			return
+		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+				return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
