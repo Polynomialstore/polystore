@@ -46,21 +46,21 @@ func encodePayloadToMdu(raw []byte) []byte {
 	return encoded
 }
 
-func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, error) {
+func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	stripe, err := stripeParamsFromHint(hint)
 	if err != nil {
-		return nil, fmt.Errorf("parse service_hint: %w", err)
+		return nil, "", fmt.Errorf("parse service_hint: %w", err)
 	}
 	if stripe.mode != 2 || stripe.k == 0 || stripe.m == 0 || stripe.rows == 0 {
-		return nil, fmt.Errorf("deal is not Mode 2")
+		return nil, "", fmt.Errorf("deal is not Mode 2")
 	}
 
 	fi, err := os.Stat(filePath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	fileSize := uint64(fi.Size())
 	userMdus := uint64(1)
@@ -81,7 +81,7 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 	commitmentsPerMdu := stripe.leafCount
 	builder := crypto_ffi.NewMdu0BuilderWithCommitments(userMdus, commitmentsPerMdu)
 	if builder == nil {
-		return nil, fmt.Errorf("failed to create MDU0 builder")
+		return nil, "", fmt.Errorf("failed to create MDU0 builder")
 	}
 	defer builder.Free()
 	witnessCount := builder.GetWitnessCount()
@@ -89,11 +89,11 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
 	if err := os.MkdirAll(baseDealDir, 0o755); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	stagingDir, err := os.MkdirTemp(baseDealDir, "staging-")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	rollback := true
 	defer func() {
@@ -107,21 +107,21 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer f.Close()
 
 	rawBuf := make([]byte, RawMduCapacity)
 	for i := uint64(0); i < userMdus; i++ {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		n, readErr := io.ReadFull(f, rawBuf)
 		if readErr != nil {
 			if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 				// Last chunk is short (or empty).
 			} else {
-				return nil, readErr
+				return nil, "", readErr
 			}
 		}
 		chunk := rawBuf[:n]
@@ -129,26 +129,26 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 
 		witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
 		if err != nil {
-			return nil, fmt.Errorf("expand mdu %d: %w", i, err)
+			return nil, "", fmt.Errorf("expand mdu %d: %w", i, err)
 		}
 		root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 		if err != nil {
-			return nil, fmt.Errorf("compute mdu root %d: %w", i, err)
+			return nil, "", fmt.Errorf("compute mdu root %d: %w", i, err)
 		}
 		userRoots = append(userRoots, root)
 		if err := builder.SetRoot(witnessCount+i, root); err != nil {
-			return nil, fmt.Errorf("set user root %d: %w", i, err)
+			return nil, "", fmt.Errorf("set user root %d: %w", i, err)
 		}
 		_, _ = witnessData.Write(witnessFlat)
 
 		slabIndex := uint64(1) + witnessCount + i
 		for slot := uint64(0); slot < stripe.slotCount; slot++ {
 			if int(slot) >= len(shards) {
-				return nil, fmt.Errorf("missing shard for slot %d", slot)
+				return nil, "", fmt.Errorf("missing shard for slot %d", slot)
 			}
 			name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
 			if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
-				return nil, err
+				return nil, "", err
 			}
 		}
 	}
@@ -171,33 +171,33 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 		encoded := encodePayloadToMdu(chunk)
 		root, err := crypto_ffi.ComputeMduMerkleRoot(encoded)
 		if err != nil {
-			return nil, fmt.Errorf("compute witness root %d: %w", i, err)
+			return nil, "", fmt.Errorf("compute witness root %d: %w", i, err)
 		}
 		witnessRoots = append(witnessRoots, root)
 		if err := builder.SetRoot(i, root); err != nil {
-			return nil, fmt.Errorf("set witness root %d: %w", i, err)
+			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
 		}
 		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
 	// Append the file record (naive single-file mapping at offset 0 for now).
 	if err := builder.AppendFile(fileRecordPath, fileSize, 0); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Write MDU #0 and compute its root.
 	mdu0Bytes, err := builder.Bytes()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("compute mdu0 root: %w", err)
+		return nil, "", fmt.Errorf("compute mdu0 root: %w", err)
 	}
 
 	roots := make([][]byte, 0, 1+len(witnessRoots)+len(userRoots))
@@ -207,45 +207,78 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 
 	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
 	if err != nil {
-		return nil, fmt.Errorf("compute manifest commitment: %w", err)
+		return nil, "", fmt.Errorf("compute manifest commitment: %w", err)
 	}
 	manifestRootHex := "0x" + hex.EncodeToString(commitment)
 	parsedRoot, err := parseManifestRoot(manifestRootHex)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := os.Rename(stagingDir, finalDir); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	rollback = false
+
+	return &mode2IngestResult{
+		manifestRoot:    parsedRoot,
+		manifestBlob:    manifestBlob,
+		allocatedLength: uint64(len(roots)),
+		fileSize:        fileSize,
+		witnessMdus:     witnessCount,
+		userMdus:        userMdus,
+	}, finalDir, nil
+}
+
+func mode2UploadArtifactsToProviders(
+	ctx context.Context,
+	dealID uint64,
+	manifestRoot ManifestRoot,
+	hint string,
+	finalDir string,
+	witnessCount uint64,
+	userMdus uint64,
+) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stripe, err := stripeParamsFromHint(hint)
+	if err != nil {
+		return fmt.Errorf("parse service_hint: %w", err)
+	}
+	if stripe.mode != 2 || stripe.k == 0 || stripe.m == 0 || stripe.rows == 0 {
+		return fmt.Errorf("deal is not Mode 2")
+	}
+	if witnessCount == 0 || stripe.slotCount == 0 {
+		return fmt.Errorf("invalid Mode 2 state")
+	}
 
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
 	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(providers) < int(stripe.slotCount) {
-		return nil, fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
+		return fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
 	}
 	slotBases := make([]string, 0, stripe.slotCount)
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		base, err := resolveProviderHTTPBaseURL(ctx, providers[slot])
 		if err != nil {
-			return nil, err
+			return err
 		}
 		slotBases = append(slotBases, strings.TrimRight(base, "/"))
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
-	manifestRootCanonical := parsedRoot.Canonical
+	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 
 	uploadBlob := func(ctx context.Context, url string, headers map[string]string, path string, maxBytes int64) error {
@@ -285,14 +318,14 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 				"X-Nil-Mdu-Index":     strconv.FormatUint(mduIndex, 10),
 				"X-Nil-Manifest-Root": manifestRootCanonical,
 			}, path, 10<<20); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		if err := uploadBlob(ctx, base+"/sp/upload_manifest", map[string]string{
 			"X-Nil-Deal-ID":       dealIDStr,
 			"X-Nil-Manifest-Root": manifestRootCanonical,
 		}, filepath.Join(finalDir, "manifest.bin"), 512<<10); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -307,17 +340,21 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 				"X-Nil-Slot":          strconv.Itoa(slot),
 				"X-Nil-Manifest-Root": manifestRootCanonical,
 			}, path, 10<<20); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	return &mode2IngestResult{
-		manifestRoot:    parsedRoot,
-		manifestBlob:    manifestBlob,
-		allocatedLength: uint64(len(roots)),
-		fileSize:        fileSize,
-		witnessMdus:     witnessCount,
-		userMdus:        userMdus,
-	}, nil
+	return nil
+}
+
+func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, error) {
+	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
