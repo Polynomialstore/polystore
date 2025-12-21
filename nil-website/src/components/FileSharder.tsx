@@ -86,7 +86,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [slotBases, setSlotBases] = useState<string[]>([])
-  const [slotProviders, setSlotProviders] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<{ index: number; shards: Uint8Array[] }[]>([])
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
@@ -149,7 +148,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!dealId) {
         setStripeParams(null)
         setSlotBases([])
-        setSlotProviders([])
         return
       }
       try {
@@ -163,13 +161,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
         if (!cancelled) {
           setSlotBases(endpoints.map((e) => e.baseUrl))
-          setSlotProviders(endpoints.map((e) => e.provider))
         }
       } catch {
         if (!cancelled) {
           setStripeParams(null)
           setSlotBases([])
-          setSlotProviders([])
         }
       }
     }
@@ -1364,65 +1360,59 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           </div>
       </div>
       {isMode2 && stripeParams && (
-        <div className="rounded-lg border border-border bg-card/70 p-3 text-xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold text-foreground">Mode 2 Slots</div>
+        <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-semibold text-foreground">Mode 2</div>
             <div className="text-muted-foreground">
               RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
             </div>
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            Each user MDU expands into {stripeParams.k + stripeParams.m} shards (K data + M parity). Metadata MDUs are
-            replicated to every slot.
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {Array.from({ length: stripeParams.k + stripeParams.m }).map((_, idx) => {
-              const provider = slotProviders[idx] || 'unassigned'
-              const base = slotBases[idx] || ''
-              return (
-                <div key={`slot-${idx}`} className="rounded border border-border bg-secondary/40 p-2">
-                  <div className="text-[10px] uppercase text-muted-foreground">Slot {idx}</div>
-                  <div className="font-mono text-[10px] text-foreground break-all">{provider}</div>
-                  <div className="font-mono text-[10px] text-muted-foreground break-all">
-                    {base || 'missing endpoint'}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            Each user MDU expands into stripes (K data + M parity). The gateway can mirror and distribute shards when running.
           </div>
         </div>
       )}
 
       {/* Dropzone */}
-      <div
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        className={`
-          border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200
-          ${isDragging 
-            ? 'border-primary bg-primary/10 scale-[1.02]' 
-            : 'border-border hover:border-primary/50 bg-card'
-          }
-        `}
-      >
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center text-3xl">
-            <Cpu className="w-8 h-8 text-foreground" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-foreground">Client-Side Expansion</h3>
-            <p className="text-muted-foreground mt-2">
-              Drop a file to split it into <span className="text-primary font-bold">128 KiB Data Units</span> and generate <span className="text-primary font-bold">KZG Commitments</span> locally via WASM.
-            </p>
-            <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              Browse Files
-              <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-            </label>
+      {wasmStatus === 'ready' ? (
+        <div
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          className={`
+            border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200
+            ${isDragging
+              ? 'border-primary bg-primary/10 scale-[1.01]'
+              : 'border-border hover:border-primary/50 bg-card'
+            }
+          `}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center">
+              <Cpu className="w-7 h-7 text-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Select a file</h3>
+              <p className="text-muted-foreground mt-1 text-sm">
+                The browser will expand it into MDUs and compute commitments locally (WASM).
+              </p>
+              <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                Browse files
+                <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+              </label>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-8 text-center">
+          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+          <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            This only runs in your browser. Once ready, the file picker will appear.
+          </div>
+        </div>
+      )}
 
       {/* Processing Status */}
       {(processing || activeUploading) && (
