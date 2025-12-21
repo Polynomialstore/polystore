@@ -80,7 +80,8 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Target fields (recommended):**
         *   `capabilities.mode2_rs = true|false`
         *   `extra.rs_profile = "8+4"` (or similar)
-        *   `extra.artifact_spec = "mode2-v1"` (or similar)
+        *   `extra.artifact_spec = "mode2-artifacts-v1"`
+            *   Canonical contract: `notes/mode2-artifacts-v1.md`
 
 #### Deal Management (EVM Bridge, Optional Relay)
 *   **`POST /gateway/create-deal-evm`**

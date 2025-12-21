@@ -193,9 +193,9 @@ The **local gateway is optional** and MUST NOT sign on the user’s behalf. All 
 
 **Devnet UX default (policy):** if a reachable local gateway reports Mode 2 support, clients SHOULD use the gateway path; otherwise clients SHOULD use the browser Mode 2 path (not Mode 1) as the default suggested flow.
 
-**Devnet artifact layout (recommended):** for local persistence and repairs, clients SHOULD store Mode 2 artifacts under a `deal_id`‑scoped directory (to avoid collisions) and use stable filenames for:
-* replicated metadata (`mdu_0.bin`, `witness_<i>.bin`), and
-* per‑slot user shards (`mdu_<mdu_index>_slot_<slot>.bin`).
+**Devnet artifact layout (recommended):** clients SHOULD follow the canonical `mode2-artifacts-v1` contract (`notes/mode2-artifacts-v1.md`) for local persistence and repairs:
+* replicated metadata (`mdu_0.bin`, `mdu_1.bin .. mdu_W.bin`, `manifest.bin`), and
+* per‑slot user shards (`mdu_<slab_index>_slot_<slot>.bin` where `slab_index = 1 + W + user_ordinal`).
 
 ### 8.1 The "Aligned" Striping Model
 
