@@ -1736,6 +1736,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	isOnchainSession := onchainSessionID != ""
 	if isOnchainSession {
+		// Normalize the on-chain session id so that proof recording and later submission
+		// use the exact same key (hex case differences otherwise break lookups).
+		normalized, _, nerr := parseSessionIDHex(onchainSessionID)
+		if nerr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", nerr.Error())
+			return
+		}
+		onchainSessionID = normalized
 		downloadSessionID = onchainSessionID
 	}
 	isDownloadSession := downloadSessionID != ""
