@@ -138,6 +138,28 @@ test('OpfsAdapter: writeMdu and readMdu', async () => {
     assert.deepStrictEqual(readData, data, 'Read data should match written data');
 });
 
+test('OpfsAdapter: writeShard and readShard', async () => {
+    const dealId = 'test-deal-write-read-shard';
+    const mduIndex = 42;
+    const slot = 7;
+    const data = new Uint8Array([9, 8, 7, 6]);
+
+    await OpfsAdapter.writeShard(dealId, mduIndex, slot, data);
+
+    const readData = await OpfsAdapter.readShard(dealId, mduIndex, slot);
+    assert.deepStrictEqual(readData, data, 'Read shard should match written shard');
+});
+
+test('OpfsAdapter: writeManifestBlob and readManifestBlob', async () => {
+    const dealId = 'test-deal-manifest-blob';
+    const blob = new Uint8Array([0xaa, 0xbb, 0xcc]);
+
+    await OpfsAdapter.writeManifestBlob(dealId, blob);
+
+    const readBlob = await OpfsAdapter.readManifestBlob(dealId);
+    assert.deepStrictEqual(readBlob, blob, 'Read manifest blob should match written manifest blob');
+});
+
 test('OpfsAdapter: readMdu returns null for non-existent file', async () => {
     const dealId = 'test-deal-non-existent';
     const mduIndex = 1;
