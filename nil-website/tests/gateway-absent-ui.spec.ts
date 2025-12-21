@@ -44,6 +44,7 @@ test.describe('gateway absent', () => {
   const stakeBalance = page.getByTestId('cosmos-stake-balance')
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
 
   await page.getByTestId('tab-content').click()

@@ -248,6 +248,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
   await page.getByTestId('tab-content').click()
 

@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu, ArrowUpRight } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -138,7 +138,7 @@ export function Dashboard() {
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
   const [replication, setReplication] = useState('1')
-  const [redundancyMode, setRedundancyMode] = useState<'mode1' | 'mode2'>('mode1')
+  const [redundancyMode, setRedundancyMode] = useState<'mode1' | 'mode2'>('mode2')
   const [rsK, setRsK] = useState('8')
   const [rsM, setRsM] = useState('4')
 
@@ -1008,61 +1008,79 @@ export function Dashboard() {
       <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal Actions</div>
-            <h3 className="text-lg font-semibold text-foreground">Create → Upload → Commit</h3>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
+            <h3 className="text-lg font-semibold text-foreground">Create or upload into a deal</h3>
           </div>
           <div className="text-xs text-muted-foreground">
-            Pick a deal, then choose how you want to upload or shard.
+            Select a deal first, then upload. Mode 2 is recommended.
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row">
-          <div className="flex lg:flex-col border-b lg:border-b-0 lg:border-r border-border">
-            <button 
+        <div className="p-4 border-b border-border bg-muted/20">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
               onClick={() => setActiveTab('alloc')}
               data-testid="tab-alloc"
-              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
+              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
                 activeTab === 'alloc'
-                  ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <span className="text-[10px] font-semibold text-muted-foreground">STEP 1</span>
-              <HardDrive className="w-4 h-4" />
-              Create Deal
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Create deal</div>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Allocate a container (bucket).</div>
             </button>
-            <button 
-              onClick={() => setActiveTab('content')}
-              data-testid="tab-content"
-              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
-                activeTab === 'content'
-                  ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
-              }`}
-            >
-              <span className="text-[10px] font-semibold text-muted-foreground">STEP 2</span>
-              <Database className="w-4 h-4" />
-              Upload &amp; Commit
-            </button>
-            <button 
+            <button
+              type="button"
               onClick={() => setActiveTab('mdu')}
               data-testid="tab-mdu"
-              className={`flex-1 px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors ${
+              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
                 activeTab === 'mdu'
-                  ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <span className="text-[10px] font-semibold text-muted-foreground">STEP 3</span>
-              <Cpu className="w-4 h-4" />
-              Local MDU (WASM)
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('content')}
+              data-testid="tab-content"
+              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                activeTab === 'content'
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border bg-background/60 hover:bg-secondary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Upload (legacy)</div>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Gateway sharding for Mode 1 deals.</div>
             </button>
           </div>
+          <div className="mt-3 text-xs text-muted-foreground">
+            Selected deal:{' '}
+            <span className="font-mono text-foreground" data-testid="selected-deal-id">
+              {targetDealId ? `#${targetDealId}` : '—'}
+            </span>
+          </div>
+        </div>
 
-          <div className="p-6 flex-1">
+        <div className="p-6 flex-1">
             {activeTab === 'alloc' ? (
-                <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">Create a new deal (bucket) that will hold your files.</p>
+                  <div className="space-y-4">
+                      <p className="text-xs text-muted-foreground">
+                        Create a deal (a bucket). Mode 2 is the default; Mode 1 is available as legacy.
+                      </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
@@ -1093,18 +1111,16 @@ export function Dashboard() {
                         </label>
                         <label className="space-y-1">
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
-                            <select
-                                defaultValue={redundancyMode || 'mode1'}
-                                onChange={(e) =>
-                                  setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode1')
-                                }
-                                data-testid="alloc-redundancy-mode"
-                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            >
-                                <option value="mode1">Mode 1: Full Replica</option>
-                                <option value="mode2">Mode 2: StripeReplica (RS)</option>
-                            </select>
-                        </label>
+                              <select
+                                  value={redundancyMode}
+                                  onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
+                                  data-testid="alloc-redundancy-mode"
+                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                              >
+                                  <option value="mode2">Mode 2 (Striped RS, recommended)</option>
+                                  <option value="mode1">Mode 1 (Replication, legacy)</option>
+                              </select>
+                          </label>
                         {redundancyMode === 'mode1' ? (
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
@@ -1171,9 +1187,11 @@ export function Dashboard() {
                         </button>
                     </div>
                 </div>
-              ) : activeTab === 'content' ? (
-                  <div className="space-y-4">
-                      <p className="text-xs text-muted-foreground">Upload a file and commit its cryptographic hash to your deal.</p>
+                ) : activeTab === 'content' ? (
+                    <div className="space-y-4">
+                        <p className="text-xs text-muted-foreground">
+                          Legacy gateway sharding (Mode 1). For Mode 2, use the Mode 2 upload card.
+                        </p>
                       <div className="grid grid-cols-1 gap-3 text-sm">
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
@@ -1202,22 +1220,16 @@ export function Dashboard() {
                               • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
                             </div>
                           )}
-                          {isTargetDealMode2 && (
-                            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300 flex items-center justify-between gap-2">
-                              <span>Mode 2 deals require Local MDU (WASM). Gateway upload is disabled for this deal.</span>
-                              <button
-                                onClick={() => setActiveTab('mdu')}
-                                className="text-[11px] font-semibold underline"
-                              >
-                                Open MDU tab
-                              </button>
-                            </div>
-                          )}
+                            {isTargetDealMode2 && (
+                              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                                This is a Mode 2 deal. Upload via the Mode 2 card (local WASM expansion; a gateway can still assist with distributing stripes when running).
+                              </div>
+                            )}
                           <label className="space-y-1">
                               <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                                   <Upload className="w-3 h-3 text-primary" />
-                                  Upload & Shard (gateway)
-                              </span>
+                                    Upload & Shard (gateway, Mode 1)
+                                </span>
                               <input
                                   type="file"
                                   onChange={handleFileChange}
@@ -1446,10 +1458,9 @@ export function Dashboard() {
               ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">Run the Rust WASM sharder locally to produce MDUs and commitments before sending to the gateway.</p>
-                  <div className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-1 rounded-md flex items-center gap-1">
-                    <ArrowUpRight className="w-3 h-3" /> Offloads heavy work to your browser.
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Mode 2 upload: expand locally via WASM, then upload stripes. If a local gateway is running, it will be used to distribute shards faster.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 text-sm">
@@ -1478,11 +1489,10 @@ export function Dashboard() {
                         <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
                     </div>
                 )}
-              </div>
-            )}
+                </div>
+              )}
           </div>
         </div>
-      </div>
 
       {loading ? (
         <div className="text-center py-24">
@@ -1522,8 +1532,11 @@ export function Dashboard() {
                       key={deal.id}
                       data-testid={`deal-row-${deal.id}`}
                       className="hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => setSelectedDeal(deal)}
-                    >
+                        onClick={() => {
+                          setSelectedDeal(deal)
+                          setTargetDealId(String(deal.id ?? ''))
+                        }}
+                      >
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
                             <td
                               className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
@@ -1560,13 +1573,20 @@ export function Dashboard() {
                               {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setTargetDealId(String(deal.id ?? '')); setActiveTab('content'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                              >
-                                Upload to deal
-                              </button>
-                            </td>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const dealId = String(deal.id ?? '')
+                                    setTargetDealId(dealId)
+                                    const service = parseServiceHint(deal.service_hint)
+                                    setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
+                                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                                  }}
+                                  className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                                >
+                                  Upload
+                                </button>
+                              </td>
                     </tr>
                     ))}
                 </tbody>
