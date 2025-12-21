@@ -38,7 +38,9 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Optional deal_id/owner validation (shared semantics with manifest-info / mdu-kzg).
-	if _, _, status, err := validateDealOwnerCidQuery(r, manifestRoot); err != nil {
+	dealID, _, status, err := validateDealOwnerCidQuery(r, manifestRoot)
+	hasDealQuery := strings.TrimSpace(r.URL.Query().Get("deal_id")) != ""
+	if err != nil {
 		writeJSONError(w, status, err.Error(), "")
 		return
 	}
@@ -69,7 +71,12 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		rangeLen = v
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	var dealDir string
+	if hasDealQuery {
+		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	} else {
+		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")

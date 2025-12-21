@@ -1391,11 +1391,11 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-				return
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
@@ -1608,11 +1608,11 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 
-		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-				return
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
@@ -1859,11 +1859,11 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
 	}
 
-		dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-				return
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
 		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
@@ -2320,7 +2320,7 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(dealRoot, dealRoot.Canonical)
+	dealDir, err := resolveDealDirForDeal(dealID, dealRoot, dealRoot.Canonical)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2593,7 +2593,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2692,16 +2692,19 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	if dealIDStr != "" || owner != "" {
+	var dealID uint64
+	hasDealQuery := dealIDStr != "" || owner != ""
+	if hasDealQuery {
 		if dealIDStr == "" || owner == "" {
 			writeJSONError(w, http.StatusBadRequest, "deal_id and owner must be provided together", "")
 			return
 		}
-		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+		parsedDealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
 			return
 		}
+		dealID = parsedDealID
 
 		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 		if err != nil {
@@ -2742,7 +2745,12 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	var dealDir string
+	if hasDealQuery {
+		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	} else {
+		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
