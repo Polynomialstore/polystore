@@ -180,11 +180,22 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
 This section norms the **Blob-Aligned Striping** model required for Mode 2 operation, resolving the conflict between cryptographic verification (KZG) and network distribution (Erasure Coding).
 
 ### 8.0 Mode 2 Ingestion (Gateway-Optional)
-Mode 2 deals require **client-side RS(K, K+M) encoding** of each SP‑MDU before upload. In devnet, this is performed by:
-* **Browser/WASM** (worker + OPFS) or **CLI** tooling.
-* The **local gateway is optional** and MUST NOT sign on the user’s behalf.
+Mode 2 deals require **RS(K, K+M) encoding** of each SP‑MDU before upload. In devnet, Mode 2 ingestion MAY be performed by:
+* **Local Gateway (preferred when present):** performs packing, witness generation, RS encoding, and uploads bytes to providers.
+* **Browser/WASM (fallback default):** performs the same work in a worker and persists artifacts to OPFS.
+* **CLI** tooling for debugging and automation.
 
-**Devnet requirement:** the default `/gateway/upload` path is **disabled for Mode 2** deals. Clients MUST upload per‑slot shards **directly** to the assigned providers; a gateway may optionally **mirror/cache** those shards for convenience, but is not required for correctness.
+The **local gateway is optional** and MUST NOT sign on the user’s behalf. All chain transactions remain user‑signed (MetaMask / wallet).
+
+**Provider role (normative):** providers are a **dumb pipe** for bytes addressed by `(deal_id, mdu_index, slot, manifest_root)` and do not need to understand Mode 1 vs Mode 2 beyond storing and serving the requested objects.
+
+**Determinism & repair confidence:** implementations SHOULD aim for byte‑identical artifact bytes across Gateway and Browser for the same input and RS profile. If strict byte‑identity is not feasible across runtimes, they MUST still agree on all cryptographic commitments (manifest root, MDU roots, witness commitments) so repairs and verification remain correct.
+
+**Devnet UX default (policy):** if a reachable local gateway reports Mode 2 support, clients SHOULD use the gateway path; otherwise clients SHOULD use the browser Mode 2 path (not Mode 1) as the default suggested flow.
+
+**Devnet artifact layout (recommended):** for local persistence and repairs, clients SHOULD store Mode 2 artifacts under a `deal_id`‑scoped directory (to avoid collisions) and use stable filenames for:
+* replicated metadata (`mdu_0.bin`, `witness_<i>.bin`), and
+* per‑slot user shards (`mdu_<mdu_index>_slot_<slot>.bin`).
 
 ### 8.1 The "Aligned" Striping Model
 
