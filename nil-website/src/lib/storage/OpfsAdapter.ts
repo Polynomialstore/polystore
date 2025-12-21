@@ -69,6 +69,11 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
     await writeBlob(dealId, fileName, data);
 }
 
+export async function writeShard(dealId: string, mduIndex: number, slot: number, data: Uint8Array): Promise<void> {
+    const fileName = `mdu_${mduIndex}_slot_${slot}.bin`;
+    await writeBlob(dealId, fileName, data);
+}
+
 /**
  * Reads MDU data from a file within a specific deal's OPFS directory.
  * @param dealId The ID of the deal.
@@ -77,6 +82,11 @@ export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Arra
  */
 export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Array | null> {
     const fileName = `mdu_${mduIndex}.bin`;
+    return await readBlob(dealId, fileName);
+}
+
+export async function readShard(dealId: string, mduIndex: number, slot: number): Promise<Uint8Array | null> {
+    const fileName = `mdu_${mduIndex}_slot_${slot}.bin`;
     return await readBlob(dealId, fileName);
 }
 
@@ -117,6 +127,14 @@ export async function deleteDealDirectory(dealId: string): Promise<void> {
 export async function writeManifestRoot(dealId: string, manifestRoot: string): Promise<void> {
     const normalized = String(manifestRoot || '').trim();
     await writeBlob(dealId, 'manifest_root.txt', normalized);
+}
+
+export async function writeManifestBlob(dealId: string, manifestBlob: Uint8Array): Promise<void> {
+    await writeBlob(dealId, 'manifest.bin', manifestBlob);
+}
+
+export async function readManifestBlob(dealId: string): Promise<Uint8Array | null> {
+    return await readBlob(dealId, 'manifest.bin');
 }
 
 export async function readManifestRoot(dealId: string): Promise<string | null> {

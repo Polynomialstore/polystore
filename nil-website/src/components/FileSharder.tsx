@@ -6,12 +6,13 @@ import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
-import { readMdu, writeManifestRoot, writeMdu } from '../lib/storage/OpfsAdapter';
+import { readMdu, writeManifestBlob, writeManifestRoot, writeMdu, writeShard } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
+import { useLocalGateway } from '../hooks/useLocalGateway';
 
 interface ShardItem {
   id: number;
@@ -74,6 +75,7 @@ function formatDuration(ms: number) {
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
+  const localGateway = useLocalGateway();
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -137,6 +139,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
+  const gatewayMode2Capable = isMode2 && localGateway.status === 'connected' && Boolean(localGateway.details?.capabilities?.mode2_rs)
   const activeUploading = isMode2 ? mode2Uploading : isUploading
   const isUploadComplete = isMode2
     ? mode2UploadComplete
@@ -567,14 +570,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const persist = async () => {
       if (!isCommitSuccess) return;
       if (!currentManifestRoot) return;
-      if (collectedMdus.length === 0) return;
+      if (collectedMdus.length === 0 && !isMode2) return;
 
       try {
         addLog('> Saving committed slab to OPFS...');
         await writeManifestRoot(dealId, currentManifestRoot);
+        if (currentManifestBlob) {
+          await writeManifestBlob(dealId, currentManifestBlob);
+        }
         for (const mdu of collectedMdus) {
           if (cancelled) return;
           await writeMdu(dealId, mdu.index, mdu.data);
+        }
+        if (isMode2 && mode2Shards.length > 0) {
+          const witnessCount = shardProgress.totalWitnessMdus;
+          for (const mdu of mode2Shards) {
+            const slabIndex = 1 + witnessCount + mdu.index;
+            for (let slot = 0; slot < mdu.shards.length; slot++) {
+              const shard = mdu.shards[slot];
+              if (!shard) continue;
+              await writeShard(dealId, slabIndex, slot, shard);
+            }
+          }
         }
         addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.');
       } catch (e: unknown) {
@@ -586,7 +603,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     return () => {
       cancelled = true;
     };
-  }, [addLog, collectedMdus, currentManifestRoot, dealId, isCommitSuccess]);
+  }, [
+    addLog,
+    collectedMdus,
+    currentManifestBlob,
+    currentManifestRoot,
+    dealId,
+    isCommitSuccess,
+    isMode2,
+    mode2Shards,
+    shardProgress.totalWitnessMdus,
+  ]);
 
   useEffect(() => {
     // Initialize WASM in the worker
@@ -625,15 +652,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   }, []);
 
-  const processFile = useCallback(async (file: File) => {
-    if (!isConnected) {
-        alert("Connect wallet first");
+  const processFile = useCallback(
+    async (file: File) => {
+      if (!isConnected) {
+        alert('Connect wallet first');
         return;
-    }
-    if (wasmStatus !== 'ready') {
-        alert("WASM worker not ready. " + (wasmError || "Initializing..."));
+      }
+      if (!gatewayMode2Capable && wasmStatus !== 'ready') {
+        alert('WASM worker not ready. ' + (wasmError || 'Initializing...'));
         return;
-    }
+      }
 
     const startTs = performance.now();
     setProcessing(true);
@@ -672,14 +700,72 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
     const RawMduCapacity = RAW_MDU_CAPACITY;
-    const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-    const rsK = useMode2 ? stripeParams!.k : 0
-    const rsM = useMode2 ? stripeParams!.m : 0
-    const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64
+      const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0);
+      const rsK = useMode2 ? stripeParams!.k : 0;
+      const rsM = useMode2 ? stripeParams!.m : 0;
+      const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64;
 
-    let baseMdu0Bytes: Uint8Array | null = null
-    let existingUserMdus: { index: number; data: Uint8Array }[] = []
-    let existingUserCount = 0
+      if (useMode2 && gatewayMode2Capable) {
+        try {
+          setMode2Uploading(true);
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'planning',
+            label: 'Gateway Mode 2: encoding + uploading...',
+            currentOpStartedAtMs: performance.now(),
+          }));
+
+          const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
+          const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`;
+          const form = new FormData();
+          form.append('file', file);
+          form.append('deal_id', dealId);
+          form.append('file_path', file.name);
+
+          const resp = await fetch(url, { method: 'POST', body: form });
+          if (!resp.ok) {
+            const txt = await resp.text().catch(() => '');
+            throw new Error(txt || `gateway upload failed (${resp.status})`);
+          }
+          const payload = (await resp.json().catch(() => null)) as { manifest_root?: string; cid?: string } | null;
+          const root = String(payload?.manifest_root || payload?.cid || '').trim();
+          if (!root) throw new Error('gateway upload returned no manifest_root');
+
+          setCurrentManifestRoot(root);
+          setCurrentManifestBlob(null);
+          setCollectedMdus([]);
+          setMode2Shards([]);
+          setMode2UploadError(null);
+          setMode2UploadComplete(true);
+          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`);
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'done',
+            label: 'Gateway Mode 2 ingest complete. Ready to commit.',
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }));
+          return;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setMode2UploadError(msg);
+          addLog(`> Gateway Mode 2 ingest failed: ${msg}`);
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'error',
+            label: `Gateway Mode 2 ingest failed: ${msg}`,
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }));
+          return;
+        } finally {
+          setMode2Uploading(false);
+        }
+      }
+
+      let baseMdu0Bytes: Uint8Array | null = null;
+      let existingUserMdus: { index: number; data: Uint8Array }[] = [];
+      let existingUserCount = 0;
     let existingMaxEnd = 0
     let appendStartOffset = 0
 
@@ -1294,7 +1380,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams]);
+  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams, gatewayMode2Capable]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {

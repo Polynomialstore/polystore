@@ -82,10 +82,17 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"list_files":     true,
 			"slab":           true,
 			"retrieval_plan": true,
+			// Mode 2: gateway-side RS encoding + witness generation for new deals.
+			"mode2_rs":        !isGatewayRouterMode(),
+			"mode2_rs_append": false,
 		},
 		Dependencies: map[string]bool{
 			"lcd_reachable": pingURL(r.Context(), lcdBase+"/cosmos/base/tendermint/v1beta1/node_info"),
 			"sp_reachable":  pingURL(r.Context(), strings.TrimRight(providerBase, "/")+"/health"),
+		},
+		Extra: map[string]string{
+			"artifact_spec": "mode2-artifacts-v1",
+			"rs_default":    "8+4",
 		},
 	}
 	p2pAddrs := getP2PAnnounceAddrs()

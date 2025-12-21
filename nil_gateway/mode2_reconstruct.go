@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
 
@@ -29,32 +30,69 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	if err != nil {
 		return "", err
 	}
-	if len(providers) < int(stripe.k) {
-		return "", fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.k, len(providers))
+	if stripe.slotCount == 0 {
+		return "", fmt.Errorf("invalid stripe params")
+	}
+	if len(providers) < int(stripe.slotCount) {
+		return "", fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
 	}
 
-	shards := make([][]byte, stripe.k)
-	for slot := uint64(0); slot < stripe.k; slot++ {
+	shards := make([][]byte, stripe.slotCount)
+	present := make([]bool, stripe.slotCount)
+	presentCount := uint64(0)
+	expectedShardSize := stripe.rows * uint64(types.BLOB_SIZE)
+
+	tryLoadSlot := func(slot uint64) error {
 		localPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot))
-		if localBytes, err := os.ReadFile(localPath); err == nil && len(localBytes) > 0 {
+		if localBytes, err := os.ReadFile(localPath); err == nil && uint64(len(localBytes)) == expectedShardSize {
 			shards[slot] = localBytes
-			continue
+			if !present[slot] {
+				present[slot] = true
+				presentCount++
+			}
+			return nil
 		} else if err != nil && !os.IsNotExist(err) {
-			return "", err
+			return err
 		}
 
 		base, err := resolveProviderHTTPBaseURL(ctx, providers[slot])
 		if err != nil {
-			return "", err
+			return err
 		}
 		shardBytes, err := fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot)
 		if err != nil {
-			return "", err
+			return err
+		}
+		if uint64(len(shardBytes)) != expectedShardSize {
+			return fmt.Errorf("shard %d has invalid size: %d", slot, len(shardBytes))
 		}
 		shards[slot] = shardBytes
+		if !present[slot] {
+			present[slot] = true
+			presentCount++
+		}
+		_ = os.WriteFile(localPath, shardBytes, 0o644)
+		return nil
 	}
 
-	mduBytes, err := reconstructMduFromDataShards(shards, stripe.k, stripe.rows)
+	// Prefer local shards first. Fetch remote shards until we have >=K present.
+	for slot := uint64(0); slot < stripe.slotCount && presentCount < stripe.k; slot++ {
+		_ = tryLoadSlot(slot)
+	}
+	if presentCount < stripe.k {
+		// Second pass: try all slots to pick up parity shards if earlier ones were missing.
+		for slot := uint64(0); slot < stripe.slotCount && presentCount < stripe.k; slot++ {
+			if present[slot] {
+				continue
+			}
+			_ = tryLoadSlot(slot)
+		}
+	}
+	if presentCount < stripe.k {
+		return "", fmt.Errorf("not enough shards available for reconstruction (need %d, got %d)", stripe.k, presentCount)
+	}
+
+	mduBytes, err := crypto_ffi.ReconstructMduRs(shards, present, stripe.k, stripe.m)
 	if err != nil {
 		return "", err
 	}

@@ -25,11 +25,13 @@ The service wraps a mix of native libraries and CLI tools:
     *   **MDU #0 (Super-Manifest):** Stores the File Allocation Table (FAT) and Merkle Roots for all other MDUs.
     *   **Witness MDUs:** Store the KZG Blobs required for Triple Proof verification (replicated metadata).
     *   **User Data MDUs:** Store the raw file content slices.
-    *   Files are committed to a `dealDir` (e.g., `uploads/<manifest_root_key>/`) containing `mdu_0.bin` and numbered `mdu_N.bin` slab files.
-        *   **Directory key normalization (target):** `manifest_root_key` is the canonical on-disk directory name: lowercase hex **without** `0x` (96 chars), derived by decoding the 48-byte `manifest_root` then re-encoding (not by string trimming alone).
+    *   Files are committed to a **deal-scoped directory** (recommended):
+        *   `uploads/deals/<deal_id>/<manifest_root_key>/`
+        *   where `manifest_root_key` is lowercase hex **without** `0x` (96 chars), derived by decoding the 48-byte `manifest_root` then re-encoding (not by string trimming alone).
+        *   This avoids collisions across deals and allows multiple roots per deal over time.
         *   Any extra debug artifacts (e.g., shard JSON, `manifest_blob_hex`) are optional and must not be required for fetch/prove.
 *   **NilFS is the Source of Truth (Target End State):**
-    *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/<manifest_root_key>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
+    *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/deals/<deal_id>/<manifest_root_key>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
 
 ---
 
@@ -62,7 +64,9 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Raw shard bytes (body) with headers:
         * `X-Nil-Deal-ID` (uint64), `X-Nil-Mdu-Index` (uint64), `X-Nil-Slot` (uint64), `X-Nil-Manifest-Root` (`0x` + 96 hex).
     *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
-    *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica). Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
+    *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica).
+        *   **Provider is a dumb pipe:** the server does not need to understand Mode 1 vs Mode 2 beyond writing/serving bytes addressed by the headers.
+        *   Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
 
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
@@ -72,7 +76,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
 *   **`GET /health`**
     *   **Role:** Lightweight liveness probe (200 if gateway is reachable).
 *   **`GET /status`**
-    *   **Role:** Returns gateway capabilities and mode (used by the web UI “green dot”).
+    *   **Role:** Returns gateway capabilities and mode (used by the web UI “green dot” and to prefer gateway Mode 2 when available).
+    *   **Target fields (recommended):**
+        *   `capabilities.mode2_rs = true|false`
+        *   `extra.rs_profile = "8+4"` (or similar)
+        *   `extra.artifact_spec = "mode2-artifacts-v1"`
+            *   Canonical contract: `notes/mode2-artifacts-v1.md`
 
 #### Deal Management (EVM Bridge, Optional Relay)
 *   **`POST /gateway/create-deal-evm`**

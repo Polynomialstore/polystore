@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
@@ -97,3 +98,14 @@ func resolveDealDir(root ManifestRoot, rawParam string) (string, error) {
 	return canonicalDir, os.ErrNotExist
 }
 
+func dealScopedDir(dealID uint64, root ManifestRoot) string {
+	return filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10), root.Key)
+}
+
+func resolveDealDirForDeal(dealID uint64, root ManifestRoot, rawParam string) (string, error) {
+	cand := dealScopedDir(dealID, root)
+	if info, err := os.Stat(cand); err == nil && info.IsDir() {
+		return cand, nil
+	}
+	return resolveDealDir(root, rawParam)
+}

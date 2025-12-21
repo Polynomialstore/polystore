@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"testing"
 
+	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
 
-func TestReconstructMduFromDataShards(t *testing.T) {
-	const dataShards = 8
-	rows := types.BLOBS_PER_MDU / dataShards
-	if rows == 0 {
-		t.Fatal("invalid rows")
+func TestReconstructMduRs_MissingShards(t *testing.T) {
+	const k = 8
+	const m = 4
+	rows := types.BLOBS_PER_MDU / k
+	if rows == 0 || types.BLOBS_PER_MDU%k != 0 {
+		t.Fatal("invalid stripe params")
 	}
 
 	mdu := make([]byte, types.MDU_SIZE)
@@ -23,22 +25,28 @@ func TestReconstructMduFromDataShards(t *testing.T) {
 		}
 	}
 
-	shardSize := rows * types.BLOB_SIZE
-	shards := make([][]byte, dataShards)
-	for slot := 0; slot < dataShards; slot++ {
-		shards[slot] = make([]byte, shardSize)
+	_, shards, err := crypto_ffi.ExpandMduRs(mdu, k, m)
+	if err != nil {
+		t.Fatalf("expand failed: %v", err)
+	}
+	if len(shards) != k+m {
+		t.Fatalf("expected %d shards, got %d", k+m, len(shards))
 	}
 
-	for row := 0; row < rows; row++ {
-		rowOffset := row * types.BLOB_SIZE
-		for slot := 0; slot < dataShards; slot++ {
-			blobIndex := row*dataShards + slot
-			srcStart := blobIndex * types.BLOB_SIZE
-			copy(shards[slot][rowOffset:rowOffset+types.BLOB_SIZE], mdu[srcStart:srcStart+types.BLOB_SIZE])
-		}
+	present := make([]bool, k+m)
+	for i := range present {
+		present[i] = true
 	}
 
-	reconstructed, err := reconstructMduFromDataShards(shards, uint64(dataShards), uint64(rows))
+	// Drop up to M shards (including data slots) and ensure reconstruction still succeeds.
+	shards[0] = nil
+	present[0] = false
+	shards[3] = nil
+	present[3] = false
+	shards[9] = nil
+	present[9] = false
+
+	reconstructed, err := crypto_ffi.ReconstructMduRs(shards, present, k, m)
 	if err != nil {
 		t.Fatalf("reconstruct failed: %v", err)
 	}

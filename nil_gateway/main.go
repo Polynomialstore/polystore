@@ -527,58 +527,108 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		serviceHint, err := fetchDealServiceHintFromLCD(ingestCtx, dealID)
+		if err != nil {
+			log.Printf("GatewayUpload: failed to fetch service_hint for deal %d: %v", dealID, err)
+			http.Error(w, "failed to fetch deal service_hint", http.StatusInternalServerError)
+			return
+		}
+		stripe, err := stripeParamsFromHint(serviceHint)
+		if err != nil {
+			log.Printf("GatewayUpload: invalid service_hint for deal %d: %v", dealID, err)
+			http.Error(w, "invalid deal service_hint", http.StatusInternalServerError)
+			return
+		}
+
 		if chainCID == "" {
-			// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
-			// assigned provider before the first content commit.
-			switch {
-			case os.Getenv("NIL_FAKE_INGEST") == "1":
-				var err error
-				cid, size, allocatedLength, err = fastShardQuick(path)
-				if err != nil {
-					http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			if stripe.mode == 2 {
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
 					return
 				}
-				fileSize = size
 
-			case os.Getenv("NIL_FAST_INGEST") == "1":
-				b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
+				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				if recordPath == "" {
+					recordPath = strings.TrimSpace(header.Filename)
+				}
+				if recordPath != "" {
+					if validated, err := validateNilfsFilePath(recordPath); err == nil {
+						recordPath = validated
+					}
+				}
+				if strings.Contains(recordPath, "/") {
+					recordPath = filepath.Base(recordPath)
+				}
+				res, err := mode2IngestAndUploadNewDeal(ingestCtx, path, dealID, serviceHint, recordPath)
 				if err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
 					}
-					http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+					http.Error(w, fmt.Sprintf("mode2 ingest failed: %v", err), http.StatusInternalServerError)
 					return
 				}
-				cid = manifestRoot
-				allocatedLength = allocLen
-				if info, err := os.Stat(path); err == nil {
-					fileSize = uint64(info.Size())
-				}
-				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
-				}
-
-			default:
-				b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
+				cid = res.manifestRoot.Canonical
+				allocatedLength = res.allocatedLength
+				fileSize = res.fileSize
+				size = fileSize
+			} else {
+				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
+				// assigned provider before the first content commit.
+				switch {
+				case os.Getenv("NIL_FAKE_INGEST") == "1":
+					var err error
+					cid, size, allocatedLength, err = fastShardQuick(path)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
 						return
 					}
-					http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
-					return
-				}
-				cid = manifestRoot
-				allocatedLength = allocLen
-				if info, err := os.Stat(path); err == nil {
-					fileSize = uint64(info.Size())
-				}
-				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
+					fileSize = size
+
+				case os.Getenv("NIL_FAST_INGEST") == "1":
+					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
+							return
+						}
+						http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+						return
+					}
+					cid = manifestRoot
+					allocatedLength = allocLen
+					if info, err := os.Stat(path); err == nil {
+						fileSize = uint64(info.Size())
+					}
+					if b != nil {
+						size = totalSizeBytesFromMdu0(b)
+					}
+
+				default:
+					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
+							return
+						}
+						http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
+						return
+					}
+					cid = manifestRoot
+					allocatedLength = allocLen
+					if info, err := os.Stat(path); err == nil {
+						fileSize = uint64(info.Size())
+					}
+					if b != nil {
+						size = totalSizeBytesFromMdu0(b)
+					}
 				}
 			}
 		} else {
+			if stripe.mode == 2 {
+				http.Error(w, "mode2 append via /gateway/upload is not supported yet; use browser mode2 path", http.StatusBadRequest)
+				return
+			}
 			// Append path: load existing slab by on-chain manifest root, then append.
 			if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
 				http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
@@ -1341,7 +1391,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -1558,7 +1608,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -1686,6 +1736,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	isOnchainSession := onchainSessionID != ""
 	if isOnchainSession {
+		// Normalize the on-chain session id so that proof recording and later submission
+		// use the exact same key (hex case differences otherwise break lookups).
+		normalized, _, nerr := parseSessionIDHex(onchainSessionID)
+		if nerr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", nerr.Error())
+			return
+		}
+		onchainSessionID = normalized
 		downloadSessionID = onchainSessionID
 	}
 	isDownloadSession := downloadSessionID != ""
@@ -1801,7 +1859,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2262,7 +2320,7 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(dealRoot, dealRoot.Canonical)
+	dealDir, err := resolveDealDirForDeal(dealID, dealRoot, dealRoot.Canonical)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2535,7 +2593,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2634,16 +2692,19 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	if dealIDStr != "" || owner != "" {
+	var dealID uint64
+	hasDealQuery := dealIDStr != "" || owner != ""
+	if hasDealQuery {
 		if dealIDStr == "" || owner == "" {
 			writeJSONError(w, http.StatusBadRequest, "deal_id and owner must be provided together", "")
 			return
 		}
-		dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+		parsedDealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
 			return
 		}
+		dealID = parsedDealID
 
 		dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
 		if err != nil {
@@ -2684,7 +2745,12 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dealDir, err := resolveDealDir(manifestRoot, rawManifestRoot)
+	var dealDir string
+	if hasDealQuery {
+		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	} else {
+		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -4289,8 +4355,8 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
-	// Use canonical key (lowercase hex, no 0x) for directory
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	// Store under deal-scoped directory to avoid collisions across deals.
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return
@@ -4370,7 +4436,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return
@@ -4418,7 +4484,7 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := strconv.ParseUint(dealIDStr, 10, 64)
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
 		return
@@ -4441,7 +4507,7 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest_root", http.StatusBadRequest)
 		return
 	}
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
 
@@ -4496,7 +4562,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return

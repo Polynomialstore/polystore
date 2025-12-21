@@ -49,9 +49,58 @@ banner() { printf '\n=== %s ===\n' "$*"; }
 
 ensure_nil_core() {
   local lib_dir="$ROOT_DIR/nil_core/target/release"
-  if [ -f "$lib_dir/libnil_core.a" ] || [ -f "$lib_dir/libnil_core.so" ] || [ -f "$lib_dir/libnil_core.dylib" ]; then
+
+  nil_core_has_symbols() {
+    local sym
+    local file=""
+
+    # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
+    # (causing false negatives under `set -o pipefail`).
+    if [ -f "$lib_dir/libnil_core.so" ]; then
+      file="$lib_dir/libnil_core.so"
+    elif [ -f "$lib_dir/libnil_core.dylib" ]; then
+      file="$lib_dir/libnil_core.dylib"
+    elif [ -f "$lib_dir/libnil_core.a" ]; then
+      file="$lib_dir/libnil_core.a"
+    else
+      return 1
+    fi
+
+    if ! command -v nm >/dev/null 2>&1; then
+      return 1
+    fi
+
+    # Dynamic libs: use nm -D where available. Static libs: nm defaults are fine.
+    # Avoid bash array edge-cases under `set -u` on older shells.
+    local nm_supports_dash_d="0"
+    if [[ "$file" == *.so ]] && nm -D "$file" >/dev/null 2>&1; then
+      nm_supports_dash_d="1"
+    fi
+
+    for sym in \
+      nil_compute_mdu_root_from_witness_flat \
+      nil_expand_mdu_rs \
+      nil_reconstruct_mdu_rs \
+      nil_mdu0_builder_new_with_commitments \
+      nil_mdu0_builder_load_with_commitments; do
+      if [ "$nm_supports_dash_d" = "1" ]; then
+        if ! nm -D "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
+          return 1
+        fi
+      else
+        if ! nm "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
+          return 1
+        fi
+      fi
+    done
+
+    return 0
+  }
+
+  if nil_core_has_symbols; then
     return 0
   fi
+
   banner "Building nil_core (native)"
   (cd "$ROOT_DIR/nil_core" && cargo build --release)
   if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
@@ -67,6 +116,10 @@ ensure_nil_core() {
   fi
   if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
     echo "nil_core native library not found after build" >&2
+    exit 1
+  fi
+  if ! nil_core_has_symbols; then
+    echo "nil_core native library is missing required symbols (stale build?)" >&2
     exit 1
   fi
 }

@@ -174,13 +174,17 @@ func storeOnChainSessionProof(sessionID string, proof types.ChainedProof) error 
 	if sessionDB == nil {
 		return fmt.Errorf("session db not initialized")
 	}
+	normalized, _, err := parseSessionIDHex(sessionID)
+	if err != nil {
+		return err
+	}
 	return sessionDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
 			return fmt.Errorf("onchain_session_proofs bucket missing")
 		}
 		
-		current := b.Get([]byte(sessionID))
+		current := b.Get([]byte(normalized))
 		var proofs []types.ChainedProof
 		if current != nil {
 			_ = json.Unmarshal(current, &proofs)
@@ -191,7 +195,7 @@ func storeOnChainSessionProof(sessionID string, proof types.ChainedProof) error 
 		if err != nil {
 			return err
 		}
-		return b.Put([]byte(sessionID), bz)
+		return b.Put([]byte(normalized), bz)
 	})
 }
 
@@ -199,13 +203,17 @@ func loadOnChainSessionProofs(sessionID string) ([]types.ChainedProof, error) {
 	if sessionDB == nil {
 		return nil, fmt.Errorf("session db not initialized")
 	}
+	normalized, _, err := parseSessionIDHex(sessionID)
+	if err != nil {
+		return nil, err
+	}
 	var proofs []types.ChainedProof
-	err := sessionDB.View(func(tx *bolt.Tx) error {
+	err = sessionDB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
 			return nil
 		}
-		v := b.Get([]byte(sessionID))
+		v := b.Get([]byte(normalized))
 		if v == nil {
 			return nil
 		}
@@ -218,11 +226,15 @@ func deleteOnChainSessionProofs(sessionID string) error {
 	if sessionDB == nil {
 		return nil
 	}
+	normalized, _, err := parseSessionIDHex(sessionID)
+	if err != nil {
+		return err
+	}
 	return sessionDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
 			return nil
 		}
-		return b.Delete([]byte(sessionID))
+		return b.Delete([]byte(normalized))
 	})
 }
