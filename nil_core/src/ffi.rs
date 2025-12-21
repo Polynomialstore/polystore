@@ -1,4 +1,5 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
+use crate::coding::{expand_mdu_encoded, reconstruct_mdu_from_shards};
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -82,6 +83,208 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
             -3 // Commitment calculation failed
         }
     }
+}
+
+/// Computes an MDU merkle root from a flattened list of 48-byte KZG commitments.
+///
+/// This is the shared primitive used for:
+/// - Mode 1 (64 commitments per MDU) and
+/// - Mode 2 (L = (K+M)*(64/K) commitments per user MDU; slot-major ordering).
+///
+/// Inputs:
+/// - witness_flat: pointer to a contiguous array of commitments (48 bytes each)
+/// - witness_flat_len: total byte length (must be a multiple of 48)
+///
+/// Output:
+/// - out_mdu_merkle_root: 32-byte merkle root
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_compute_mdu_root_from_witness_flat(
+    witness_flat: *const u8,
+    witness_flat_len: usize,
+    out_mdu_merkle_root: *mut u8,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1,
+    };
+    if witness_flat.is_null() || out_mdu_merkle_root.is_null() || witness_flat_len == 0 {
+        return -2;
+    }
+    if witness_flat_len % 48 != 0 {
+        return -2;
+    }
+
+    let witness_slice = unsafe { std::slice::from_raw_parts(witness_flat, witness_flat_len) };
+    let mut commitments = Vec::with_capacity(witness_flat_len / 48);
+    for chunk in witness_slice.chunks_exact(48) {
+        let mut c = [0u8; 48];
+        c.copy_from_slice(chunk);
+        commitments.push(c);
+    }
+
+    match ctx.create_mdu_merkle_root(&commitments) {
+        Ok(root) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(root.as_slice().as_ptr(), out_mdu_merkle_root, 32);
+            }
+            0
+        }
+        Err(_) => -3,
+    }
+}
+
+/// Expands an encoded 8 MiB MDU into Mode 2 RS shards and witness commitments.
+///
+/// Outputs are flattened to make Go/C interop easy and deterministic:
+/// - witness_flat: slot-major commitments, 48 bytes each (length = N*rows*48)
+/// - shards_flat: slot-major shard bytes (length = N*rows*BLOB_SIZE)
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_expand_mdu_rs(
+    mdu_bytes: *const u8,
+    mdu_bytes_len: usize,
+    data_shards: u64,
+    parity_shards: u64,
+    out_witness_flat: *mut u8,
+    out_witness_flat_len: usize,
+    out_shards_flat: *mut u8,
+    out_shards_flat_len: usize,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1,
+    };
+
+    if mdu_bytes.is_null()
+        || out_witness_flat.is_null()
+        || out_shards_flat.is_null()
+        || mdu_bytes_len != crate::kzg::MDU_SIZE
+    {
+        return -2;
+    }
+    if data_shards == 0 || parity_shards == 0 {
+        return -2;
+    }
+
+    let ds = data_shards as usize;
+    let ps = parity_shards as usize;
+    if ds == 0 || ps == 0 {
+        return -2;
+    }
+    if BLOBS_PER_MDU % ds != 0 {
+        return -2;
+    }
+    let rows = BLOBS_PER_MDU / ds;
+    let shards_total = ds + ps;
+
+    let expected_witness_len = shards_total * rows * 48;
+    let expected_shards_len = shards_total * rows * BLOB_SIZE;
+    if out_witness_flat_len != expected_witness_len || out_shards_flat_len != expected_shards_len {
+        return -2;
+    }
+
+    let mdu_slice = unsafe { std::slice::from_raw_parts(mdu_bytes, mdu_bytes_len) };
+    let expanded = match expand_mdu_encoded(ctx, mdu_slice, ds, ps) {
+        Ok(v) => v,
+        Err(_) => return -3,
+    };
+
+    // Flatten witness commitments.
+    let mut woff = 0usize;
+    for c in expanded.witness.iter() {
+        if c.len() != 48 {
+            return -3;
+        }
+        unsafe {
+            std::ptr::copy_nonoverlapping(c.as_ptr(), out_witness_flat.add(woff), 48);
+        }
+        woff += 48;
+    }
+    if woff != expected_witness_len {
+        return -3;
+    }
+
+    // Flatten shards.
+    let shard_len = rows * BLOB_SIZE;
+    let mut soff = 0usize;
+    for shard in expanded.shards.iter() {
+        if shard.len() != shard_len {
+            return -3;
+        }
+        unsafe {
+            std::ptr::copy_nonoverlapping(shard.as_ptr(), out_shards_flat.add(soff), shard_len);
+        }
+        soff += shard_len;
+    }
+    if soff != expected_shards_len {
+        return -3;
+    }
+
+    0
+}
+
+/// Reconstructs the original encoded 8 MiB MDU from any >=K RS shards.
+///
+/// Inputs are provided as a flattened `shards_flat` buffer plus a per-slot `present` byte array.
+/// - shards_flat_len must equal N * (rows*BLOB_SIZE)
+/// - present_len must equal N
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_reconstruct_mdu_rs(
+    shards_flat: *const u8,
+    shards_flat_len: usize,
+    present: *const u8,
+    present_len: usize,
+    data_shards: u64,
+    parity_shards: u64,
+    out_mdu_bytes: *mut u8,
+    out_mdu_bytes_len: usize,
+) -> c_int {
+    if shards_flat.is_null() || present.is_null() || out_mdu_bytes.is_null() {
+        return -2;
+    }
+    if out_mdu_bytes_len != crate::kzg::MDU_SIZE {
+        return -2;
+    }
+    if data_shards == 0 || parity_shards == 0 {
+        return -2;
+    }
+    let ds = data_shards as usize;
+    let ps = parity_shards as usize;
+    if BLOBS_PER_MDU % ds != 0 {
+        return -2;
+    }
+    let rows = BLOBS_PER_MDU / ds;
+    let shards_total = ds + ps;
+    let shard_len = rows * BLOB_SIZE;
+    let expected_shards_len = shards_total * shard_len;
+    if shards_flat_len != expected_shards_len || present_len != shards_total {
+        return -2;
+    }
+
+    let shards_slice = unsafe { std::slice::from_raw_parts(shards_flat, shards_flat_len) };
+    let present_slice = unsafe { std::slice::from_raw_parts(present, present_len) };
+
+    let mut shards_opt: Vec<Option<Vec<u8>>> = Vec::with_capacity(shards_total);
+    for slot in 0..shards_total {
+        let start = slot * shard_len;
+        let end = start + shard_len;
+        if present_slice[slot] != 0 {
+            shards_opt.push(Some(shards_slice[start..end].to_vec()));
+        } else {
+            shards_opt.push(None);
+        }
+    }
+
+    let mdu = match reconstruct_mdu_from_shards(&mut shards_opt, ds, ps) {
+        Ok(v) => v,
+        Err(_) => return -3,
+    };
+    if mdu.len() != crate::kzg::MDU_SIZE {
+        return -3;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(mdu.as_ptr(), out_mdu_bytes, crate::kzg::MDU_SIZE);
+    }
+    0
 }
 
 /// Verifies a KZG proof for a single 128 KiB blob within an MDU, including Merkle proof verification.

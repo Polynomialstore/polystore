@@ -4,13 +4,34 @@ package crypto_ffi
 #cgo LDFLAGS: -L${SRCDIR}/../../../nil_core/target/release -lnil_core -ldl -lpthread -lm
 #include <stdlib.h> // For C.free
 
-// FFI declarations for Rust functions
-int nil_init(const char* path);
-int nil_compute_mdu_merkle_root(const unsigned char* mdu_bytes, size_t mdu_bytes_len, unsigned char* out_mdu_merkle_root);
-int nil_verify_mdu_proof(
-    const unsigned char* mdu_merkle_root,
-    const unsigned char* challenged_kzg_commitment,
-    const unsigned char* merkle_path_bytes,
+	// FFI declarations for Rust functions
+	int nil_init(const char* path);
+	int nil_compute_mdu_merkle_root(const unsigned char* mdu_bytes, size_t mdu_bytes_len, unsigned char* out_mdu_merkle_root);
+	int nil_compute_mdu_root_from_witness_flat(const unsigned char* witness_flat, size_t witness_flat_len, unsigned char* out_mdu_merkle_root);
+	int nil_expand_mdu_rs(
+	    const unsigned char* mdu_bytes,
+	    size_t mdu_bytes_len,
+	    unsigned long long data_shards,
+	    unsigned long long parity_shards,
+	    unsigned char* out_witness_flat,
+	    size_t out_witness_flat_len,
+	    unsigned char* out_shards_flat,
+	    size_t out_shards_flat_len
+	);
+	int nil_reconstruct_mdu_rs(
+	    const unsigned char* shards_flat,
+	    size_t shards_flat_len,
+	    const unsigned char* present,
+	    size_t present_len,
+	    unsigned long long data_shards,
+	    unsigned long long parity_shards,
+	    unsigned char* out_mdu_bytes,
+	    size_t out_mdu_bytes_len
+	);
+	int nil_verify_mdu_proof(
+	    const unsigned char* mdu_merkle_root,
+	    const unsigned char* challenged_kzg_commitment,
+	    const unsigned char* merkle_path_bytes,
     size_t merkle_path_len,
     unsigned int challenged_kzg_commitment_index,
     unsigned long long leaf_count,
@@ -165,7 +186,7 @@ func (b *Mdu0Builder) AppendFile(path string, size uint64, startOffset uint64) e
 func (b *Mdu0Builder) SetRoot(index uint64, root []byte) error {
 	if len(root) != 32 {
 		return errors.New("invalid root length")
-    }
+	}
 	res := C.nil_mdu0_set_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&root[0])))
 	if res != 0 {
 		return fmt.Errorf("set root failed: %d", res)
@@ -229,6 +250,118 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 	}
 
 	return outRoot, nil
+}
+
+// ComputeMduRootFromWitnessFlat computes the Merkle root from a flattened list of 48-byte KZG commitments.
+// witness_flat must be non-empty and a multiple of 48 bytes.
+func ComputeMduRootFromWitnessFlat(witness_flat []byte) ([]byte, error) {
+	if len(witness_flat) == 0 || len(witness_flat)%48 != 0 {
+		return nil, fmt.Errorf("invalid witness_flat length: got %d", len(witness_flat))
+	}
+	outRoot := make([]byte, 32)
+	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
+	cOutRoot := (*C.uchar)(unsafe.Pointer(&outRoot[0]))
+	res := C.nil_compute_mdu_root_from_witness_flat(cWitness, C.size_t(len(witness_flat)), cOutRoot)
+	if res != 0 {
+		return nil, fmt.Errorf("nil_compute_mdu_root_from_witness_flat failed with code: %d", res)
+	}
+	return outRoot, nil
+}
+
+// ExpandMduRs expands an encoded 8 MiB MDU into RS shards and witness commitments.
+//
+// Returns:
+// - witness_flat: slot-major commitments (48 bytes each), length = (k+m)*(64/k)*48
+// - shards: slot-major shard bytes, each length = (64/k)*BLOB_SIZE
+func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, shards [][]byte, err error) {
+	if len(mdu_bytes) != types.MDU_SIZE {
+		return nil, nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mdu_bytes))
+	}
+	if k == 0 || m == 0 {
+		return nil, nil, errors.New("invalid RS params")
+	}
+	if 64%k != 0 {
+		return nil, nil, errors.New("invalid RS params: k must divide 64")
+	}
+	rows := uint64(64 / k)
+	n := k + m
+	witnessLen := int(n * rows * 48)
+	shardLen := int(rows * uint64(types.BLOB_SIZE))
+	shardsFlatLen := int(n) * shardLen
+
+	witness_flat = make([]byte, witnessLen)
+	shardsFlat := make([]byte, shardsFlatLen)
+
+	cMdu := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
+	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
+	cShards := (*C.uchar)(unsafe.Pointer(&shardsFlat[0]))
+	res := C.nil_expand_mdu_rs(
+		cMdu,
+		C.size_t(len(mdu_bytes)),
+		C.ulonglong(k),
+		C.ulonglong(m),
+		cWitness,
+		C.size_t(len(witness_flat)),
+		cShards,
+		C.size_t(len(shardsFlat)),
+	)
+	if res != 0 {
+		return nil, nil, fmt.Errorf("nil_expand_mdu_rs failed with code: %d", res)
+	}
+
+	shards = make([][]byte, 0, n)
+	for slot := 0; slot < int(n); slot++ {
+		start := slot * shardLen
+		end := start + shardLen
+		shardCopy := make([]byte, shardLen)
+		copy(shardCopy, shardsFlat[start:end])
+		shards = append(shards, shardCopy)
+	}
+	return witness_flat, shards, nil
+}
+
+// ReconstructMduRs reconstructs the original encoded 8 MiB MDU from any >=K shards.
+//
+// `present[i]` indicates whether `shards[i]` is populated. All shards must have the same size.
+func ReconstructMduRs(shards [][]byte, present []bool, k uint64, m uint64) ([]byte, error) {
+	if k == 0 || m == 0 {
+		return nil, errors.New("invalid RS params")
+	}
+	if 64%k != 0 {
+		return nil, errors.New("invalid RS params: k must divide 64")
+	}
+	n := int(k + m)
+	if len(shards) != n || len(present) != n {
+		return nil, fmt.Errorf("invalid shard arrays: expected %d slots", n)
+	}
+	rows := uint64(64 / k)
+	expectedShardLen := int(rows * uint64(types.BLOB_SIZE))
+	shardsFlat := make([]byte, n*expectedShardLen)
+	presentBytes := make([]byte, n)
+	for i := 0; i < n; i++ {
+		if present[i] {
+			presentBytes[i] = 1
+			if len(shards[i]) != expectedShardLen {
+				return nil, fmt.Errorf("invalid shard %d length: expected %d, got %d", i, expectedShardLen, len(shards[i]))
+			}
+			copy(shardsFlat[i*expectedShardLen:(i+1)*expectedShardLen], shards[i])
+		}
+	}
+	out := make([]byte, types.MDU_SIZE)
+	res := C.nil_reconstruct_mdu_rs(
+		(*C.uchar)(unsafe.Pointer(&shardsFlat[0])),
+		C.size_t(len(shardsFlat)),
+		(*C.uchar)(unsafe.Pointer(&presentBytes[0])),
+		C.size_t(len(presentBytes)),
+		C.ulonglong(k),
+		C.ulonglong(m),
+		(*C.uchar)(unsafe.Pointer(&out[0])),
+		C.size_t(len(out)),
+	)
+	if res != 0 {
+		return nil, fmt.Errorf("nil_reconstruct_mdu_rs failed with code: %d", res)
+	}
+	return out, nil
 }
 
 // ComputeManifestProof computes a KZG proof for a specific MDU inclusion in the Manifest.
