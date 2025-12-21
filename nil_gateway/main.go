@@ -527,58 +527,108 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		serviceHint, err := fetchDealServiceHintFromLCD(ingestCtx, dealID)
+		if err != nil {
+			log.Printf("GatewayUpload: failed to fetch service_hint for deal %d: %v", dealID, err)
+			http.Error(w, "failed to fetch deal service_hint", http.StatusInternalServerError)
+			return
+		}
+		stripe, err := stripeParamsFromHint(serviceHint)
+		if err != nil {
+			log.Printf("GatewayUpload: invalid service_hint for deal %d: %v", dealID, err)
+			http.Error(w, "invalid deal service_hint", http.StatusInternalServerError)
+			return
+		}
+
 		if chainCID == "" {
-			// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
-			// assigned provider before the first content commit.
-			switch {
-			case os.Getenv("NIL_FAKE_INGEST") == "1":
-				var err error
-				cid, size, allocatedLength, err = fastShardQuick(path)
-				if err != nil {
-					http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
+			if stripe.mode == 2 {
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
 					return
 				}
-				fileSize = size
 
-			case os.Getenv("NIL_FAST_INGEST") == "1":
-				b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
+				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				if recordPath == "" {
+					recordPath = strings.TrimSpace(header.Filename)
+				}
+				if recordPath != "" {
+					if validated, err := validateNilfsFilePath(recordPath); err == nil {
+						recordPath = validated
+					}
+				}
+				if strings.Contains(recordPath, "/") {
+					recordPath = filepath.Base(recordPath)
+				}
+				res, err := mode2IngestAndUploadNewDeal(ingestCtx, path, dealID, serviceHint, recordPath)
 				if err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
 					}
-					http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+					http.Error(w, fmt.Sprintf("mode2 ingest failed: %v", err), http.StatusInternalServerError)
 					return
 				}
-				cid = manifestRoot
-				allocatedLength = allocLen
-				if info, err := os.Stat(path); err == nil {
-					fileSize = uint64(info.Size())
-				}
-				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
-				}
-
-			default:
-				b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
+				cid = res.manifestRoot.Canonical
+				allocatedLength = res.allocatedLength
+				fileSize = res.fileSize
+				size = fileSize
+			} else {
+				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
+				// assigned provider before the first content commit.
+				switch {
+				case os.Getenv("NIL_FAKE_INGEST") == "1":
+					var err error
+					cid, size, allocatedLength, err = fastShardQuick(path)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
 						return
 					}
-					http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
-					return
-				}
-				cid = manifestRoot
-				allocatedLength = allocLen
-				if info, err := os.Stat(path); err == nil {
-					fileSize = uint64(info.Size())
-				}
-				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
+					fileSize = size
+
+				case os.Getenv("NIL_FAST_INGEST") == "1":
+					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
+							return
+						}
+						http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
+						return
+					}
+					cid = manifestRoot
+					allocatedLength = allocLen
+					if info, err := os.Stat(path); err == nil {
+						fileSize = uint64(info.Size())
+					}
+					if b != nil {
+						size = totalSizeBytesFromMdu0(b)
+					}
+
+				default:
+					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
+							return
+						}
+						http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
+						return
+					}
+					cid = manifestRoot
+					allocatedLength = allocLen
+					if info, err := os.Stat(path); err == nil {
+						fileSize = uint64(info.Size())
+					}
+					if b != nil {
+						size = totalSizeBytesFromMdu0(b)
+					}
 				}
 			}
 		} else {
+			if stripe.mode == 2 {
+				http.Error(w, "mode2 append via /gateway/upload is not supported yet; use browser mode2 path", http.StatusBadRequest)
+				return
+			}
 			// Append path: load existing slab by on-chain manifest root, then append.
 			if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
 				http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
