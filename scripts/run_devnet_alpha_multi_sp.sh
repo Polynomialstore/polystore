@@ -54,12 +54,14 @@ ensure_nil_core() {
     local sym
     local file=""
 
-    if [ -f "$lib_dir/libnil_core.a" ]; then
-      file="$lib_dir/libnil_core.a"
-    elif [ -f "$lib_dir/libnil_core.so" ]; then
+    # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
+    # (causing false negatives under `set -o pipefail`).
+    if [ -f "$lib_dir/libnil_core.so" ]; then
       file="$lib_dir/libnil_core.so"
     elif [ -f "$lib_dir/libnil_core.dylib" ]; then
       file="$lib_dir/libnil_core.dylib"
+    elif [ -f "$lib_dir/libnil_core.a" ]; then
+      file="$lib_dir/libnil_core.a"
     else
       return 1
     fi
@@ -69,9 +71,10 @@ ensure_nil_core() {
     fi
 
     # Dynamic libs: use nm -D where available. Static libs: nm defaults are fine.
-    local nm_args=()
+    # Avoid bash array edge-cases under `set -u` on older shells.
+    local nm_supports_dash_d="0"
     if [[ "$file" == *.so ]] && nm -D "$file" >/dev/null 2>&1; then
-      nm_args=(-D)
+      nm_supports_dash_d="1"
     fi
 
     for sym in \
@@ -80,8 +83,14 @@ ensure_nil_core() {
       nil_reconstruct_mdu_rs \
       nil_mdu0_builder_new_with_commitments \
       nil_mdu0_builder_load_with_commitments; do
-      if ! nm "${nm_args[@]}" "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
-        return 1
+      if [ "$nm_supports_dash_d" = "1" ]; then
+        if ! nm -D "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
+          return 1
+        fi
+      else
+        if ! nm "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
+          return 1
+        fi
       fi
     done
 
