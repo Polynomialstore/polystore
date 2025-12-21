@@ -370,6 +370,7 @@ test('repro bug: download from commit content widget', async ({
   console.log('Faucet received.')
 
   console.log('Creating deal...')
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
   
   // Check for any visible error message

@@ -55,6 +55,7 @@ test.describe('libp2p fetch', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
+    await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
