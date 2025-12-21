@@ -4289,8 +4289,8 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
-	// Use canonical key (lowercase hex, no 0x) for directory
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	// Store under deal-scoped directory to avoid collisions across deals.
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return
@@ -4370,7 +4370,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return
@@ -4418,7 +4418,7 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := strconv.ParseUint(dealIDStr, 10, 64)
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
 		return
@@ -4441,7 +4441,7 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid manifest_root", http.StatusBadRequest)
 		return
 	}
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
 
@@ -4496,7 +4496,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rootDir := filepath.Join(uploadDir, parsed.Key)
+	rootDir := dealScopedDir(dealID, parsed)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
 		return
