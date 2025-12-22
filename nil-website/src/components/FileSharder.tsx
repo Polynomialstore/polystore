@@ -6,6 +6,7 @@ import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
+import { NILFS_RECORD_PATH_MAX_BYTES, sanitizeNilfsRecordPath } from '../lib/nilfsPath';
 import { readMdu, writeManifestBlob, writeManifestRoot, writeMdu, writeShard } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
@@ -1208,7 +1209,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
 
         const fileStartOffset = appendMode2 ? appendStartOffset : 0;
-        await workerClient.appendFileToMdu0(file.name, file.size, fileStartOffset);
+        const recordPath = sanitizeNilfsRecordPath(file.name);
+        if (recordPath !== file.name) {
+          addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
+        }
+        await workerClient.appendFileToMdu0(recordPath, file.size, fileStartOffset);
 
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
