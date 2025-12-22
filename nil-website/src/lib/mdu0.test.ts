@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 
 import init, { WasmMdu0Builder } from '../../public/wasm/nil_core.js';
+import { sanitizeNilfsRecordPath } from './nilfsPath'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,4 +57,28 @@ test('Mdu0Builder WASM', async () => {
     if (nullIdx === -1) nullIdx = pathBytes.length;
     const readPath = new TextDecoder().decode(pathBytes.slice(0, nullIdx));
     assert.strictEqual(readPath, fileName, "Path mismatch");
+});
+
+test('Mdu0Builder WASM rejects paths > 40 bytes (NilFS V1)', async () => {
+    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm');
+    const wasmBuffer = await fs.readFile(wasmPath);
+    await init({ module_or_path: wasmBuffer });
+
+    const mdu = new WasmMdu0Builder(10n);
+    const longName = 'x'.repeat(41);
+    assert.throws(() => {
+        mdu.append_file(longName, 1n, 0n);
+    }, /path too long/i);
+});
+
+test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async () => {
+    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm');
+    const wasmBuffer = await fs.readFile(wasmPath);
+    await init({ module_or_path: wasmBuffer });
+
+    const mdu = new WasmMdu0Builder(10n);
+    const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(200) + '.txt');
+    assert.doesNotThrow(() => {
+        mdu.append_file(sanitized, 1n, 0n);
+    });
 });
