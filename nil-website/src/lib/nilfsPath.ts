@@ -5,7 +5,7 @@ export function sanitizeNilfsRecordPath(input: string): string {
   if (!value) return 'file'
 
   // Treat common OS path separators as delimiters; NilFS V1 currently stores basename only.
-  value = value.replaceAll('\\', '/')
+  value = value.replace(/\\/g, '/')
   if (value.includes('/')) {
     const parts = value.split('/').filter(Boolean)
     value = parts.length ? parts[parts.length - 1] : value
