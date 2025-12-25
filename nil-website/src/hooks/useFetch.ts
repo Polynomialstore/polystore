@@ -177,6 +177,7 @@ export function useFetch() {
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
+
       let gatewayP2pTarget: P2pTarget | undefined
       if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !p2pEndpoint?.target) {
         const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
@@ -188,95 +189,121 @@ export function useFetch() {
           }
         }
       }
+
       const planP2pTarget = p2pEndpoint?.target || gatewayP2pTarget || undefined
-      const planResult = await transport.plan({
-        manifestRoot,
-        owner,
-        dealId,
-        filePath,
-        rangeStart: wantRangeStart,
-        rangeLen: effectiveRangeLen,
-        directBase,
-        p2pTarget: planP2pTarget,
-        preference: preferenceOverride,
-      })
-      const planJson = planResult.data
-      const provider = String(planJson.provider || '').trim()
-      if (!provider) throw new Error('gateway plan did not return provider')
-      const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
-      const startBlobIndex = Number(planJson.start_blob_index || 0)
-      const blobCount = BigInt(Number(planJson.blob_count || 0))
-      if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
-      if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
-      if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+      const providerEndpointCache = new Map<string, Awaited<ReturnType<typeof resolveProviderEndpointByAddress>> | null>()
+      const providerP2pCache = new Map<string, Awaited<ReturnType<typeof resolveProviderP2pEndpointByAddress>> | null>()
 
-      setProgress((p) => ({ ...p, phase: 'opening_session_tx', receiptsSubmitted: 0, receiptsTotal: 2 }))
-
-      const openNonce = BigInt(Date.now())
-      const openExpiresAt = 0n
-      const openTxData = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'openRetrievalSession',
-        args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
-      })
-      const openTxHash = (await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
-      })) as Hex
-
-      const openReceipt = await waitForTransactionReceipt(openTxHash)
-      let sessionId: Hex | null = null
-      for (const log of openReceipt.logs || []) {
-        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
-        try {
-          const decoded = decodeEventLog({
-            abi: NILSTORE_PRECOMPILE_ABI,
-            eventName: 'RetrievalSessionOpened',
-            topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
-            data: log.data,
-          })
-          const sid = (decoded.args as { sessionId: Hex }).sessionId
-          if (sid) {
-            sessionId = sid
-            break
-          }
-        } catch {
-          continue
-        }
+      const getProviderEndpoint = async (provider: string) => {
+        if (providerEndpointCache.has(provider)) return providerEndpointCache.get(provider) ?? null
+        const endpoint = await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
+        providerEndpointCache.set(provider, endpoint)
+        return endpoint
       }
-      if (!sessionId) throw new Error('openRetrievalSession tx confirmed but RetrievalSessionOpened event not found')
-
-      setProgress((p) => ({
-        ...p,
-        phase: 'fetching',
-        filePath,
-        chunkCount: chunks.length,
-        bytesTotal: effectiveRangeLen,
-        receiptsTotal: 2,
-      }))
-
-      const providerEndpoint = provider
-        ? await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
-        : null
-      const providerP2pEndpoint = provider
-        ? await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
-        : null
-      const fetchP2pTarget =
-        providerP2pEndpoint?.target ||
-        (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
-        gatewayP2pTarget
-      const fetchDirectBase =
-        providerEndpoint?.baseUrl ||
-        (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
-        (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
-        (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
+      const getProviderP2pEndpoint = async (provider: string) => {
+        if (providerP2pCache.has(provider)) return providerP2pCache.get(provider) ?? null
+        const endpoint = await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
+        providerP2pCache.set(provider, endpoint)
+        return endpoint
+      }
 
       const parts: Uint8Array[] = []
       let bytesFetched = 0
-      let observedProvider: string | null = null
+      let receiptsSubmitted = 0
+      let chunksFetched = 0
+
+      setProgress((p) => ({
+        ...p,
+        phase: 'opening_session_tx',
+        filePath,
+        chunkCount: chunks.length,
+        bytesTotal: effectiveRangeLen,
+        receiptsSubmitted: 0,
+        receiptsTotal: chunks.length * 2,
+      }))
 
       for (let idx = 0; idx < chunks.length; idx++) {
         const c = chunks[idx]
+        const planResult = await transport.plan({
+          manifestRoot,
+          owner,
+          dealId,
+          filePath,
+          rangeStart: c.rangeStart,
+          rangeLen: c.rangeLen,
+          directBase,
+          p2pTarget: planP2pTarget,
+          preference: preferenceOverride,
+        })
+
+        const planJson = planResult.data
+        const provider = String(planJson.provider || '').trim()
+        if (!provider) throw new Error('gateway plan did not return provider')
+        const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
+        const startBlobIndex = Number(planJson.start_blob_index || 0)
+        const blobCount = BigInt(Number(planJson.blob_count || 0))
+        if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
+        if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
+        if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+
+        setProgress((p) => ({
+          ...p,
+          phase: 'opening_session_tx',
+          receiptsSubmitted,
+        }))
+
+        const openNonce = BigInt(Date.now()) + BigInt(idx)
+        const openExpiresAt = 0n
+        const openTxData = encodeFunctionData({
+          abi: NILSTORE_PRECOMPILE_ABI,
+          functionName: 'openRetrievalSession',
+          args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
+        })
+        const openTxHash = (await ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
+        })) as Hex
+
+        const openReceipt = await waitForTransactionReceipt(openTxHash)
+        let sessionId: Hex | null = null
+        for (const log of openReceipt.logs || []) {
+          if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
+          try {
+            const decoded = decodeEventLog({
+              abi: NILSTORE_PRECOMPILE_ABI,
+              eventName: 'RetrievalSessionOpened',
+              topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
+              data: log.data,
+            })
+            const sid = (decoded.args as { sessionId: Hex }).sessionId
+            if (sid) {
+              sessionId = sid
+              break
+            }
+          } catch {
+            continue
+          }
+        }
+        if (!sessionId) throw new Error('openRetrievalSession tx confirmed but RetrievalSessionOpened event not found')
+
+        setProgress((p) => ({
+          ...p,
+          phase: 'fetching',
+          chunkCount: chunks.length,
+          bytesTotal: effectiveRangeLen,
+        }))
+
+        const providerEndpoint = await getProviderEndpoint(provider)
+        const providerP2pEndpoint = await getProviderP2pEndpoint(provider)
+        const fetchP2pTarget =
+          providerP2pEndpoint?.target ||
+          (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
+          gatewayP2pTarget
+        const fetchDirectBase =
+          providerEndpoint?.baseUrl ||
+          (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
+          (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
+          (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
 
         const rangeResult = await transport.fetchRange({
           manifestRoot,
@@ -292,30 +319,23 @@ export function useFetch() {
           preference: preferenceOverride,
         })
 
-        const hProvider = rangeResult.data.provider
-        if (!observedProvider) observedProvider = hProvider
-        if (observedProvider !== hProvider) {
-          throw new Error(`provider mismatch during download: ${observedProvider} vs ${hProvider}`)
-        }
-
         const buf = rangeResult.data.bytes
         parts.push(buf)
         bytesFetched += buf.byteLength
+        chunksFetched += 1
 
         setProgress((p) => ({
           ...p,
           phase: 'fetching',
-          chunksFetched: Math.min(p.chunkCount || chunks.length, idx + 1),
+          chunksFetched: Math.min(p.chunkCount || chunks.length, chunksFetched),
           bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
         }))
-      }
 
-      const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      setDownloadUrl(url)
-
-      try {
-        setProgress((p) => ({ ...p, phase: 'confirming_session_tx', receiptsSubmitted: 1, receiptsTotal: 2 }))
+        setProgress((p) => ({
+          ...p,
+          phase: 'confirming_session_tx',
+          receiptsSubmitted: receiptsSubmitted + 1,
+        }))
 
         const confirmTxData = encodeFunctionData({
           abi: NILSTORE_PRECOMPILE_ABI,
@@ -328,7 +348,11 @@ export function useFetch() {
         })) as Hex
         await waitForTransactionReceipt(confirmTxHash)
 
-        setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))
+        setProgress((p) => ({
+          ...p,
+          phase: 'submitting_proof_request',
+          receiptsSubmitted: receiptsSubmitted + 1,
+        }))
         // `session-proof` is an internal "user daemon -> provider" forward and requires gateway auth.
         // Even when `serviceBase` points at the provider (direct fetch flows), proof submission must go
         // through the local gateway.
@@ -343,14 +367,19 @@ export function useFetch() {
           throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
         }
 
-        setReceiptStatus('submitted')
-        setProgress((p) => ({ ...p, phase: 'done', receiptsSubmitted: 2, receiptsTotal: 2 }))
-      } catch (e) {
-        console.error(e)
-        setProgress((p) => ({ ...p, phase: 'error', message: (e as Error).message }))
-        setReceiptStatus('failed')
-        setReceiptError((e as Error).message)
+        receiptsSubmitted += 2
       }
+
+      const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      setDownloadUrl(url)
+
+      setReceiptStatus('submitted')
+      setProgress((p) => ({
+        ...p,
+        phase: 'done',
+        receiptsSubmitted: receiptsSubmitted,
+      }))
 
       return { url, blob }
     } catch (e) {

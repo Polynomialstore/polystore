@@ -17,7 +17,7 @@ test.describe('mode2 stripe', () => {
     test.setTimeout(600_000)
 
     const filePath = 'mode2-small.txt'
-    const fileBytes = Buffer.alloc(64 * 1024, 'M') // <= one blob (128 KiB)
+    const fileBytes = Buffer.alloc(256 * 1024, 'M') // spans multiple blobs (128 KiB each)
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
@@ -81,6 +81,29 @@ test.describe('mode2 stripe', () => {
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
 
+    const expectedChunks = Math.ceil(fileBytes.length / (128 * 1024))
+    let planCalls = 0
+    let fetchCalls = 0
+    page.on('response', (resp) => {
+      const url = resp.url()
+      if (url.includes('/gateway/plan-retrieval-session/')) planCalls += 1
+      if (url.includes('/gateway/fetch/')) fetchCalls += 1
+    })
+
+    const cacheName = cachedFileNameForPath(filePath)
+    await page.evaluate(
+      async ({ dealId, cacheName }) => {
+        try {
+          const root = await navigator.storage.getDirectory()
+          const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+          await dealDir.removeEntry(cacheName, { recursive: false })
+        } catch (err) {
+          void err
+        }
+      },
+      { dealId, cacheName },
+    )
+
     await downloadBtn.click()
 
     await expect(page.getByText(/Receipt submitted on-chain|Receipt failed/i)).toBeVisible({ timeout: 360_000 })
@@ -88,7 +111,9 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
     await expect(page.getByText(/Download failed/i)).toHaveCount(0)
 
-    const cacheName = cachedFileNameForPath(filePath)
+    await expect.poll(() => planCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
+    await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
+
     const cachedBytes = await page.evaluate(
       async ({ dealId, cacheName }) => {
         const root = await navigator.storage.getDirectory()
