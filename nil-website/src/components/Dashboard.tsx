@@ -133,6 +133,7 @@ export function Dashboard() {
     }
   }
 
+
   // Step 1: Alloc State
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
@@ -304,6 +305,37 @@ export function Dashboard() {
     [targetDeal?.service_hint],
   )
   const isTargetDealMode2 = targetDealService.mode === 'mode2'
+  const hasSelectedDeal = Boolean(targetDealId)
+  const hasCommittedContent = Boolean(targetDeal?.cid)
+  const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Allocated' : '—'
+  const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
+  const nextAction = useMemo(() => {
+    if (!hasSelectedDeal) {
+      return { label: 'Create a deal', hint: 'Allocate a new container', tab: 'alloc' as const }
+    }
+    if (!hasCommittedContent) {
+      return {
+        label: isTargetDealMode2 ? 'Upload with Mode 2' : 'Upload with gateway',
+        hint: isTargetDealMode2 ? 'Shard locally with WASM' : 'Use legacy gateway sharding',
+        tab: (isTargetDealMode2 ? 'mdu' : 'content') as const,
+      }
+    }
+    return { label: 'View deal details', hint: 'Inspect files and retrievals', tab: null }
+  }, [hasCommittedContent, hasSelectedDeal, isTargetDealMode2])
+  const handleNextAction = useCallback(() => {
+    if (nextAction.tab) {
+      setActiveTab(nextAction.tab)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (targetDeal) {
+      setSelectedDeal(targetDeal)
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+    }
+  }, [nextAction.tab, targetDeal])
+  const allocStatusLabel = hasSelectedDeal ? 'Selected' : 'Step 1'
+  const mode2StatusLabel = !hasSelectedDeal ? 'Step 2' : isTargetDealMode2 ? (hasCommittedContent ? 'Committed' : 'Recommended') : 'Optional'
+  const legacyStatusLabel = !hasSelectedDeal ? 'Step 2' : !isTargetDealMode2 ? (hasCommittedContent ? 'Committed' : 'Legacy') : 'Fallback'
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
@@ -1028,11 +1060,23 @@ export function Dashboard() {
                   : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Create deal</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    activeTab === 'alloc' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+                  }`}>
+                    1
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-primary" />
+                      <div className="text-sm font-semibold text-foreground">Create deal</div>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">Allocate a container (bucket).</div>
+                  </div>
+                </div>
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{allocStatusLabel}</span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Allocate a container (bucket).</div>
             </button>
             <button
               type="button"
@@ -1044,11 +1088,27 @@ export function Dashboard() {
                   : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    activeTab === 'mdu' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+                  }`}>
+                    2
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-primary" />
+                      <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
+                  </div>
+                </div>
+                <span className={`text-[10px] uppercase tracking-wide ${
+                  mode2StatusLabel === 'Recommended' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+                }`}>
+                  {mode2StatusLabel}
+                </span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
             </button>
             <button
               type="button"
@@ -1060,18 +1120,62 @@ export function Dashboard() {
                   : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Upload (legacy)</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    activeTab === 'content' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+                  }`}>
+                    3
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-primary" />
+                      <div className="text-sm font-semibold text-foreground">Upload (legacy)</div>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">Gateway sharding for Mode 1 deals.</div>
+                  </div>
+                </div>
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{legacyStatusLabel}</span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Gateway sharding for Mode 1 deals.</div>
             </button>
           </div>
-          <div className="mt-3 text-xs text-muted-foreground">
-            Selected deal:{' '}
-            <span className="font-mono text-foreground" data-testid="selected-deal-id">
-              {targetDealId ? `#${targetDealId}` : '—'}
-            </span>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected deal</div>
+              <div className="mt-1 font-mono text-foreground" data-testid="selected-deal-id">
+                {targetDealId ? `#${targetDealId}` : '—'}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {targetDeal?.cid ? `${targetDeal.cid.slice(0, 12)}...` : 'No manifest yet'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</div>
+              <div className="mt-1 text-sm font-semibold text-foreground">{activeDealModeLabel}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {isTargetDealMode2 ? 'Striped RS' : hasSelectedDeal ? 'Replication' : '—'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</div>
+              <div className="mt-1 text-sm font-semibold text-foreground">{activeDealStatus}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {hasCommittedContent ? 'Content committed' : hasSelectedDeal ? 'Awaiting upload' : 'Select or create'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 px-3 py-2 flex flex-col gap-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Next action</div>
+              <div className="text-xs font-semibold text-foreground">{nextAction.label}</div>
+              <div className="text-[10px] text-muted-foreground">{nextAction.hint}</div>
+              <button
+                type="button"
+                onClick={handleNextAction}
+                disabled={!nextAction.tab && !targetDeal}
+                className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                {nextAction.tab ? 'Go' : 'Open'}
+              </button>
+            </div>
           </div>
         </div>
 
