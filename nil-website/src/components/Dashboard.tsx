@@ -1419,6 +1419,8 @@ export function Dashboard() {
                                             }
                                             }}
                                           disabled={downloading}
+                                          data-testid="content-download"
+                                          data-file-path={f.path}
                                           className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
                                         >
                                           <ArrowDownRight className="w-4 h-4" />

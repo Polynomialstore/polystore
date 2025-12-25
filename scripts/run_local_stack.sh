@@ -27,6 +27,8 @@ BRIDGE_STATUS="not deployed"
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
 export NIL_EVM_DEV_PRIVKEY
+# Shared auth between router and provider for /sp/session-proof forwarding.
+NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
 export NIL_DISABLE_EVM_MEMPOOL
@@ -38,6 +40,16 @@ if [ ! -x "$GO_BIN" ]; then
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
+
+if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+  else
+    NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+  fi
+fi
+export NIL_GATEWAY_SP_AUTH
+echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
@@ -435,8 +447,9 @@ start_sp_gateway() {
     cd "$ROOT_DIR/nil_gateway"
     # SP Mode (default), Listen on 8082, Uploads to uploads_sp
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
-      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER_MODE="0" \
+      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
     NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-0}" \
+    NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GATEWAY_BIN" \
@@ -469,8 +482,9 @@ start_user_gateway() {
     cd "$ROOT_DIR/nil_gateway"
     # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
-      NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER_MODE="1" \
+      NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
     NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-0}" NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-}" \
+    NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GATEWAY_BIN" \
