@@ -309,15 +309,15 @@ export function Dashboard() {
   const hasCommittedContent = Boolean(targetDeal?.cid)
   const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Allocated' : '—'
   const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
-  const nextAction = useMemo(() => {
+  const nextAction = useMemo<{ label: string; hint: string; tab: 'alloc' | 'mdu' | 'content' | null }>(() => {
     if (!hasSelectedDeal) {
-      return { label: 'Create a deal', hint: 'Allocate a new container', tab: 'alloc' as const }
+      return { label: 'Create a deal', hint: 'Allocate a new container', tab: 'alloc' }
     }
     if (!hasCommittedContent) {
       return {
         label: isTargetDealMode2 ? 'Upload with Mode 2' : 'Upload with gateway',
         hint: isTargetDealMode2 ? 'Shard locally with WASM' : 'Use legacy gateway sharding',
-        tab: (isTargetDealMode2 ? 'mdu' : 'content') as const,
+        tab: isTargetDealMode2 ? 'mdu' : 'content',
       }
     }
     return { label: 'View deal details', hint: 'Inspect files and retrievals', tab: null }
