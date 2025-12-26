@@ -235,7 +235,11 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
 
 	w := httptest.NewRecorder()
-	GatewayFetch(w, httpReq)
+	if isGatewayRouterMode() {
+		RouterGatewayFetch(w, httpReq)
+	} else {
+		GatewayFetch(w, httpReq)
+	}
 	result := w.Result()
 	body, _ := io.ReadAll(result.Body)
 	_ = result.Body.Close()

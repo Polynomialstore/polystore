@@ -578,6 +578,20 @@ export function Dashboard() {
     }
   }, [address])
 
+  // Keep the open Deal Explorer panel in sync with deal list refreshes.
+  useEffect(() => {
+    if (!selectedDeal) return
+    const selectedId = String(selectedDeal.id ?? '').trim()
+    if (!selectedId) return
+    const updated =
+      deals.find((d) => String(d.id) === selectedId) ||
+      allDeals.find((d) => String(d.id) === selectedId) ||
+      null
+    if (updated && updated !== selectedDeal) {
+      setSelectedDeal(updated)
+    }
+  }, [allDeals, deals, selectedDeal])
+
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
     try {
