@@ -293,62 +293,80 @@ export function useFetch() {
         chunkCount: chunks.length,
         bytesTotal: effectiveRangeLen,
         receiptsSubmitted: 0,
-        receiptsTotal: providerGroups.size * 2,
+        receiptsTotal: providerGroups.size > 0 ? 2 : 0,
       }))
 
-      let groupIndex = 0
-      for (const group of providerGroups.values()) {
-        const provider = group.provider
+      const groups = Array.from(providerGroups.values())
+      const openBaseNonce = BigInt(Date.now())
+      const openRequests = groups.map((group, index) => {
         const groupStartMdu = group.globalStart / leafCount
         const groupStartBlob = Number(group.globalStart % leafCount)
         const groupBlobCount = group.globalEnd - group.globalStart + 1n
-
-        setProgress((p) => ({
-          ...p,
-          phase: 'opening_session_tx',
-          receiptsSubmitted,
-        }))
-
-        const openNonce = BigInt(Date.now()) + BigInt(groupIndex)
-        const openExpiresAt = 0n
-        const openTxData = encodeFunctionData({
-          abi: NILSTORE_PRECOMPILE_ABI,
-          functionName: 'openRetrievalSession',
-          args: [BigInt(dealId), provider, manifestRoot, groupStartMdu, groupStartBlob, groupBlobCount, openNonce, openExpiresAt],
-        })
-        const openTxHash = (await ethereum.request({
-          method: 'eth_sendTransaction',
-          params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
-        })) as Hex
-
-        const openReceipt = await waitForTransactionReceipt(openTxHash)
-        let sessionId: Hex | null = null
-        for (const log of openReceipt.logs || []) {
-          if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
-          try {
-            const decoded = decodeEventLog({
-              abi: NILSTORE_PRECOMPILE_ABI,
-              eventName: 'RetrievalSessionOpened',
-              topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
-              data: log.data,
-            })
-            const sid = (decoded.args as { sessionId: Hex }).sessionId
-            if (sid) {
-              sessionId = sid
-              break
-            }
-          } catch {
-            continue
-          }
+        return {
+          dealId: BigInt(dealId),
+          provider: group.provider,
+          manifestRoot,
+          startMduIndex: groupStartMdu,
+          startBlobIndex: groupStartBlob,
+          blobCount: groupBlobCount,
+          nonce: openBaseNonce + BigInt(index),
+          expiresAt: 0n,
         }
-        if (!sessionId) throw new Error('openRetrievalSession tx confirmed but RetrievalSessionOpened event not found')
+      })
 
-        setProgress((p) => ({
-          ...p,
-          phase: 'fetching',
-          chunkCount: chunks.length,
-          bytesTotal: effectiveRangeLen,
-        }))
+      const openTxData = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'openRetrievalSessions',
+        args: [openRequests],
+      })
+      const openTxHash = (await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(7_000_000) }],
+      })) as Hex
+
+      const openReceipt = await waitForTransactionReceipt(openTxHash)
+      const sessionsByProvider = new Map<string, Hex>()
+      for (const log of openReceipt.logs || []) {
+        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
+        try {
+          const decoded = decodeEventLog({
+            abi: NILSTORE_PRECOMPILE_ABI,
+            eventName: 'RetrievalSessionOpened',
+            topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
+            data: log.data,
+          })
+          const args = decoded.args as { provider?: string; sessionId?: Hex }
+          const provider = String(args.provider || '').trim()
+          const sid = args.sessionId
+          if (provider && sid) {
+            sessionsByProvider.set(provider, sid)
+          }
+        } catch {
+          continue
+        }
+      }
+
+      for (const group of groups) {
+        if (!sessionsByProvider.has(group.provider)) {
+          throw new Error(`openRetrievalSessions tx confirmed but session for ${group.provider} not found`)
+        }
+      }
+
+      receiptsSubmitted = 1
+      setProgress((p) => ({
+        ...p,
+        phase: 'fetching',
+        chunkCount: chunks.length,
+        bytesTotal: effectiveRangeLen,
+        receiptsSubmitted,
+      }))
+
+      for (const group of groups) {
+        const provider = group.provider
+        const sessionId = sessionsByProvider.get(provider)
+        if (!sessionId) {
+          throw new Error(`missing session for provider ${provider}`)
+        }
 
         const providerEndpoint = await getProviderEndpoint(provider)
         const providerP2pEndpoint = await getProviderP2pEndpoint(provider)
@@ -393,29 +411,39 @@ export function useFetch() {
             bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
           }))
         }
+      }
 
-        setProgress((p) => ({
-          ...p,
-          phase: 'confirming_session_tx',
-          receiptsSubmitted: receiptsSubmitted + 1,
-        }))
+      setProgress((p) => ({
+        ...p,
+        phase: 'confirming_session_tx',
+        receiptsSubmitted,
+      }))
 
-        const confirmTxData = encodeFunctionData({
-          abi: NILSTORE_PRECOMPILE_ABI,
-          functionName: 'confirmRetrievalSession',
-          args: [sessionId],
-        })
-        const confirmTxHash = (await ethereum.request({
-          method: 'eth_sendTransaction',
-          params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(2_000_000) }],
-        })) as Hex
-        await waitForTransactionReceipt(confirmTxHash)
+      const sessionIds = groups.map((group) => sessionsByProvider.get(group.provider) as Hex)
+      const confirmTxData = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'confirmRetrievalSessions',
+        args: [sessionIds],
+      })
+      const confirmTxHash = (await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(3_000_000) }],
+      })) as Hex
+      await waitForTransactionReceipt(confirmTxHash)
+      receiptsSubmitted = 2
 
-        setProgress((p) => ({
-          ...p,
-          phase: 'submitting_proof_request',
-          receiptsSubmitted: receiptsSubmitted + 1,
-        }))
+      setProgress((p) => ({
+        ...p,
+        phase: 'submitting_proof_request',
+        receiptsSubmitted,
+      }))
+
+      for (const group of groups) {
+        const provider = group.provider
+        const sessionId = sessionsByProvider.get(provider)
+        if (!sessionId) {
+          throw new Error(`missing session for provider ${provider}`)
+        }
         // `session-proof` is an internal "user daemon -> provider" forward and requires gateway auth.
         // Even when `serviceBase` points at the provider (direct fetch flows), proof submission must go
         // through the local gateway.
@@ -429,9 +457,6 @@ export function useFetch() {
           const text = await proofRes.text().catch(() => '')
           throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
         }
-
-        receiptsSubmitted += 2
-        groupIndex += 1
       }
 
       const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })

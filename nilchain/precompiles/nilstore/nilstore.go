@@ -93,9 +93,34 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"openRetrievalSessions",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"sessions","type":"tuple[]","components":[
+        {"name":"dealId","type":"uint64"},
+        {"name":"provider","type":"string"},
+        {"name":"manifestRoot","type":"bytes"},
+        {"name":"startMduIndex","type":"uint64"},
+        {"name":"startBlobIndex","type":"uint32"},
+        {"name":"blobCount","type":"uint64"},
+        {"name":"nonce","type":"uint64"},
+        {"name":"expiresAt","type":"uint64"}
+      ]}
+    ],
+    "outputs":[{"name":"sessionIds","type":"bytes32[]"}]
+  },
+  {
+    "type":"function",
     "name":"confirmRetrievalSession",
     "stateMutability":"nonpayable",
     "inputs":[{"name":"sessionId","type":"bytes32"}],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
+    "name":"confirmRetrievalSessions",
+    "stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionIds","type":"bytes32[]"}],
     "outputs":[{"name":"ok","type":"bool"}]
   },
   {"type":"event","name":"DealCreated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true}]},
@@ -174,11 +199,26 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runProveRetrievalBatch(ctx, evm, contract, method, input[4:])
 	case "openRetrievalSession":
 		return p.runOpenRetrievalSession(ctx, evm, contract, method, input[4:])
+	case "openRetrievalSessions":
+		return p.runOpenRetrievalSessions(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSession":
 		return p.runConfirmRetrievalSession(ctx, evm, contract, method, input[4:])
+	case "confirmRetrievalSessions":
+		return p.runConfirmRetrievalSessions(ctx, evm, contract, method, input[4:])
 	default:
 		return nil, fmt.Errorf("nilstore precompile: unsupported method %q", method.Name)
 	}
+}
+
+type openSessionInput struct {
+	DealId         uint64 `abi:"dealId"`
+	Provider       string `abi:"provider"`
+	ManifestRoot   []byte `abi:"manifestRoot"`
+	StartMduIndex  uint64 `abi:"startMduIndex"`
+	StartBlobIndex uint32 `abi:"startBlobIndex"`
+	BlobCount      uint64 `abi:"blobCount"`
+	Nonce          uint64 `abi:"nonce"`
+	ExpiresAt      uint64 `abi:"expiresAt"`
 }
 
 func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
@@ -254,6 +294,67 @@ func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contr
 	return out, nil
 }
 
+func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	values, err := method.Inputs.Unpack(data)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSessions: failed to unpack args: %w", err)
+	}
+
+	var sessions []openSessionInput
+	if err := method.Inputs.Copy(&sessions, values); err != nil {
+		return nil, fmt.Errorf("openRetrievalSessions: failed to decode sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		return nil, errors.New("openRetrievalSessions: sessions is empty")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	sessionIDs := make([][32]byte, len(sessions))
+
+	for i, input := range sessions {
+		provider := strings.TrimSpace(input.Provider)
+		if provider == "" {
+			return nil, errors.New("openRetrievalSessions: invalid provider")
+		}
+		if len(input.ManifestRoot) != 48 {
+			return nil, errors.New("openRetrievalSessions: manifestRoot must be 48 bytes")
+		}
+		if input.BlobCount == 0 {
+			return nil, errors.New("openRetrievalSessions: blobCount must be > 0")
+		}
+
+		res, err := msgServer.OpenRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSession{
+			Creator:        creator,
+			DealId:         input.DealId,
+			Provider:       provider,
+			ManifestRoot:   input.ManifestRoot,
+			StartMduIndex:  input.StartMduIndex,
+			StartBlobIndex: input.StartBlobIndex,
+			BlobCount:      input.BlobCount,
+			Nonce:          input.Nonce,
+			ExpiresAt:      input.ExpiresAt,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(res.SessionId) != 32 {
+			return nil, errors.New("openRetrievalSessions: invalid session id")
+		}
+
+		copy(sessionIDs[i][:], res.SessionId)
+		p.emitEventRetrievalSessionOpened(evm, input.DealId, caller, provider, sessionIDs[i])
+	}
+
+	out, err := method.Outputs.Pack(sessionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSessions: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
 func (p *Precompile) runConfirmRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
 	args := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
@@ -282,6 +383,42 @@ func (p *Precompile) runConfirmRetrievalSession(ctx sdk.Context, evm *vm.EVM, co
 	out, err := method.Outputs.Pack(true)
 	if err != nil {
 		return nil, fmt.Errorf("confirmRetrievalSession: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runConfirmRetrievalSessions(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	values, err := method.Inputs.Unpack(data)
+	if err != nil {
+		return nil, fmt.Errorf("confirmRetrievalSessions: failed to unpack args: %w", err)
+	}
+
+	var sessionIDs [][32]byte
+	if err := method.Inputs.Copy(&sessionIDs, values); err != nil {
+		return nil, fmt.Errorf("confirmRetrievalSessions: failed to decode sessionIds: %w", err)
+	}
+	if len(sessionIDs) == 0 {
+		return nil, errors.New("confirmRetrievalSessions: sessionIds is empty")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	for _, sessionID := range sessionIDs {
+		_, err := msgServer.ConfirmRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgConfirmRetrievalSession{
+			Creator:   creator,
+			SessionId: sessionID[:],
+		})
+		if err != nil {
+			return nil, err
+		}
+		p.emitEventRetrievalSessionConfirmed(evm, sessionID, caller)
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("confirmRetrievalSessions: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }
