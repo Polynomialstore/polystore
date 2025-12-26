@@ -141,7 +141,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-  const gatewayMode2Capable = isMode2 && localGateway.status === 'connected' && Boolean(localGateway.details?.capabilities?.mode2_rs)
+  const gatewayReachable = localGateway.status === 'connected' && !appConfig.gatewayDisabled
+  const gatewayMode2Preferred = isMode2 && gatewayReachable
   const activeUploading = isMode2 ? mode2Uploading : isUploading
   const isUploadComplete = isMode2
     ? mode2UploadComplete
@@ -660,7 +661,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         alert('Connect wallet first');
         return;
       }
-      if (!gatewayMode2Capable && wasmStatus !== 'ready') {
+
+      const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
+      const canSkipWasm = useMode2 && gatewayMode2Preferred
+      if (!canSkipWasm && wasmStatus !== 'ready') {
         alert('WASM worker not ready. ' + (wasmError || 'Initializing...'));
         return;
       }
@@ -703,12 +707,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
     const RawMduCapacity = RAW_MDU_CAPACITY;
-      const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0);
       const rsK = useMode2 ? stripeParams!.k : 0;
       const rsM = useMode2 ? stripeParams!.m : 0;
       const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64;
 
-      if (useMode2 && gatewayMode2Capable) {
+      if (useMode2 && gatewayMode2Preferred) {
         try {
           setMode2Uploading(true);
           setShardProgress((p) => ({
@@ -730,9 +733,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const txt = await resp.text().catch(() => '');
             throw new Error(txt || `gateway upload failed (${resp.status})`);
           }
-          const payload = (await resp.json().catch(() => null)) as { manifest_root?: string; cid?: string } | null;
+          const payload = (await resp.json().catch(() => null)) as {
+            manifest_root?: string
+            cid?: string
+            size_bytes?: number
+            file_size_bytes?: number
+            allocated_length?: number
+          } | null
           const root = String(payload?.manifest_root || payload?.cid || '').trim();
           if (!root) throw new Error('gateway upload returned no manifest_root');
+          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size;
 
           setCurrentManifestRoot(root);
           setCurrentManifestBlob(null);
@@ -745,22 +755,38 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ...p,
             phase: 'done',
             label: 'Gateway Mode 2 ingest complete. Ready to commit.',
+            fileBytesTotal: gatewaySizeBytes,
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }));
+          setProcessing(false);
           return;
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          setMode2UploadError(msg);
           addLog(`> Gateway Mode 2 ingest failed: ${msg}`);
+          addLog('> Falling back to in-browser Mode 2 sharding + stripe upload.');
+
+          if (wasmStatus !== 'ready') {
+            setMode2UploadError(`Gateway ingest failed and WASM is not ready (${msg})`);
+            setShardProgress((p) => ({
+              ...p,
+              phase: 'error',
+              label: `Gateway ingest failed and WASM is not ready (${msg})`,
+              currentOpStartedAtMs: null,
+              lastOpMs: performance.now() - startTs,
+            }));
+            setProcessing(false);
+            return;
+          }
+
+          setMode2UploadError(null);
           setShardProgress((p) => ({
             ...p,
-            phase: 'error',
-            label: `Gateway Mode 2 ingest failed: ${msg}`,
+            phase: 'planning',
+            label: 'Gateway unavailable; falling back to in-browser sharding...',
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }));
-          return;
         } finally {
           setMode2Uploading(false);
         }
@@ -1387,7 +1413,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams, gatewayMode2Capable]);
+  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams, gatewayMode2Preferred]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -1461,13 +1487,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </div>
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            Each user MDU expands into stripes (K data + M parity). The gateway can mirror and distribute shards when running.
+            Default: use the local gateway for RS encoding + distribution. Fallback: in-browser WASM sharding + direct uploads.
           </div>
         </div>
       )}
 
       {/* Dropzone */}
-      {wasmStatus === 'ready' ? (
+      {wasmStatus === 'ready' || (isMode2 && gatewayMode2Preferred) ? (
         <div
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
@@ -1488,7 +1514,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div>
               <h3 className="text-lg font-bold text-foreground">Select a file</h3>
               <p className="text-muted-foreground mt-1 text-sm">
-                The browser will expand it into MDUs and compute commitments locally (WASM).
+                {isMode2 && gatewayMode2Preferred
+                  ? 'Uploads via the local gateway by default (WASM fallback when unavailable).'
+                  : 'The browser will expand it into MDUs and compute commitments locally (WASM).'}
               </p>
               <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
                 Browse files

@@ -1835,9 +1835,9 @@ export function Dashboard() {
                               • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
                             </div>
                           )}
-                            {isTargetDealMode2 && (
+                              {isTargetDealMode2 && (
                               <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                                This is a Mode 2 deal. Upload via the Mode 2 card (local WASM expansion; a gateway can still assist with distributing stripes when running).
+                                This is a Mode 2 deal. Use the Mode 2 card — it will use the local gateway when available, otherwise fall back to in-browser WASM sharding + direct stripe uploads.
                               </div>
                             )}
                           <label className="space-y-1">
@@ -2057,7 +2057,7 @@ export function Dashboard() {
                 <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
-                    Mode 2 upload: expand locally via WASM, then upload stripes. If a local gateway is running, it will be used to distribute shards faster.
+                    Mode 2 upload: uses the local gateway when available; otherwise falls back to in-browser WASM sharding + direct stripe uploads.
                   </p>
                 </div>
 
