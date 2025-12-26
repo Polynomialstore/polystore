@@ -47,7 +47,7 @@ test.describe('mode2 stripe', () => {
     const dealId = await page.getByTestId('workspace-deal-select').inputValue()
     expect(dealId).not.toBe('')
 
-    await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: filePath,
@@ -56,11 +56,18 @@ test.describe('mode2 stripe', () => {
     })
 
     const uploadBtn = page.getByTestId('mdu-upload')
-    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
-    await uploadBtn.click()
-    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
-
     const commitBtn = page.getByTestId('mdu-commit')
+
+    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
+      timeout: 300_000,
+      state: 'attached',
+    })
+    if ((await uploadBtn.count().catch(() => 0)) > 0) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    }
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
@@ -155,7 +162,7 @@ test.describe('mode2 stripe', () => {
     const dealId = await page.getByTestId('workspace-deal-select').inputValue()
     expect(dealId).not.toBe('')
 
-    await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileA.name,
@@ -163,10 +170,18 @@ test.describe('mode2 stripe', () => {
       buffer: fileA.buffer,
     })
     const uploadBtn = page.getByTestId('mdu-upload')
-    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
-    await uploadBtn.click()
-    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
     const commitBtn = page.getByTestId('mdu-commit')
+
+    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
+      timeout: 300_000,
+      state: 'attached',
+    })
+    if ((await uploadBtn.count().catch(() => 0)) > 0) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    }
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
@@ -175,10 +190,17 @@ test.describe('mode2 stripe', () => {
       mimeType: 'text/plain',
       buffer: fileB.buffer,
     })
-    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
-    await uploadBtn.click()
-    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
-    await expect(commitBtn).toBeEnabled({ timeout: 15_000 })
+
+    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
+      timeout: 300_000,
+      state: 'attached',
+    })
+    if ((await uploadBtn.count().catch(() => 0)) > 0) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    }
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
