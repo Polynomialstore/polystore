@@ -179,6 +179,9 @@ export function Dashboard() {
   const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
   const toastTimerRef = useRef<number | null>(null)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const dealDetailRef = useRef<HTMLDivElement | null>(null)
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -409,12 +412,12 @@ export function Dashboard() {
   const handleNextAction = useCallback(() => {
     if (nextAction.tab) {
       setActiveTab(nextAction.tab)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setPendingScrollTarget('workspace')
       return
     }
     if (targetDeal) {
       setSelectedDeal(targetDeal)
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+      setPendingScrollTarget('deal')
     }
   }, [nextAction.tab, targetDeal])
   const allocStatusLabel = hasSelectedDeal ? 'Selected' : 'Step 1'
@@ -681,6 +684,14 @@ export function Dashboard() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!pendingScrollTarget) return
+    const ref = pendingScrollTarget === 'workspace' ? workspaceRef : dealDetailRef
+    if (!ref.current) return
+    ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setPendingScrollTarget(null)
+  }, [pendingScrollTarget, activeTab, selectedDeal])
 
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -1187,7 +1198,7 @@ export function Dashboard() {
     }
     if (stepId === 'deal') {
       setActiveTab('alloc')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setPendingScrollTarget('workspace')
       return
     }
     if (stepId === 'upload') {
@@ -1195,14 +1206,14 @@ export function Dashboard() {
         setTargetDealId(String(wizardDeal.id ?? ''))
       }
       setActiveTab(wizardUploadTab)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setPendingScrollTarget('workspace')
       return
     }
     if (stepId === 'retrieve') {
       if (wizardDeal) {
         setTargetDealId(String(wizardDeal.id ?? ''))
         setSelectedDeal(wizardDeal)
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+        setPendingScrollTarget('deal')
       }
     }
   }
@@ -1386,7 +1397,9 @@ export function Dashboard() {
           )}
 
           <div className="text-sm text-muted-foreground space-y-3">
-            <div className="font-mono text-primary break-all">Address: {address || nilAddress}</div>
+            <div className="font-mono text-primary break-all" data-testid="wallet-address">
+              Address: {address || nilAddress}
+            </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-secondary/50 border border-border rounded p-2">
                 <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
@@ -1509,7 +1522,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+      <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
@@ -2219,12 +2232,14 @@ export function Dashboard() {
           </div>
 
           {selectedDeal && (
-            <DealDetail 
-                deal={selectedDeal} 
-                onClose={() => setSelectedDeal(null)} 
-                nilAddress={nilAddress} 
-                onFileActivity={recordRecentActivity}
-            />
+            <div ref={dealDetailRef}>
+              <DealDetail 
+                  deal={selectedDeal} 
+                  onClose={() => setSelectedDeal(null)} 
+                  nilAddress={nilAddress} 
+                  onFileActivity={recordRecentActivity}
+              />
+            </div>
           )}
 
           {proofs.length > 0 && (

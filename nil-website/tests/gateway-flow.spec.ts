@@ -24,14 +24,18 @@ test.describe('gateway flow', () => {
       }
     }
 
-    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
+    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="cosmos-identity"]', {
       timeout: 60_000,
       state: 'attached',
     })
     const walletAddress = page.getByTestId('wallet-address')
-    if (!(await walletAddress.isVisible().catch(() => false))) {
-      await page.getByTestId('connect-wallet').first().click()
-      await expect(walletAddress).toBeVisible({ timeout: 60_000 })
+    const cosmosIdentity = page.getByTestId('cosmos-identity')
+    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+      const connectBtn = page.getByTestId('connect-wallet').first()
+      if (await connectBtn.isVisible().catch(() => false)) {
+        await connectBtn.click()
+      }
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
     }
 
     await page.getByTestId('faucet-request').click()

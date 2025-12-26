@@ -136,6 +136,7 @@ export function useFetch() {
       if (!manifestRoot.startsWith('0x')) throw new Error('manifestRoot must be 0x-prefixed hex bytes')
 
       const blobSizeBytes = Number(input.blobSizeBytes || 128 * 1024)
+      const mduSizeBytes = Number(input.mduSizeBytes || 8 * 1024 * 1024)
       const wantRangeStart = Math.max(0, Number(input.rangeStart ?? 0))
       const wantRangeLen = Math.max(0, Number(input.rangeLen ?? 0))
       const wantFileSize = typeof input.fileSizeBytes === 'number' ? Number(input.fileSizeBytes) : 0
@@ -212,18 +213,19 @@ export function useFetch() {
       let receiptsSubmitted = 0
       let chunksFetched = 0
 
-      setProgress((p) => ({
-        ...p,
-        phase: 'opening_session_tx',
-        filePath,
-        chunkCount: chunks.length,
-        bytesTotal: effectiveRangeLen,
-        receiptsSubmitted: 0,
-        receiptsTotal: chunks.length * 2,
-      }))
+      type PlannedChunk = {
+        rangeStart: number
+        rangeLen: number
+        provider: string
+        startMduIndex: bigint
+        startBlobIndex: number
+        blobCount: bigint
+        planBackend: string
+        planEndpoint?: string
+      }
 
-      for (let idx = 0; idx < chunks.length; idx++) {
-        const c = chunks[idx]
+      const plannedChunks: PlannedChunk[] = []
+      for (const c of chunks) {
         const planResult = await transport.plan({
           manifestRoot,
           owner,
@@ -246,18 +248,73 @@ export function useFetch() {
         if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
         if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
 
+        plannedChunks.push({
+          rangeStart: c.rangeStart,
+          rangeLen: c.rangeLen,
+          provider,
+          startMduIndex,
+          startBlobIndex,
+          blobCount,
+          planBackend: planResult.backend,
+          planEndpoint: planResult.trace?.chosen?.endpoint,
+        })
+      }
+
+      const leafCount = BigInt(Math.max(1, Math.floor(mduSizeBytes / blobSizeBytes)))
+      const providerGroups = new Map<string, {
+        provider: string
+        chunks: PlannedChunk[]
+        globalStart: bigint
+        globalEnd: bigint
+      }>()
+
+      for (const chunk of plannedChunks) {
+        const globalStart = chunk.startMduIndex * leafCount + BigInt(chunk.startBlobIndex)
+        const globalEnd = globalStart + chunk.blobCount - 1n
+        const existing = providerGroups.get(chunk.provider)
+        if (existing) {
+          existing.chunks.push(chunk)
+          if (globalStart < existing.globalStart) existing.globalStart = globalStart
+          if (globalEnd > existing.globalEnd) existing.globalEnd = globalEnd
+        } else {
+          providerGroups.set(chunk.provider, {
+            provider: chunk.provider,
+            chunks: [chunk],
+            globalStart,
+            globalEnd,
+          })
+        }
+      }
+
+      setProgress((p) => ({
+        ...p,
+        phase: 'opening_session_tx',
+        filePath,
+        chunkCount: chunks.length,
+        bytesTotal: effectiveRangeLen,
+        receiptsSubmitted: 0,
+        receiptsTotal: providerGroups.size * 2,
+      }))
+
+      let groupIndex = 0
+      for (const group of providerGroups.values()) {
+        const provider = group.provider
+        const groupStartMdu = group.globalStart / leafCount
+        const groupStartBlob = Number(group.globalStart % leafCount)
+        const groupBlobCount = group.globalEnd - group.globalStart + 1n
+
         setProgress((p) => ({
           ...p,
           phase: 'opening_session_tx',
           receiptsSubmitted,
         }))
 
-        const openNonce = BigInt(Date.now()) + BigInt(idx)
+        const openNonce = BigInt(Date.now()) + BigInt(groupIndex)
         const openExpiresAt = 0n
         const openTxData = encodeFunctionData({
           abi: NILSTORE_PRECOMPILE_ABI,
           functionName: 'openRetrievalSession',
-          args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
+          args: [BigInt(dealId), provider, manifestRoot, groupStartMdu, groupStartBlob, groupBlobCount, openNonce, openExpiresAt],
         })
         const openTxHash = (await ethereum.request({
           method: 'eth_sendTransaction',
@@ -299,37 +356,43 @@ export function useFetch() {
           providerP2pEndpoint?.target ||
           (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
           gatewayP2pTarget
-        const fetchDirectBase =
+
+        let fetchDirectBase =
           providerEndpoint?.baseUrl ||
+          group.chunks.find((c) => c.planBackend === 'direct_sp')?.planEndpoint ||
           (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
-          (planResult.backend === 'direct_sp' ? planResult.trace.chosen?.endpoint : undefined) ||
           (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
+        if (!providerEndpoint && group.chunks.every((c) => c.planBackend !== 'direct_sp')) {
+          fetchDirectBase = undefined
+        }
 
-        const rangeResult = await transport.fetchRange({
-          manifestRoot,
-          owner,
-          dealId,
-          filePath,
-          rangeStart: c.rangeStart,
-          rangeLen: c.rangeLen,
-          sessionId,
-          expectedProvider: provider,
-          directBase: fetchDirectBase,
-          p2pTarget: fetchP2pTarget,
-          preference: preferenceOverride,
-        })
+        for (const c of group.chunks) {
+          const rangeResult = await transport.fetchRange({
+            manifestRoot,
+            owner,
+            dealId,
+            filePath,
+            rangeStart: c.rangeStart,
+            rangeLen: c.rangeLen,
+            sessionId,
+            expectedProvider: provider,
+            directBase: fetchDirectBase,
+            p2pTarget: fetchP2pTarget,
+            preference: preferenceOverride,
+          })
 
-        const buf = rangeResult.data.bytes
-        parts.push(buf)
-        bytesFetched += buf.byteLength
-        chunksFetched += 1
+          const buf = rangeResult.data.bytes
+          parts.push(buf)
+          bytesFetched += buf.byteLength
+          chunksFetched += 1
 
-        setProgress((p) => ({
-          ...p,
-          phase: 'fetching',
-          chunksFetched: Math.min(p.chunkCount || chunks.length, chunksFetched),
-          bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
-        }))
+          setProgress((p) => ({
+            ...p,
+            phase: 'fetching',
+            chunksFetched: Math.min(p.chunkCount || chunks.length, chunksFetched),
+            bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
+          }))
+        }
 
         setProgress((p) => ({
           ...p,
@@ -368,6 +431,7 @@ export function useFetch() {
         }
 
         receiptsSubmitted += 2
+        groupIndex += 1
       }
 
       const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
