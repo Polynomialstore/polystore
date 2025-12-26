@@ -244,55 +244,6 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
     }
   }, [])
 
-  const fetchLocalSlabLayout = useCallback(async (dealId: string) => {
-    setLoadingSlab(true)
-    try {
-      const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-      if (!localManifest) {
-        setSlab(null)
-        setSlabSource('none')
-        return
-      }
-      const mdu0 = await readMdu(String(dealId), 0)
-      if (!mdu0) {
-        setSlab(null)
-        setSlabSource('none')
-        return
-      }
-      const localFiles = parseNilfsFilesFromMdu0(mdu0)
-      const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
-      const totalSizeBytes = localFiles.reduce((acc, f) => acc + (Number(f.size_bytes) || 0), 0)
-      const mduSizeBytes = 8 * 1024 * 1024
-      const blobSizeBytes = 128 * 1024
-      const segments = [
-        { kind: 'mdu0', start_index: 0, count: 1, size_bytes: mduSizeBytes },
-        ...(witnessCount > 0 ? [{ kind: 'witness', start_index: 1, count: witnessCount, size_bytes: witnessCount * mduSizeBytes }] : []),
-        ...(userCount > 0
-          ? [{ kind: 'user', start_index: 1 + witnessCount, count: userCount, size_bytes: userCount * mduSizeBytes }]
-          : []),
-      ] as SlabLayoutData['segments']
-      setSlab({
-        manifest_root: localManifest,
-        mdu_size_bytes: mduSizeBytes,
-        blob_size_bytes: blobSizeBytes,
-        total_mdus: totalMdus,
-        witness_mdus: witnessCount,
-        user_mdus: userCount,
-        file_records: localFiles.length,
-        file_count: localFiles.length,
-        total_size_bytes: totalSizeBytes,
-        segments,
-      })
-      setSlabSource('opfs')
-    } catch (e) {
-      console.error('Failed to compute local slab layout', e)
-      setSlab(null)
-      setSlabSource('none')
-    } finally {
-      setLoadingSlab(false)
-    }
-  }, [])
-
   useEffect(() => {
     let canceled = false
     async function refreshBrowserCache() {
@@ -643,13 +594,20 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
       void fetchFiles(deal.cid, deal.id, owner)
       void fetchManifestInfo(deal.cid, deal.id, owner)
     } else {
-      void fetchLocalFiles(deal.id)
-      void fetchLocalSlabLayout(deal.id)
+      // Do not surface local OPFS slabs for "empty" deals; OPFS is treated as a cache for on-chain content.
+      // This avoids showing stale slabs after a chain reset where deal IDs are reused.
+      setLoadingFiles(false)
+      setLoadingSlab(false)
+      setFiles(null)
+      setSlab(null)
+      setSlabSource('none')
+      setGatewaySlabStatus('unknown')
+      setBrowserCachedByPath({})
       setManifestInfo(null)
     }
     setFileActionError(null)
     void fetchHeat(deal.id)
-  }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchLocalSlabLayout, fetchManifestInfo, fetchSlab, nilAddress])
+  }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
@@ -949,7 +907,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                             const chainCid = String(deal.cid || '').trim()
                                             const localManifest = await readManifestRoot(dealId).catch(() => null)
                                             const canUseLocalSlab =
-                                              !!localManifest && (!chainCid || localManifest.trim() === chainCid)
+                                              !!localManifest && !!chainCid && localManifest.trim() === chainCid
                                             if (!canUseLocalSlab) throw new Error('local slab not available')
 
                                             const bytes = await readNilfsFileFromOpfs({
