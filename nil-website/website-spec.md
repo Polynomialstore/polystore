@@ -439,11 +439,25 @@ The website depends on the following services (configured in `config.ts`):
 *   **Spec:** Client fetches chunks from SPs (or gateway acting as SP proxy), verifies the KZG Triple Proof, and confirms success on-chain.
 *   **Actual (Gamma‑4):**
     1.  Client plans a retrieval session via `GET /gateway/plan-retrieval-session/...` (gateway or direct SP).
-    2.  Client opens the session on-chain (MetaMask `openRetrievalSession`).
+    2.  Client opens the session(s) on-chain (MetaMask `openRetrievalSession` or `openRetrievalSessions` for multi-provider).
     3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑Nil‑Session‑Id` header.
-    4.  Client confirms completion on-chain (`confirmRetrievalSession`).
+    4.  Client confirms completion on-chain (`confirmRetrievalSession` or `confirmRetrievalSessions`).
     5.  Gateway forwards `POST /gateway/session-proof` to submit provider proofs.
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.
+
+### 8.2.1 SDK: Batch Retrieval Precompile
+Use the batch methods when a download spans multiple providers:
+- `openRetrievalSessions(sessions[])` opens all provider sessions in one tx.
+- `confirmRetrievalSessions(sessionIds[])` confirms them in one tx.
+- `computeRetrievalSessions(sessions[])` is a **view helper** that returns `(provider, sessionId)[]` so clients can map providers without parsing logs.
+
+Example (viem-style):
+```ts
+const openRequests = [{ dealId, provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, nonce, expiresAt }]
+const data = encodeFunctionData({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessions', args: [openRequests] })
+const result = await ethereum.request({ method: 'eth_call', params: [{ from, to: precompile, data }, 'latest'] })
+const sessions = decodeFunctionResult({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessions', data: result })
+```
 
 ### 8.3 Visualizations vs. Logic
 *   **`FileSharder.tsx`:** Uses `nil_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.

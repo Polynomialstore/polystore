@@ -111,6 +111,27 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"computeRetrievalSessions",
+    "stateMutability":"view",
+    "inputs":[
+      {"name":"sessions","type":"tuple[]","components":[
+        {"name":"dealId","type":"uint64"},
+        {"name":"provider","type":"string"},
+        {"name":"manifestRoot","type":"bytes"},
+        {"name":"startMduIndex","type":"uint64"},
+        {"name":"startBlobIndex","type":"uint32"},
+        {"name":"blobCount","type":"uint64"},
+        {"name":"nonce","type":"uint64"},
+        {"name":"expiresAt","type":"uint64"}
+      ]}
+    ],
+    "outputs":[{"name":"sessions","type":"tuple[]","components":[
+      {"name":"provider","type":"string"},
+      {"name":"sessionId","type":"bytes32"}
+    ]}]
+  },
+  {
+    "type":"function",
     "name":"confirmRetrievalSession",
     "stateMutability":"nonpayable",
     "inputs":[{"name":"sessionId","type":"bytes32"}],
@@ -201,6 +222,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runOpenRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "openRetrievalSessions":
 		return p.runOpenRetrievalSessions(ctx, evm, contract, method, input[4:])
+	case "computeRetrievalSessions":
+		return p.runComputeRetrievalSessions(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSession":
 		return p.runConfirmRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSessions":
@@ -219,6 +242,11 @@ type openSessionInput struct {
 	BlobCount      uint64 `abi:"blobCount"`
 	Nonce          uint64 `abi:"nonce"`
 	ExpiresAt      uint64 `abi:"expiresAt"`
+}
+
+type openSessionOutput struct {
+	Provider  string   `abi:"provider"`
+	SessionID [32]byte `abi:"sessionId"`
 }
 
 func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
@@ -351,6 +379,67 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 	out, err := method.Outputs.Pack(sessionIDs)
 	if err != nil {
 		return nil, fmt.Errorf("openRetrievalSessions: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runComputeRetrievalSessions(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	values, err := method.Inputs.Unpack(data)
+	if err != nil {
+		return nil, fmt.Errorf("computeRetrievalSessions: failed to unpack args: %w", err)
+	}
+
+	var sessions []openSessionInput
+	if err := method.Inputs.Copy(&sessions, values); err != nil {
+		return nil, fmt.Errorf("computeRetrievalSessions: failed to decode sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		return nil, errors.New("computeRetrievalSessions: sessions is empty")
+	}
+
+	caller := contract.Caller()
+	ownerBytes := caller.Bytes()
+	outputs := make([]openSessionOutput, len(sessions))
+
+	for i, input := range sessions {
+		provider := strings.TrimSpace(input.Provider)
+		if provider == "" {
+			return nil, errors.New("computeRetrievalSessions: invalid provider")
+		}
+		providerAddr, err := sdk.AccAddressFromBech32(provider)
+		if err != nil {
+			return nil, errors.New("computeRetrievalSessions: invalid provider")
+		}
+		if len(input.ManifestRoot) != 48 {
+			return nil, errors.New("computeRetrievalSessions: manifestRoot must be 48 bytes")
+		}
+		if input.BlobCount == 0 {
+			return nil, errors.New("computeRetrievalSessions: blobCount must be > 0")
+		}
+
+		sessionID, err := types.HashRetrievalSessionID(
+			ownerBytes,
+			input.DealId,
+			providerAddr.Bytes(),
+			input.ManifestRoot,
+			input.StartMduIndex,
+			input.StartBlobIndex,
+			input.BlobCount,
+			input.Nonce,
+			input.ExpiresAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("computeRetrievalSessions: failed to compute session id: %w", err)
+		}
+
+		var sid [32]byte
+		copy(sid[:], sessionID)
+		outputs[i] = openSessionOutput{Provider: provider, SessionID: sid}
+	}
+
+	out, err := method.Outputs.Pack(outputs)
+	if err != nil {
+		return nil, fmt.Errorf("computeRetrievalSessions: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }

@@ -111,6 +111,11 @@ export function installE2eWallet() {
           return walletClient.sendTransaction({ to, data, value, gas })
         }
 
+        case 'eth_call': {
+          const paramsArray = Array.isArray(params) ? params : [params]
+          return walletClient.transport.request({ method: 'eth_call', params: paramsArray })
+        }
+
         default:
           throw new Error(`E2E wallet does not support method: ${method}`)
       }

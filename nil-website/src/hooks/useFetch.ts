@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
-import { decodeEventLog, encodeFunctionData, numberToHex, type Hex } from 'viem'
+import { decodeFunctionResult, encodeFunctionData, numberToHex, type Hex } from 'viem'
 
 import { appConfig } from '../config'
 import { normalizeDealId } from '../lib/dealId'
@@ -314,6 +314,34 @@ export function useFetch() {
         }
       })
 
+      const computeData = encodeFunctionData({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'computeRetrievalSessions',
+        args: [openRequests],
+      })
+      const computeResult = (await ethereum.request({
+        method: 'eth_call',
+        params: [{ from: address, to: appConfig.nilstorePrecompile, data: computeData }, 'latest'],
+      })) as Hex
+      const computedSessions = decodeFunctionResult({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'computeRetrievalSessions',
+        data: computeResult,
+      }) as Array<{ provider?: string; sessionId?: Hex }>
+      const sessionsByProvider = new Map<string, Hex>()
+      for (const entry of computedSessions || []) {
+        const provider = String(entry?.provider || '').trim()
+        const sessionId = entry?.sessionId
+        if (provider && sessionId) {
+          sessionsByProvider.set(provider, sessionId)
+        }
+      }
+      for (const group of groups) {
+        if (!sessionsByProvider.has(group.provider)) {
+          throw new Error(`computeRetrievalSessions did not return session for ${group.provider}`)
+        }
+      }
+
       const openTxData = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'openRetrievalSessions',
@@ -324,33 +352,7 @@ export function useFetch() {
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(7_000_000) }],
       })) as Hex
 
-      const openReceipt = await waitForTransactionReceipt(openTxHash)
-      const sessionsByProvider = new Map<string, Hex>()
-      for (const log of openReceipt.logs || []) {
-        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
-        try {
-          const decoded = decodeEventLog({
-            abi: NILSTORE_PRECOMPILE_ABI,
-            eventName: 'RetrievalSessionOpened',
-            topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
-            data: log.data,
-          })
-          const args = decoded.args as { provider?: string; sessionId?: Hex }
-          const provider = String(args.provider || '').trim()
-          const sid = args.sessionId
-          if (provider && sid) {
-            sessionsByProvider.set(provider, sid)
-          }
-        } catch {
-          continue
-        }
-      }
-
-      for (const group of groups) {
-        if (!sessionsByProvider.has(group.provider)) {
-          throw new Error(`openRetrievalSessions tx confirmed but session for ${group.provider} not found`)
-        }
-      }
+      await waitForTransactionReceipt(openTxHash)
 
       receiptsSubmitted = 1
       setProgress((p) => ({

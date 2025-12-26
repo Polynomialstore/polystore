@@ -99,6 +99,37 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'computeRetrievalSessions',
+    stateMutability: 'view',
+    inputs: [
+      {
+        name: 'sessions',
+        type: 'tuple[]',
+        components: [
+          { name: 'dealId', type: 'uint64' },
+          { name: 'provider', type: 'string' },
+          { name: 'manifestRoot', type: 'bytes' },
+          { name: 'startMduIndex', type: 'uint64' },
+          { name: 'startBlobIndex', type: 'uint32' },
+          { name: 'blobCount', type: 'uint64' },
+          { name: 'nonce', type: 'uint64' },
+          { name: 'expiresAt', type: 'uint64' },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: 'sessions',
+        type: 'tuple[]',
+        components: [
+          { name: 'provider', type: 'string' },
+          { name: 'sessionId', type: 'bytes32' },
+        ],
+      },
+    ],
+  },
+  {
+    type: 'function',
     name: 'confirmRetrievalSession',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'sessionId', type: 'bytes32' }],
