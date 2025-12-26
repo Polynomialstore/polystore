@@ -571,7 +571,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				cid = res.manifestRoot.Canonical
 				allocatedLength = res.allocatedLength
 				fileSize = res.fileSize
-				size = fileSize
+				size = res.sizeBytes
 			} else {
 				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
 				// assigned provider before the first content commit.
@@ -626,31 +626,56 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				http.Error(w, "mode2 append via /gateway/upload is not supported yet; use browser mode2 path", http.StatusBadRequest)
-				return
-			}
-			// Append path: load existing slab by on-chain manifest root, then append.
-			if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-				http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
-				return
-			}
+				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				if recordPath == "" {
+					recordPath = strings.TrimSpace(header.Filename)
+				}
+				if recordPath != "" {
+					if validated, err := validateNilfsFilePath(recordPath); err == nil {
+						recordPath = validated
+					}
+				}
+				if strings.Contains(recordPath, "/") {
+					recordPath = filepath.Base(recordPath)
+				}
 
-			b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					http.Error(w, err.Error(), http.StatusRequestTimeout)
+				res, err := mode2IngestAndUploadAppendToDeal(ingestCtx, path, dealID, serviceHint, chainCID, recordPath)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("mode2 append failed: %v", err), http.StatusInternalServerError)
 					return
 				}
-				http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
-				return
-			}
-			cid = manifestRoot
-			allocatedLength = allocLen
-			if info, err := os.Stat(path); err == nil {
-				fileSize = uint64(info.Size())
-			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
+				cid = res.manifestRoot.Canonical
+				allocatedLength = res.allocatedLength
+				fileSize = res.fileSize
+				size = res.sizeBytes
+			} else {
+				// Append path: load existing slab by on-chain manifest root, then append.
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
+					return
+				}
+
+				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				cid = manifestRoot
+				allocatedLength = allocLen
+				if info, err := os.Stat(path); err == nil {
+					fileSize = uint64(info.Size())
+				}
+				if b != nil {
+					size = totalSizeBytesFromMdu0(b)
+				}
 			}
 		}
 	} else {

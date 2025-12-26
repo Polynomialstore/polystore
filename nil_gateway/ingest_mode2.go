@@ -22,6 +22,7 @@ type mode2IngestResult struct {
 	manifestBlob    []byte
 	allocatedLength uint64
 	fileSize        uint64
+	sizeBytes       uint64
 	witnessMdus     uint64
 	userMdus        uint64
 }
@@ -44,6 +45,39 @@ func encodePayloadToMdu(raw []byte) []byte {
 		scalarIdx++
 	}
 	return encoded
+}
+
+func decodePayloadFromMdu(encoded []byte, rawLen uint64) ([]byte, error) {
+	if rawLen > RawMduCapacity {
+		rawLen = RawMduCapacity
+	}
+	if rawLen == 0 {
+		return []byte{}, nil
+	}
+	if len(encoded) != types.MDU_SIZE {
+		return nil, fmt.Errorf("invalid MDU size: %d", len(encoded))
+	}
+
+	scalarsUsed := (rawLen + nilfsScalarPayloadBytes - 1) / nilfsScalarPayloadBytes
+	out := make([]byte, rawLen)
+	var outOff uint64
+	for scalarIdx := uint64(0); scalarIdx < scalarsUsed; scalarIdx++ {
+		remaining := rawLen - scalarIdx*nilfsScalarPayloadBytes
+		chunkLen := uint64(nilfsScalarPayloadBytes)
+		base := uint64(1)
+		if remaining < chunkLen {
+			chunkLen = remaining
+			base = uint64(nilfsScalarBytes) - chunkLen
+		}
+		start := scalarIdx*nilfsScalarBytes + base
+		end := start + chunkLen
+		if end > uint64(len(encoded)) {
+			return nil, fmt.Errorf("encoded payload out of bounds: scalar=%d end=%d", scalarIdx, end)
+		}
+		copy(out[outOff:outOff+chunkLen], encoded[start:end])
+		outOff += chunkLen
+	}
+	return out, nil
 }
 
 func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, string, error) {
@@ -186,6 +220,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := builder.AppendFile(fileRecordPath, fileSize, 0); err != nil {
 		return nil, "", err
 	}
+	sizeBytes := totalSizeBytesFromMdu0(builder)
 
 	// Write MDU #0 and compute its root.
 	mdu0Bytes, err := builder.Bytes()
@@ -232,8 +267,339 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		manifestBlob:    manifestBlob,
 		allocatedLength: uint64(len(roots)),
 		fileSize:        fileSize,
+		sizeBytes:       sizeBytes,
 		witnessMdus:     witnessCount,
 		userMdus:        userMdus,
+	}, finalDir, nil
+}
+
+func mode2BuildArtifactsAppend(
+	ctx context.Context,
+	filePath string,
+	dealID uint64,
+	hint string,
+	existingManifestRoot string,
+	fileRecordPath string,
+) (*mode2IngestResult, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stripe, err := stripeParamsFromHint(hint)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse service_hint: %w", err)
+	}
+	if stripe.mode != 2 || stripe.k == 0 || stripe.m == 0 || stripe.rows == 0 {
+		return nil, "", fmt.Errorf("deal is not Mode 2")
+	}
+
+	parsedExisting, err := parseManifestRoot(existingManifestRoot)
+	if err != nil {
+		return nil, "", err
+	}
+	oldDir, err := resolveDealDirForDeal(dealID, parsedExisting, existingManifestRoot)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve existing slab dir: %w", err)
+	}
+	oldMdu0Bytes, err := os.ReadFile(filepath.Join(oldDir, "mdu_0.bin"))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read existing MDU #0: %w", err)
+	}
+
+	commitmentsPerMdu := stripe.leafCount
+	tmpBuilder, err := crypto_ffi.LoadMdu0BuilderWithCommitments(oldMdu0Bytes, 1, commitmentsPerMdu)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to parse existing MDU #0: %w", err)
+	}
+
+	var maxEnd uint64
+	recordCount := tmpBuilder.GetRecordCount()
+	for i := uint32(0); i < recordCount; i++ {
+		rec, err := tmpBuilder.GetRecord(i)
+		if err != nil {
+			continue
+		}
+		if rec.Path[0] == 0 {
+			continue
+		}
+		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
+		end := rec.StartOffset + length
+		if end > maxEnd {
+			maxEnd = end
+		}
+	}
+	tmpBuilder.Free()
+
+	oldUserMdus := uint64(0)
+	if maxEnd > 0 {
+		oldUserMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+	}
+	if oldUserMdus == 0 {
+		return nil, "", fmt.Errorf("existing Mode 2 slab has no user MDUs")
+	}
+
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return nil, "", err
+	}
+	newFileSize := uint64(fi.Size())
+	newUserMdus := uint64(1)
+	if newFileSize > 0 {
+		newUserMdus = (newFileSize + RawMduCapacity - 1) / RawMduCapacity
+		if newUserMdus == 0 {
+			newUserMdus = 1
+		}
+	}
+	totalUserMdus := oldUserMdus + newUserMdus
+
+	if fileRecordPath == "" {
+		fileRecordPath = filepath.Base(filePath)
+	}
+	if len(fileRecordPath) > 40 {
+		fileRecordPath = fileRecordPath[:40]
+	}
+
+	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
+	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
+	if err := os.MkdirAll(baseDealDir, 0o755); err != nil {
+		return nil, "", err
+	}
+	stagingDir, err := os.MkdirTemp(baseDealDir, "staging-")
+	if err != nil {
+		return nil, "", err
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_ = os.RemoveAll(stagingDir)
+		}
+	}()
+
+	// Determine witness counts using the same formula as the MDU0 builder.
+	oldWBuilder := crypto_ffi.NewMdu0BuilderWithCommitments(oldUserMdus, commitmentsPerMdu)
+	oldWitnessCount := oldWBuilder.GetWitnessCount()
+	oldWBuilder.Free()
+
+	newWBuilder := crypto_ffi.NewMdu0BuilderWithCommitments(totalUserMdus, commitmentsPerMdu)
+	witnessCount := newWBuilder.GetWitnessCount()
+	newWBuilder.Free()
+
+	// Copy existing user shards into staging so the new manifest root is fully materialized on providers.
+	for userIdx := uint64(0); userIdx < oldUserMdus; userIdx++ {
+		oldSlabIndex := uint64(1) + oldWitnessCount + userIdx
+		newSlabIndex := uint64(1) + witnessCount + userIdx
+		for slot := uint64(0); slot < stripe.slotCount; slot++ {
+			src := filepath.Join(oldDir, fmt.Sprintf("mdu_%d_slot_%d.bin", oldSlabIndex, slot))
+			dst := filepath.Join(stagingDir, fmt.Sprintf("mdu_%d_slot_%d.bin", newSlabIndex, slot))
+			if err := copyFile(src, dst); err != nil {
+				return nil, "", fmt.Errorf("failed to copy existing shard (mdu=%d slot=%d): %w", oldSlabIndex, slot, err)
+			}
+		}
+	}
+
+	// Decode existing witness commitments so we can rebuild witness MDUs and preserve old user roots.
+	witnessBytesPerUser := uint64(commitmentsPerMdu) * 48
+	oldWitnessBytesTotal := oldUserMdus * witnessBytesPerUser
+	oldWitnessBytes := make([]byte, 0, oldWitnessBytesTotal)
+	for i := uint64(0); i < oldWitnessCount; i++ {
+		path := filepath.Join(oldDir, fmt.Sprintf("mdu_%d.bin", 1+i))
+		encoded, err := os.ReadFile(path)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to read existing witness mdu %d: %w", i, err)
+		}
+		start := i * RawMduCapacity
+		var segLen uint64
+		if start >= oldWitnessBytesTotal {
+			segLen = 0
+		} else {
+			segLen = oldWitnessBytesTotal - start
+			if segLen > RawMduCapacity {
+				segLen = RawMduCapacity
+			}
+		}
+		decoded, err := decodePayloadFromMdu(encoded, segLen)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to decode witness mdu %d: %w", i, err)
+		}
+		oldWitnessBytes = append(oldWitnessBytes, decoded...)
+	}
+	if uint64(len(oldWitnessBytes)) > oldWitnessBytesTotal {
+		oldWitnessBytes = oldWitnessBytes[:oldWitnessBytesTotal]
+	}
+	if uint64(len(oldWitnessBytes)) != oldWitnessBytesTotal {
+		return nil, "", fmt.Errorf("decoded witness bytes mismatch (expected %d, got %d)", oldWitnessBytesTotal, len(oldWitnessBytes))
+	}
+
+	// Load existing MDU0 (preserves file table), then append the new file record.
+	builder, err := crypto_ffi.LoadMdu0BuilderWithCommitments(oldMdu0Bytes, totalUserMdus, commitmentsPerMdu)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load existing MDU0 builder: %w", err)
+	}
+	defer builder.Free()
+	if builder.GetWitnessCount() != witnessCount {
+		return nil, "", fmt.Errorf("witness_count mismatch (expected %d, got %d)", witnessCount, builder.GetWitnessCount())
+	}
+
+	newFileOffset := oldUserMdus * RawMduCapacity
+	if err := builder.AppendFile(fileRecordPath, newFileSize, newFileOffset); err != nil {
+		return nil, "", fmt.Errorf("append file record failed: %w", err)
+	}
+	sizeBytes := totalSizeBytesFromMdu0(builder)
+
+	// Read and shard the new file into fresh stripes + witness commitments.
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+	rawBuf := make([]byte, RawMduCapacity)
+	newWitnessBytes := make([]byte, 0, newUserMdus*witnessBytesPerUser)
+	newUserRoots := make([][]byte, 0, newUserMdus)
+
+	for i := uint64(0); i < newUserMdus; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
+		n, readErr := io.ReadFull(f, rawBuf)
+		if readErr != nil {
+			if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+				// Last chunk is short (or empty).
+			} else {
+				return nil, "", readErr
+			}
+		}
+		chunk := rawBuf[:n]
+		encoded := encodePayloadToMdu(chunk)
+		witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
+		if err != nil {
+			return nil, "", fmt.Errorf("expand new mdu %d: %w", i, err)
+		}
+		if uint64(len(witnessFlat)) != witnessBytesPerUser {
+			return nil, "", fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
+		}
+		root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+		if err != nil {
+			return nil, "", fmt.Errorf("compute new mdu root %d: %w", i, err)
+		}
+		newUserRoots = append(newUserRoots, root)
+		newWitnessBytes = append(newWitnessBytes, witnessFlat...)
+
+		userIdx := oldUserMdus + i
+		slabIndex := uint64(1) + witnessCount + userIdx
+		for slot := uint64(0); slot < stripe.slotCount; slot++ {
+			if int(slot) >= len(shards) {
+				return nil, "", fmt.Errorf("missing shard for slot %d", slot)
+			}
+			name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
+			if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+				return nil, "", err
+			}
+		}
+	}
+
+	// Recompute all user roots + rebuild witness MDUs from concatenated witness commitments.
+	totalWitnessBytes := make([]byte, 0, totalUserMdus*witnessBytesPerUser)
+	totalWitnessBytes = append(totalWitnessBytes, oldWitnessBytes...)
+	totalWitnessBytes = append(totalWitnessBytes, newWitnessBytes...)
+	if uint64(len(totalWitnessBytes)) != totalUserMdus*witnessBytesPerUser {
+		return nil, "", fmt.Errorf("witness bytes mismatch (expected %d, got %d)", totalUserMdus*witnessBytesPerUser, len(totalWitnessBytes))
+	}
+
+	userRoots := make([][]byte, 0, totalUserMdus)
+	for userIdx := uint64(0); userIdx < oldUserMdus; userIdx++ {
+		start := userIdx * witnessBytesPerUser
+		end := start + witnessBytesPerUser
+		witnessFlat := totalWitnessBytes[start:end]
+		root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+		if err != nil {
+			return nil, "", fmt.Errorf("compute existing user root %d: %w", userIdx, err)
+		}
+		userRoots = append(userRoots, root)
+	}
+	userRoots = append(userRoots, newUserRoots...)
+
+	// Build witness MDUs from the concatenated witness commitments.
+	witnessRoots := make([][]byte, 0, witnessCount)
+	for i := uint64(0); i < witnessCount; i++ {
+		start := i * RawMduCapacity
+		end := start + RawMduCapacity
+		var chunk []byte
+		if start >= uint64(len(totalWitnessBytes)) {
+			chunk = nil
+		} else {
+			if end > uint64(len(totalWitnessBytes)) {
+				end = uint64(len(totalWitnessBytes))
+			}
+			chunk = totalWitnessBytes[start:end]
+		}
+		encoded := encodePayloadToMdu(chunk)
+		root, err := crypto_ffi.ComputeMduMerkleRoot(encoded)
+		if err != nil {
+			return nil, "", fmt.Errorf("compute witness root %d: %w", i, err)
+		}
+		witnessRoots = append(witnessRoots, root)
+		if err := builder.SetRoot(i, root); err != nil {
+			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
+		}
+		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Write user roots into MDU0 (starting after witness roots).
+	for i, root := range userRoots {
+		if err := builder.SetRoot(witnessCount+uint64(i), root); err != nil {
+			return nil, "", fmt.Errorf("set user root %d: %w", i, err)
+		}
+	}
+
+	// Write MDU #0 and compute its root.
+	mdu0Bytes, err := builder.Bytes()
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		return nil, "", err
+	}
+	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
+	if err != nil {
+		return nil, "", fmt.Errorf("compute mdu0 root: %w", err)
+	}
+
+	roots := make([][]byte, 0, 1+len(witnessRoots)+len(userRoots))
+	roots = append(roots, mdu0Root)
+	roots = append(roots, witnessRoots...)
+	roots = append(roots, userRoots...)
+
+	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
+	if err != nil {
+		return nil, "", fmt.Errorf("compute manifest commitment: %w", err)
+	}
+	manifestRootHex := "0x" + hex.EncodeToString(commitment)
+	parsedRoot, err := parseManifestRoot(manifestRootHex)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+		return nil, "", err
+	}
+
+	finalDir := dealScopedDir(dealID, parsedRoot)
+	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
+		return nil, "", err
+	}
+	if err := os.Rename(stagingDir, finalDir); err != nil {
+		return nil, "", err
+	}
+	rollback = false
+
+	return &mode2IngestResult{
+		manifestRoot:    parsedRoot,
+		manifestBlob:    manifestBlob,
+		allocatedLength: uint64(len(roots)),
+		fileSize:        newFileSize,
+		sizeBytes:       sizeBytes,
+		witnessMdus:     witnessCount,
+		userMdus:        totalUserMdus,
 	}, finalDir, nil
 }
 
@@ -350,6 +716,17 @@ func mode2UploadArtifactsToProviders(
 
 func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, error) {
 	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, dealID uint64, hint string, existingManifestRoot string, fileRecordPath string) (*mode2IngestResult, error) {
+	res, finalDir, err := mode2BuildArtifactsAppend(ctx, filePath, dealID, hint, existingManifestRoot, fileRecordPath)
 	if err != nil {
 		return nil, err
 	}
