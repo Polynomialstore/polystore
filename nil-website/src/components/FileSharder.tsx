@@ -25,7 +25,7 @@ type WasmStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
 export interface FileSharderProps {
   dealId: string;
-  onCommitSuccess?: (dealId: string, manifestRoot: string) => void;
+  onCommitSuccess?: (dealId: string, manifestRoot: string, fileMeta?: { filePath: string; fileSizeBytes: number }) => void;
 }
 
 type ShardPhase =
@@ -125,6 +125,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const etaLastRawMsRef = useRef<number | null>(null);
   const lastCommitRef = useRef<string | null>(null);
   const lastCommitTxRef = useRef<string | null>(null);
+  const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -185,7 +186,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (lastCommitTxRef.current === commitHash) return;
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
-    onCommitSuccess?.(dealId, currentManifestRoot);
+    onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
   const uploadMode2 = useCallback(async () => {
@@ -664,6 +665,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         return;
       }
 
+    lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
     const startTs = performance.now();
     setProcessing(true);
     setShards([]);

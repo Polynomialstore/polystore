@@ -46,6 +46,21 @@ type StagedUpload = {
   filename: string
 }
 
+type RecentFileEntry = {
+  id: string
+  dealId: string
+  filePath: string
+  sizeBytes: number
+  manifestRoot: string
+  updatedAt: number
+  lastAction: 'upload' | 'download'
+  status: 'pending' | 'success' | 'failed'
+  error?: string
+}
+
+const RECENT_FILES_KEY = 'nil_recent_files_v1'
+const MAX_RECENT_FILES = 6
+
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
@@ -155,6 +170,8 @@ export function Dashboard() {
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
+  const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -296,6 +313,66 @@ export function Dashboard() {
     }
   }, [deals, retrievalCountsByDeal])
 
+  const ownedDeals = useMemo(
+    () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
+    [deals, nilAddress],
+  )
+  const hasWallet = Boolean(nilAddress)
+  const hasFunds =
+    parseUint64(bankBalances.stake) > 0n ||
+    parseUint64(bankBalances.atom) > 0n
+  const hasAnyDeals = ownedDeals.length > 0
+  const hasAnyContent = ownedDeals.some((deal) => String(deal.cid || '').trim())
+  const hasRetrieval = dealSummary.retrievals > 0 || receiptStatus === 'submitted'
+  const wizardDeal = useMemo(
+    () => ownedDeals.find((deal) => String(deal.cid || '').trim()) || ownedDeals[ownedDeals.length - 1] || null,
+    [ownedDeals],
+  )
+  const wizardUploadTab = useMemo(() => {
+    const hint = parseServiceHint(wizardDeal?.service_hint)
+    return hint.mode === 'mode2' ? 'mdu' : 'content'
+  }, [wizardDeal?.service_hint])
+  const wizardSteps = useMemo(
+    () => [
+      {
+        id: 'connect',
+        label: 'Connect wallet',
+        hint: 'Link MetaMask to NilChain',
+        done: hasWallet,
+        actionLabel: 'Connect',
+      },
+      {
+        id: 'fund',
+        label: 'Fund with test NIL',
+        hint: 'Request faucet funds',
+        done: hasFunds,
+        actionLabel: 'Request',
+      },
+      {
+        id: 'deal',
+        label: 'Create a deal',
+        hint: 'Allocate a storage bucket',
+        done: hasAnyDeals,
+        actionLabel: 'Create',
+      },
+      {
+        id: 'upload',
+        label: 'Upload your first file',
+        hint: 'Use Mode 2 upload flow',
+        done: hasAnyContent,
+        actionLabel: 'Upload',
+      },
+      {
+        id: 'retrieve',
+        label: 'Download and verify',
+        hint: 'Pull file from providers',
+        done: hasRetrieval,
+        actionLabel: 'Download',
+      },
+    ],
+    [hasAnyContent, hasAnyDeals, hasFunds, hasRetrieval, hasWallet],
+  )
+  const wizardNext = wizardSteps.find((step) => !step.done) || null
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -554,6 +631,43 @@ export function Dashboard() {
     }
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(RECENT_FILES_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const sanitized = parsed
+          .filter((entry) => entry && typeof entry === 'object')
+          .map((entry) => ({
+            id: String(entry.id ?? ''),
+            dealId: String(entry.dealId ?? ''),
+            filePath: String(entry.filePath ?? ''),
+            sizeBytes: Number(entry.sizeBytes ?? 0) || 0,
+            manifestRoot: String(entry.manifestRoot ?? ''),
+            updatedAt: Number(entry.updatedAt ?? 0) || 0,
+            lastAction: entry.lastAction === 'download' ? 'download' : 'upload',
+            status: entry.status === 'failed' ? 'failed' : entry.status === 'pending' ? 'pending' : 'success',
+            error: entry.error ? String(entry.error) : undefined,
+          }))
+          .filter((entry) => entry.id && entry.dealId && entry.filePath)
+        if (sanitized.length > 0) setRecentFiles(sanitized.slice(0, MAX_RECENT_FILES))
+      }
+    } catch (e) {
+      console.warn('Failed to load recent files', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(recentFiles))
+    } catch (e) {
+      console.warn('Failed to persist recent files', e)
+    }
+  }, [recentFiles])
+
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
     const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
@@ -564,6 +678,18 @@ export function Dashboard() {
       idx++
     }
     return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
+  }
+
+  function formatRelativeTime(ts: number): string {
+    if (!Number.isFinite(ts) || ts <= 0) return 'just now'
+    const diff = Math.max(0, Date.now() - ts)
+    if (diff < 60_000) return 'just now'
+    const mins = Math.floor(diff / 60_000)
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   function parseUint64(v: unknown): bigint {
@@ -656,6 +782,32 @@ export function Dashboard() {
   const retrievalFeeNote = retrievalParams
     ? 'Base fee burned on session open. Variable fee locked until completion or cancel.'
     : 'Loading retrieval parameters...'
+
+  const upsertRecentFile = useCallback((entry: Omit<RecentFileEntry, 'id' | 'updatedAt'>) => {
+    const id = `${entry.dealId}:${entry.filePath}`
+    setRecentFiles((prev) => {
+      const existing = prev.find((item) => item.id === id)
+      const next: RecentFileEntry = {
+        id,
+        dealId: entry.dealId,
+        filePath: entry.filePath,
+        sizeBytes: entry.sizeBytes,
+        manifestRoot: entry.manifestRoot,
+        updatedAt: Date.now(),
+        lastAction: entry.lastAction,
+        status: entry.status,
+        error: entry.error,
+      }
+      const merged = { ...existing, ...next }
+      return [merged, ...prev.filter((item) => item.id !== id)].slice(0, MAX_RECENT_FILES)
+    })
+  }, [])
+
+  const updateRecentFile = useCallback((id: string, patch: Partial<RecentFileEntry>) => {
+    setRecentFiles((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item)),
+    )
+  }, [])
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -775,23 +927,43 @@ export function Dashboard() {
       }
   }
 
-  const handleUpdateContent = async (manifestRoot: string, manifestSize: number) => {
-    if (!targetDealId) { alert('Select a deal to commit into'); return }
-    if (!manifestRoot) { alert('Upload a file first'); return }
-    
+  const handleUpdateContent = async (manifestRoot: string, manifestSize: number): Promise<boolean> => {
+    if (!targetDealId) { alert('Select a deal to commit into'); return false }
+    if (!manifestRoot) { alert('Upload a file first'); return false }
+
+    const trimmedRoot = manifestRoot.trim()
+    const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
+    const recordUpload = (status: 'success' | 'failed', error?: string) => {
+      if (!stagedUpload?.filename) return
+      upsertRecentFile({
+        dealId: targetDealId,
+        filePath: stagedUpload.filename,
+        sizeBytes: stagedUpload.fileSizeBytes || stagedUpload.sizeBytes || manifestSize || 0,
+        manifestRoot: manifestHex,
+        lastAction: 'upload',
+        status,
+        error,
+      })
+    }
+
     try {
         await submitUpdate({
             creator: address || nilAddress,
             dealId: Number(targetDealId),
-            cid: manifestRoot.trim(),
+            cid: trimmedRoot,
             sizeBytes: manifestSize
         })
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
-        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, manifestRoot.trim())
+        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, trimmedRoot)
+        recordUpload('success')
+        return true
     } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
         setStatusTone('error')
         setStatusMsg('Content commit failed. Check gateway + chain logs.')
+        recordUpload('failed', msg || 'commit failed')
+        return false
     }
   }
 
@@ -835,10 +1007,218 @@ export function Dashboard() {
     return false
   }
 
-  const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
+  const handleMduCommitSuccess = (
+    dealId: string,
+    manifestRoot: string,
+    fileMeta?: { filePath: string; fileSizeBytes: number },
+  ) => {
     if (!nilAddress) return
-    refreshDealsAfterContentCommit(nilAddress, dealId, manifestRoot)
+    const trimmedRoot = manifestRoot.trim()
+    refreshDealsAfterContentCommit(nilAddress, dealId, trimmedRoot)
+    if (fileMeta?.filePath) {
+      const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
+      upsertRecentFile({
+        dealId,
+        filePath: fileMeta.filePath,
+        sizeBytes: fileMeta.fileSizeBytes || 0,
+        manifestRoot: manifestHex,
+        lastAction: 'upload',
+        status: 'success',
+      })
+    }
   }
+
+  const resolveDealById = useCallback(
+    (dealId: string): Deal | null =>
+      allDeals.find((deal) => String(deal.id) === dealId) ||
+      deals.find((deal) => String(deal.id) === dealId) ||
+      null,
+    [allDeals, deals],
+  )
+
+  const handleRecentDownload = useCallback(
+    async (entry: RecentFileEntry) => {
+      const id = entry.id
+      setRecentDownloadId(id)
+      updateRecentFile(id, { status: 'pending', lastAction: 'download', error: undefined })
+      try {
+        const deal = resolveDealById(entry.dealId)
+        if (!deal) throw new Error('Deal not found')
+        const owner = String(nilAddress || deal.owner || '').trim()
+        if (!owner) throw new Error('Deal owner not available')
+        const manifestRootRaw = String(deal.cid || entry.manifestRoot || '').trim()
+        if (!manifestRootRaw) throw new Error('Manifest root missing')
+        const manifestHex = toHexFromBase64OrHex(manifestRootRaw) || manifestRootRaw
+        const directBase = resolveProviderBase(deal)
+        const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(deal) : undefined
+
+        const [filesResult, slabResult] = await Promise.allSettled([
+          listFiles({
+            manifestRoot: manifestRootRaw,
+            dealId: entry.dealId,
+            owner,
+            directBase,
+            p2pTarget,
+          }),
+          slab({
+            manifestRoot: manifestRootRaw,
+            dealId: entry.dealId,
+            owner,
+            directBase,
+            p2pTarget,
+          }),
+        ])
+
+        if (filesResult.status !== 'fulfilled') {
+          throw filesResult.reason instanceof Error ? filesResult.reason : new Error('Failed to load file list')
+        }
+        const fileEntry = filesResult.value.data.find((f) => f.path === entry.filePath)
+        if (!fileEntry) throw new Error('File not found on provider')
+
+        const slabLayout = slabResult.status === 'fulfilled' ? slabResult.value.data : null
+        const result = await fetchFile({
+          dealId: entry.dealId,
+          manifestRoot: manifestHex,
+          owner,
+          filePath: entry.filePath,
+          rangeStart: 0,
+          rangeLen: fileEntry.size_bytes,
+          fileStartOffset: fileEntry.start_offset,
+          fileSizeBytes: fileEntry.size_bytes,
+          mduSizeBytes: slabLayout?.mdu_size_bytes ?? 8 * 1024 * 1024,
+          blobSizeBytes: slabLayout?.blob_size_bytes ?? 128 * 1024,
+        })
+        if (!result?.url) throw new Error('Download failed')
+
+        const anchor = document.createElement('a')
+        anchor.href = result.url
+        anchor.download = entry.filePath.split('/').pop() || 'download'
+        anchor.click()
+        setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
+
+        updateRecentFile(id, {
+          status: 'success',
+          lastAction: 'download',
+          sizeBytes: fileEntry.size_bytes,
+          manifestRoot: manifestHex,
+          error: undefined,
+        })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
+      } finally {
+        setRecentDownloadId(null)
+      }
+    },
+    [
+      fetchFile,
+      listFiles,
+      nilAddress,
+      resolveDealById,
+      resolveProviderBase,
+      resolveProviderP2pTarget,
+      slab,
+      updateRecentFile,
+    ],
+  )
+
+  const recordRecentActivity = useCallback(
+    (event: {
+      dealId: string
+      filePath: string
+      sizeBytes: number
+      manifestRoot: string
+      action: 'upload' | 'download'
+      status: 'pending' | 'success' | 'failed'
+      error?: string
+    }) => {
+      const manifestHex = toHexFromBase64OrHex(event.manifestRoot) || event.manifestRoot
+      upsertRecentFile({
+        dealId: event.dealId,
+        filePath: event.filePath,
+        sizeBytes: event.sizeBytes || 0,
+        manifestRoot: manifestHex,
+        lastAction: event.action,
+        status: event.status,
+        error: event.error,
+      })
+    },
+    [upsertRecentFile],
+  )
+
+  const handleWizardAction = async (stepId: string) => {
+    if (stepId === 'connect') {
+      await connectAsync({ connector: injectedConnector })
+      return
+    }
+    if (stepId === 'fund') {
+      await handleRequestFunds()
+      return
+    }
+    if (stepId === 'deal') {
+      setActiveTab('alloc')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (stepId === 'upload') {
+      if (wizardDeal) {
+        setTargetDealId(String(wizardDeal.id ?? ''))
+      }
+      setActiveTab(wizardUploadTab)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (stepId === 'retrieve') {
+      if (wizardDeal) {
+        setTargetDealId(String(wizardDeal.id ?? ''))
+        setSelectedDeal(wizardDeal)
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+      }
+    }
+  }
+
+  const handleContentDownload = useCallback(
+    async (file: NilfsFileEntry) => {
+      if (!targetDealId) return
+      const dealId = String(targetDealId)
+      const manifestHex = toHexFromBase64OrHex(contentManifestRoot) || contentManifestRoot
+      const id = `${dealId}:${file.path}`
+      updateRecentFile(id, { status: 'pending', lastAction: 'download', error: undefined })
+      upsertRecentFile({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes || 0,
+        manifestRoot: manifestHex,
+        lastAction: 'download',
+        status: 'pending',
+      })
+      try {
+        const result = await fetchFile({
+          dealId,
+          manifestRoot: manifestHex,
+          owner: nilAddress,
+          filePath: file.path,
+          rangeStart: 0,
+          rangeLen: file.size_bytes,
+          fileStartOffset: file.start_offset,
+          fileSizeBytes: file.size_bytes,
+          mduSizeBytes: contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+          blobSizeBytes: contentSlab?.blob_size_bytes ?? 128 * 1024,
+        })
+        if (!result?.url) throw new Error('Download failed')
+        const anchor = document.createElement('a')
+        anchor.href = result.url
+        anchor.download = file.path.split('/').pop() || 'download'
+        anchor.click()
+        setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
+        updateRecentFile(id, { status: 'success', lastAction: 'download', error: undefined })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
+      }
+    },
+    [contentManifestRoot, contentSlab, fetchFile, nilAddress, targetDealId, upsertRecentFile, updateRecentFile],
+  )
 
   useEffect(() => {
     if (faucetTxStatus === 'confirmed' && faucetTx) {
@@ -1036,6 +1416,67 @@ export function Dashboard() {
           {statusMsg}
         </div>
       )}
+
+      <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">First Upload Wizard</div>
+            <h3 className="text-lg font-semibold text-foreground">Finish your first storage flow</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {wizardNext
+                ? `Next: ${wizardNext.label}. ${wizardNext.hint}`
+                : 'All steps complete. You can upload and retrieve freely.'}
+            </p>
+          </div>
+          {wizardNext && (
+            <button
+              type="button"
+              onClick={() => handleWizardAction(wizardNext.id)}
+              className="inline-flex items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+            >
+              {wizardNext.actionLabel}
+            </button>
+          )}
+        </div>
+        <div className="mt-4 grid gap-2">
+          {wizardSteps.map((step, idx) => (
+            <div
+              key={step.id}
+              className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+                step.done ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-background/60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    step.done ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'
+                  }`}
+                >
+                  {idx + 1}
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-foreground">{step.label}</div>
+                  <div className="text-[11px] text-muted-foreground">{step.hint}</div>
+                </div>
+              </div>
+              {step.done ? (
+                <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Done
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleWizardAction(step.id)}
+                  className="text-[11px] font-semibold text-primary hover:text-primary/80"
+                >
+                  {step.actionLabel}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1501,27 +1942,7 @@ export function Dashboard() {
                                           </div>
                                         </div>
                                         <button
-                                          onClick={async () => {
-                                            const result = await fetchFile({
-                                              dealId: String(targetDealId),
-                                              manifestRoot: contentManifestRoot,
-                                              owner: nilAddress,
-                                              filePath: f.path,
-                                              rangeStart: 0,
-                                              rangeLen: f.size_bytes,
-                                              fileStartOffset: f.start_offset,
-                                              fileSizeBytes: f.size_bytes,
-                                              mduSizeBytes: contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                              blobSizeBytes: contentSlab?.blob_size_bytes ?? 128 * 1024,
-                                            })
-                                            if (result?.url) {
-                                              const a = document.createElement('a')
-                                              a.href = result.url
-                                              a.download = f.path.split('/').pop() || 'download'
-                                              a.click()
-                                              setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
-                                            }
-                                            }}
+                                          onClick={() => handleContentDownload(f)}
                                           disabled={downloading}
                                           data-testid="content-download"
                                           data-file-path={f.path}
@@ -1615,88 +2036,155 @@ export function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-3 border-b border-border bg-muted/50">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
-              <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
-            </div>
-            <table className="min-w-full divide-y divide-border" data-testid="deals-table">
-                <thead className="bg-muted/50">
-                    <tr>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                    {deals.map((deal) => (
-                    <tr
-                      key={deal.id}
-                      data-testid={`deal-row-${deal.id}`}
-                      className="hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => {
-                          setSelectedDeal(deal)
-                          setTargetDealId(String(deal.id ?? ''))
-                        }}
-                      >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
-                            <td
-                              className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
-                              title={deal.cid}
-                              data-testid={`deal-manifest-${deal.id}`}
-                            >
-                              {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                              {(() => {
-                                const sizeNum = Number(deal.size)
-                                if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
-                                return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
-                              })()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                {deal.cid ? (
-                                    <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                                        Active
-                                    </span>
-                                ) : (
-                                    <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                                        Allocated
-                                    </span>
-                                )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
-                              {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
-                            </td>
-                            <td
-                              className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
-                              data-testid={`deal-retrievals-${deal.id}`}
-                            >
-                              {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    const dealId = String(deal.id ?? '')
-                                    setTargetDealId(dealId)
-                                    const service = parseServiceHint(deal.service_hint)
-                                    setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
-                                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                                  }}
-                                  className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                                >
-                                  Upload
-                                </button>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
+                <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
+              </div>
+              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
+                  <thead className="bg-muted/50">
+                      <tr>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                      {deals.map((deal) => (
+                      <tr
+                        key={deal.id}
+                        data-testid={`deal-row-${deal.id}`}
+                        className="hover:bg-muted/50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setSelectedDeal(deal)
+                            setTargetDealId(String(deal.id ?? ''))
+                          }}
+                        >
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
+                              <td
+                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
+                                title={deal.cid}
+                                data-testid={`deal-manifest-${deal.id}`}
+                              >
+                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
                               </td>
-                    </tr>
-                    ))}
-                </tbody>
-            </table>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
+                                {(() => {
+                                  const sizeNum = Number(deal.size)
+                                  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
+                                  return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
+                                })()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                  {deal.cid ? (
+                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
+                                          Active
+                                      </span>
+                                  ) : (
+                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
+                                          Allocated
+                                      </span>
+                                  )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
+                                {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
+                              </td>
+                              <td
+                                className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
+                                data-testid={`deal-retrievals-${deal.id}`}
+                              >
+                                {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const dealId = String(deal.id ?? '')
+                                      setTargetDealId(dealId)
+                                      const service = parseServiceHint(deal.service_hint)
+                                      setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
+                                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                                    }}
+                                    className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                                  >
+                                    Upload
+                                  </button>
+                                </td>
+                      </tr>
+                      ))}
+                  </tbody>
+              </table>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
+                <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
+              </div>
+              <div className="p-4 space-y-3">
+                {recentFiles.length === 0 ? (
+                  <div className="text-xs text-muted-foreground italic">
+                    Upload or download a file to see it here.
+                  </div>
+                ) : (
+                  recentFiles.map((entry) => {
+                    const isBusy = recentDownloadId === entry.id || downloading
+                    const actionLabel =
+                      entry.status === 'pending'
+                        ? 'Downloading...'
+                        : entry.status === 'failed'
+                        ? 'Retry'
+                        : 'Download'
+                    return (
+                      <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
+                              {entry.filePath}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRecentDownload(entry)}
+                            disabled={isBusy}
+                            className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                          >
+                            <ArrowDownRight className="w-3 h-3" />
+                            {actionLabel}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="rounded-full border border-border px-2 py-0.5">
+                            Last: {entry.lastAction}
+                          </span>
+                          <span className={`rounded-full border px-2 py-0.5 ${
+                            entry.status === 'failed'
+                              ? 'border-red-500/40 text-red-500'
+                              : entry.status === 'pending'
+                              ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
+                              : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {entry.status}
+                          </span>
+                        </div>
+                        {entry.error && (
+                          <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
+                            {entry.error}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           {selectedDeal && (
@@ -1704,6 +2192,7 @@ export function Dashboard() {
                 deal={selectedDeal} 
                 onClose={() => setSelectedDeal(null)} 
                 nilAddress={nilAddress} 
+                onFileActivity={recordRecentActivity}
             />
           )}
 

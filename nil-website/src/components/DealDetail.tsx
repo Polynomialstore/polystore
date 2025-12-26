@@ -14,6 +14,7 @@ import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
+import { toHexFromBase64OrHex } from '../domain/hex'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -49,6 +50,7 @@ interface DealDetailProps {
   deal: LcdDeal
   onClose: () => void
   nilAddress: string
+  onFileActivity?: (activity: FileActivity) => void
 }
 
 interface HeatState {
@@ -64,7 +66,17 @@ interface ProviderInfo {
   status?: string
 }
 
-export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
+interface FileActivity {
+  dealId: string
+  filePath: string
+  sizeBytes: number
+  manifestRoot: string
+  action: 'download'
+  status: 'pending' | 'success' | 'failed'
+  error?: string
+}
+
+export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2'
   const stripeLayout = useMemo(() => {
@@ -999,9 +1011,18 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                             }
 
                                             if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'pending',
+                                            })
                                             const result = await fetchFile({
                                               dealId,
-                                              manifestRoot: deal.cid,
+                                              manifestRoot: manifestHex,
                                               owner: nilAddress,
                                               filePath: f.path,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
@@ -1017,8 +1038,28 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                             await writeCachedFile(dealId, f.path, bytes)
                                             setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
                                             downloadBlobAsFile(result.blob, f.path)
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'success',
+                                            })
                                           } catch (e: unknown) {
                                             const msg = e instanceof Error ? e.message : String(e)
+                                            if (deal.cid) {
+                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                              onFileActivity?.({
+                                                dealId,
+                                                filePath: f.path,
+                                                sizeBytes: f.size_bytes,
+                                                manifestRoot: manifestHex,
+                                                action: 'download',
+                                                status: 'failed',
+                                                error: msg,
+                                              })
+                                            }
                                             setFileActionError(msg)
                                           } finally {
                                             setBusyFilePath(null)
@@ -1109,9 +1150,18 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                           const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                           try {
                                             if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'pending',
+                                            })
                                             const result = await fetchFile({
                                               dealId,
-                                              manifestRoot: deal.cid,
+                                              manifestRoot: manifestHex,
                                               owner: nilAddress,
                                               filePath: f.path,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
@@ -1127,8 +1177,28 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                             await writeCachedFile(dealId, f.path, bytes)
                                             setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
                                             downloadBlobAsFile(result.blob, f.path)
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'success',
+                                            })
                                           } catch (e: unknown) {
                                             const msg = e instanceof Error ? e.message : String(e)
+                                            if (deal.cid) {
+                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                              onFileActivity?.({
+                                                dealId,
+                                                filePath: f.path,
+                                                sizeBytes: f.size_bytes,
+                                                manifestRoot: manifestHex,
+                                                action: 'download',
+                                                status: 'failed',
+                                                error: msg,
+                                              })
+                                            }
                                             setFileActionError(msg)
                                           } finally {
                                             setBusyFilePath(null)
