@@ -78,6 +78,11 @@ export function Dashboard() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
+  const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
+  const { data: evmBalance, refetch: refetchEvm } = useBalance({
+    address,
+    chainId: appConfig.chainId,
+  })
   const providerCount = providers.length
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
@@ -592,12 +597,6 @@ export function Dashboard() {
     return []
   }
 
-  const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
-  const { data: evmBalance, refetch: refetchEvm } = useBalance({
-    address,
-    chainId: appConfig.chainId,
-  })
-
   async function fetchBalances(owner: string): Promise<{ atom?: string; stake?: string } | null> {
     try {
       const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${owner}`)
@@ -640,17 +639,22 @@ export function Dashboard() {
       if (Array.isArray(parsed)) {
         const sanitized = parsed
           .filter((entry) => entry && typeof entry === 'object')
-          .map((entry) => ({
-            id: String(entry.id ?? ''),
-            dealId: String(entry.dealId ?? ''),
-            filePath: String(entry.filePath ?? ''),
-            sizeBytes: Number(entry.sizeBytes ?? 0) || 0,
-            manifestRoot: String(entry.manifestRoot ?? ''),
-            updatedAt: Number(entry.updatedAt ?? 0) || 0,
-            lastAction: entry.lastAction === 'download' ? 'download' : 'upload',
-            status: entry.status === 'failed' ? 'failed' : entry.status === 'pending' ? 'pending' : 'success',
-            error: entry.error ? String(entry.error) : undefined,
-          }))
+          .map((entry) => {
+            const lastAction: 'download' | 'upload' = entry.lastAction === 'download' ? 'download' : 'upload'
+            const status: 'pending' | 'success' | 'failed' =
+              entry.status === 'failed' ? 'failed' : entry.status === 'pending' ? 'pending' : 'success'
+            return {
+              id: String(entry.id ?? ''),
+              dealId: String(entry.dealId ?? ''),
+              filePath: String(entry.filePath ?? ''),
+              sizeBytes: Number(entry.sizeBytes ?? 0) || 0,
+              manifestRoot: String(entry.manifestRoot ?? ''),
+              updatedAt: Number(entry.updatedAt ?? 0) || 0,
+              lastAction,
+              status,
+              error: entry.error ? String(entry.error) : undefined,
+            }
+          })
           .filter((entry) => entry.id && entry.dealId && entry.filePath)
         if (sanitized.length > 0) setRecentFiles(sanitized.slice(0, MAX_RECENT_FILES))
       }
