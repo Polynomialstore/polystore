@@ -1,6 +1,6 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -177,6 +177,8 @@ export function Dashboard() {
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
   const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
+  const [downloadToast, setDownloadToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -672,6 +674,14 @@ export function Dashboard() {
     }
   }, [recentFiles])
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+      }
+    }
+  }, [])
+
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
     const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
@@ -811,6 +821,17 @@ export function Dashboard() {
     setRecentFiles((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item)),
     )
+  }, [])
+
+  const showDownloadToast = useCallback((filePath: string) => {
+    const fileName = filePath.split('/').pop() || filePath
+    setDownloadToast(`${fileName} saved to Downloads`)
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setDownloadToast(null)
+    }, 2200)
   }, [])
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1107,6 +1128,7 @@ export function Dashboard() {
           manifestRoot: manifestHex,
           error: undefined,
         })
+        showDownloadToast(entry.filePath)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
@@ -1121,6 +1143,7 @@ export function Dashboard() {
       resolveDealById,
       resolveProviderBase,
       resolveProviderP2pTarget,
+      showDownloadToast,
       slab,
       updateRecentFile,
     ],
@@ -1146,8 +1169,11 @@ export function Dashboard() {
         status: event.status,
         error: event.error,
       })
+      if (event.action === 'download' && event.status === 'success') {
+        showDownloadToast(event.filePath)
+      }
     },
-    [upsertRecentFile],
+    [showDownloadToast, upsertRecentFile],
   )
 
   const handleWizardAction = async (stepId: string) => {
@@ -1216,12 +1242,13 @@ export function Dashboard() {
         anchor.click()
         setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
         updateRecentFile(id, { status: 'success', lastAction: 'download', error: undefined })
+        showDownloadToast(file.path)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
       }
     },
-    [contentManifestRoot, contentSlab, fetchFile, nilAddress, targetDealId, upsertRecentFile, updateRecentFile],
+    [contentManifestRoot, contentSlab, fetchFile, nilAddress, showDownloadToast, targetDealId, upsertRecentFile, updateRecentFile],
   )
 
   useEffect(() => {
@@ -2411,6 +2438,15 @@ export function Dashboard() {
           </tbody>
         </table>
       </div>
+
+      {downloadToast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-700 shadow-lg dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+            {downloadToast}
+          </div>
+        </div>
+      )}
 
     </div>
   )
