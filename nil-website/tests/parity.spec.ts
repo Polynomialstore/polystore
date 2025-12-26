@@ -149,7 +149,7 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
   await page.getByTestId('tab-mdu').click();
 
   console.log('Selecting Deal #1...');
-  await page.getByTestId('mdu-deal-select').selectOption('1');
+  await page.getByTestId('workspace-deal-select').selectOption('1');
 
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 });
 

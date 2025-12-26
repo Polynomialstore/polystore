@@ -370,7 +370,14 @@ test('repro bug: download from commit content widget', async ({
   console.log('Faucet received.')
 
   console.log('Creating deal...')
-  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
+  const advancedToggle = page.getByTestId('workspace-advanced-toggle')
+  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
+  if (!(await redundancySelect.isVisible().catch(() => false))) {
+    await advancedToggle.click()
+    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+  }
+
+  await redundancySelect.selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
   
   // Check for any visible error message
@@ -379,18 +386,18 @@ test('repro bug: download from commit content widget', async ({
       console.log('Error visible on UI:', await errorToast.textContent())
   }
 
-  await page.getByTestId('tab-content').click()
+  const contentTab = page.getByTestId('tab-content')
+  if (!(await contentTab.isVisible().catch(() => false))) {
+    await advancedToggle.click()
+    await expect(contentTab).toBeVisible({ timeout: 10_000 })
+  }
+  await contentTab.click()
   console.log('Deal created (click sent).')
 
-  const dealSelect = page.getByTestId('content-deal-select')
-  
-  // Wait for our intercepted deal (ID 0) to appear in the options
-  // The label should contain "Deal #0"
+  const dealSelect = page.getByTestId('workspace-deal-select')
+  await expect(dealSelect).toBeVisible({ timeout: 60_000 })
   await expect(dealSelect.locator('option', { hasText: 'Deal #0' })).toBeAttached({ timeout: 60_000 })
-  
-  // Select it
   await dealSelect.selectOption('0')
-  
   const dealId = await dealSelect.inputValue()
   console.log(`Deal ID in UI: ${dealId}`)
   
@@ -413,19 +420,6 @@ test('repro bug: download from commit content widget', async ({
   await expect(page.getByTestId('staged-manifest-root')).toHaveText(/^0x[0-9a-f]{96}$/i, { timeout: 180_000 })
   console.log('File staged.')
 
-  // Commit content
-  console.log('Committing content...')
-  const commitBtn = page.getByTestId('content-commit')
-  await expect(commitBtn).toBeVisible()
-  
-  if (await commitBtn.isDisabled()) {
-      console.log('Commit button is disabled. Checking why...')
-      await expect(commitBtn).toBeEnabled({ timeout: 10_000 }).catch(() => console.log('Commit button still disabled after 10s'))
-  }
-  
-  await commitBtn.click()
-  console.log('Commit button clicked.')
-  
   // Wait for "Files In Slab" to appear
   const filesInSlab = page.getByText('Files In Slab')
   await expect(filesInSlab).toBeVisible({ timeout: 60_000 })
@@ -435,10 +429,8 @@ test('repro bug: download from commit content widget', async ({
   const slabHeader = page.getByText('Files In Slab')
   const slabSection = slabHeader.locator('xpath=..')
   
-  const fileRow = page.locator('div.flex.items-center.justify-between', { hasText: filePath })
-  await expect(fileRow).toBeVisible({ timeout: 60_000 })
-  
-  const specificDownloadBtn = fileRow.locator('button', { hasText: 'Download' })
+  const specificDownloadBtn = page.locator(`[data-testid="content-download"][data-file-path="${filePath}"]`)
+  await expect(specificDownloadBtn).toBeVisible({ timeout: 60_000 })
   
   const downloadPromise = page.waitForEvent('download', { timeout: 10_000 }) // Short timeout as we expect failure
   

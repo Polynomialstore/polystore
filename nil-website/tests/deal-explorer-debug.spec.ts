@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
-import { encodeAbiParameters, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
+import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
@@ -38,6 +38,11 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
+  const computeResult = encodeFunctionResult({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'computeRetrievalSessions',
+    result: [{ provider: 'nil1provider', sessionId }],
+  })
 
   let planCalls = 0
   let gatewayRawCalls = 0
@@ -248,7 +253,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   })
 
   // Inject wallet that returns txOpen then txConfirm.
-  await page.addInitScript(({ address, chainIdHex, txOpen, txConfirm }) => {
+  await page.addInitScript(({ address, chainIdHex, txOpen, txConfirm, computeResult }) => {
     const w = window as any
     if (w.ethereum) return
     let sendCount = 0
@@ -269,6 +274,8 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
             return chainIdHex
           case 'net_version':
             return String(parseInt(chainIdHex, 16))
+          case 'eth_call':
+            return computeResult
           case 'eth_sendTransaction':
             sendCount += 1
             return sendCount % 2 === 1 ? txOpen : txConfirm
@@ -289,7 +296,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     }
     window.addEventListener('eip6963:requestProvider', announceProvider)
     announceProvider()
-  }, { address: account.address, chainIdHex, txOpen, txConfirm })
+  }, { address: account.address, chainIdHex, txOpen, txConfirm, computeResult })
 
   await page.goto(path)
 

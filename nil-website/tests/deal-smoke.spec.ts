@@ -248,23 +248,19 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
-  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
+  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
+  if (!(await redundancySelect.isVisible().catch(() => false))) {
+    await page.getByTestId('workspace-advanced-toggle').click()
+    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+  }
+  await redundancySelect.selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
   await page.getByTestId('tab-content').click()
 
-  const dealSelect = page.getByTestId('content-deal-select')
-  await expect
-    .poll(async () => {
-      const count = await dealSelect.locator(`option[value="${dealId}"]`).count()
-      if (count < 1) return ''
-      try {
-        await dealSelect.selectOption(dealId)
-      } catch {
-        // Ignore transient select failures while options are still populating.
-      }
-      return await dealSelect.inputValue()
-    }, { timeout: 60_000 })
-    .toBe(dealId)
+  const dealSelect = page.getByTestId('workspace-deal-select')
+  await expect(dealSelect.locator(`option[value="${dealId}"]`)).toHaveCount(1, { timeout: 60_000 })
+  await dealSelect.selectOption(dealId)
+  await expect(dealSelect).toHaveValue(dealId)
 
   await page.getByTestId('content-file-input').setInputFiles({
     name: filePath,

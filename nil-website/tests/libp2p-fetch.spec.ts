@@ -47,6 +47,10 @@ test.describe('libp2p fetch', () => {
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
 
+    const routingSummary = page.locator('summary', { hasText: 'Network & routing' }).first()
+    if ((await routingSummary.count()) > 0) {
+      await routingSummary.click()
+    }
     const transportSelect = page.getByLabel('Preference')
     await expect(transportSelect).toBeVisible({ timeout: 60_000 })
     await expect(transportSelect.locator('option[value="prefer_p2p"]')).toHaveCount(1)
@@ -55,23 +59,18 @@ test.describe('libp2p fetch', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
+    const redundancySelect = page.getByTestId('alloc-redundancy-mode')
+    if (!(await redundancySelect.isVisible().catch(() => false))) {
+      await page.getByTestId('workspace-advanced-toggle').click()
+      await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    }
+    await redundancySelect.selectOption('mode1')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
     await page.getByTestId('tab-content').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="content-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('content-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
+    const dealSelect = page.getByTestId('workspace-deal-select')
+    await expect(dealSelect).toHaveValue(/\d+/, { timeout: 180_000 })
     const dealId = await dealSelect.inputValue()
     expect(dealId).not.toBe('')
 
@@ -84,9 +83,6 @@ test.describe('libp2p fetch', () => {
     })
 
     await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
-
-    const commitBtn = page.getByTestId('content-commit')
-    await commitBtn.click()
     await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
 
     const dealRow = page.getByTestId(`deal-row-${dealId}`)
