@@ -123,29 +123,7 @@ echo "==> Verifying balance for $NIL_ADDRESS..."
 BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
 echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
 
-# 2. Upload File
-echo "==> Uploading file 'README.md' to Gateway..."
-# Canonical NilFS ingest should be fast; enforce a bounded timeout.
-UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
-UPLOAD_START_TS="$(date +%s)"
-UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$ROOT_DIR/README.md" \
-  -F "owner=$NIL_ADDRESS" \
-  "$GATEWAY_BASE/gateway/upload")
-UPLOAD_END_TS="$(date +%s)"
-echo "    Upload elapsed: $((UPLOAD_END_TS - UPLOAD_START_TS))s"
-echo "    Response: $UPLOAD_RESP"
-
-MANIFEST_ROOT=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['manifest_root'])")
-SIZE_BYTES=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['size_bytes'])")
-echo "    Manifest Root: $MANIFEST_ROOT"
-echo "    Size: $SIZE_BYTES"
-
-if [ -z "$MANIFEST_ROOT" ] || [ -z "$SIZE_BYTES" ] || [ "$MANIFEST_ROOT" == "null" ]; then
-    echo "ERROR: Failed to extract manifest_root or size_bytes"
-    exit 1
-fi
-
-# 3. Create Deal (EVM)
+# 2. Create Deal (EVM)
 echo "==> Creating Deal (EVM-signed)..."
 
 EVM_NONCE=1
@@ -188,6 +166,28 @@ if [ -z "$DEAL_ID" ]; then
 fi
 echo "    Deal ID: $DEAL_ID"
 EVM_NONCE=$((EVM_NONCE + 1))
+
+# 3. Upload File into Deal (Gateway)
+echo "==> Uploading file 'README.md' to Gateway (deal_id=$DEAL_ID)..."
+# Canonical NilFS ingest should be fast; enforce a bounded timeout.
+UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
+UPLOAD_START_TS="$(date +%s)"
+UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$ROOT_DIR/README.md" \
+  -F "owner=$NIL_ADDRESS" \
+  "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")
+UPLOAD_END_TS="$(date +%s)"
+echo "    Upload elapsed: $((UPLOAD_END_TS - UPLOAD_START_TS))s"
+echo "    Response: $UPLOAD_RESP"
+
+MANIFEST_ROOT=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('manifest_root') or j.get('cid') or '')")
+SIZE_BYTES=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('size_bytes') or j.get('sizeBytes') or '')")
+echo "    Manifest Root: $MANIFEST_ROOT"
+echo "    Size: $SIZE_BYTES"
+
+if [ -z "$MANIFEST_ROOT" ] || [ -z "$SIZE_BYTES" ] || [ "$MANIFEST_ROOT" == "null" ]; then
+    echo "ERROR: Failed to extract manifest_root or size_bytes"
+    exit 1
+fi
 
 # 4. Update Deal Content (EVM)
 echo "==> Updating Deal Content (Commit Manifest)..."
@@ -318,12 +318,11 @@ rm fetched_README.md
 echo "==> Uploading second file 'ECONOMY.md' into existing deal..."
 UPLOAD2_RESP=$(timeout 600s curl --verbose -X POST -F "file=@$ROOT_DIR/ECONOMY.md" \
   -F "owner=$NIL_ADDRESS" \
-  -F "deal_id=$DEAL_ID" \
-  "$GATEWAY_BASE/gateway/upload")
+  "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")
 echo "    Response: $UPLOAD2_RESP"
 
-MANIFEST_ROOT_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['manifest_root'])")
-SIZE_BYTES_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['size_bytes'])")
+MANIFEST_ROOT_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('manifest_root') or j.get('cid') or '')")
+SIZE_BYTES_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('size_bytes') or j.get('sizeBytes') or '')")
 echo "    New Manifest Root: $MANIFEST_ROOT_2"
 echo "    New File Size: $SIZE_BYTES_2"
 
