@@ -39,27 +39,12 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
-
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
     await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
+    await expect(page.getByTestId('workspace-deal-select')).toHaveValue(/\d+/, { timeout: 180_000 })
+    const dealId = await page.getByTestId('workspace-deal-select').inputValue()
     expect(dealId).not.toBe('')
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
@@ -162,26 +147,12 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
     await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
+    await expect(page.getByTestId('workspace-deal-select')).toHaveValue(/\d+/, { timeout: 180_000 })
+    const dealId = await page.getByTestId('workspace-deal-select').inputValue()
     expect(dealId).not.toBe('')
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })

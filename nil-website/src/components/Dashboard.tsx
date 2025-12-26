@@ -78,6 +78,7 @@ export function Dashboard() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { data: evmBalance, refetch: refetchEvm } = useBalance({
     address,
@@ -396,33 +397,28 @@ export function Dashboard() {
   const hasCommittedContent = Boolean(targetDeal?.cid)
   const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Allocated' : '—'
   const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
-  const nextAction = useMemo<{ label: string; hint: string; tab: 'alloc' | 'mdu' | 'content' | null }>(() => {
-    if (!hasSelectedDeal) {
-      return { label: 'Create a deal', hint: 'Allocate a new container', tab: 'alloc' }
+
+  useEffect(() => {
+    if (hasSelectedDeal && !isTargetDealMode2) {
+      setShowAdvanced(true)
     }
-    if (!hasCommittedContent) {
-      return {
-        label: isTargetDealMode2 ? 'Upload with Mode 2' : 'Upload with gateway',
-        hint: isTargetDealMode2 ? 'Shard locally with WASM' : 'Use legacy gateway sharding',
-        tab: isTargetDealMode2 ? 'mdu' : 'content',
-      }
+  }, [hasSelectedDeal, isTargetDealMode2])
+
+  useEffect(() => {
+    if (!showAdvanced && redundancyMode !== 'mode2') {
+      setRedundancyMode('mode2')
     }
-    return { label: 'View deal details', hint: 'Inspect files and retrievals', tab: null }
-  }, [hasCommittedContent, hasSelectedDeal, isTargetDealMode2])
-  const handleNextAction = useCallback(() => {
-    if (nextAction.tab) {
-      setActiveTab(nextAction.tab)
-      setPendingScrollTarget('workspace')
-      return
-    }
-    if (targetDeal) {
-      setSelectedDeal(targetDeal)
-      setPendingScrollTarget('deal')
-    }
-  }, [nextAction.tab, targetDeal])
-  const allocStatusLabel = hasSelectedDeal ? 'Selected' : 'Step 1'
-  const mode2StatusLabel = !hasSelectedDeal ? 'Step 2' : isTargetDealMode2 ? (hasCommittedContent ? 'Committed' : 'Recommended') : 'Optional'
-  const legacyStatusLabel = !hasSelectedDeal ? 'Step 2' : !isTargetDealMode2 ? (hasCommittedContent ? 'Committed' : 'Legacy') : 'Fallback'
+  }, [redundancyMode, showAdvanced])
+
+  useEffect(() => {
+    if (targetDealId) return
+    if (!nilAddress) return
+    if (ownedDeals.length !== 1) return
+    const onlyDeal = ownedDeals[0]
+    if (!onlyDeal?.id) return
+    setTargetDealId(String(onlyDeal.id))
+    setSelectedDeal(onlyDeal)
+  }, [nilAddress, ownedDeals, targetDealId])
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
@@ -1291,7 +1287,14 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
-      <StatusBar />
+      <details className="rounded-xl border border-border bg-card shadow-sm">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-foreground">
+          Network &amp; routing <span className="text-xs font-normal text-muted-foreground">(advanced)</span>
+        </summary>
+        <div className="px-4 pb-4">
+          <StatusBar />
+        </div>
+      </details>
       
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
@@ -1332,40 +1335,27 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Deal Library</h2>
-              <p className="text-muted-foreground text-sm mt-1">Create a deal (bucket), then upload, commit, and retrieve files.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-                Chain ID <span className="font-mono text-foreground">{activeChainId}</span>
-              </span>
-              <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-                Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
-              </span>
-            </div>
+      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+        <div className="flex-1 space-y-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">NilStore Console</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Create a deal (bucket), upload files, and retrieve directly from providers.
+            </p>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <div className="bg-secondary/50 border border-border rounded-lg p-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Total Deals</div>
-              <div className="text-lg font-semibold text-foreground">{dealSummary.total}</div>
-            </div>
-            <div className="bg-secondary/50 border border-border rounded-lg p-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Active Deals</div>
-              <div className="text-lg font-semibold text-foreground">{dealSummary.active}</div>
-            </div>
-            <div className="bg-secondary/50 border border-border rounded-lg p-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Retrievals</div>
-              <div className="text-lg font-semibold text-foreground">{dealSummary.retrievals}</div>
-            </div>
-            <div className="bg-secondary/50 border border-border rounded-lg p-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Stored</div>
-              <div className="text-lg font-semibold text-foreground">{formatBytes(dealSummary.totalBytes)}</div>
-            </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+              Chain <span className="font-mono text-foreground">{activeChainId}</span>
+            </span>
+            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+              Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
+            </span>
+            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+              Deals <span className="font-mono text-foreground">{dealSummary.total}</span>
+            </span>
+            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+              Stored <span className="font-mono text-foreground">{formatBytes(dealSummary.totalBytes)}</span>
+            </span>
           </div>
         </div>
 
@@ -1523,143 +1513,130 @@ export function Dashboard() {
       </div>
 
       <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-        <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
-            <h3 className="text-lg font-semibold text-foreground">Create or upload into a deal</h3>
+            <h3 className="text-lg font-semibold text-foreground">Create a deal and manage files</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mode 2 is the default. Legacy Mode 1 tools live under Advanced.
+            </p>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Select a deal first, then upload. Mode 2 is recommended.
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <label className="space-y-1 min-w-[220px]">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Current deal</span>
+              <select
+                value={targetDealId ?? ''}
+                onChange={(e) => {
+                  const next = String(e.target.value ?? '')
+                  setTargetDealId(next)
+                  if (!next) {
+                    setSelectedDeal(null)
+                    return
+                  }
+                  const deal = resolveDealById(next)
+                  if (deal) setSelectedDeal(deal)
+                }}
+                data-testid="workspace-deal-select"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+              >
+                <option value="">Select a deal…</option>
+                {deals
+                  .filter((d) => d.owner === nilAddress)
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              data-testid="workspace-advanced-toggle"
+              className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
+                showAdvanced
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+              }`}
+            >
+              {showAdvanced ? 'Advanced: on' : 'Advanced'}
+            </button>
           </div>
         </div>
 
-        <div className="p-4 border-b border-border bg-muted/20">
-          <div className="grid gap-3 sm:grid-cols-3">
+        <div className="p-4 border-b border-border bg-muted/20 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('alloc')}
               data-testid="tab-alloc"
-              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
                 activeTab === 'alloc'
                   ? 'border-primary/40 bg-primary/5'
                   : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    activeTab === 'alloc' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
-                  }`}>
-                    1
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-primary" />
-                      <div className="text-sm font-semibold text-foreground">Create deal</div>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">Allocate a container (bucket).</div>
-                  </div>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{allocStatusLabel}</span>
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Create deal</div>
               </div>
+              <div className="mt-1 text-xs text-muted-foreground">Allocate a new bucket.</div>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('mdu')}
               data-testid="tab-mdu"
-              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
                 activeTab === 'mdu'
                   ? 'border-primary/40 bg-primary/5'
                   : 'border-border bg-background/60 hover:bg-secondary/50'
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    activeTab === 'mdu' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
-                  }`}>
-                    2
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-primary" />
-                      <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
-                  </div>
-                </div>
-                <span className={`text-[10px] uppercase tracking-wide ${
-                  mode2StatusLabel === 'Recommended' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
-                }`}>
-                  {mode2StatusLabel}
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
+                <span className="ml-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Recommended
                 </span>
               </div>
+              <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('content')}
-              data-testid="tab-content"
-              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
-                activeTab === 'content'
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-border bg-background/60 hover:bg-secondary/50'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    activeTab === 'content' ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground'
-                  }`}>
-                    3
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Database className="w-4 h-4 text-primary" />
-                      <div className="text-sm font-semibold text-foreground">Upload (legacy)</div>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">Gateway sharding for Mode 1 deals.</div>
-                  </div>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{legacyStatusLabel}</span>
-              </div>
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected deal</div>
-              <div className="mt-1 font-mono text-foreground" data-testid="selected-deal-id">
-                {targetDealId ? `#${targetDealId}` : '—'}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                {targetDeal?.cid ? `${targetDeal.cid.slice(0, 12)}...` : 'No manifest yet'}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</div>
-              <div className="mt-1 text-sm font-semibold text-foreground">{activeDealModeLabel}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {isTargetDealMode2 ? 'Striped RS' : hasSelectedDeal ? 'Replication' : '—'}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</div>
-              <div className="mt-1 text-sm font-semibold text-foreground">{activeDealStatus}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {hasCommittedContent ? 'Content committed' : hasSelectedDeal ? 'Awaiting upload' : 'Select or create'}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 px-3 py-2 flex flex-col gap-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Next action</div>
-              <div className="text-xs font-semibold text-foreground">{nextAction.label}</div>
-              <div className="text-[10px] text-muted-foreground">{nextAction.hint}</div>
+            {showAdvanced && (
               <button
                 type="button"
-                onClick={handleNextAction}
-                disabled={!nextAction.tab && !targetDeal}
-                className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                onClick={() => setActiveTab('content')}
+                data-testid="tab-content"
+                className={`rounded-lg border px-4 py-2 text-left transition-colors ${
+                  activeTab === 'content'
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-border bg-background/60 hover:bg-secondary/50'
+                }`}
               >
-                {nextAction.tab ? 'Go' : 'Open'}
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-primary" />
+                  <div className="text-sm font-semibold text-foreground">Legacy upload (Mode 1)</div>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">Gateway sharding flow.</div>
               </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected</span>
+              <span className="font-mono text-foreground" data-testid="selected-deal-id">
+                {targetDealId ? `#${targetDealId}` : '—'}
+              </span>
+            </div>
+            <span className="text-border">|</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</span>
+              <span className="font-semibold text-foreground">{activeDealModeLabel}</span>
+            </div>
+            <span className="text-border">|</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</span>
+              <span className="font-semibold text-foreground">{activeDealStatus}</span>
             </div>
           </div>
         </div>
@@ -1689,79 +1666,104 @@ export function Dashboard() {
                               className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                             />
                         </label>
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
-                            <input
-                              defaultValue={maxMonthlySpend ?? ''}
-                              onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
-                              data-testid="alloc-max-monthly-spend"
-                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
-                        </label>
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
-                              <select
+                          <label className="space-y-1">
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
+                              <input
+                                defaultValue={maxMonthlySpend ?? ''}
+                                onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
+                                data-testid="alloc-max-monthly-spend"
+                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                              />
+                          </label>
+                            {!showAdvanced ? (
+                              <div className="sm:col-span-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                                <div>
+                                  <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
+                                  <span className="font-mono text-foreground">K={rsK}</span>{' '}
+                                  <span className="font-mono text-foreground">M={rsM}</span>
+                                  <span className="ml-2 text-[11px] text-muted-foreground">
+                                    Toggle Advanced for Mode 1 or custom tuning.
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  Slots required:{' '}
+                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                                  {' '}• Providers available:{' '}
+                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                                  {mode2Config.error && (
+                                    <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                            <>
+                              <label className="space-y-1">
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
+                                <select
                                   value={redundancyMode}
                                   onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
                                   data-testid="alloc-redundancy-mode"
                                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                              >
+                                >
                                   <option value="mode2">Mode 2 (Striped RS, recommended)</option>
                                   <option value="mode1">Mode 1 (Replication, legacy)</option>
-                              </select>
-                          </label>
-                        {redundancyMode === 'mode1' ? (
-                          <label className="space-y-1">
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
-                              <input
-                                  type="number"
-                                  min={1}
-                                  max={12}
-                                  defaultValue={replication ?? ''}
-                                  onChange={e => setReplication(e.target.value ?? '')}
-                                  data-testid="alloc-replication"
-                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                              />
-                          </label>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-3">
-                              <label className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                                </select>
+                              </label>
+                              {redundancyMode === 'mode1' ? (
+                                <label className="space-y-1">
+                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
                                   <input
+                                    type="number"
+                                    min={1}
+                                    max={12}
+                                    defaultValue={replication ?? ''}
+                                    onChange={(e) => setReplication(e.target.value ?? '')}
+                                    data-testid="alloc-replication"
+                                    className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                                  />
+                                </label>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <label className="space-y-1">
+                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                                    <input
                                       type="number"
                                       min={1}
                                       max={64}
                                       defaultValue={rsK ?? ''}
-                                      onChange={e => setRsK(e.target.value ?? '')}
+                                      onChange={(e) => setRsK(e.target.value ?? '')}
                                       data-testid="alloc-rs-k"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                  />
-                              </label>
-                              <label className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
-                                  <input
+                                    />
+                                  </label>
+                                  <label className="space-y-1">
+                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
+                                    <input
                                       type="number"
                                       min={1}
                                       max={64}
                                       defaultValue={rsM ?? ''}
-                                      onChange={e => setRsM(e.target.value ?? '')}
+                                      onChange={(e) => setRsM(e.target.value ?? '')}
                                       data-testid="alloc-rs-m"
                                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                  />
-                              </label>
-                          </div>
-                        )}
-                        {redundancyMode === 'mode2' && (
-                          <div className="text-[11px] text-muted-foreground">
-                            Slots required: <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                            {' '}• Providers available:{' '}
-                            <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                            {mode2Config.error && (
-                              <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
-                            )}
-                          </div>
-                        )}
-                    </div>
+                                    />
+                                  </label>
+                                </div>
+                              )}
+                              {redundancyMode === 'mode2' && (
+                                <div className="text-[11px] text-muted-foreground sm:col-span-2">
+                                  Slots required:{' '}
+                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                                  {' '}• Providers available:{' '}
+                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                                  {mode2Config.error && (
+                                    <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                      </div>
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-xs text-muted-foreground">
                             {createTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0,10)}...</div>}
@@ -1776,32 +1778,42 @@ export function Dashboard() {
                         </button>
                     </div>
                 </div>
-                ) : activeTab === 'content' ? (
-                    <div className="space-y-4">
-                        <p className="text-xs text-muted-foreground">
-                          Legacy gateway sharding (Mode 1). For Mode 2, use the Mode 2 upload card.
-                        </p>
-                      <div className="grid grid-cols-1 gap-3 text-sm">
-                          <label className="space-y-1">
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
-                              <select 
-                                  value={targetDealId ?? ''} 
-                                  onChange={e => setTargetDealId(String(e.target.value ?? ''))}
-                                  data-testid="content-deal-select"
-                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                              >
-                                  <option value="">Select a Deal...</option>
-                                  {deals.filter(d => d.owner === nilAddress).map(d => (
-                                      <option key={d.id} value={d.id}>
-                                        Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
-                                      </option>
-                                  ))}
-                              </select>
-                          </label>
-                          {targetDealId && (
-                            <div className="text-xs text-muted-foreground">
-                              On-chain:{" "}
-                              {targetDeal?.cid ? (
+                  ) : activeTab === 'content' ? (
+                    !showAdvanced ? (
+                      <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-foreground">Legacy Mode 1 tools are hidden</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Enable Advanced to access gateway sharding (Mode 1).
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdvanced(true)}
+                          className="inline-flex items-center justify-center rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+                        >
+                          Enable Advanced
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                            <p className="text-xs text-muted-foreground">
+                              Legacy gateway sharding (Mode 1). For Mode 2, use the Mode 2 upload card.
+                            </p>
+                          <div className="grid grid-cols-1 gap-3 text-sm">
+                            <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+                              Target deal:{' '}
+                              <span className="font-mono text-foreground">
+                                {targetDealId ? `#${targetDealId}` : '—'}
+                              </span>
+                              {!targetDealId ? (
+                                <span className="ml-2">Select a deal above to continue.</span>
+                              ) : null}
+                            </div>
+                            {targetDealId && (
+                              <div className="text-xs text-muted-foreground">
+                                On-chain:{" "}
+                                {targetDeal?.cid ? (
                                 <span className="font-mono text-primary">{`${targetDeal.cid.slice(0, 18)}...`}</span>
                               ) : (
                                 <span className="italic">Empty container</span>
@@ -2023,34 +2035,24 @@ export function Dashboard() {
                               className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                           >
                               {updateLoading ? 'Committing...' : 'Commit uploaded content'}
-                          </button>
-                      </div>
-                  </div>
-              ) : (
-              <div className="space-y-4">
+                            </button>
+                        </div>
+                    </div>
+                    )
+                ) : (
+                <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
                     Mode 2 upload: expand locally via WASM, then upload stripes. If a local gateway is running, it will be used to distribute shards faster.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 text-sm">
-                    <label className="space-y-1">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">Target Deal ID</span>
-                        <select 
-                            value={targetDealId ?? ''} 
-                            onChange={e => setTargetDealId(String(e.target.value ?? ''))}
-                            data-testid="mdu-deal-select"
-                            className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                        >
-                            <option value="">Select a Deal...</option>
-                            {deals.filter(d => d.owner === nilAddress).map(d => (
-                                <option key={d.id} value={d.id}>
-                                  Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+                  Target deal:{' '}
+                  <span className="font-mono text-foreground">
+                    {targetDealId ? `#${targetDealId}` : '—'}
+                  </span>
+                  {!targetDealId ? <span className="ml-2">Select a deal above to begin.</span> : null}
                 </div>
 
                 {targetDealId ? (
@@ -2146,18 +2148,18 @@ export function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      const dealId = String(deal.id ?? '')
-                                      setTargetDealId(dealId)
-                                      const service = parseServiceHint(deal.service_hint)
-                                      setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
-                                      window.scrollTo({ top: 0, behavior: 'smooth' })
-                                    }}
-                                    className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                                  >
-                                    Upload
-                                  </button>
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const dealId = String(deal.id ?? '')
+                                        setTargetDealId(dealId)
+                                        const service = parseServiceHint(deal.service_hint)
+                                        setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
+                                        setPendingScrollTarget('workspace')
+                                      }}
+                                      className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                      Upload
+                                    </button>
                                 </td>
                       </tr>
                       ))}
@@ -2241,9 +2243,16 @@ export function Dashboard() {
               />
             </div>
           )}
+        </>
+      )}
 
+      <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Network &amp; Diagnostics (advanced)
+        </summary>
+        <div className="p-6 space-y-6">
           {proofs.length > 0 && (
-            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                 <span>Liveness &amp; Performance</span>
                 {proofsLoading && <span className="text-[10px] text-muted-foreground">Syncing proofs…</span>}
@@ -2273,11 +2282,13 @@ export function Dashboard() {
                           {p.blockHeight || 0}
                         </td>
                         <td className="px-4 py-2">
-                          <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
-                            p.valid
-                              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
-                          }`}>
+                          <span
+                            className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                              p.valid
+                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+                            }`}
+                          >
                             {p.valid ? 'OK' : 'FAIL'}
                           </span>
                         </td>
@@ -2288,171 +2299,174 @@ export function Dashboard() {
               </table>
             </div>
           )}
-        </>
-      )}
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Providers (Deals &amp; Retrievals)
-        </div>
-        <table className="min-w-full divide-y divide-border text-xs" data-testid="providers-table">
-          <thead className="bg-muted/30">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deals</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Active</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Bytes Served</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {providers.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-6 py-6 text-sm text-muted-foreground">
-                  No providers found.
-                </td>
-              </tr>
-            ) : (
-              providers.map((p) => {
-                const stats = providerStatsByAddress.get(p.address) ?? {
-                  assignedDeals: 0,
-                  activeDeals: 0,
-                  retrievals: 0,
-                  bytesServed: 0,
-                }
-                return (
-                  <tr key={p.address} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-2 font-mono text-[11px] text-primary" title={p.address}>
-                      {p.address.slice(0, 12)}...{p.address.slice(-6)}
-                    </td>
-                    <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
-                    <td className="px-4 py-2">
-                      <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
-                      {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
-                        <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
-                      ) : (
-                        <span className="italic">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.assignedDeals}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.activeDeals}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{stats.retrievals}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{formatBytes(stats.bytesServed)}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
-                      {(() => {
-                        const totalStorage = Number(p.total_storage)
-                        if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
-                        return `${(totalStorage / (1024 ** 4)).toFixed(2)} TiB`
-                      })()}
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Providers (Deals &amp; Retrievals)
+            </div>
+            <table className="min-w-full divide-y divide-border text-xs" data-testid="providers-table">
+              <thead className="bg-muted/30">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deals</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Active</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Bytes Served</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {providers.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-6 text-sm text-muted-foreground">
+                      No providers found.
                     </td>
                   </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : (
+                  providers.map((p) => {
+                    const stats = providerStatsByAddress.get(p.address) ?? {
+                      assignedDeals: 0,
+                      activeDeals: 0,
+                      retrievals: 0,
+                      bytesServed: 0,
+                    }
+                    return (
+                      <tr key={p.address} className="hover:bg-muted/50 transition-colors">
+                        <td className="px-4 py-2 font-mono text-[11px] text-primary" title={p.address}>
+                          {p.address.slice(0, 12)}...{p.address.slice(-6)}
+                        </td>
+                        <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
+                        <td className="px-4 py-2">
+                          <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
+                          {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
+                            <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
+                          ) : (
+                            <span className="italic">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.assignedDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.activeDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.retrievals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{formatBytes(stats.bytesServed)}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">
+                          {(() => {
+                            const totalStorage = Number(p.total_storage)
+                            if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
+                            return `${(totalStorage / (1024 ** 4)).toFixed(2)} TiB`
+                          })()}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Retrieval Fees (Gamma-4)
-        </div>
-        <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
-            <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Retrieval Fees (Gamma-4)
+            </div>
+            <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
+                <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
+                <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
+                <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
+              </div>
+            </div>
+            <div className="px-6 pb-4 text-xs text-muted-foreground">
+              {retrievalFeeNote}
+              {retrievalParamsError ? (
+                <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+              ) : null}
+            </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
-            <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
-            <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
-          </div>
-        </div>
-        <div className="px-6 pb-4 text-xs text-muted-foreground">
-          {retrievalFeeNote}
-          {retrievalParamsError ? (
-            <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
-          ) : null}
-        </div>
-      </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          My Retrieval Sessions
-        </div>
-        <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
-          <thead className="bg-muted/30">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-              <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
-              <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {!nilAddress ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                  Connect a wallet to view retrieval sessions.
-                </td>
-              </tr>
-            ) : retrievalSessionsLoading ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                  Loading sessions…
-                </td>
-              </tr>
-            ) : retrievalSessions.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                  No retrieval sessions found.
-                  {retrievalSessionsError ? (
-                    <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
-                  ) : null}
-                </td>
-              </tr>
-            ) : (
-              retrievalSessions.map((raw) => {
-                const s = raw as Record<string, unknown>
-                const dealId = String(s['deal_id'] ?? '')
-                const provider = String(s['provider'] ?? '')
-                const status = formatSessionStatus(s['status'])
-                const updatedHeight = String(s['updated_height'] ?? '')
-                const totalBytes = formatBytesU64(s['total_bytes'])
-                const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
-                const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
-                return (
-                  <tr key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
-                      {shortSession}
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              My Retrieval Sessions
+            </div>
+            <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
+              <thead className="bg-muted/30">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {!nilAddress ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                      Connect a wallet to view retrieval sessions.
                     </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
-                    <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
-                      {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">{status}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
                   </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : retrievalSessionsLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                      Loading sessions…
+                    </td>
+                  </tr>
+                ) : retrievalSessions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                      No retrieval sessions found.
+                      {retrievalSessionsError ? (
+                        <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : (
+                  retrievalSessions.map((raw) => {
+                    const s = raw as Record<string, unknown>
+                    const dealId = String(s['deal_id'] ?? '')
+                    const provider = String(s['provider'] ?? '')
+                    const status = formatSessionStatus(s['status'])
+                    const updatedHeight = String(s['updated_height'] ?? '')
+                    const totalBytes = formatBytesU64(s['total_bytes'])
+                    const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
+                    const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
+                    return (
+                      <tr
+                        key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
+                        className="hover:bg-muted/50 transition-colors"
+                      >
+                        <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
+                          {shortSession}
+                        </td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
+                          {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">{status}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
 
       {downloadToast && (
         <div className="fixed bottom-6 right-6 z-50">
