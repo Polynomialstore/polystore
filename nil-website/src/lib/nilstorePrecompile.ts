@@ -1,4 +1,4 @@
-import type { Abi } from 'viem'
+import { decodeFunctionResult, encodeFunctionData, type Abi, type Hex } from 'viem'
 
 export const NILSTORE_PRECOMPILE_ABI = [
   {
@@ -215,3 +215,62 @@ export const NILSTORE_PRECOMPILE_ABI = [
     ],
   },
 ] as const satisfies Abi
+
+export type RetrievalSessionInput = {
+  dealId: bigint
+  provider: string
+  manifestRoot: Hex
+  startMduIndex: bigint
+  startBlobIndex: number
+  blobCount: bigint
+  nonce: bigint
+  expiresAt: bigint
+}
+
+export type ComputeRetrievalSessionIdsResult = {
+  providers: string[]
+  sessionIds: Hex[]
+}
+
+export function encodeComputeRetrievalSessionIdsData(sessions: readonly RetrievalSessionInput[]): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'computeRetrievalSessionIds',
+    args: [sessions],
+  })
+}
+
+export function decodeComputeRetrievalSessionIdsResult(data: Hex): ComputeRetrievalSessionIdsResult {
+  const decoded = decodeFunctionResult({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'computeRetrievalSessionIds',
+    data,
+  }) as unknown
+
+  const providers: string[] = Array.isArray(decoded)
+    ? ((decoded as unknown[])[0] as string[])
+    : ((decoded as { providers?: string[] }).providers ?? [])
+
+  const sessionIds: Hex[] = Array.isArray(decoded)
+    ? ((decoded as unknown[])[1] as Hex[])
+    : ((decoded as { sessionIds?: Hex[] }).sessionIds ?? [])
+
+  return { providers, sessionIds }
+}
+
+export function encodeOpenRetrievalSessionsData(sessions: readonly RetrievalSessionInput[]): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'openRetrievalSessions',
+    args: [sessions],
+  })
+}
+
+export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'confirmRetrievalSessions',
+    args: [sessionIds],
+  })
+}
+

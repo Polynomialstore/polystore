@@ -1,12 +1,17 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
-import { decodeFunctionResult, encodeFunctionData, numberToHex, type Hex } from 'viem'
+import { numberToHex, type Hex } from 'viem'
 
 import { appConfig } from '../config'
 import { normalizeDealId } from '../lib/dealId'
 import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import {
+  decodeComputeRetrievalSessionIdsResult,
+  encodeComputeRetrievalSessionIdsData,
+  encodeConfirmRetrievalSessionsData,
+  encodeOpenRetrievalSessionsData,
+} from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import {
   resolveProviderEndpoint,
@@ -315,26 +320,13 @@ export function useFetch() {
         }
       })
 
-      const computeData = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'computeRetrievalSessionIds',
-        args: [openRequests],
-      })
+      const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
       const computeResult = (await ethereum.request({
         method: 'eth_call',
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: computeData }, 'latest'],
       })) as Hex
-      const computedSessions = decodeFunctionResult({
-        abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'computeRetrievalSessionIds',
-        data: computeResult,
-      }) as unknown
-      const computedProviders: string[] = Array.isArray(computedSessions)
-        ? ((computedSessions as unknown[])[0] as string[])
-        : ((computedSessions as { providers?: string[] }).providers ?? [])
-      const computedSessionIds: Hex[] = Array.isArray(computedSessions)
-        ? ((computedSessions as unknown[])[1] as Hex[])
-        : ((computedSessions as { sessionIds?: Hex[] }).sessionIds ?? [])
+      const { providers: computedProviders, sessionIds: computedSessionIds } =
+        decodeComputeRetrievalSessionIdsResult(computeResult)
       const sessionsByProvider = new Map<string, Hex>()
       for (let i = 0; i < computedProviders.length; i++) {
         const provider = String(computedProviders[i] || '').trim()
@@ -348,11 +340,7 @@ export function useFetch() {
         }
       }
 
-      const openTxData = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'openRetrievalSessions',
-        args: [openRequests],
-      })
+      const openTxData = encodeOpenRetrievalSessionsData(openRequests)
       const openTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(7_000_000) }],
@@ -487,11 +475,7 @@ export function useFetch() {
       }))
 
       const sessionIds = groups.map((group) => sessionsByProvider.get(group.provider) as Hex)
-      const confirmTxData = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'confirmRetrievalSessions',
-        args: [sessionIds],
-      })
+      const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
       const confirmTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(3_000_000) }],
