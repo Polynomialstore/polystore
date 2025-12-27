@@ -27,6 +27,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
 
   let manifestUploadCalls = 0
+  let dealCid = ''
 
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
@@ -122,23 +123,44 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   })
 
   // Mock LCD Deals
-  await page.route('**/nilchain/nilchain/v1/deals**', async route => {
-      await route.fulfill({
-          status: 200,
-          body: JSON.stringify({
-              deals: [
-                  {
-                      id: '1',
-                      owner: nilAddress,
-                      cid: '',
-                      size: '0',
-                      escrow_balance: '1000000',
-                      end_block: '1000',
-                      providers: ['nil1provider'],
-                  }
-              ]
-          })
+  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+    const url = route.request().url()
+
+    if (url.includes('/heat')) {
+      return route.fulfill({
+        status: 200,
+        body: JSON.stringify({ heat: { bytes_served: '0' } }),
       })
+    }
+
+    const deal = {
+      id: '1',
+      owner: nilAddress,
+      cid: dealCid,
+      size: '0',
+      escrow_balance: '1000000',
+      end_block: '1000',
+      providers: ['nil1provider'],
+    }
+
+    let pathname = url
+    try {
+      pathname = new URL(url).pathname
+    } catch {
+      // ignore
+    }
+
+    if (/\/nilchain\/nilchain\/v1\/deals\/[0-9]+$/.test(pathname)) {
+      return route.fulfill({
+        status: 200,
+        body: JSON.stringify({ deal }),
+      })
+    }
+
+    return route.fulfill({
+      status: 200,
+      body: JSON.stringify({ deals: [deal] }),
+    })
   })
 
   // Inject Wallet
@@ -279,7 +301,33 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Commit confirmed.')
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
 
+  // Update the mocked on-chain CID to match the locally persisted OPFS slab (manifest_root.txt),
+  // then reload so the Dashboard refresh loop can pick up the new Deal CID and allow OPFS fallback.
+  dealCid = (await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory()
+    const dealDir = await root.getDirectoryHandle('deal-1', { create: false })
+    const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
+    const file = await fh.getFile()
+    return file.text()
+  })).trim()
+  expect(dealCid).not.toBe('')
+
+  await page.reload({ waitUntil: 'networkidle' })
+
+  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="cosmos-identity"]', {
+    timeout: 60_000,
+    state: 'attached',
+  })
+
+  const walletAddress = page.getByTestId('wallet-address')
+  const cosmosIdentity = page.getByTestId('cosmos-identity')
+  if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+    await page.getByTestId('connect-wallet').first().click({ force: true })
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
+  }
+
   // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
+  await expect(page.getByTestId('deal-row-1')).toBeVisible({ timeout: 60_000 })
   await page.getByTestId('deal-row-1').click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
