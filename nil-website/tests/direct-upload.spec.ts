@@ -246,11 +246,11 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await page.goto(path)
 
   console.log('Connecting wallet...')
-  if (await page.getByTestId('wallet-address').isVisible()) {
+  if (await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible()) {
     console.log('Wallet already connected.')
   } else {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
   console.log('Switching to Local MDU tab...')
@@ -314,12 +314,12 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   await page.reload({ waitUntil: 'networkidle' })
 
-  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="cosmos-identity"]', {
+  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
     timeout: 60_000,
     state: 'attached',
   })
 
-  const walletAddress = page.getByTestId('wallet-address')
+  const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
   const cosmosIdentity = page.getByTestId('cosmos-identity')
   if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
     await page.getByTestId('connect-wallet').first().click({ force: true })

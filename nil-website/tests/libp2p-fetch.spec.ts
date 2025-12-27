@@ -32,7 +32,7 @@ test.describe('libp2p fetch', () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         await page.waitForSelector('body', { state: 'attached' })
         const hasConnect = await page.getByTestId('connect-wallet').count().catch(() => 0)
-        const hasAddress = await page.getByTestId('wallet-address').count().catch(() => 0)
+        const hasAddress = await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').count()
         if (hasConnect > 0 || hasAddress > 0) return
         await page.waitForTimeout(1000)
         await page.reload({ waitUntil: 'networkidle' })
@@ -41,7 +41,7 @@ test.describe('libp2p fetch', () => {
     }
 
     await waitForWalletControls()
-    const walletAddress = page.getByTestId('wallet-address')
+    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
     if (!(await walletAddress.isVisible().catch(() => false))) {
       await page.getByTestId('connect-wallet').first().click()
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
@@ -84,6 +84,7 @@ test.describe('libp2p fetch', () => {
 
     await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
     await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
 
     const dealRow = page.getByTestId(`deal-row-${dealId}`)
     await expect(dealRow).toBeVisible({ timeout: 180_000 })

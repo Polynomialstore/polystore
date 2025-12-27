@@ -136,13 +136,13 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
   await page.goto('/#/dashboard');
 
   console.log('Connecting wallet...');
-  if (await page.getByTestId('wallet-address').isVisible()) {
+  if (await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible()) {
     console.log('Wallet already connected.');
   } else {
     const connectBtn = page.getByTestId('connect-wallet').first();
     await expect(connectBtn).toBeVisible({ timeout: 60000 });
     await connectBtn.click({ force: true });
-    await expect(page.getByTestId('wallet-address')).toBeVisible();
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible();
   }
 
   console.log('Switching to Local MDU tab...');

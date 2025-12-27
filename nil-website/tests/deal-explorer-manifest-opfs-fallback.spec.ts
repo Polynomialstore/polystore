@@ -155,9 +155,9 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
 
   await page.goto(path)
 
-  if (!(await page.getByTestId('wallet-address').isVisible())) {
+  if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
   // Seed OPFS with a minimal NilFS MDU0 + 1 witness + 1 user MDU.

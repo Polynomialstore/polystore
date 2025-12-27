@@ -201,9 +201,9 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await page.goto(path)
 
   // Connect wallet if needed.
-  if (!(await page.getByTestId('wallet-address').isVisible())) {
+  if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
   // Local MDU flow: shard -> upload -> commit.
@@ -364,9 +364,9 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   }, { address: account.address, chainIdHex })
 
   await page2.goto(path)
-  if (!(await page2.getByTestId('wallet-address').isVisible())) {
+  if (!(await page2.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page2.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page2.getByTestId('wallet-address')).toBeVisible()
+    await expect(page2.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
   await page2.getByTestId(`deal-row-${dealId}`).click()

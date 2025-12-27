@@ -302,9 +302,9 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
 
   await page.goto(path)
 
-  if (!(await page.getByTestId('wallet-address').isVisible())) {
+  if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.getByTestId('wallet-address')).toBeVisible()
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
   // Seed OPFS with ONLY the manifest root (no MDUs).

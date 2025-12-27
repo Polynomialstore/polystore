@@ -22,11 +22,11 @@ test.describe('gateway absent', () => {
   await page.goto(dashboardPath, { waitUntil: 'networkidle' })
 
   await page.waitForSelector('#root', { timeout: 60_000 })
-  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
+  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"]', {
     timeout: 60_000,
     state: 'attached',
   })
-  const walletAddress = page.getByTestId('wallet-address')
+  const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
   if (!(await walletAddress.isVisible().catch(() => false))) {
     const connectButton = page.getByTestId('connect-wallet').first()
     await connectButton.click({ force: true })
