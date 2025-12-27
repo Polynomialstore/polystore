@@ -78,6 +78,15 @@ func requireDealIDQuery(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	return dealID, true
 }
 
+func requireUploadIDQuery(w http.ResponseWriter, r *http.Request) (string, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("upload_id"))
+	if raw == "" {
+		writeJSONError(w, http.StatusBadRequest, "upload_id query parameter is required", "")
+		return "", false
+	}
+	return raw, true
+}
+
 func parseDealID(raw string) (uint64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -144,6 +153,38 @@ func RouterGatewayUpload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerAddr, err := resolveDealAssignedProvider(r.Context(), dealID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrDealNotFound) {
+			status = http.StatusNotFound
+		}
+		writeJSONError(w, status, "failed to resolve deal provider", err.Error())
+		return
+	}
+	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
+		return
+	}
+	proxyToProviderBaseURL(w, r, baseURL)
+}
+
+func RouterGatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealID, ok := requireDealIDQuery(w, r)
+	if !ok {
+		return
+	}
+	if _, ok := requireUploadIDQuery(w, r); !ok {
+		return
+	}
+
 	providerAddr, err := resolveDealAssignedProvider(r.Context(), dealID)
 	if err != nil {
 		status := http.StatusInternalServerError

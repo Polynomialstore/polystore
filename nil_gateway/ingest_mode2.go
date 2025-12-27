@@ -119,6 +119,12 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	defer builder.Free()
 	witnessCount := builder.GetWitnessCount()
+	totalSteps := userMdus + witnessCount + 2
+	job := uploadJobFromContext(ctx)
+	if job != nil {
+		job.setPhase(uploadJobPhaseEncoding, "Gateway Mode 2: encoding stripes...")
+		job.setSteps(0, totalSteps)
+	}
 
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
@@ -185,6 +191,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 				return nil, "", err
 			}
 		}
+		if job != nil {
+			job.setSteps(i+1, totalSteps)
+		}
 	}
 
 	// Build witness MDUs from the concatenated witness commitments.
@@ -213,6 +222,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
 			return nil, "", err
+		}
+		if job != nil {
+			job.setSteps(userMdus+i+1, totalSteps)
 		}
 	}
 
@@ -261,6 +273,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		return nil, "", err
 	}
 	rollback = false
+	if job != nil {
+		job.setSteps(totalSteps, totalSteps)
+	}
 
 	return &mode2IngestResult{
 		manifestRoot:    parsedRoot,
@@ -383,6 +398,13 @@ func mode2BuildArtifactsAppend(
 	witnessCount := newWBuilder.GetWitnessCount()
 	newWBuilder.Free()
 
+	totalSteps := newUserMdus + witnessCount + 2
+	job := uploadJobFromContext(ctx)
+	if job != nil {
+		job.setPhase(uploadJobPhaseEncoding, "Gateway Mode 2: encoding append...")
+		job.setSteps(0, totalSteps)
+	}
+
 	// Copy existing user shards into staging so the new manifest root is fully materialized on providers.
 	for userIdx := uint64(0); userIdx < oldUserMdus; userIdx++ {
 		oldSlabIndex := uint64(1) + oldWitnessCount + userIdx
@@ -494,6 +516,9 @@ func mode2BuildArtifactsAppend(
 				return nil, "", err
 			}
 		}
+		if job != nil {
+			job.setSteps(i+1, totalSteps)
+		}
 	}
 
 	// Recompute all user roots + rebuild witness MDUs from concatenated witness commitments.
@@ -543,6 +568,9 @@ func mode2BuildArtifactsAppend(
 		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
 			return nil, "", err
 		}
+		if job != nil {
+			job.setSteps(newUserMdus+i+1, totalSteps)
+		}
 	}
 
 	// Write user roots into MDU0 (starting after witness roots).
@@ -591,6 +619,9 @@ func mode2BuildArtifactsAppend(
 		return nil, "", err
 	}
 	rollback = false
+	if job != nil {
+		job.setSteps(totalSteps, totalSteps)
+	}
 
 	return &mode2IngestResult{
 		manifestRoot:    parsedRoot,
@@ -624,6 +655,20 @@ func mode2UploadArtifactsToProviders(
 	}
 	if witnessCount == 0 || stripe.slotCount == 0 {
 		return fmt.Errorf("invalid Mode 2 state")
+	}
+
+	job := uploadJobFromContext(ctx)
+	uploaded := uint64(0)
+	totalUploads := stripe.slotCount * (witnessCount + 2 + userMdus)
+	if job != nil {
+		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
+		job.setSteps(0, totalUploads)
+	}
+	bump := func() {
+		uploaded++
+		if job != nil {
+			job.setSteps(uploaded, totalUploads)
+		}
 	}
 
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
@@ -686,6 +731,7 @@ func mode2UploadArtifactsToProviders(
 			}, path, 10<<20); err != nil {
 				return err
 			}
+			bump()
 		}
 		if err := uploadBlob(ctx, base+"/sp/upload_manifest", map[string]string{
 			"X-Nil-Deal-ID":       dealIDStr,
@@ -693,6 +739,7 @@ func mode2UploadArtifactsToProviders(
 		}, filepath.Join(finalDir, "manifest.bin"), 512<<10); err != nil {
 			return err
 		}
+		bump()
 	}
 
 	// Striped user shards.
@@ -708,6 +755,7 @@ func mode2UploadArtifactsToProviders(
 			}, path, 10<<20); err != nil {
 				return err
 			}
+			bump()
 		}
 	}
 

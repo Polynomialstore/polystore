@@ -51,7 +51,7 @@ var (
 	shardTimeout = time.Duration(envInt("NIL_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
 	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
 	// This is enforced per request so clients never see an infinite hang.
-	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 60))) * time.Second
+	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 1800))) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 	// Devnet UX: allow unsigned range fetches (MetaMask-only txs) by default.
@@ -336,6 +336,7 @@ func main() {
 
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
@@ -353,6 +354,7 @@ func main() {
 		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	} else {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
@@ -439,6 +441,52 @@ func GetObject(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.status = code
+	sr.wroteHeader = true
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+func (sr *statusRecorder) Write(b []byte) (int, error) {
+	if !sr.wroteHeader {
+		sr.WriteHeader(http.StatusOK)
+	}
+	return sr.ResponseWriter.Write(b)
+}
+
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (cr *ctxReader) Read(p []byte) (int, error) {
+	if err := cr.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return cr.r.Read(p)
+}
+
+type uploadProgressWriter struct {
+	job        *uploadJob
+	bytesTotal uint64
+	bytesDone  uint64
+}
+
+func (pw *uploadProgressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.bytesDone += uint64(n)
+	if pw.job != nil {
+		pw.job.setBytes(pw.bytesDone, pw.bytesTotal)
+	}
+	return n, nil
+}
+
 // GatewayUpload is used by the web UI to upload a file and derive a Root CID + size.
 // It does NOT create a deal; it just returns metadata.
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
@@ -447,6 +495,37 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+
+	dealIDQuery := uint64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("deal_id")); raw != "" {
+		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil {
+			dealIDQuery = parsed
+		}
+	}
+	uploadID := strings.TrimSpace(r.URL.Query().Get("upload_id"))
+	var job *uploadJob
+	if dealIDQuery > 0 && uploadID != "" {
+		job = newUploadJob(dealIDQuery, uploadID)
+		job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
+		storeUploadJob(job)
+	}
+
+	rec := &statusRecorder{ResponseWriter: w}
+	w = rec
+	defer func() {
+		if job == nil {
+			return
+		}
+		snap := job.snapshot()
+		if snap.Status != string(uploadJobRunning) {
+			return
+		}
+		code := rec.status
+		if code == 0 {
+			code = http.StatusInternalServerError
+		}
+		job.setError(fmt.Sprintf("upload failed (HTTP %d)", code))
+	}()
 
 	ingestCtx, cancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
 	defer cancel()
@@ -483,12 +562,35 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create file", http.StatusInternalServerError)
 		return
 	}
-	if _, err := io.Copy(out, file); err != nil {
-		out.Close()
+
+	bytesTotal := uint64(0)
+	if header.Size > 0 {
+		bytesTotal = uint64(header.Size)
+	}
+	if job != nil {
+		job.setFile(header.Filename, bytesTotal)
+		job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
+		job.setBytes(0, bytesTotal)
+	}
+
+	pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
+	reader := &ctxReader{ctx: ingestCtx, r: file}
+	if _, err := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10)); err != nil {
+		_ = out.Close()
+		if job != nil {
+			job.setError(err.Error())
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			http.Error(w, err.Error(), http.StatusRequestTimeout)
+			return
+		}
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
 	if err := out.Close(); err != nil {
+		if job != nil {
+			job.setError(err.Error())
+		}
 		http.Error(w, "failed to close file", http.StatusInternalServerError)
 		return
 	}
@@ -559,8 +661,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				if strings.Contains(recordPath, "/") {
 					recordPath = filepath.Base(recordPath)
 				}
-				res, err := mode2IngestAndUploadNewDeal(ingestCtx, path, dealID, serviceHint, recordPath)
+				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, recordPath)
 				if err != nil {
+					if job != nil {
+						job.setError(err.Error())
+					}
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
@@ -639,8 +744,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					recordPath = filepath.Base(recordPath)
 				}
 
-				res, err := mode2IngestAndUploadAppendToDeal(ingestCtx, path, dealID, serviceHint, chainCID, recordPath)
+				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, chainCID, recordPath)
 				if err != nil {
+					if job != nil {
+						job.setError(err.Error())
+					}
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
@@ -737,6 +845,15 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		size = fileSize
 	}
 
+	if job != nil && strings.TrimSpace(cid) != "" {
+		job.setResult(uploadJobResult{
+			ManifestRoot:    cid,
+			SizeBytes:       size,
+			FileSizeBytes:   fileSize,
+			AllocatedLength: allocatedLength,
+		})
+	}
+
 	resp := map[string]any{
 		"cid":              cid,
 		"manifest_root":    cid,
@@ -744,6 +861,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"file_size_bytes":  fileSize,
 		"allocated_length": allocatedLength,
 		"filename":         header.Filename,
+		"upload_id":        uploadID,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
