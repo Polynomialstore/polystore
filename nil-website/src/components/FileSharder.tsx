@@ -1494,11 +1494,45 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-             <span title={wasmError || undefined} className={`px-2 py-0.5 rounded-full border ${
-                 wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : wasmStatus === 'initializing' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
-             }`}>
-                 WASM: {wasmStatus}
-             </span>
+            {isMode2 && (
+              <span
+                title={localGateway.error || undefined}
+                className={`px-2 py-0.5 rounded-full border ${
+                  appConfig.gatewayDisabled
+                    ? 'bg-secondary/40 text-muted-foreground border-border'
+                    : localGateway.status === 'connected'
+                      ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
+                      : localGateway.error
+                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                        : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20'
+                }`}
+              >
+                Gateway:{' '}
+                {appConfig.gatewayDisabled
+                  ? 'disabled'
+                  : localGateway.status === 'connected'
+                    ? 'connected'
+                    : localGateway.error
+                      ? 'unavailable'
+                      : 'checking'}
+              </span>
+            )}
+            <span
+              title={wasmError || undefined}
+              className={`px-2 py-0.5 rounded-full border ${
+                gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
+                  ? 'bg-secondary/40 text-muted-foreground border-border'
+                  : wasmStatus === 'ready'
+                    ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                    : wasmStatus === 'initializing'
+                      ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                      : 'bg-red-500/10 text-red-500 border-red-500/20'
+              }`}
+            >
+              {gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
+                ? 'WASM: standby'
+                : `WASM: ${wasmStatus}`}
+            </span>
           </div>
       </div>
       {isMode2 && stripeParams && (
