@@ -863,7 +863,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
-                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
                                     <div className="flex items-center justify-between">
                                       <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                         Browser
@@ -872,7 +872,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         cache {cached ? 'yes' : 'no'} • slab {slabSource === 'opfs' ? 'yes' : 'unknown'}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -892,7 +892,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={isBusy || !cached}
                                         data-testid="deal-detail-download-browser-cache"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         Cached
                                       </button>
@@ -930,7 +930,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={isBusy}
                                         data-testid="deal-detail-download-browser-slab"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
                                         {isBusy ? 'Loading...' : 'Slab'}
@@ -950,7 +950,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !cached}
                                         data-testid="deal-detail-clear-browser-cache"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         Clear
                                       </button>
@@ -1026,14 +1026,14 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         Download
                                       </button>
                                     </div>
                                   </div>
 
-                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
                                     <div className="flex items-center justify-between">
                                       <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                         Gateway
@@ -1042,7 +1042,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         reach {gatewayReachable} • slab {gatewaySlabStatus}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -1079,7 +1079,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || gatewaySlabStatus !== 'present'}
                                         data-testid="deal-detail-download-gateway"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         Download
                                       </button>
@@ -1089,7 +1089,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                     </div>
                                   </div>
 
-                                  <div className="rounded border border-border bg-background/40 p-2 space-y-2">
+                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
                                     <div className="flex items-center justify-between">
                                       <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                         SP (interactive)
@@ -1098,7 +1098,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         {downloading ? 'in progress' : 'wallet'}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -1165,7 +1165,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download-sp"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
                                         Download

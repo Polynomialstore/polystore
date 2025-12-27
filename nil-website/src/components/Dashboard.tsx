@@ -181,6 +181,9 @@ export function Dashboard() {
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
   const toastTimerRef = useRef<number | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const allocRef = useRef<HTMLDivElement | null>(null)
+  const mduRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
   const dealDetailRef = useRef<HTMLDivElement | null>(null)
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
@@ -417,7 +420,6 @@ export function Dashboard() {
     const onlyDeal = ownedDeals[0]
     if (!onlyDeal?.id) return
     setTargetDealId(String(onlyDeal.id))
-    setSelectedDeal(onlyDeal)
   }, [nilAddress, ownedDeals, targetDealId])
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
@@ -697,9 +699,26 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!pendingScrollTarget) return
-    const ref = pendingScrollTarget === 'workspace' ? workspaceRef : dealDetailRef
-    if (!ref.current) return
-    ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+    if (pendingScrollTarget === 'workspace') {
+      const target =
+        activeTab === 'alloc'
+          ? allocRef.current
+          : activeTab === 'mdu'
+          ? mduRef.current
+          : activeTab === 'content'
+          ? contentRef.current
+          : workspaceRef.current
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setPendingScrollTarget(null)
+      return
+    }
+
+    const root = dealDetailRef.current
+    if (root) {
+      const fileList = root.querySelector('[data-testid="deal-detail-file-list"]') as HTMLElement | null
+      ;(fileList ?? root).scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
     setPendingScrollTarget(null)
   }, [pendingScrollTarget, activeTab, selectedDeal])
 
@@ -1543,12 +1562,7 @@ export function Dashboard() {
                 onChange={(e) => {
                   const next = String(e.target.value ?? '')
                   setTargetDealId(next)
-                  if (!next) {
-                    setSelectedDeal(null)
-                    return
-                  }
-                  const deal = resolveDealById(next)
-                  if (deal) setSelectedDeal(deal)
+                  if (!next) setSelectedDeal(null)
                 }}
                 data-testid="workspace-deal-select"
                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
@@ -1573,7 +1587,7 @@ export function Dashboard() {
                   : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
               }`}
             >
-              {showAdvanced ? 'Advanced: on' : 'Advanced'}
+              {showAdvanced ? 'Advanced / Legacy: on' : 'Advanced / Legacy'}
             </button>
           </div>
         </div>
@@ -1657,7 +1671,7 @@ export function Dashboard() {
 
         <div className="p-6 flex-1">
             {activeTab === 'alloc' ? (
-                  <div className="space-y-4">
+                  <div ref={allocRef} className="space-y-4">
                       <p className="text-xs text-muted-foreground">
                         Create a deal (a bucket). Mode 2 is the default; Mode 1 is available as legacy.
                       </p>
@@ -1794,7 +1808,7 @@ export function Dashboard() {
                 </div>
                   ) : activeTab === 'content' ? (
                     !showAdvanced ? (
-                      <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div ref={contentRef} className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                           <div className="font-semibold text-foreground">Legacy Mode 1 tools are hidden</div>
                           <div className="text-xs text-muted-foreground mt-1">
@@ -1810,7 +1824,7 @@ export function Dashboard() {
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div ref={contentRef} className="space-y-4">
                             <p className="text-xs text-muted-foreground">
                               Legacy gateway sharding (Mode 1). For Mode 2, use the Mode 2 upload card.
                             </p>
@@ -2054,7 +2068,7 @@ export function Dashboard() {
                     </div>
                     )
                 ) : (
-                <div className="space-y-4">
+                <div ref={mduRef} className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
                     Mode 2 upload: uses the local gateway when available; otherwise falls back to in-browser WASM sharding + direct stripe uploads.
@@ -2097,7 +2111,16 @@ export function Dashboard() {
       ) : (
         <>
           <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div ref={dealDetailRef} className="space-y-6">
+              {selectedDeal ? (
+                <DealDetail
+                  deal={selectedDeal}
+                  onClose={() => setSelectedDeal(null)}
+                  nilAddress={nilAddress}
+                  onFileActivity={recordRecentActivity}
+                />
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
                 <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
@@ -2179,6 +2202,8 @@ export function Dashboard() {
                       ))}
                   </tbody>
               </table>
+                </div>
+              )}
             </div>
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
@@ -2247,16 +2272,6 @@ export function Dashboard() {
             </div>
           </div>
 
-          {selectedDeal && (
-            <div ref={dealDetailRef}>
-              <DealDetail 
-                  deal={selectedDeal} 
-                  onClose={() => setSelectedDeal(null)} 
-                  nilAddress={nilAddress} 
-                  onFileActivity={recordRecentActivity}
-              />
-            </div>
-          )}
         </>
       )}
 
