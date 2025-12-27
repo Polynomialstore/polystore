@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -1621,13 +1621,13 @@ export function Dashboard() {
               }`}
             >
               <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Upload (Mode 2)</div>
+                <Upload className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Upload files</div>
                 <span className="ml-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   Recommended
                 </span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Local WASM expansion + striped upload.</div>
+              <div className="mt-1 text-xs text-muted-foreground">Gateway-first upload (WASM fallback).</div>
             </button>
             {showAdvanced && (
               <button
@@ -2087,7 +2087,7 @@ export function Dashboard() {
                     <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
                 ) : (
                     <div className="p-8 text-center border border-dashed border-border rounded-xl">
-                        <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
+                        <p className="text-muted-foreground text-sm">Select a deal to begin uploading.</p>
                     </div>
                 )}
                 </div>
