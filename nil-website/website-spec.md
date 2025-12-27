@@ -449,14 +449,14 @@ The website depends on the following services (configured in `config.ts`):
 Use the batch methods when a download spans multiple providers:
 - `openRetrievalSessions(sessions[])` opens all provider sessions in one tx.
 - `confirmRetrievalSessions(sessionIds[])` confirms them in one tx.
-- `computeRetrievalSessions(sessions[])` is a **view helper** that returns `(provider, sessionId)[]` so clients can map providers without parsing logs.
+- `computeRetrievalSessionIds(sessions[])` is a **view helper** that returns `(providers[], sessionIds[])` so clients can map providers without parsing logs.
 
 Example (viem-style):
 ```ts
-const openRequests = [{ dealId, provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, nonce, expiresAt }]
-const data = encodeFunctionData({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessions', args: [openRequests] })
-const result = await ethereum.request({ method: 'eth_call', params: [{ from, to: precompile, data }, 'latest'] })
-const sessions = decodeFunctionResult({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessions', data: result })
+	const openRequests = [{ dealId, provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, nonce, expiresAt }]
+	const data = encodeFunctionData({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', args: [openRequests] })
+	const result = await ethereum.request({ method: 'eth_call', params: [{ from, to: precompile, data }, 'latest'] })
+	const [providers, sessionIds] = decodeFunctionResult({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', data: result })
 ```
 
 ### 8.3 Visualizations vs. Logic

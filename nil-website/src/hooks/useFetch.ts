@@ -316,7 +316,7 @@ export function useFetch() {
 
       const computeData = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'computeRetrievalSessions',
+        functionName: 'computeRetrievalSessionIds',
         args: [openRequests],
       })
       const computeResult = (await ethereum.request({
@@ -325,20 +325,25 @@ export function useFetch() {
       })) as Hex
       const computedSessions = decodeFunctionResult({
         abi: NILSTORE_PRECOMPILE_ABI,
-        functionName: 'computeRetrievalSessions',
+        functionName: 'computeRetrievalSessionIds',
         data: computeResult,
-      }) as Array<{ provider?: string; sessionId?: Hex }>
+      }) as unknown
+      const computedProviders: string[] = Array.isArray(computedSessions)
+        ? ((computedSessions as unknown[])[0] as string[])
+        : ((computedSessions as { providers?: string[] }).providers ?? [])
+      const computedSessionIds: Hex[] = Array.isArray(computedSessions)
+        ? ((computedSessions as unknown[])[1] as Hex[])
+        : ((computedSessions as { sessionIds?: Hex[] }).sessionIds ?? [])
       const sessionsByProvider = new Map<string, Hex>()
-      for (const entry of computedSessions || []) {
-        const provider = String(entry?.provider || '').trim()
-        const sessionId = entry?.sessionId
-        if (provider && sessionId) {
-          sessionsByProvider.set(provider, sessionId)
-        }
+      for (let i = 0; i < computedProviders.length; i++) {
+        const provider = String(computedProviders[i] || '').trim()
+        const sessionId = computedSessionIds[i]
+        if (!provider || !sessionId) continue
+        sessionsByProvider.set(provider, sessionId)
       }
       for (const group of groups) {
         if (!sessionsByProvider.has(group.provider)) {
-          throw new Error(`computeRetrievalSessions did not return session for ${group.provider}`)
+          throw new Error(`computeRetrievalSessionIds did not return session for ${group.provider}`)
         }
       }
 

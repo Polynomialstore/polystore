@@ -40,8 +40,8 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
     abi: NILSTORE_PRECOMPILE_ABI,
-    functionName: 'computeRetrievalSessions',
-    result: [{ provider: 'nil1provider', sessionId }],
+    functionName: 'computeRetrievalSessionIds',
+    result: [['nil1provider'], [sessionId]],
   })
 
   let planCalls = 0
