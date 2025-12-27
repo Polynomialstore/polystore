@@ -126,6 +126,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastCommitRef = useRef<string | null>(null);
   const lastCommitTxRef = useRef<string | null>(null);
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
+  const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -141,8 +142,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-  const gatewayReachable = localGateway.status === 'connected' && !appConfig.gatewayDisabled
-  const gatewayMode2Preferred = isMode2 && gatewayReachable
+  const gatewayMode2Enabled = isMode2 && !appConfig.gatewayDisabled
+  const gatewayReachable = localGateway.status === 'connected' && gatewayMode2Enabled
   const activeUploading = isMode2 ? mode2Uploading : isUploading
   const isUploadComplete = isMode2
     ? mode2UploadComplete
@@ -618,32 +619,50 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     shardProgress.totalWitnessMdus,
   ]);
 
-  useEffect(() => {
-    // Initialize WASM in the worker
-    async function initWasmInWorker() {
-      if (wasmStatus !== 'idle') return;
-      setWasmStatus('initializing');
-      try {
-        const response = await fetch('/trusted_setup.txt');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch trusted setup: ${response.statusText}`);
-        }
-        const buffer = await response.arrayBuffer();
-        const trustedSetupBytes = new Uint8Array(buffer);
-        
-        await workerClient.initNilWasm(trustedSetupBytes);
-        setWasmStatus('ready');
-        addLog('WASM and KZG context initialized in worker.');
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        setWasmError(message);
-        setWasmStatus('error');
-        addLog(`Error initializing WASM in worker: ${message}`);
-        console.error('WASM Worker Init Error:', e);
-      }
+  const ensureWasmReady = useCallback(async () => {
+    if (wasmStatus === 'ready') return
+    if (wasmInitPromiseRef.current) {
+      await wasmInitPromiseRef.current
+      return
     }
-    initWasmInWorker();
-  }, [addLog, wasmStatus]);
+
+    const promise = (async () => {
+      setWasmStatus('initializing')
+      setWasmError(null)
+      try {
+        const response = await fetch('/trusted_setup.txt')
+        if (!response.ok) {
+          throw new Error(`Failed to fetch trusted setup: ${response.statusText}`)
+        }
+        const buffer = await response.arrayBuffer()
+        const trustedSetupBytes = new Uint8Array(buffer)
+
+        await workerClient.initNilWasm(trustedSetupBytes)
+        setWasmStatus('ready')
+        addLog('WASM and KZG context initialized in worker.')
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e)
+        setWasmError(message)
+        setWasmStatus('error')
+        addLog(`Error initializing WASM in worker: ${message}`)
+        console.error('WASM Worker Init Error:', e)
+        throw e
+      }
+    })()
+
+    wasmInitPromiseRef.current = promise
+    try {
+      await promise
+    } finally {
+      wasmInitPromiseRef.current = null
+    }
+  }, [addLog, wasmStatus])
+
+  useEffect(() => {
+    const shouldPreloadWasm = !gatewayMode2Enabled || Boolean(localGateway.error)
+    if (!shouldPreloadWasm) return
+    void ensureWasmReady()
+  }, [ensureWasmReady, gatewayMode2Enabled, localGateway.error])
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -662,76 +681,74 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         return;
       }
 
+      lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
+      const startTs = performance.now();
+      setProcessing(true);
+      setShards([]);
+      setCollectedMdus([]);
+      setCurrentManifestRoot(null);
+      setCurrentManifestBlob(null);
+      setLogs([]);
+      resetUpload();
+      setMode2Shards([]);
+      setMode2Uploading(false);
+      setMode2UploadComplete(false);
+      setMode2UploadError(null);
+      addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
+      setShardProgress({
+        phase: 'reading',
+        label: 'Reading file...',
+        blobsDone: 0,
+        blobsTotal: 0,
+        blobsInCurrentMdu: 0,
+        blobsPerMdu: 64,
+        workDone: 0,
+        workTotal: 0,
+        avgWorkMs: null,
+        fileBytesTotal: file.size,
+        currentOpStartedAtMs: performance.now(),
+        startTsMs: startTs,
+        totalUserMdus: 0,
+        totalWitnessMdus: 0,
+        currentMduIndex: null,
+        currentMduKind: null,
+        lastOpMs: null,
+      });
+
       const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-      const canSkipWasm = useMode2 && gatewayMode2Preferred
-      if (!canSkipWasm && wasmStatus !== 'ready') {
-        alert('WASM worker not ready. ' + (wasmError || 'Initializing...'));
-        return;
-      }
+      const shouldTryGatewayMode2 =
+        useMode2 && gatewayMode2Enabled && !(localGateway.status === 'disconnected' && localGateway.error)
 
-    lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
-    const startTs = performance.now();
-    setProcessing(true);
-    setShards([]);
-    setCollectedMdus([]);
-    setCurrentManifestRoot(null);
-    setCurrentManifestBlob(null);
-    setLogs([]);
-    resetUpload();
-    setMode2Shards([]);
-    setMode2Uploading(false);
-    setMode2UploadComplete(false);
-    setMode2UploadError(null);
-    addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
-    setShardProgress({
-      phase: 'reading',
-      label: 'Reading file...',
-      blobsDone: 0,
-      blobsTotal: 0,
-      blobsInCurrentMdu: 0,
-      blobsPerMdu: 64,
-      workDone: 0,
-      workTotal: 0,
-      avgWorkMs: null,
-      fileBytesTotal: file.size,
-      currentOpStartedAtMs: performance.now(),
-      startTsMs: startTs,
-      totalUserMdus: 0,
-      totalWitnessMdus: 0,
-      currentMduIndex: null,
-      currentMduKind: null,
-      lastOpMs: null,
-    });
+      const RawMduCapacity = RAW_MDU_CAPACITY
+      const rsK = useMode2 ? stripeParams!.k : 0
+      const rsM = useMode2 ? stripeParams!.m : 0
+      const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64
 
-    const buffer = await file.arrayBuffer();
-    console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
-    const bytes = new Uint8Array(buffer);
-    const RawMduCapacity = RAW_MDU_CAPACITY;
-      const rsK = useMode2 ? stripeParams!.k : 0;
-      const rsM = useMode2 ? stripeParams!.m : 0;
-      const leafCount = useMode2 ? (rsK + rsM) * (64 / rsK) : 64;
-
-      if (useMode2 && gatewayMode2Preferred) {
+      if (shouldTryGatewayMode2) {
         try {
-          setMode2Uploading(true);
+          setMode2Uploading(true)
           setShardProgress((p) => ({
             ...p,
             phase: 'planning',
             label: 'Gateway Mode 2: encoding + uploading...',
             currentOpStartedAtMs: performance.now(),
-          }));
+          }))
 
-          const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
-          const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`;
-          const form = new FormData();
-          form.append('file', file);
-          form.append('deal_id', dealId);
-          form.append('file_path', file.name);
+          const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
+          const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`
+          const form = new FormData()
+          form.append('file', file)
+          form.append('deal_id', dealId)
+          form.append('file_path', file.name)
 
-          const resp = await fetch(url, { method: 'POST', body: form });
+          const resp = await fetch(url, {
+            method: 'POST',
+            body: form,
+            signal: AbortSignal.timeout(30_000),
+          })
           if (!resp.ok) {
-            const txt = await resp.text().catch(() => '');
-            throw new Error(txt || `gateway upload failed (${resp.status})`);
+            const txt = await resp.text().catch(() => '')
+            throw new Error(txt || `gateway upload failed (${resp.status})`)
           }
           const payload = (await resp.json().catch(() => null)) as {
             manifest_root?: string
@@ -740,17 +757,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             file_size_bytes?: number
             allocated_length?: number
           } | null
-          const root = String(payload?.manifest_root || payload?.cid || '').trim();
-          if (!root) throw new Error('gateway upload returned no manifest_root');
-          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size;
+          const root = String(payload?.manifest_root || payload?.cid || '').trim()
+          if (!root) throw new Error('gateway upload returned no manifest_root')
+          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
 
-          setCurrentManifestRoot(root);
-          setCurrentManifestBlob(null);
-          setCollectedMdus([]);
-          setMode2Shards([]);
-          setMode2UploadError(null);
-          setMode2UploadComplete(true);
-          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`);
+          setCurrentManifestRoot(root)
+          setCurrentManifestBlob(null)
+          setCollectedMdus([])
+          setMode2Shards([])
+          setMode2UploadError(null)
+          setMode2UploadComplete(true)
+          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
           setShardProgress((p) => ({
             ...p,
             phase: 'done',
@@ -758,40 +775,46 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             fileBytesTotal: gatewaySizeBytes,
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
-          }));
-          setProcessing(false);
-          return;
+          }))
+          setProcessing(false)
+          return
         } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          addLog(`> Gateway Mode 2 ingest failed: ${msg}`);
-          addLog('> Falling back to in-browser Mode 2 sharding + stripe upload.');
+          const msg = e instanceof Error ? e.message : String(e)
+          addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
+          addLog('> Falling back to in-browser Mode 2 sharding + stripe upload.')
 
-          if (wasmStatus !== 'ready') {
-            setMode2UploadError(`Gateway ingest failed and WASM is not ready (${msg})`);
-            setShardProgress((p) => ({
-              ...p,
-              phase: 'error',
-              label: `Gateway ingest failed and WASM is not ready (${msg})`,
-              currentOpStartedAtMs: null,
-              lastOpMs: performance.now() - startTs,
-            }));
-            setProcessing(false);
-            return;
-          }
-
-          setMode2UploadError(null);
+          setMode2UploadError(null)
           setShardProgress((p) => ({
             ...p,
             phase: 'planning',
             label: 'Gateway unavailable; falling back to in-browser sharding...',
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
-          }));
+          }))
         } finally {
-          setMode2Uploading(false);
+          setMode2Uploading(false)
         }
       }
 
+      try {
+        await ensureWasmReady()
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        addLog(`Error initializing WASM in worker: ${msg}`)
+        setShardProgress((p) => ({
+          ...p,
+          phase: 'error',
+          label: `WASM init failed: ${msg}`,
+          currentOpStartedAtMs: null,
+          lastOpMs: performance.now() - startTs,
+        }))
+        setProcessing(false)
+        return
+      }
+
+      const buffer = await file.arrayBuffer()
+      console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
+      const bytes = new Uint8Array(buffer)
       let baseMdu0Bytes: Uint8Array | null = null;
       let existingUserMdus: { index: number; data: Uint8Array }[] = [];
       let existingUserCount = 0;
@@ -1413,7 +1436,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [isConnected, wasmStatus, wasmError, addLog, dealId, resetUpload, stripeParams, gatewayMode2Preferred]);
+  }, [addLog, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.error, localGateway.status, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -1471,7 +1494,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-             <span className={`px-2 py-0.5 rounded-full border ${
+             <span title={wasmError || undefined} className={`px-2 py-0.5 rounded-full border ${
                  wasmStatus === 'ready' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : wasmStatus === 'initializing' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
              }`}>
                  WASM: {wasmStatus}
@@ -1493,7 +1516,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       )}
 
       {/* Dropzone */}
-      {wasmStatus === 'ready' || (isMode2 && gatewayMode2Preferred) ? (
+      {wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
         <div
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
@@ -1514,8 +1537,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div>
               <h3 className="text-lg font-bold text-foreground">Select a file</h3>
               <p className="text-muted-foreground mt-1 text-sm">
-                {isMode2 && gatewayMode2Preferred
-                  ? 'Uploads via the local gateway by default (WASM fallback when unavailable).'
+                {isMode2 && gatewayMode2Enabled
+                  ? gatewayReachable
+                    ? 'Local gateway detected: uploads go through the gateway (WASM fallback if it drops).'
+                    : 'Will try the local gateway first (WASM fallback if unavailable).'
                   : 'The browser will expand it into MDUs and compute commitments locally (WASM).'}
               </p>
               <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
@@ -1545,9 +1570,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 <div className="flex items-start justify-between gap-3">
                   <p className="flex items-center gap-2">
                     <Cpu className="w-4 h-4 animate-spin text-blue-500" />
-                    <span className="font-semibold">WASM Sharding</span>
+                    <span className="font-semibold">
+                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                        ? 'Gateway ingest'
+                        : 'WASM Sharding'}
+                    </span>
                     <span className="text-muted-foreground">•</span>
-                    <span className="text-muted-foreground">{shardingUi.phaseDetails || 'Working...'}</span>
+                    <span className="text-muted-foreground">
+                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                        ? shardProgress.label
+                        : shardingUi.phaseDetails || 'Working...'}
+                    </span>
                   </p>
                   <div className="text-xs font-mono text-muted-foreground whitespace-nowrap">
                     {shardProgress.blobsDone}/{shardProgress.blobsTotal} blobs
