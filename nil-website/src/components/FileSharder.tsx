@@ -88,6 +88,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mirrorStatus, setMirrorStatus] = useState<'idle' | 'running' | 'success' | 'error' | 'skipped'>('idle')
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
+  const [stripeParamsLoaded, setStripeParamsLoaded] = useState(false)
   const [slotBases, setSlotBases] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<{ index: number; shards: Uint8Array[] }[]>([])
   const [mode2Uploading, setMode2Uploading] = useState(false)
@@ -152,18 +153,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     let cancelled = false
     async function loadDeal() {
+      setStripeParamsLoaded(false)
       if (!dealId) {
         setStripeParams(null)
         setSlotBases([])
+        setStripeParamsLoaded(true)
         return
       }
       try {
         const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
         const parsed = parseServiceHint(deal?.service_hint)
-        if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
-          if (!cancelled) setStripeParams({ k: parsed.rsK, m: parsed.rsM })
-        } else {
-          if (!cancelled) setStripeParams(null)
+        if (!cancelled) {
+          if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
+            setStripeParams({ k: parsed.rsK, m: parsed.rsM })
+          } else {
+            setStripeParams(null)
+          }
+          setStripeParamsLoaded(true)
         }
         const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
         if (!cancelled) {
@@ -173,6 +179,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (!cancelled) {
           setStripeParams(null)
           setSlotBases([])
+          setStripeParamsLoaded(true)
         }
       }
     }
@@ -659,10 +666,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   }, [addLog, wasmStatus])
 
   useEffect(() => {
+    if (!stripeParamsLoaded) return
     const shouldPreloadWasm = !gatewayMode2Enabled || Boolean(localGateway.error)
     if (!shouldPreloadWasm) return
     void ensureWasmReady()
-  }, [ensureWasmReady, gatewayMode2Enabled, localGateway.error])
+  }, [ensureWasmReady, gatewayMode2Enabled, localGateway.error, stripeParamsLoaded])
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1549,7 +1557,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       )}
 
       {/* Dropzone */}
-      {wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
+      {!stripeParamsLoaded ? (
+        <div className="rounded-xl border border-border bg-card p-8 text-center">
+          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+          <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            Checking redundancy mode and gateway availability.
+          </div>
+        </div>
+      ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
         <div
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
