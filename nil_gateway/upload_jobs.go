@@ -117,7 +117,7 @@ func storeUploadJob(job *uploadJob) {
 
 func lookupUploadJob(dealID uint64, uploadID string) *uploadJob {
 	uploadID = strings.TrimSpace(uploadID)
-	if dealID == 0 || uploadID == "" {
+	if uploadID == "" {
 		return nil
 	}
 	uploadJobsMu.RLock()

@@ -497,14 +497,16 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dealIDQuery := uint64(0)
+	dealIDQueryOK := false
 	if raw := strings.TrimSpace(r.URL.Query().Get("deal_id")); raw != "" {
 		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil {
 			dealIDQuery = parsed
+			dealIDQueryOK = true
 		}
 	}
 	uploadID := strings.TrimSpace(r.URL.Query().Get("upload_id"))
 	var job *uploadJob
-	if dealIDQuery > 0 && uploadID != "" {
+	if dealIDQueryOK && uploadID != "" {
 		job = newUploadJob(dealIDQuery, uploadID)
 		job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
 		storeUploadJob(job)
