@@ -716,8 +716,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       });
 
       const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-      const shouldTryGatewayMode2 =
-        useMode2 && gatewayMode2Enabled && !(localGateway.status === 'disconnected' && localGateway.error)
+      const shouldTryGatewayMode2 = useMode2 && gatewayMode2Enabled
 
       const RawMduCapacity = RAW_MDU_CAPACITY
       const rsK = useMode2 ? stripeParams!.k : 0
@@ -744,7 +743,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const resp = await fetch(url, {
             method: 'POST',
             body: form,
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(localGateway.status === 'connected' ? 30_000 : 3_000),
           })
           if (!resp.ok) {
             const txt = await resp.text().catch(() => '')
@@ -1436,7 +1435,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.error, localGateway.status, resetUpload, stripeParams]);
+  }, [addLog, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
