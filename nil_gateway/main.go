@@ -1792,11 +1792,19 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requireReqSig := requireRetrievalReqSig && (!isDownloadSession || isOnchainSession)
+
 	var reqNonce uint64
 	var reqExpiresAt uint64
+	var signedReqRangeStart uint64
+	var signedReqRangeLen uint64
 	var reqRangeStart uint64
 	var reqRangeLen uint64
-	if !isDownloadSession && requireRetrievalReqSig {
+	if requireReqSig {
+		if strings.TrimSpace(reqSig) == "" {
+			writeJSONError(w, http.StatusBadRequest, "req_sig is required", "")
+			return
+		}
 		reqNonce, err = strconv.ParseUint(reqNonceStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
@@ -1807,19 +1815,24 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
 			return
 		}
-		reqRangeStart, err = strconv.ParseUint(reqRangeStartStr, 10, 64)
+		signedReqRangeStart, err = strconv.ParseUint(reqRangeStartStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid req_range_start", "")
 			return
 		}
-		reqRangeLen, err = strconv.ParseUint(reqRangeLenStr, 10, 64)
+		signedReqRangeLen, err = strconv.ParseUint(reqRangeLenStr, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid req_range_len", "")
 			return
 		}
-		if reqRangeLen > uint64(types.BLOB_SIZE) {
+		// Per-chunk receipt mode signs a single blob; enforce that range_len <= blob.
+		if !isDownloadSession && signedReqRangeLen > uint64(types.BLOB_SIZE) {
 			writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("req_range_len must be <= %d", types.BLOB_SIZE))
 			return
+		}
+		if !isDownloadSession {
+			reqRangeStart = signedReqRangeStart
+			reqRangeLen = signedReqRangeLen
 		}
 	}
 
@@ -1840,9 +1853,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
-	// For download sessions, this check is done once in GatewayOpenSession.
-	if !isDownloadSession && requireRetrievalReqSig {
-		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, reqRangeStart, reqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+	// For gateway download sessions, this check is done once in GatewayOpenSession.
+	if requireReqSig {
+		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, signedReqRangeStart, signedReqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
 			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
 			return
 		}
@@ -1982,6 +1995,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 		reqRangeStart = rangeHeaderStart
 		reqRangeLen = rangeHeaderLen
+
+		if isOnchainSession && requireReqSig {
+			if reqRangeStart < signedReqRangeStart {
+				writeJSONError(w, http.StatusBadRequest, "range outside signed request", "range_start before signed start")
+				return
+			}
+			if signedReqRangeLen > 0 {
+				end := reqRangeStart + reqRangeLen
+				limit := signedReqRangeStart + signedReqRangeLen
+				if end < reqRangeStart {
+					writeJSONError(w, http.StatusBadRequest, "range outside signed request", "range overflow")
+					return
+				}
+				if limit < signedReqRangeStart {
+					writeJSONError(w, http.StatusBadRequest, "range outside signed request", "signed range overflow")
+					return
+				}
+				if end > limit {
+					writeJSONError(w, http.StatusBadRequest, "range outside signed request", "range exceeds signed limit")
+					return
+				}
+			}
+		}
 
 		if !isOnchainSession {
 			// Enforce the signed session range (range_len == 0 means "until EOF").

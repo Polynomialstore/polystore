@@ -45,6 +45,8 @@ type p2pFetchRequest struct {
 	ReqSig          string  `json:"req_sig,omitempty"`
 	ReqNonce        uint64  `json:"req_nonce,omitempty"`
 	ReqExpiresAt    uint64  `json:"req_expires_at,omitempty"`
+	ReqRangeStart   *uint64 `json:"req_range_start,omitempty"`
+	ReqRangeLen     *uint64 `json:"req_range_len,omitempty"`
 }
 
 type p2pFetchResponse struct {
@@ -231,8 +233,16 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	if req.ReqExpiresAt != 0 {
 		httpReq.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", req.ReqExpiresAt))
 	}
-	httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
-	httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
+	if req.ReqRangeStart != nil {
+		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", *req.ReqRangeStart))
+	} else {
+		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
+	}
+	if req.ReqRangeLen != nil {
+		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", *req.ReqRangeLen))
+	} else {
+		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
+	}
 
 	w := httptest.NewRecorder()
 	if isGatewayRouterMode() {
