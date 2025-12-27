@@ -5,10 +5,10 @@ NilStore is a decentralized storage network optimizing for performance and verif
 ## 🚀 Getting Started
 
 ### 1. Quick Start (Release Binaries)
-Download the latest release from `dist/` and extract it.
+Download the latest release tarball (GitHub Releases) and extract it.
 
 ```bash
-tar -xvf nilstore-v0.1.0-rc1-Darwin-arm64.tar.gz
+tar -xvf nilstore-vX.Y.Z-<OS>-<ARCH>.tar.gz
 cd dist
 ./bin/nilchaind start
 ```
