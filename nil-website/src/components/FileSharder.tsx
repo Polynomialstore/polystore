@@ -781,7 +781,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
 
         let stopPolling = false
-        let lastJob: GatewayUploadJobStatus | null = null
+        let lastJob: GatewayUploadJobStatus | null = null as GatewayUploadJobStatus | null
 
         const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
         const uploadId =
@@ -878,7 +878,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
           if (!resp.ok) {
             const txt = await resp.text().catch(() => '')
-            const statusErr = lastJob ? String(lastJob.error || '') : ''
+            const statusErr = String(lastJob?.error || '')
             throw new Error(txt || statusErr || `gateway upload failed (${resp.status})`)
           }
 
@@ -890,7 +890,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             allocated_length?: number
           } | null
 
-          const statusRoot = lastJob ? String(lastJob.result?.manifest_root || '') : ''
+          const statusRoot = String(lastJob?.result?.manifest_root || '')
           const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
           if (!root) throw new Error('gateway upload returned no manifest_root')
           const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
