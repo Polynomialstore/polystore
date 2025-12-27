@@ -2991,54 +2991,83 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
 	}
 
-	entries, err := os.ReadDir(dealDir)
-	if err != nil {
-		log.Printf("GatewaySlab: failed to read slab dir: %v", err)
-		http.Error(w, "failed to read slab", http.StatusInternalServerError)
-		return
+	rootTableBytes := 16 * uint64(types.BLOB_SIZE)
+	totalRoots := uint64(0)
+	if uint64(len(mdu0Data)) >= rootTableBytes {
+		for off := uint64(0); off+32 <= rootTableBytes; off += 32 {
+			chunk := mdu0Data[off : off+32]
+			allZero := true
+			for _, v := range chunk {
+				if v != 0 {
+					allZero = false
+					break
+				}
+			}
+			if !allZero {
+				totalRoots++
+			}
+		}
 	}
 
-	idxSet := map[uint64]struct{}{}
-	var maxIdx uint64
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasPrefix(name, "mdu_") || !strings.HasSuffix(name, ".bin") {
-			continue
+	totalMdus := uint64(0)
+	witnessMdus := uint64(0)
+	if totalRoots > 0 {
+		if totalRoots < userMdus {
+			http.Error(w, "invalid slab layout: root table < user mdus", http.StatusInternalServerError)
+			return
 		}
-		idxStr := strings.TrimSuffix(strings.TrimPrefix(name, "mdu_"), ".bin")
-		idx, err := strconv.ParseUint(idxStr, 10, 64)
+		witnessMdus = totalRoots - userMdus
+		totalMdus = 1 + witnessMdus + userMdus
+	} else {
+		entries, err := os.ReadDir(dealDir)
 		if err != nil {
-			continue
+			log.Printf("GatewaySlab: failed to read slab dir: %v", err)
+			http.Error(w, "failed to read slab", http.StatusInternalServerError)
+			return
 		}
-		idxSet[idx] = struct{}{}
-		if idx > maxIdx {
-			maxIdx = idx
+
+		idxSet := map[uint64]struct{}{}
+		var maxIdx uint64
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasPrefix(name, "mdu_") || !strings.HasSuffix(name, ".bin") {
+				continue
+			}
+			idxStr := strings.TrimSuffix(strings.TrimPrefix(name, "mdu_"), ".bin")
+			idx, err := strconv.ParseUint(idxStr, 10, 64)
+			if err != nil {
+				continue
+			}
+			idxSet[idx] = struct{}{}
+			if idx > maxIdx {
+				maxIdx = idx
+			}
 		}
-	}
 
-	if len(idxSet) == 0 {
-		http.Error(w, "slab not found", http.StatusNotFound)
-		return
-	}
-	if _, ok := idxSet[0]; !ok {
-		http.Error(w, "invalid slab layout: mdu_0.bin missing", http.StatusInternalServerError)
-		return
-	}
+		if len(idxSet) == 0 {
+			http.Error(w, "slab not found", http.StatusNotFound)
+			return
+		}
+		if _, ok := idxSet[0]; !ok {
+			http.Error(w, "invalid slab layout: mdu_0.bin missing", http.StatusInternalServerError)
+			return
+		}
 
-	totalMdus := maxIdx + 1
-	if uint64(len(idxSet)) != totalMdus {
-		http.Error(w, "invalid slab layout: non-contiguous mdu files", http.StatusInternalServerError)
-		return
+		totalMdus = maxIdx + 1
+		if uint64(len(idxSet)) != totalMdus {
+			http.Error(w, "invalid slab layout: non-contiguous mdu files", http.StatusInternalServerError)
+			return
+		}
+		if totalMdus < 1 {
+			http.Error(w, "invalid slab layout", http.StatusInternalServerError)
+			return
+		}
+		if totalMdus-1 < userMdus {
+			http.Error(w, "invalid slab layout: file table exceeds user mdus", http.StatusInternalServerError)
+			return
+		}
+		witnessMdus = (totalMdus - 1) - userMdus
 	}
-	if totalMdus < 1 {
-		http.Error(w, "invalid slab layout", http.StatusInternalServerError)
-		return
-	}
-	if totalMdus-1 < userMdus {
-		http.Error(w, "invalid slab layout: file table exceeds user mdus", http.StatusInternalServerError)
-		return
-	}
-	witnessMdus := (totalMdus - 1) - userMdus
 
 	segments := []slabSegment{
 		{Kind: "mdu0", StartIndex: 0, Count: 1, SizeBytes: types.MDU_SIZE},

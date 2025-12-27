@@ -108,7 +108,10 @@ func TestGatewaySlab_WithOwnerCheck(t *testing.T) {
 		t.Fatalf("write mdu_1.bin: %v", err)
 	}
 
-	srv := dynamicMockDealServer(map[uint64]struct{ Owner string; CID string }{
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		1: {Owner: "nil1owner", CID: manifestRoot.Canonical},
 	})
 	defer srv.Close()
@@ -127,5 +130,91 @@ func TestGatewaySlab_WithOwnerCheck(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGatewaySlab_Mode2ShardsOnly(t *testing.T) {
+	useTempUploadDir(t)
+
+	manifestRoot := mustTestManifestRoot(t, "slab-mode2-shards")
+	dealID := uint64(42)
+	dealDir := dealScopedDir(dealID, manifestRoot)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+	defer os.RemoveAll(filepath.Join(uploadDir, "deals"))
+
+	userMdus := uint64(2)
+	b := crypto_ffi.NewMdu0Builder(userMdus)
+	defer b.Free()
+
+	if err := b.AppendFile("big.bin", RawMduCapacity+1, 0); err != nil {
+		t.Fatalf("AppendFile: %v", err)
+	}
+
+	// Mode 2 stores user MDUs as RS shards (mdu_<idx>_slot_<slot>.bin), but still populates
+	// the root table with witness + user roots.
+	// totalRoots = witness(1) + user(2) = 3
+	for i := uint64(0); i < 3; i++ {
+		root := make([]byte, 32)
+		for j := range root {
+			root[j] = byte(i + 1)
+		}
+		if err := b.SetRoot(i, root); err != nil {
+			t.Fatalf("SetRoot(%d): %v", i, err)
+		}
+	}
+
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), []byte{0}, 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
+
+	// Slot shards for user slab indices 2..3.
+	for slabIdx := uint64(2); slabIdx < 2+userMdus; slabIdx++ {
+		if err := os.WriteFile(filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_0.bin", slabIdx)), []byte{0}, 0o644); err != nil {
+			t.Fatalf("write shard: %v", err)
+		}
+	}
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: "nil1owner", CID: manifestRoot.Canonical},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	q := url.Values{}
+	q.Set("deal_id", fmt.Sprintf("%d", dealID))
+	q.Set("owner", "nil1owner")
+
+	r := testRouter()
+	req := httptest.NewRequest("GET", fmt.Sprintf("/gateway/slab/%s?%s", manifestRoot.Canonical, q.Encode()), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var payload slabLayoutResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.UserMdus != userMdus {
+		t.Fatalf("unexpected user_mdus: %d", payload.UserMdus)
+	}
+	if payload.WitnessMdus != 1 {
+		t.Fatalf("unexpected witness_mdus: %d", payload.WitnessMdus)
+	}
+	if payload.TotalMdus != 1+payload.WitnessMdus+payload.UserMdus {
+		t.Fatalf("unexpected total_mdus: %d", payload.TotalMdus)
 	}
 }
