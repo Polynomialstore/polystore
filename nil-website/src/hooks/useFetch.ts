@@ -4,6 +4,7 @@ import { decodeFunctionResult, encodeFunctionData, numberToHex, type Hex } from 
 
 import { appConfig } from '../config'
 import { normalizeDealId } from '../lib/dealId'
+import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
@@ -368,6 +369,52 @@ export function useFetch() {
         receiptsSubmitted,
       }))
 
+      let metaAuth:
+        | {
+            reqSig: string
+            reqNonce: number
+            reqExpiresAt: number
+            signedRangeStart: number
+            signedRangeLen: number
+          }
+        | undefined
+
+      const shouldSignMetaAuth = (err: unknown): boolean => {
+        if (!(err instanceof Error)) return false
+        const msg = decodeHttpError(err.message)
+        return /req_sig is required/i.test(msg) || /range must be signed/i.test(msg)
+      }
+
+      const signMetaAuth = async () => {
+        const now = Math.floor(Date.now() / 1000)
+        const reqNonce = Math.floor(Math.random() * 1_000_000_000) + Date.now()
+        const reqExpiresAt = now + 9 * 60
+        const typedData = buildRetrievalRequestTypedData(
+          {
+            deal_id: Number(dealId),
+            file_path: filePath,
+            range_start: wantRangeStart,
+            range_len: effectiveRangeLen,
+            nonce: reqNonce,
+            expires_at: reqExpiresAt,
+          },
+          appConfig.chainId,
+        )
+        const reqSig = (await ethereum.request({
+          method: 'eth_signTypedData_v4',
+          params: [address, JSON.stringify(typedData)],
+        })) as string
+
+        metaAuth = {
+          reqSig,
+          reqNonce,
+          reqExpiresAt,
+          signedRangeStart: wantRangeStart,
+          signedRangeLen: effectiveRangeLen,
+        }
+        return metaAuth
+      }
+
       for (const group of groups) {
         const provider = group.provider
         const sessionId = sessionsByProvider.get(provider)
@@ -392,7 +439,7 @@ export function useFetch() {
         }
 
         for (const c of group.chunks) {
-          const rangeResult = await transport.fetchRange({
+          const fetchReq = {
             manifestRoot,
             owner,
             dealId,
@@ -404,7 +451,20 @@ export function useFetch() {
             directBase: fetchDirectBase,
             p2pTarget: fetchP2pTarget,
             preference: preferenceOverride,
-          })
+          }
+
+          let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>>
+          try {
+            rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
+          } catch (err) {
+            if (!metaAuth && shouldSignMetaAuth(err)) {
+              setProgress((p) => ({ ...p, message: 'Sign the download request to authorize retrieval' }))
+              metaAuth = await signMetaAuth()
+              rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
+            } else {
+              throw err
+            }
+          }
 
           const buf = rangeResult.data.bytes
           parts.push(buf)

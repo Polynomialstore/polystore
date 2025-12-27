@@ -69,6 +69,14 @@ type MduKzgRequest = {
   p2pTarget?: P2pTarget
   preference?: RoutePreference
 }
+type FetchRangeAuth = {
+  reqSig: string
+  reqNonce: number
+  reqExpiresAt: number
+  signedRangeStart: number
+  signedRangeLen: number
+}
+
 type FetchRangeRequest = {
   manifestRoot: string
   owner: string
@@ -77,6 +85,7 @@ type FetchRangeRequest = {
   rangeStart: number
   rangeLen: number
   sessionId: string
+  auth?: FetchRangeAuth
   expectedProvider?: string
   directBase?: string
   p2pTarget?: P2pTarget
@@ -484,6 +493,15 @@ export function useTransportRouter() {
         headers: {
           Range: `bytes=${req.rangeStart}-${rangeEnd}`,
           'X-Nil-Session-Id': req.sessionId,
+          ...(req.auth
+            ? {
+                'X-Nil-Req-Sig': req.auth.reqSig,
+                'X-Nil-Req-Nonce': String(req.auth.reqNonce),
+                'X-Nil-Req-Expires-At': String(req.auth.reqExpiresAt),
+                'X-Nil-Req-Range-Start': String(req.auth.signedRangeStart),
+                'X-Nil-Req-Range-Len': String(req.auth.signedRangeLen),
+              }
+            : {}),
         },
       })
       if (!res.ok) {
@@ -535,6 +553,11 @@ export function useTransportRouter() {
             rangeStart: req.rangeStart,
             rangeLen: req.rangeLen,
             sessionId: req.sessionId,
+            reqSig: req.auth?.reqSig,
+            reqNonce: req.auth?.reqNonce,
+            reqExpiresAt: req.auth?.reqExpiresAt,
+            reqRangeStart: req.auth?.signedRangeStart,
+            reqRangeLen: req.auth?.signedRangeLen,
           }, signal)
 
           if (result.status < 200 || result.status >= 300) {

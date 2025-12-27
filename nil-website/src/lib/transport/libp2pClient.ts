@@ -19,6 +19,11 @@ export interface Libp2pFetchRequest {
   rangeLen: number
   sessionId?: string
   downloadSession?: string
+  reqSig?: string
+  reqNonce?: number
+  reqExpiresAt?: number
+  reqRangeStart?: number
+  reqRangeLen?: number
 }
 
 export interface Libp2pFetchResult {
@@ -131,16 +136,21 @@ export async function libp2pFetchRange(
   const node = await getLibp2pNode()
   const stream = await abortable(signal, node.dialProtocol(multiaddr(addr), P2P_PROTOCOL))
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     manifest_root: req.manifestRoot,
     deal_id: Number(req.dealId),
     owner: req.owner,
     file_path: req.filePath,
     range_start: req.rangeStart,
     range_len: req.rangeLen,
-    onchain_session: req.sessionId,
-    download_session: req.downloadSession,
   }
+  if (req.sessionId) payload.onchain_session = req.sessionId
+  if (req.downloadSession) payload.download_session = req.downloadSession
+  if (req.reqSig) payload.req_sig = req.reqSig
+  if (req.reqNonce !== undefined) payload.req_nonce = req.reqNonce
+  if (req.reqExpiresAt !== undefined) payload.req_expires_at = req.reqExpiresAt
+  if (req.reqRangeStart !== undefined) payload.req_range_start = req.reqRangeStart
+  if (req.reqRangeLen !== undefined) payload.req_range_len = req.reqRangeLen
   const encoded = new TextEncoder().encode(JSON.stringify(payload))
   stream.send(encoded)
   await abortable(signal, stream.close())
