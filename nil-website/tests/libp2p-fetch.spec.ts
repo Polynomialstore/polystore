@@ -69,9 +69,9 @@ test.describe('libp2p fetch', () => {
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
     await page.getByTestId('tab-content').click()
-    const dealSelect = page.getByTestId('workspace-deal-select')
-    await expect(dealSelect).toHaveValue(/\d+/, { timeout: 180_000 })
-    const dealId = await dealSelect.inputValue()
+    await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
+    const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
 
     const fileInput = page.getByTestId('content-file-input')

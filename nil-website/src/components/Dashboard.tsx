@@ -407,7 +407,7 @@ export function Dashboard() {
   const isTargetDealMode2 = targetDealService.mode === 'mode2'
   const hasSelectedDeal = Boolean(targetDealId)
   const hasCommittedContent = Boolean(targetDeal?.cid)
-  const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Allocated' : '—'
+  const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Empty' : '—'
   const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
 
   useEffect(() => {
@@ -1496,44 +1496,39 @@ export function Dashboard() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <div ref={workspaceRef} className="min-w-0 lg:order-2 space-y-6">
+      <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
       <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-        <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal</div>
-              <h3 className="text-lg font-semibold text-foreground">
-                {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
+        <div className="px-6 py-4 border-b border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
+                {targetDealId ? `Deal #${targetDealId}` : 'Deal workspace'}
               </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                {targetDealId
-                  ? 'Upload, list, and download files inside this deal.'
-                  : 'Select a deal from the left to upload, list, and download files.'}
-              </p>
+              {hasSelectedDeal ? (
+                <>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      hasCommittedContent
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-border bg-secondary/60 text-muted-foreground'
+                    }`}
+                  >
+                    {activeDealStatus}
+                  </span>
+                  <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {activeDealModeLabel}
+                  </span>
+                </>
+              ) : null}
             </div>
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-              <label className="space-y-1 min-w-[220px]">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Select deal</span>
-              <select
-                value={targetDealId ?? ''}
-                onChange={(e) => {
-                  const next = String(e.target.value ?? '')
-                  setTargetDealId(next)
-                  if (!next) return
-                  const nextDeal = ownedDeals.find((d) => String(d.id) === next) || null
-                  const nextService = parseServiceHint(nextDeal?.service_hint)
-                  setActiveTab(nextService.mode === 'mode2' ? 'mdu' : 'content')
-                }}
-                data-testid="workspace-deal-select"
-                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-              >
-                <option value="">Select a deal…</option>
-                {ownedDeals.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <p className="text-xs text-muted-foreground mt-1">
+              {targetDealId
+                ? 'Upload, list, and download files inside this deal.'
+                : 'Select a deal on the left to upload, list, and download files.'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
@@ -1653,9 +1648,6 @@ export function Dashboard() {
             >
               <Upload className={`h-4 w-4 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
               Upload
-              <span className="ml-auto rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                Mode 2
-              </span>
             </button>
 
             {showAdvanced && (
@@ -1673,26 +1665,8 @@ export function Dashboard() {
                 Legacy (Mode 1)
               </button>
             )}
-          </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected</span>
-              <span className="font-mono text-foreground" data-testid="selected-deal-id">
-                {targetDealId ? `#${targetDealId}` : '—'}
-              </span>
-            </div>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</span>
-              <span className="font-semibold text-foreground">{activeDealModeLabel}</span>
-            </div>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</span>
-              <span className="font-semibold text-foreground">{activeDealStatus}</span>
-            </div>
-          </div>
         </div>
 
         <div className="p-6 flex-1">
@@ -1959,27 +1933,16 @@ export function Dashboard() {
                     )
                 ) : (
                 <div ref={mduRef} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    Mode 2 upload: uses the local gateway when available; otherwise falls back to in-browser WASM sharding + direct stripe uploads.
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-                  Target deal:{' '}
-                  <span className="font-mono text-foreground">
-                    {targetDealId ? `#${targetDealId}` : '—'}
-                  </span>
-                  {!targetDealId ? <span className="ml-2">Select a deal above to begin.</span> : null}
-                </div>
-
-                {targetDealId ? (
+                  {targetDealId ? (
                     <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
-                ) : (
-                    <div className="p-8 text-center border border-dashed border-border rounded-xl">
-                        <p className="text-muted-foreground text-sm">Select a deal to begin uploading.</p>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
+                      <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Choose a deal from the left to upload, list, and download files.
+                      </div>
                     </div>
-                )}
+                  )}
                 </div>
               )}
             </div>
@@ -1997,7 +1960,7 @@ export function Dashboard() {
           ) : null}
         </div>
   
-        <div className="min-w-0 lg:order-1 space-y-6">
+        <div className="min-w-0 order-1 lg:order-1 space-y-6">
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>

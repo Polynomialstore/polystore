@@ -394,17 +394,13 @@ test('repro bug: download from commit content widget', async ({
   await contentTab.click()
   console.log('Deal created (click sent).')
 
-  const dealSelect = page.getByTestId('workspace-deal-select')
-  await expect(dealSelect).toBeVisible({ timeout: 60_000 })
-  await expect(dealSelect.locator('option', { hasText: 'Deal #0' })).toBeAttached({ timeout: 60_000 })
-  await dealSelect.selectOption('0')
-  const dealId = await dealSelect.inputValue()
+  const dealRow = page.getByTestId('deal-row-0')
+  await expect(dealRow).toBeVisible({ timeout: 60_000 })
+  await dealRow.click()
+  await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #0\b/, { timeout: 60_000 })
+
+  const dealId = '0'
   console.log(`Deal ID in UI: ${dealId}`)
-  
-  // If interception worked, dealId should be "0"
-  if (dealId !== '0') {
-      console.warn('WARNING: Deal ID is not 0. Interception might have failed or race condition.')
-  }
 
   const filePath = 'repro.txt'
   const fileBytes = Buffer.from('repro bug content')

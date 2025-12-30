@@ -53,9 +53,7 @@ test.describe('gateway absent', () => {
   await page.getByTestId('alloc-submit').click()
 
   await page.getByTestId('tab-content').click()
-
-  const dealSelect = page.getByTestId('workspace-deal-select')
-  await expect(dealSelect).toHaveValue(/\d+/, { timeout: 120_000 })
+  await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 120_000 })
 
   const fileInput = page.getByTestId('content-file-input')
   await expect(fileInput).toBeEnabled({ timeout: 120_000 })
