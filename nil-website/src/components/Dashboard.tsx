@@ -1512,6 +1512,7 @@ export function Dashboard() {
         </div>
       )}
 
+      <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
       <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -2145,203 +2146,230 @@ export function Dashboard() {
           </div>
         </div>
 
-      {loading ? (
-        <div className="text-center py-24">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Syncing with NilChain...</p>
-        </div>
-      ) : deals.length === 0 ? (
-        <div className="bg-card rounded-xl p-16 text-center border border-border border-dashed shadow-sm">
-            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-6">
-                <HardDrive className="w-8 h-8 text-muted-foreground" />
+      <div className="space-y-6">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Browse deals, open the explorer, and jump into uploads.
+              </p>
             </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">No deals yet</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Create a deal, then upload files into it.</p>
-            <button
-              type="button"
-              onClick={() => void handleWizardAction('deal')}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-            >
-              <HardDrive className="h-4 w-4" />
-              Create a deal
-            </button>
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div ref={dealDetailRef} className="space-y-6">
-              {selectedDeal ? (
-                <DealDetail
-                  deal={selectedDeal}
-                  onClose={() => setSelectedDeal(null)}
-                  nilAddress={nilAddress}
-                  onFileActivity={recordRecentActivity}
-                />
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
-                  <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleWizardAction('deal')}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
-                >
-                  <HardDrive className="h-4 w-4" />
-                  Create deal
-                </button>
-              </div>
-              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
-                  <thead className="bg-muted/50">
-                      <tr>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                      {deals.map((deal) => (
-                      <tr
-                        key={deal.id}
-                        data-testid={`deal-row-${deal.id}`}
-                        className="hover:bg-muted/50 transition-colors cursor-pointer"
-                          onClick={() => {
-                            setSelectedDeal(deal)
-                            setTargetDealId(String(deal.id ?? ''))
-                          }}
-                        >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
-                                title={deal.cid}
-                                data-testid={`deal-manifest-${deal.id}`}
-                              >
-                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                                {(() => {
-                                  const sizeNum = Number(deal.size)
-                                  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
-                                  return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
-                                })()}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                  {deal.cid ? (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                                          Active
-                                      </span>
-                                  ) : (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                                          Allocated
-                                      </span>
-                                  )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
-                                {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
-                              </td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
-                                data-testid={`deal-retrievals-${deal.id}`}
-                              >
-                                {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                  <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        const dealId = String(deal.id ?? '')
-                                        setTargetDealId(dealId)
-                                        const service = parseServiceHint(deal.service_hint)
-                                        setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
-                                        setPendingScrollTarget('workspace')
-                                      }}
-                                      className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                                    >
-                                      Upload
-                                    </button>
-                                </td>
-                      </tr>
-                      ))}
-                  </tbody>
-              </table>
-                </div>
-              )}
-            </div>
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
-                <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
-              </div>
-              <div className="p-4 space-y-3">
-                {recentFiles.length === 0 ? (
-                  <div className="text-xs text-muted-foreground italic">
-                    Upload or download a file to see it here.
-                  </div>
-                ) : (
-                  recentFiles.map((entry) => {
-                    const isBusy = recentDownloadId === entry.id || downloading
-                    const actionLabel =
-                      entry.status === 'pending'
-                        ? 'Downloading...'
-                        : entry.status === 'failed'
-                        ? 'Retry'
-                        : 'Download'
-                    return (
-                      <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
-                              {entry.filePath}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRecentDownload(entry)}
-                            disabled={isBusy}
-                            className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
-                          >
-                            <ArrowDownRight className="w-3 h-3" />
-                            {actionLabel}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span className="rounded-full border border-border px-2 py-0.5">
-                            Last: {entry.lastAction}
-                          </span>
-                          <span className={`rounded-full border px-2 py-0.5 ${
-                            entry.status === 'failed'
-                              ? 'border-red-500/40 text-red-500'
-                              : entry.status === 'pending'
-                              ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
-                              : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                          }`}>
-                            {entry.status}
-                          </span>
-                        </div>
-                        {entry.error && (
-                          <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
-                            {entry.error}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })
-                )}
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefreshSummary()}
+                title="Refresh deals"
+                className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleWizardAction('deal')}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
+              >
+                <HardDrive className="h-4 w-4" />
+                Create deal
+              </button>
             </div>
           </div>
 
-        </>
-      )}
+          {loading ? (
+            <div className="text-center py-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+              <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
+            </div>
+          ) : deals.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                <HardDrive className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <div className="text-sm font-semibold text-foreground">No deals yet</div>
+              <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
+              <button
+                type="button"
+                onClick={() => void handleWizardAction('deal')}
+                className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+              >
+                <HardDrive className="h-4 w-4" />
+                Create a deal
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {deals.map((deal) => (
+                    <tr
+                      key={deal.id}
+                      data-testid={`deal-row-${deal.id}`}
+                      className="hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedDeal(deal)
+                        setTargetDealId(String(deal.id ?? ''))
+                      }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
+                      <td
+                        className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
+                        title={deal.cid}
+                        data-testid={`deal-manifest-${deal.id}`}
+                      >
+                        {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
+                        {(() => {
+                          const sizeNum = Number(deal.size)
+                          if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
+                          return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
+                        })()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {deal.cid ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
+                            Allocated
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
+                        {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
+                      </td>
+                      <td
+                        className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
+                        data-testid={`deal-retrievals-${deal.id}`}
+                      >
+                        {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const dealId = String(deal.id ?? '')
+                            setTargetDealId(dealId)
+                            const service = parseServiceHint(deal.service_hint)
+                            setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
+                            setPendingScrollTarget('workspace')
+                          }}
+                          className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                        >
+                          Upload
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
+            <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
+          </div>
+          <div className="p-4 space-y-3">
+            {recentFiles.length === 0 ? (
+              <div className="text-xs text-muted-foreground italic">
+                Upload or download a file to see it here.
+              </div>
+            ) : (
+              recentFiles.map((entry) => {
+                const isBusy = recentDownloadId === entry.id || downloading
+                const actionLabel =
+                  entry.status === 'pending'
+                    ? 'Downloading...'
+                    : entry.status === 'failed'
+                      ? 'Retry'
+                      : 'Download'
+                return (
+                  <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
+                          {entry.filePath}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRecentDownload(entry)}
+                        disabled={isBusy}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        <ArrowDownRight className="w-3 h-3" />
+                        {actionLabel}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span className="rounded-full border border-border px-2 py-0.5">
+                        Last: {entry.lastAction}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 ${
+                        entry.status === 'failed'
+                          ? 'border-red-500/40 text-red-500'
+                          : entry.status === 'pending'
+                            ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
+                            : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                      }`}>
+                        {entry.status}
+                      </span>
+                    </div>
+                    {entry.error && (
+                      <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
+                        {entry.error}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </div>
+      </div>
+
+      {selectedDeal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6"
+          onClick={() => setSelectedDeal(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+            <div
+              ref={dealDetailRef}
+              className="max-h-[calc(100vh-3rem)] overflow-auto rounded-xl border border-border bg-card shadow-xl"
+            >
+              <DealDetail
+                deal={selectedDeal}
+                onClose={() => setSelectedDeal(null)}
+                nilAddress={nilAddress}
+                onFileActivity={recordRecentActivity}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
