@@ -75,9 +75,9 @@ export function Dashboard() {
   const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
+  const [autoSwitchedFromAlloc, setAutoSwitchedFromAlloc] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { data: evmBalance, refetch: refetchEvm } = useBalance({
@@ -426,11 +426,27 @@ export function Dashboard() {
   useEffect(() => {
     if (targetDealId) return
     if (!nilAddress) return
-    if (ownedDeals.length !== 1) return
-    const onlyDeal = ownedDeals[0]
-    if (!onlyDeal?.id) return
-    setTargetDealId(String(onlyDeal.id))
+    if (ownedDeals.length === 0) return
+    const newestDeal = ownedDeals[ownedDeals.length - 1]
+    if (!newestDeal?.id) return
+    setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
+
+  useEffect(() => {
+    setAutoSwitchedFromAlloc(false)
+  }, [nilAddress])
+
+  useEffect(() => {
+    if (autoSwitchedFromAlloc) return
+    if (!targetDealId) return
+    if (ownedDeals.length === 0) return
+    if (activeTab !== 'alloc') {
+      setAutoSwitchedFromAlloc(true)
+      return
+    }
+    setActiveTab(isTargetDealMode2 ? 'mdu' : 'content')
+    setAutoSwitchedFromAlloc(true)
+  }, [activeTab, autoSwitchedFromAlloc, isTargetDealMode2, ownedDeals.length, targetDealId])
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
@@ -590,20 +606,6 @@ export function Dashboard() {
     }
   }, [address])
 
-  // Keep the open Deal Explorer panel in sync with deal list refreshes.
-  useEffect(() => {
-    if (!selectedDeal) return
-    const selectedId = String(selectedDeal.id ?? '').trim()
-    if (!selectedId) return
-    const updated =
-      deals.find((d) => String(d.id) === selectedId) ||
-      allDeals.find((d) => String(d.id) === selectedId) ||
-      null
-    if (updated && updated !== selectedDeal) {
-      setSelectedDeal(updated)
-    }
-  }, [allDeals, deals, selectedDeal])
-
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
     try {
@@ -715,10 +717,10 @@ export function Dashboard() {
         activeTab === 'alloc'
           ? allocRef.current
           : activeTab === 'mdu'
-          ? mduRef.current
-          : activeTab === 'content'
-          ? contentRef.current
-          : workspaceRef.current
+            ? mduRef.current
+            : activeTab === 'content'
+              ? contentRef.current
+              : workspaceRef.current
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setPendingScrollTarget(null)
       return
@@ -730,7 +732,7 @@ export function Dashboard() {
       ;(fileList ?? root).scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     setPendingScrollTarget(null)
-  }, [pendingScrollTarget, activeTab, selectedDeal])
+  }, [pendingScrollTarget, activeTab, targetDealId])
 
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -1236,6 +1238,7 @@ export function Dashboard() {
       return
     }
     if (stepId === 'deal') {
+      setAutoSwitchedFromAlloc(true)
       setActiveTab('alloc')
       setPendingScrollTarget('workspace')
       return
@@ -1251,7 +1254,6 @@ export function Dashboard() {
     if (stepId === 'retrieve') {
       if (wizardDeal) {
         setTargetDealId(String(wizardDeal.id ?? ''))
-        setSelectedDeal(wizardDeal)
         setPendingScrollTarget('deal')
       }
     }
@@ -1512,39 +1514,41 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-      <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div ref={workspaceRef} className="min-w-0 lg:order-2 space-y-6">
+      <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
-            <h3 className="text-lg font-semibold text-foreground">Create a deal and manage files</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Mode 2 is the default. Turn on Advanced for Mode 1 and custom tuning.
-            </p>
-          </div>
+            <div>
+              <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal</div>
+              <h3 className="text-lg font-semibold text-foreground">
+                {targetDealId ? `Deal #${targetDealId}` : 'Create a deal'}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {targetDealId
+                  ? 'Upload, list, and download files inside this deal.'
+                  : 'Create a deal (bucket) to start uploading files.'}
+              </p>
+            </div>
           <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <label className="space-y-1 min-w-[220px]">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Current deal</span>
+              <label className="space-y-1 min-w-[220px]">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Select deal</span>
               <select
                 value={targetDealId ?? ''}
                 onChange={(e) => {
                   const next = String(e.target.value ?? '')
                   setTargetDealId(next)
-                  if (!next) setSelectedDeal(null)
                 }}
                 data-testid="workspace-deal-select"
                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
               >
                 <option value="">Select a deal…</option>
-                {deals
-                  .filter((d) => d.owner === nilAddress)
-                  .map((d) => (
+                  {ownedDeals.map((d) => (
                     <option key={d.id} value={d.id}>
                       Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
                     </option>
                   ))}
-              </select>
-            </label>
+                </select>
+              </label>
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
@@ -1654,7 +1658,10 @@ export function Dashboard() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={() => setActiveTab('alloc')}
+              onClick={() => {
+                setAutoSwitchedFromAlloc(true)
+                setActiveTab('alloc')
+              }}
               data-testid="tab-alloc"
               className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
                 activeTab === 'alloc'
@@ -2143,18 +2150,30 @@ export function Dashboard() {
                 )}
                 </div>
               )}
-          </div>
-        </div>
-
-      <div className="space-y-6">
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Browse deals, open the explorer, and jump into uploads.
-              </p>
             </div>
+          </div>
+
+          {targetDeal ? (
+            <div ref={dealDetailRef} className="min-w-0">
+              <DealDetail
+                deal={targetDeal}
+                onClose={() => setTargetDealId('')}
+                nilAddress={nilAddress}
+                onFileActivity={recordRecentActivity}
+              />
+            </div>
+          ) : null}
+        </div>
+  
+        <div className="min-w-0 lg:order-1 space-y-6">
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Select a deal to manage files (upload, list, download).
+                </p>
+              </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -2175,18 +2194,18 @@ export function Dashboard() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="text-center py-10">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
-              <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
-            </div>
-          ) : deals.length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-                <HardDrive className="w-7 h-7 text-muted-foreground" />
+            {loading ? (
+              <div className="text-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+                <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
               </div>
-              <div className="text-sm font-semibold text-foreground">No deals yet</div>
-              <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
+            ) : ownedDeals.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                  <HardDrive className="w-7 h-7 text-muted-foreground" />
+                </div>
+                <div className="text-sm font-semibold text-foreground">No deals yet</div>
+                <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
               <button
                 type="button"
                 onClick={() => void handleWizardAction('deal')}
@@ -2196,88 +2215,66 @@ export function Dashboard() {
                 Create a deal
               </button>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {deals.map((deal) => (
-                    <tr
-                      key={deal.id}
-                      data-testid={`deal-row-${deal.id}`}
-                      className="hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => {
-                        setSelectedDeal(deal)
-                        setTargetDealId(String(deal.id ?? ''))
-                      }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
-                      <td
-                        className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
-                        title={deal.cid}
-                        data-testid={`deal-manifest-${deal.id}`}
+            ) : (
+              <div className="p-2">
+                <div className="space-y-1">
+                  {ownedDeals.map((deal) => {
+                    const isSelected = String(deal.id) === String(targetDealId || '')
+                    const hint = parseServiceHint(deal.service_hint)
+                    const retrievalCount = retrievalCountsByDeal[deal.id] ?? 0
+                    const sizeNum = Number(deal.size)
+                    const sizeLabel =
+                      Number.isFinite(sizeNum) && sizeNum > 0 ? formatBytes(sizeNum) : '0 B'
+                    return (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        data-testid={`deal-row-${deal.id}`}
+                        onClick={() => {
+                          setTargetDealId(String(deal.id ?? ''))
+                          setActiveTab(hint.mode === 'mode2' ? 'mdu' : 'content')
+                          setPendingScrollTarget('workspace')
+                        }}
+                        className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                          isSelected
+                            ? 'border-primary/40 bg-primary/10'
+                            : 'border-border bg-background/60 hover:bg-secondary/40'
+                        }`}
                       >
-                        {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                        {(() => {
-                          const sizeNum = Number(deal.size)
-                          if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
-                          return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
-                        })()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {deal.cid ? (
-                          <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                            Allocated
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
-                        {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
-                      </td>
-                      <td
-                        className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
-                        data-testid={`deal-retrievals-${deal.id}`}
-                      >
-                        {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const dealId = String(deal.id ?? '')
-                            setTargetDealId(dealId)
-                            const service = parseServiceHint(deal.service_hint)
-                            setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
-                            setPendingScrollTarget('workspace')
-                          }}
-                          className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-foreground">Deal #{deal.id}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {deal.cid ? 'Active' : 'Empty'}
+                              </span>
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {hint.mode === 'mode2' ? 'Mode 2' : 'Mode 1'}
+                              </span>
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {sizeLabel}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-[11px] text-muted-foreground">
+                            <span className="font-mono text-foreground">{retrievalCount}</span>
+                            <span className="ml-1 hidden sm:inline">retrievals</span>
+                          </div>
+                        </div>
+                        <div
+                          className="mt-2 truncate font-mono text-[10px] text-muted-foreground"
+                          title={deal.cid || ''}
+                          data-testid={`deal-manifest-${deal.id}`}
                         >
-                          Upload
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                          {deal.cid ? `${deal.cid.slice(0, 22)}…` : 'Manifest: —'}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
@@ -2347,34 +2344,10 @@ export function Dashboard() {
       </div>
       </div>
 
-      {selectedDeal ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6"
-          onClick={() => setSelectedDeal(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-          <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-            <div
-              ref={dealDetailRef}
-              className="max-h-[calc(100vh-3rem)] overflow-auto rounded-xl border border-border bg-card shadow-xl"
-            >
-              <DealDetail
-                deal={selectedDeal}
-                onClose={() => setSelectedDeal(null)}
-                nilAddress={nilAddress}
-                onFileActivity={recordRecentActivity}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Network &amp; Diagnostics (advanced)
-        </summary>
+        <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Network &amp; Diagnostics (advanced)
+          </summary>
         <div className="p-6 space-y-6">
           <StatusBar />
           {proofs.length > 0 && (
