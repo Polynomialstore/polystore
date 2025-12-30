@@ -154,6 +154,11 @@ export function Dashboard() {
     }
   }
 
+  const handleRefreshSummary = async () => {
+    if (!nilAddress) return
+    await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders(), refetchEvm?.()])
+  }
+
 
   // Step 1: Alloc State
   const [duration, setDuration] = useState('100')
@@ -1364,26 +1369,43 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-        <div className="flex-1 space-y-3">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">NilStore Console</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Create a deal (bucket), upload files, and retrieve directly from providers.
-            </p>
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+        <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-foreground">NilStore Console</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a deal (bucket), upload files, and retrieve directly from providers.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRefreshSummary()}
+              title="Refresh chain state"
+              className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
               Chain <span className="font-mono text-foreground">{activeChainId}</span>
             </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
               Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
             </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
               Deals <span className="font-mono text-foreground">{dealSummary.total}</span>
             </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
+              Active <span className="font-mono text-foreground">{dealSummary.active}</span>
+            </span>
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
               Stored <span className="font-mono text-foreground">{formatBytes(dealSummary.totalBytes)}</span>
+            </span>
+            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
+              Retrievals <span className="font-mono text-foreground">{dealSummary.retrievals}</span>
             </span>
           </div>
         </div>
@@ -1415,12 +1437,24 @@ export function Dashboard() {
             </div>
           )}
 
-          <div className="text-sm text-muted-foreground space-y-3">
-            <div className="font-mono text-primary break-all" data-testid="wallet-address-full">
-              Address: {address || nilAddress}
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <div className="grid gap-3">
+              <div className="rounded-lg border border-border bg-background/60 px-3 py-2" data-testid="wallet-address-full">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">EVM Address</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground break-all">
+                  {address || '—'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Cosmos Address</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground break-all" data-testid="cosmos-identity">
+                  {nilAddress || '—'}
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-secondary/50 border border-border rounded p-2">
+
+            <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+              <div className="rounded-lg border border-border bg-background/60 p-2">
                 <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
                 <div className="font-mono text-green-600 dark:text-green-400">
                   {(() => {
@@ -1433,23 +1467,21 @@ export function Dashboard() {
                   })()}
                 </div>
               </div>
-              <div className="bg-secondary/50 border border-border rounded p-2">
+              <div className="rounded-lg border border-border bg-background/60 p-2">
                 <div className="text-muted-foreground uppercase tracking-wide">Cosmos stake</div>
                 <div className="font-mono text-blue-600 dark:text-blue-400" data-testid="cosmos-stake-balance">
                   {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
                 </div>
               </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
-              <div
-                className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10"
-                data-testid="cosmos-identity"
-              >
-                {nilAddress}
+              <div className="rounded-lg border border-border bg-background/60 p-2">
+                <div className="text-muted-foreground uppercase tracking-wide">Cosmos aatom</div>
+                <div className="font-mono text-foreground" data-testid="cosmos-atom-balance">
+                  {bankBalances.atom ? `${bankBalances.atom} aatom` : '—'}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 border-t border-border/50 pt-3">
               <button
                 onClick={() => disconnect()}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
