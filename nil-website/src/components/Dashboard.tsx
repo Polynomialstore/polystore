@@ -76,8 +76,7 @@ export function Dashboard() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
   const [nilAddress, setNilAddress] = useState('')
-  const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
-  const [autoSwitchedFromAlloc, setAutoSwitchedFromAlloc] = useState(false)
+  const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { data: evmBalance, refetch: refetchEvm } = useBalance({
@@ -190,7 +189,7 @@ export function Dashboard() {
   const mduRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const dealDetailRef = useRef<HTMLDivElement | null>(null)
-  const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | null>(null)
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -431,22 +430,6 @@ export function Dashboard() {
     if (!newestDeal?.id) return
     setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
-
-  useEffect(() => {
-    setAutoSwitchedFromAlloc(false)
-  }, [nilAddress])
-
-  useEffect(() => {
-    if (autoSwitchedFromAlloc) return
-    if (!targetDealId) return
-    if (ownedDeals.length === 0) return
-    if (activeTab !== 'alloc') {
-      setAutoSwitchedFromAlloc(true)
-      return
-    }
-    setActiveTab(isTargetDealMode2 ? 'mdu' : 'content')
-    setAutoSwitchedFromAlloc(true)
-  }, [activeTab, autoSwitchedFromAlloc, isTargetDealMode2, ownedDeals.length, targetDealId])
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
@@ -712,15 +695,15 @@ export function Dashboard() {
   useEffect(() => {
     if (!pendingScrollTarget) return
 
+    if (pendingScrollTarget === 'create') {
+      const target = allocRef.current
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setPendingScrollTarget(null)
+      return
+    }
+
     if (pendingScrollTarget === 'workspace') {
-      const target =
-        activeTab === 'alloc'
-          ? allocRef.current
-          : activeTab === 'mdu'
-            ? mduRef.current
-            : activeTab === 'content'
-              ? contentRef.current
-              : workspaceRef.current
+      const target = activeTab === 'mdu' ? mduRef.current : contentRef.current
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setPendingScrollTarget(null)
       return
@@ -1238,9 +1221,7 @@ export function Dashboard() {
       return
     }
     if (stepId === 'deal') {
-      setAutoSwitchedFromAlloc(true)
-      setActiveTab('alloc')
-      setPendingScrollTarget('workspace')
+      setPendingScrollTarget('create')
       return
     }
     if (stepId === 'upload') {
@@ -1521,12 +1502,12 @@ export function Dashboard() {
             <div>
               <div className="text-xs uppercase tracking-widest text-muted-foreground">Deal</div>
               <h3 className="text-lg font-semibold text-foreground">
-                {targetDealId ? `Deal #${targetDealId}` : 'Create a deal'}
+                {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
                 {targetDealId
                   ? 'Upload, list, and download files inside this deal.'
-                  : 'Create a deal (bucket) to start uploading files.'}
+                  : 'Select a deal from the left to upload, list, and download files.'}
               </p>
             </div>
           <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -1537,12 +1518,16 @@ export function Dashboard() {
                 onChange={(e) => {
                   const next = String(e.target.value ?? '')
                   setTargetDealId(next)
+                  if (!next) return
+                  const nextDeal = ownedDeals.find((d) => String(d.id) === next) || null
+                  const nextService = parseServiceHint(nextDeal?.service_hint)
+                  setActiveTab(nextService.mode === 'mode2' ? 'mdu' : 'content')
                 }}
                 data-testid="workspace-deal-select"
                 className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
               >
                 <option value="">Select a deal…</option>
-                  {ownedDeals.map((d) => (
+                {ownedDeals.map((d) => (
                     <option key={d.id} value={d.id}>
                       Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
                     </option>
@@ -1658,23 +1643,6 @@ export function Dashboard() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={() => {
-                setAutoSwitchedFromAlloc(true)
-                setActiveTab('alloc')
-              }}
-              data-testid="tab-alloc"
-              className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-                activeTab === 'alloc'
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <HardDrive className={`h-4 w-4 ${activeTab === 'alloc' ? 'text-primary' : 'text-muted-foreground'}`} />
-              Create deal
-            </button>
-
-            <button
-              type="button"
               onClick={() => setActiveTab('mdu')}
               data-testid="tab-mdu"
               className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
@@ -1728,143 +1696,7 @@ export function Dashboard() {
         </div>
 
         <div className="p-6 flex-1">
-            {activeTab === 'alloc' ? (
-                  <div ref={allocRef} className="space-y-4">
-                      <p className="text-xs text-muted-foreground">
-                        Create a deal (a bucket). Mode 2 is the default; Mode 1 is available as legacy.
-                      </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
-                            <input
-                              defaultValue={duration ?? ''}
-                              onChange={(e) => setDuration(e.target.value ?? '')}
-                              data-testid="alloc-duration"
-                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
-                        </label>
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
-                            <input
-                              defaultValue={initialEscrow ?? ''}
-                              onChange={(e) => setInitialEscrow(e.target.value ?? '')}
-                              data-testid="alloc-initial-escrow"
-                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
-                        </label>
-                          <label className="space-y-1">
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
-                              <input
-                                defaultValue={maxMonthlySpend ?? ''}
-                                onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
-                                data-testid="alloc-max-monthly-spend"
-                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                              />
-                          </label>
-                            {!showAdvanced ? (
-                              <div className="sm:col-span-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
-                                <div>
-                                  <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
-                                  <span className="font-mono text-foreground">K={rsK}</span>{' '}
-                                  <span className="font-mono text-foreground">M={rsM}</span>
-                                  <span className="ml-2 text-[11px] text-muted-foreground">
-                                    Turn on Advanced to use Mode 1 or tune redundancy.
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  Slots required:{' '}
-                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                                  {' '}• Providers available:{' '}
-                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                                  {mode2Config.error && (
-                                    <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                            <>
-                              <label className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
-                                <select
-                                  value={redundancyMode}
-                                  onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
-                                  data-testid="alloc-redundancy-mode"
-                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                >
-                                  <option value="mode2">Mode 2 (Striped RS, recommended)</option>
-                                  <option value="mode1">Mode 1 (Replication, legacy)</option>
-                                </select>
-                              </label>
-                              {redundancyMode === 'mode1' ? (
-                                <label className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={12}
-                                    defaultValue={replication ?? ''}
-                                    onChange={(e) => setReplication(e.target.value ?? '')}
-                                    data-testid="alloc-replication"
-                                    className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                  />
-                                </label>
-                              ) : (
-                                <div className="grid grid-cols-2 gap-3">
-                                  <label className="space-y-1">
-                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={64}
-                                      defaultValue={rsK ?? ''}
-                                      onChange={(e) => setRsK(e.target.value ?? '')}
-                                      data-testid="alloc-rs-k"
-                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                    />
-                                  </label>
-                                  <label className="space-y-1">
-                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={64}
-                                      defaultValue={rsM ?? ''}
-                                      onChange={(e) => setRsM(e.target.value ?? '')}
-                                      data-testid="alloc-rs-m"
-                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                    />
-                                  </label>
-                                </div>
-                              )}
-                              {redundancyMode === 'mode2' && (
-                                <div className="text-[11px] text-muted-foreground sm:col-span-2">
-                                  Slots required:{' '}
-                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                                  {' '}• Providers available:{' '}
-                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                                  {mode2Config.error && (
-                                    <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
-                                  )}
-                                </div>
-                              )}
-                            </>
-                          )}
-                      </div>
-                    <div className="flex items-center justify-between pt-2">
-                        <div className="text-xs text-muted-foreground">
-                            {createTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0,10)}...</div>}
-                        </div>
-                        <button
-                            onClick={handleCreateDeal}
-                            disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
-                            data-testid="alloc-submit"
-                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
-                        >
-                            {dealLoading ? 'Creating...' : 'Create Deal'}
-                        </button>
-                    </div>
-                </div>
-                  ) : activeTab === 'content' ? (
+            {activeTab === 'content' ? (
                     !showAdvanced ? (
                       <div ref={contentRef} className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
@@ -2183,14 +2015,6 @@ export function Dashboard() {
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
-              <button
-                type="button"
-                onClick={() => void handleWizardAction('deal')}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
-              >
-                <HardDrive className="h-4 w-4" />
-                Create deal
-              </button>
             </div>
           </div>
 
@@ -2204,20 +2028,12 @@ export function Dashboard() {
                 <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
                   <HardDrive className="w-7 h-7 text-muted-foreground" />
                 </div>
-                <div className="text-sm font-semibold text-foreground">No deals yet</div>
-                <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
-              <button
-                type="button"
-                onClick={() => void handleWizardAction('deal')}
-                className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-              >
-                <HardDrive className="h-4 w-4" />
-                Create a deal
-              </button>
+              <div className="text-sm font-semibold text-foreground">No deals yet</div>
+              <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
             </div>
-            ) : (
-              <div className="p-2">
-                <div className="space-y-1">
+          ) : (
+            <div className="p-2">
+              <div className="space-y-1">
                   {ownedDeals.map((deal) => {
                     const isSelected = String(deal.id) === String(targetDealId || '')
                     const hint = parseServiceHint(deal.service_hint)
@@ -2270,11 +2086,161 @@ export function Dashboard() {
                         </div>
                       </button>
                     )
-                  })}
-                </div>
+                })}
               </div>
-            )}
+            </div>
+          )}
+
+          <div ref={allocRef} className="border-t border-border bg-muted/20 px-6 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Create deal</div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Allocate a new deal on NilChain. Deals act like buckets for files.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
+                <input
+                  defaultValue={duration ?? ''}
+                  onChange={(e) => setDuration(e.target.value ?? '')}
+                  data-testid="alloc-duration"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial escrow</span>
+                <input
+                  defaultValue={initialEscrow ?? ''}
+                  onChange={(e) => setInitialEscrow(e.target.value ?? '')}
+                  data-testid="alloc-initial-escrow"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Max monthly spend</span>
+                <input
+                  defaultValue={maxMonthlySpend ?? ''}
+                  onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
+                  data-testid="alloc-max-monthly-spend"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+
+              {!showAdvanced ? (
+                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                  <div>
+                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
+                    <span className="font-mono text-foreground">K={rsK}</span>{' '}
+                    <span className="font-mono text-foreground">M={rsM}</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      Turn on Advanced to use Mode 1 or tune redundancy.
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Slots required:{' '}
+                    <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                    {' '}• Providers available:{' '}
+                    <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                    {mode2Config.error && (
+                      <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="space-y-1">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy mode</span>
+                    <select
+                      value={redundancyMode}
+                      onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
+                      data-testid="alloc-redundancy-mode"
+                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                    >
+                      <option value="mode2">Mode 2 (Striped RS, recommended)</option>
+                      <option value="mode1">Mode 1 (Replication, legacy)</option>
+                    </select>
+                  </label>
+
+                  {redundancyMode === 'mode1' ? (
+                    <label className="space-y-1">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        defaultValue={replication ?? ''}
+                        onChange={(e) => setReplication(e.target.value ?? '')}
+                        data-testid="alloc-replication"
+                        className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                      />
+                    </label>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={64}
+                          defaultValue={rsK ?? ''}
+                          onChange={(e) => setRsK(e.target.value ?? '')}
+                          data-testid="alloc-rs-k"
+                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={64}
+                          defaultValue={rsM ?? ''}
+                          onChange={(e) => setRsM(e.target.value ?? '')}
+                          data-testid="alloc-rs-m"
+                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {redundancyMode === 'mode2' && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Slots required:{' '}
+                      <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                      {' '}• Providers available:{' '}
+                      <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                      {mode2Config.error && (
+                        <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <div className="text-xs text-muted-foreground">
+                  {createTx && (
+                    <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0, 10)}...
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleCreateDeal}
+                  disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
+                  data-testid="alloc-submit"
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                >
+                  {dealLoading ? 'Creating...' : 'Create deal'}
+                </button>
+              </div>
+            </div>
           </div>
+        </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
