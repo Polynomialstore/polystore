@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, ChevronDown } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -387,6 +387,11 @@ export function Dashboard() {
     [hasAnyContent, hasAnyDeals, hasFunds, hasRetrieval, hasWallet],
   )
   const wizardNext = wizardSteps.find((step) => !step.done) || null
+  const wizardDoneCount = useMemo(() => wizardSteps.filter((step) => step.done).length, [wizardSteps])
+  const wizardProgressPct = useMemo(() => {
+    if (wizardSteps.length === 0) return 0
+    return Math.round((wizardDoneCount / wizardSteps.length) * 100)
+  }, [wizardDoneCount, wizardSteps])
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -1320,15 +1325,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
-      <details className="rounded-xl border border-border bg-card shadow-sm">
-        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-foreground">
-          Network &amp; routing <span className="text-xs font-normal text-muted-foreground">(advanced)</span>
-        </summary>
-        <div className="px-4 pb-4">
-          <StatusBar />
-        </div>
-      </details>
-      
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-3">
@@ -1484,67 +1480,6 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">First Upload Wizard</div>
-            <h3 className="text-lg font-semibold text-foreground">Finish your first storage flow</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {wizardNext
-                ? `Next: ${wizardNext.label}. ${wizardNext.hint}`
-                : 'All steps complete. You can upload and retrieve freely.'}
-            </p>
-          </div>
-          {wizardNext && (
-            <button
-              type="button"
-              onClick={() => handleWizardAction(wizardNext.id)}
-              className="inline-flex items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
-            >
-              {wizardNext.actionLabel}
-            </button>
-          )}
-        </div>
-        <div className="mt-4 grid gap-2">
-          {wizardSteps.map((step, idx) => (
-            <div
-              key={step.id}
-              className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
-                step.done ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-background/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    step.done ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'
-                  }`}
-                >
-                  {idx + 1}
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{step.label}</div>
-                  <div className="text-[11px] text-muted-foreground">{step.hint}</div>
-                </div>
-              </div>
-              {step.done ? (
-                <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Done
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleWizardAction(step.id)}
-                  className="text-[11px] font-semibold text-primary hover:text-primary/80"
-                >
-                  {step.actionLabel}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
         <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -1592,7 +1527,97 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="p-4 border-b border-border bg-muted/20 space-y-3">
+        <div className="p-4 border-b border-border bg-muted/20 space-y-4">
+          <details className="group rounded-xl border border-border bg-background/60 px-4 py-3">
+            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Quick Start
+                    </span>
+                    <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] text-muted-foreground">
+                      {wizardDoneCount}/{wizardSteps.length} complete
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {wizardNext ? `Next: ${wizardNext.label}` : 'You’re ready to store & retrieve.'}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {wizardNext ? wizardNext.hint : 'Create more deals, upload files, and verify retrievals anytime.'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {wizardNext && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        void handleWizardAction(wizardNext.id)
+                      }}
+                      className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
+                    >
+                      {wizardNext.actionLabel}
+                      <ArrowDownRight className="h-3 w-3" />
+                    </button>
+                  )}
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </div>
+              </div>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500"
+                  style={{ width: `${wizardProgressPct}%` }}
+                />
+              </div>
+            </summary>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {wizardSteps.map((step, idx) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => void handleWizardAction(step.id)}
+                  className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
+                    step.done
+                      ? 'border-emerald-500/25 bg-emerald-500/10'
+                      : wizardNext?.id === step.id
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-border bg-background/60 hover:bg-secondary/40'
+                  }`}
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                        step.done
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : wizardNext?.id === step.id
+                            ? 'border-primary/30 bg-primary/10 text-primary'
+                            : 'border-border text-muted-foreground'
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{step.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{step.hint}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold">
+                    {step.done ? (
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Done
+                      </span>
+                    ) : (
+                      <span className="text-primary">{step.actionLabel}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </details>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               type="button"
@@ -2280,6 +2305,7 @@ export function Dashboard() {
           Network &amp; Diagnostics (advanced)
         </summary>
         <div className="p-6 space-y-6">
+          <StatusBar />
           {proofs.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
