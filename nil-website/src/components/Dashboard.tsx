@@ -1518,7 +1518,7 @@ export function Dashboard() {
             <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
             <h3 className="text-lg font-semibold text-foreground">Create a deal and manage files</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Mode 2 is the default. Legacy Mode 1 tools live under Advanced.
+              Mode 2 is the default. Turn on Advanced for Mode 1 and custom tuning.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -1554,7 +1554,7 @@ export function Dashboard() {
                   : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
               }`}
             >
-              {showAdvanced ? 'Advanced / Legacy: on' : 'Advanced / Legacy'}
+              {showAdvanced ? 'Advanced: on' : 'Advanced'}
             </button>
           </div>
         </div>
@@ -1650,58 +1650,51 @@ export function Dashboard() {
             </div>
           </details>
 
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
               onClick={() => setActiveTab('alloc')}
               data-testid="tab-alloc"
-              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
+              className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
                 activeTab === 'alloc'
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-border bg-background/60 hover:bg-secondary/50'
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Create deal</div>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">Allocate a new bucket.</div>
+              <HardDrive className={`h-4 w-4 ${activeTab === 'alloc' ? 'text-primary' : 'text-muted-foreground'}`} />
+              Create deal
             </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('mdu')}
               data-testid="tab-mdu"
-              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
+              className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
                 activeTab === 'mdu'
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-border bg-background/60 hover:bg-secondary/50'
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Upload files</div>
-                <span className="ml-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Recommended
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">Gateway-first upload (WASM fallback).</div>
+              <Upload className={`h-4 w-4 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
+              Upload
+              <span className="ml-auto rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                Mode 2
+              </span>
             </button>
+
             {showAdvanced && (
               <button
                 type="button"
                 onClick={() => setActiveTab('content')}
                 data-testid="tab-content"
-                className={`rounded-lg border px-4 py-2 text-left transition-colors ${
+                className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
                   activeTab === 'content'
-                    ? 'border-primary/40 bg-primary/5'
-                    : 'border-border bg-background/60 hover:bg-secondary/50'
+                    ? 'border-primary/40 bg-primary/10 text-foreground'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-primary" />
-                  <div className="text-sm font-semibold text-foreground">Legacy upload (Mode 1)</div>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">Gateway sharding flow.</div>
+                <Database className={`h-4 w-4 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
+                Legacy (Mode 1)
               </button>
             )}
           </div>
@@ -1767,7 +1760,7 @@ export function Dashboard() {
                                   <span className="font-mono text-foreground">K={rsK}</span>{' '}
                                   <span className="font-mono text-foreground">M={rsM}</span>
                                   <span className="ml-2 text-[11px] text-muted-foreground">
-                                    Toggle Advanced for Mode 1 or custom tuning.
+                                    Turn on Advanced to use Mode 1 or tune redundancy.
                                   </span>
                                 </div>
                                 <div className="text-[11px] text-muted-foreground">
@@ -1867,7 +1860,7 @@ export function Dashboard() {
                     !showAdvanced ? (
                       <div ref={contentRef} className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                          <div className="font-semibold text-foreground">Legacy Mode 1 tools are hidden</div>
+                          <div className="font-semibold text-foreground">Advanced tools are hidden</div>
                           <div className="text-xs text-muted-foreground mt-1">
                             Enable Advanced to access gateway sharding (Mode 1).
                           </div>
@@ -2163,7 +2156,15 @@ export function Dashboard() {
                 <HardDrive className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-medium text-foreground mb-2">No deals yet</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Create a deal above, then upload files into it.</p>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Create a deal, then upload files into it.</p>
+            <button
+              type="button"
+              onClick={() => void handleWizardAction('deal')}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+            >
+              <HardDrive className="h-4 w-4" />
+              Create a deal
+            </button>
         </div>
       ) : (
         <>
@@ -2178,9 +2179,19 @@ export function Dashboard() {
                 />
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
-                <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
+              <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
+                  <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleWizardAction('deal')}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
+                >
+                  <HardDrive className="h-4 w-4" />
+                  Create deal
+                </button>
               </div>
               <table className="min-w-full divide-y divide-border" data-testid="deals-table">
                   <thead className="bg-muted/50">
