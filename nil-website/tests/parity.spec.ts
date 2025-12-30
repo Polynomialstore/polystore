@@ -153,7 +153,7 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()
 
-  await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByTestId('mdu-file-input')).toBeAttached({ timeout: 30_000 })
 
   console.log('Uploading file...');
   await page.getByTestId('mdu-file-input').setInputFiles({

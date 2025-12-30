@@ -261,7 +261,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()
 
-  await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('mdu-file-input')).toBeAttached({ timeout: 30_000 })
 
   // Find the Client-Side Expansion section
   const filePath = 'test-direct.txt'

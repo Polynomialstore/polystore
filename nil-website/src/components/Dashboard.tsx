@@ -1545,7 +1545,8 @@ export function Dashboard() {
         </div>
 
         <div className="p-4 border-b border-border bg-muted/20 space-y-4">
-          <details className="group rounded-xl border border-border bg-background/60 px-4 py-3">
+          {wizardNext ? (
+            <details className="group rounded-xl border border-border bg-background/60 px-4 py-3">
             <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -1558,27 +1559,25 @@ export function Dashboard() {
                     </span>
                   </div>
                   <div className="mt-1 text-sm font-semibold text-foreground">
-                    {wizardNext ? `Next: ${wizardNext.label}` : 'You’re ready to store & retrieve.'}
+                    {`Next: ${wizardNext.label}`}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {wizardNext ? wizardNext.hint : 'Create more deals, upload files, and verify retrievals anytime.'}
+                    {wizardNext.hint}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {wizardNext && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        void handleWizardAction(wizardNext.id)
-                      }}
-                      className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
-                    >
-                      {wizardNext.actionLabel}
-                      <ArrowDownRight className="h-3 w-3" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void handleWizardAction(wizardNext.id)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
+                  >
+                    {wizardNext.actionLabel}
+                    <ArrowDownRight className="h-3 w-3" />
+                  </button>
                   <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
                 </div>
               </div>
@@ -1634,6 +1633,7 @@ export function Dashboard() {
               ))}
             </div>
           </details>
+          ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <button

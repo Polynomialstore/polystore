@@ -77,12 +77,12 @@ function formatDuration(ms: number) {
 }
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { connectAsync } = useConnect();
   const localGateway = useLocalGateway();
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
-  const [wasmError, setWasmError] = useState<string | null>(null);
+  const [, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
@@ -1644,116 +1644,58 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </button>
       ) : (
         <>
-          <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
-              Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            {isMode2 && (
-              <span
-                title={localGateway.error || undefined}
-                className={`px-2 py-0.5 rounded-full border ${
-                  appConfig.gatewayDisabled
-                    ? 'bg-secondary/40 text-muted-foreground border-border'
-                    : localGateway.status === 'connected'
-                      ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
-                      : localGateway.error
-                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                        : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20'
-                }`}
-              >
-                Gateway:{' '}
-                {appConfig.gatewayDisabled
-                  ? 'disabled'
-                  : localGateway.status === 'connected'
-                    ? 'connected'
-                    : localGateway.error
-                      ? 'unavailable'
-                      : 'checking'}
-              </span>
-            )}
-            <span
-              title={wasmError || undefined}
-              className={`px-2 py-0.5 rounded-full border ${
-                gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
-                  ? 'bg-secondary/40 text-muted-foreground border-border'
-                  : wasmStatus === 'ready'
-                    ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                    : wasmStatus === 'initializing'
-                      ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                      : 'bg-red-500/10 text-red-500 border-red-500/20'
-              }`}
+          {/* Dropzone */}
+          {!stripeParamsLoaded ? (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Checking redundancy mode and gateway availability.
+              </div>
+            </div>
+          ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              className={`
+                border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200
+                ${isDragging
+                  ? 'border-primary bg-primary/10 scale-[1.01]'
+                  : 'border-border hover:border-primary/50 bg-card'
+                }
+              `}
             >
-              {gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
-                ? 'WASM: standby'
-                : `WASM: ${wasmStatus}`}
-            </span>
-          </div>
-          </div>
-          {isMode2 && stripeParams && (
-            <div className="rounded-lg border border-border bg-secondary/30 px-4 py-3 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold text-foreground">Mode 2 redundancy</div>
-                <div className="text-muted-foreground">
-                  RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center">
+                  <Cpu className="w-7 h-7 text-foreground" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Select a file</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {isMode2 && gatewayMode2Enabled
+                      ? gatewayReachable
+                        ? 'Gateway connected — uploads use your local node.'
+                        : 'Gateway not detected — uploads run in your browser.'
+                      : 'Uploads run in your browser.'}
+                  </p>
+                  <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                    Browse files
+                    <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                  </label>
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                This only runs in your browser. Once ready, the file picker will appear.
+              </div>
+            </div>
           )}
-
-      {/* Dropzone */}
-      {!stripeParamsLoaded ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Checking redundancy mode and gateway availability.
-          </div>
-        </div>
-      ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={`
-            border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200
-            ${isDragging
-              ? 'border-primary bg-primary/10 scale-[1.01]'
-              : 'border-border hover:border-primary/50 bg-card'
-            }
-          `}
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center">
-              <Cpu className="w-7 h-7 text-foreground" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-foreground">Select a file</h3>
-              <p className="text-muted-foreground mt-1 text-sm">
-                {isMode2 && gatewayMode2Enabled
-                  ? gatewayReachable
-                    ? 'Gateway connected — uploads use your local node.'
-                    : 'Gateway not detected — uploads run in your browser.'
-                  : 'Uploads run in your browser.'}
-              </p>
-              <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                Browse files
-                <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-              </label>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            This only runs in your browser. Once ready, the file picker will appear.
-          </div>
-        </div>
-      )}
 
       {/* Processing Status */}
       {(processing || activeUploading) && (
