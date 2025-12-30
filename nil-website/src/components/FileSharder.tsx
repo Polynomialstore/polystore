@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
-import { FileJson, Cpu } from 'lucide-react';
+import { FileJson, Cpu, Wallet } from 'lucide-react';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
@@ -1632,16 +1632,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   return (
     <div className="w-full space-y-6">
       {!isConnected ? (
-          <button 
-            onClick={() => connectAsync({ connector: injectedConnector })}
-            className="w-full py-12 border-2 border-dashed border-border rounded-xl text-muted-foreground font-bold transition-all flex flex-col items-center gap-4 hover:border-primary/50 hover:bg-secondary/50"
-          >
-              <div className="text-4xl">🔌</div>
-              Connect Wallet to Start
-          </button>
+        <button
+          onClick={() => connectAsync({ connector: injectedConnector })}
+          className="w-full rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
+        >
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary/60">
+            <Wallet className="h-6 w-6 text-foreground" />
+          </div>
+          <div className="text-sm font-semibold text-foreground">Connect wallet to upload</div>
+          <div className="mt-1 text-xs text-muted-foreground">Deals and files are owned by your Nil address.</div>
+        </button>
       ) : (
-      <>
-      <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+        <>
+          <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
               Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
@@ -1687,20 +1690,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 : `WASM: ${wasmStatus}`}
             </span>
           </div>
-      </div>
-      {isMode2 && stripeParams && (
-        <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="font-semibold text-foreground">Mode 2</div>
-            <div className="text-muted-foreground">
-              RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
+          </div>
+          {isMode2 && stripeParams && (
+            <div className="rounded-lg border border-border bg-secondary/30 px-4 py-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold text-foreground">Mode 2 redundancy</div>
+                <div className="text-muted-foreground">
+                  RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Default: use the local gateway for RS encoding + distribution. Fallback: in-browser WASM sharding + direct uploads.
-          </div>
-        </div>
-      )}
+          )}
 
       {/* Dropzone */}
       {!stripeParamsLoaded ? (
@@ -1734,9 +1734,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               <p className="text-muted-foreground mt-1 text-sm">
                 {isMode2 && gatewayMode2Enabled
                   ? gatewayReachable
-                    ? 'Local gateway detected: uploads go through the gateway (WASM fallback if it drops).'
-                    : 'Will try the local gateway first (WASM fallback if unavailable).'
-                  : 'The browser will expand it into MDUs and compute commitments locally (WASM).'}
+                    ? 'Gateway connected — uploads use your local node.'
+                    : 'Gateway not detected — uploads run in your browser.'
+                  : 'Uploads run in your browser.'}
               </p>
               <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
                 Browse files
