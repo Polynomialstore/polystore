@@ -115,7 +115,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
   const [mduKzgError, setMduKzgError] = useState<string | null>(null)
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
+  const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'heat'>('files')
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
   const {
@@ -630,53 +630,64 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
         </button>
       </div>
 
-      <div className="flex border-b border-border">
-          <button 
-            onClick={() => setActiveTab('info')}
-            data-testid="deal-detail-tab-info"
-            className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-          >
-              Overview
-          </button>
-          <button 
-            onClick={() => setActiveTab('manifest')}
-            data-testid="deal-detail-tab-manifest"
-            className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'manifest' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-          >
-              Manifest &amp; MDUs
-          </button>
-          <button 
-            onClick={() => setActiveTab('heat')}
-            data-testid="deal-detail-tab-heat"
-            className={`flex-1 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-          >
-              Heat &amp; Liveness
-          </button>
+      <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-border">
+        <button
+          onClick={() => setActiveTab('files')}
+          data-testid="deal-detail-tab-files"
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'files' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Files
+        </button>
+        <button
+          onClick={() => setActiveTab('info')}
+          data-testid="deal-detail-tab-info"
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Deal info
+        </button>
+        <button
+          onClick={() => setActiveTab('manifest')}
+          data-testid="deal-detail-tab-manifest"
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'manifest' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Manifest &amp; MDUs
+        </button>
+        <button
+          onClick={() => setActiveTab('heat')}
+          data-testid="deal-detail-tab-heat"
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Heat &amp; Liveness
+        </button>
       </div>
 
       <div className="p-5">
-        {activeTab === 'info' && (
-            <div className="grid sm:grid-cols-2 gap-4 text-xs text-muted-foreground">
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
-                  <div
-                    className="font-mono break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
-                    data-testid="deal-detail-cid"
-                  >
-                    {deal.cid || 'Empty Container'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Owner</div>
-                  <div className="font-mono text-[11px] bg-secondary/50 border border-border rounded px-3 py-2 text-foreground select-all">
-                    {deal.owner}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Size</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground font-mono">
-                        {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '0 MB'}
+          {(activeTab === 'info' || activeTab === 'files') && (
+              <div className="grid sm:grid-cols-2 gap-4 text-xs text-muted-foreground">
+                  {activeTab === 'info' && (
+                    <div className="space-y-1">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
+                      <div
+                        className="font-mono break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
+                        data-testid="deal-detail-cid"
+                      >
+                        {deal.cid || 'Empty Container'}
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'info' && (
+                    <div className="space-y-1">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Owner</div>
+                      <div className="font-mono text-[11px] bg-secondary/50 border border-border rounded px-3 py-2 text-foreground select-all">
+                        {deal.owner}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Size</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground font-mono">
+                          {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '0 MB'}
                     </span>
                     {/* Tier removed */}
                   </div>
@@ -689,152 +700,158 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                       : `Mode 1 • Replicas ${serviceHint.replicas ?? '—'}`}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
-                  <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
+                  {activeTab === 'info' && (
+                    <div className="space-y-1">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
                           <span className="text-muted-foreground block text-[10px]">Escrow Remaining</span>
                           <span className="text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</span>
-                      </div>
-                      <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
+                        </div>
+                        <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
                           <span className="text-muted-foreground block text-[10px]">Max Spend</span>
                           <span className="text-foreground">{deal.max_monthly_spend ? `${deal.max_monthly_spend} stake` : '—'}</span>
+                        </div>
                       </div>
-                  </div>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Providers</div>
-                  <div className="bg-secondary/50 border border-border rounded p-2">
-                    {deal.providers && deal.providers.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {deal.providers.map((p: string, idx: number) => (
-                            <div key={p} className="space-y-1">
-                              <div className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                                <Server className="w-3 h-3" />
-                                {isMode2 && (
-                                  <span className="text-[10px] text-muted-foreground">Slot {idx}</span>
-                                )}
-                                {p}
-                                {providersByAddr[p]?.status && (
-                                  <span className="text-muted-foreground">({providersByAddr[p]?.status})</span>
+                    </div>
+                  )}
+                  {activeTab === 'info' && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Providers</div>
+                      <div className="bg-secondary/50 border border-border rounded p-2">
+                        {deal.providers && deal.providers.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {deal.providers.map((p: string, idx: number) => (
+                              <div key={p} className="space-y-1">
+                                <div className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                  <Server className="w-3 h-3" />
+                                  {isMode2 && <span className="text-[10px] text-muted-foreground">Slot {idx}</span>}
+                                  {p}
+                                  {providersByAddr[p]?.status && (
+                                    <span className="text-muted-foreground">({providersByAddr[p]?.status})</span>
+                                  )}
+                                </div>
+                                {providersByAddr[p]?.endpoints && providersByAddr[p].endpoints!.length > 0 && (
+                                  <div className="font-mono text-[10px] text-muted-foreground break-all">
+                                    {providersByAddr[p].endpoints![0]}
+                                  </div>
                                 )}
                               </div>
-                              {providersByAddr[p]?.endpoints && providersByAddr[p].endpoints!.length > 0 && (
-                                <div className="font-mono text-[10px] text-muted-foreground break-all">
-                                  {providersByAddr[p].endpoints![0]}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground italic">No providers assigned yet</span>
+                        )}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground italic">No providers assigned yet</span>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  )}
                 
-                {(deal.cid || loadingFiles || (files && files.length > 0)) && (
-                    <div className="sm:col-span-2 mt-2 space-y-2">
-                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
-                      {!deal.cid && (
-                        <div className="text-[11px] text-muted-foreground">
-                          Showing local OPFS slab (not yet committed on-chain).
+                    {activeTab === 'files' && deal.cid && (
+                      <div className="sm:col-span-2 mt-2 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files</div>
+                          {lastRouteLabel ? (
+                            <div
+                              className="text-[11px] text-muted-foreground"
+                              data-testid="transport-route"
+                              data-transport-attempts={lastAttemptSummary}
+                              data-transport-failure={lastFailureSummary}
+                            >
+                              Route: {lastRouteLabel}
+                            </div>
+                          ) : null}
                         </div>
-                      )}
-                      {fileActionError && (
-                        <div className="text-[11px] text-red-500 dark:text-red-400">
-                          Download failed{fileActionError ? `: ${fileActionError}` : ''}
-                        </div>
-                      )}
-                      {receiptStatus !== 'idle' && (
-                        <div className="text-[11px]">
-                          {receiptStatus === 'submitted' ? (
-                            <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
-                          ) : (
-                            <span className="text-red-500 dark:text-red-400">
-                              Receipt failed{receiptError ? `: ${receiptError}` : ''}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {lastRouteLabel && (
-                        <div
-                          className="text-[11px] text-muted-foreground"
-                          data-testid="transport-route"
-                          data-transport-attempts={lastAttemptSummary}
-                          data-transport-failure={lastFailureSummary}
-                        >
-                          Route: {lastRouteLabel}
-                        </div>
-                      )}
+                        {fileActionError && (
+                          <div className="text-[11px] text-red-500 dark:text-red-400">
+                            Download failed{fileActionError ? `: ${fileActionError}` : ''}
+                          </div>
+                        )}
+                        {receiptStatus !== 'idle' && (
+                          <div className="text-[11px]">
+                            {receiptStatus === 'submitted' ? (
+                              <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
+                            ) : (
+                              <span className="text-red-500 dark:text-red-400">
+                                Receipt failed{receiptError ? `: ${receiptError}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
-                          <div className="text-[10px] text-muted-foreground uppercase">Bytes Served</div>
-                          <div className="font-mono text-foreground">
-                            {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
-                          </div>
-                        </div>
-                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
-                          <div className="text-[10px] text-muted-foreground uppercase">Escrow Remaining</div>
-                          <div className="font-mono text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</div>
-                        </div>
-                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
-                          <div className="text-[10px] text-muted-foreground uppercase">Chunks</div>
-                          <div className="font-mono text-foreground">
-                            {progress.phase === 'idle' ? '—' : `${progress.chunksFetched}/${progress.chunkCount || 0}`}
-                          </div>
-                        </div>
-                        <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
-                          <div className="text-[10px] text-muted-foreground uppercase">Receipt</div>
-                          <div className="font-mono text-foreground">
-                            {progress.phase === 'idle'
-                              ? '—'
-                              : `${progress.receiptsSubmitted}/${progress.receiptsTotal || 0}`}
-                          </div>
-                        </div>
-                      </div>
+                        <details className="rounded-xl border border-border bg-secondary/40 p-3 text-[11px]">
+                          <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                            Advanced
+                          </summary>
+                          <div className="mt-3 space-y-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                              <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="text-[10px] text-muted-foreground uppercase">Bytes Served</div>
+                                <div className="font-mono text-foreground">
+                                  {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                </div>
+                              </div>
+                              <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="text-[10px] text-muted-foreground uppercase">Escrow Remaining</div>
+                                <div className="font-mono text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</div>
+                              </div>
+                              <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="text-[10px] text-muted-foreground uppercase">Chunks</div>
+                                <div className="font-mono text-foreground">
+                                  {progress.phase === 'idle' ? '—' : `${progress.chunksFetched}/${progress.chunkCount || 0}`}
+                                </div>
+                              </div>
+                              <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="text-[10px] text-muted-foreground uppercase">Receipt</div>
+                                <div className="font-mono text-foreground">
+                                  {progress.phase === 'idle'
+                                    ? '—'
+                                    : `${progress.receiptsSubmitted}/${progress.receiptsTotal || 0}`}
+                                </div>
+                              </div>
+                            </div>
 
-                      <div className="bg-secondary/50 border border-border rounded p-3 text-[11px] space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="text-[10px] text-muted-foreground uppercase font-semibold">Download Range</div>
-                          <div className="text-[10px] text-muted-foreground">
-                            Len=0 downloads to EOF
+                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Download Range</div>
+                                <div className="text-[10px] text-muted-foreground">Len=0 downloads to EOF</div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <label className="flex flex-col gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase">Start</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={downloadRangeStart}
+                                    onChange={(e) =>
+                                      setDownloadRangeStart(Math.max(0, Number(e.target.value || 0) || 0))
+                                    }
+                                    className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                  />
+                                </label>
+                                <label className="flex flex-col gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase">Len</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={downloadRangeLen}
+                                    onChange={(e) => setDownloadRangeLen(Math.max(0, Number(e.target.value || 0) || 0))}
+                                    className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                  />
+                                </label>
+                              </div>
+                              {progress.phase !== 'idle' ? (
+                                <div className="text-[10px] text-muted-foreground">
+                                  {progress.filePath ? `${progress.filePath} • ` : ''}
+                                  {progress.phase}
+                                  {progress.bytesTotal
+                                    ? ` • ${(progress.bytesFetched / 1024).toFixed(1)} KiB / ${(progress.bytesTotal / 1024).toFixed(1)} KiB`
+                                    : ''}
+                                  {progress.message ? ` • ${progress.message}` : ''}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground uppercase">Start</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={downloadRangeStart}
-                              onChange={(e) => setDownloadRangeStart(Math.max(0, Number(e.target.value || 0) || 0))}
-                              className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground uppercase">Len</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={downloadRangeLen}
-                              onChange={(e) => setDownloadRangeLen(Math.max(0, Number(e.target.value || 0) || 0))}
-                              className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
-                            />
-                          </label>
-                        </div>
-                        {progress.phase !== 'idle' ? (
-                          <div className="text-[10px] text-muted-foreground">
-                            {progress.filePath ? `${progress.filePath} • ` : ''}
-                            {progress.phase}
-                            {progress.bytesTotal
-                              ? ` • ${(progress.bytesFetched / 1024).toFixed(1)} KiB / ${(progress.bytesTotal / 1024).toFixed(1)} KiB`
-                              : ''}
-                            {progress.message ? ` • ${progress.message}` : ''}
-                          </div>
-                        ) : null}
-                      </div>
+                        </details>
 
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
@@ -1182,11 +1199,20 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                         </div>
                       ) : (
                         <div className="text-xs text-muted-foreground italic">No files found for this manifest root.</div>
-                      )}
+                        )}
+                      </div>
+                  )}
+
+                  {activeTab === 'files' && !deal.cid && (
+                    <div className="sm:col-span-2 mt-2 rounded-xl border border-border bg-background/60 p-10 text-center">
+                      <div className="text-sm font-semibold text-foreground">No files yet</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Upload a file inside this deal to store and retrieve.
+                      </div>
                     </div>
-                )}
-            </div>
-        )}
+                  )}
+              </div>
+          )}
 
         {activeTab === 'manifest' && (
             <div className="space-y-4">
