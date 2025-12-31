@@ -1630,7 +1630,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-4">
       {!isConnected ? (
         <button
           onClick={() => connectAsync({ connector: injectedConnector })}
@@ -1660,31 +1660,33 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               className={`
-                border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200
+                border-2 border-dashed rounded-xl p-6 transition-all duration-200
                 ${isDragging
                   ? 'border-primary bg-primary/10 scale-[1.01]'
                   : 'border-border hover:border-primary/50 bg-card'
                 }
               `}
             >
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center">
-                  <Cpu className="w-7 h-7 text-foreground" />
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
+                    <Cpu className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">Upload a file</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {isMode2 && gatewayMode2Enabled
+                        ? gatewayReachable
+                          ? 'Local gateway connected (fast path).'
+                          : 'No local gateway detected (in-browser sharding).'
+                        : 'In-browser sharding.'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">Select a file</h3>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {isMode2 && gatewayMode2Enabled
-                      ? gatewayReachable
-                        ? 'Gateway connected — uploads use your local node.'
-                        : 'Gateway not detected — uploads run in your browser.'
-                      : 'Uploads run in your browser.'}
-                  </p>
-                  <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                    Browse files
-                    <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                  </label>
-                </div>
+                <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto">
+                  Choose file
+                  <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                </label>
               </div>
             </div>
           ) : (

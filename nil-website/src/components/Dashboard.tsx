@@ -1364,13 +1364,13 @@ export function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
-      <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-        <div className="px-6 py-4 border-b border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
-                {targetDealId ? `Deal #${targetDealId}` : 'Deal workspace'}
-              </h3>
+        <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+          <div className="px-5 py-3 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
+                  {targetDealId ? `Deal #${targetDealId}` : 'Deal workspace'}
+                </h3>
               {hasSelectedDeal ? (
                 <>
                   <span
@@ -1386,32 +1386,32 @@ export function Dashboard() {
                     {activeDealModeLabel}
                   </span>
                 </>
+                ) : null}
+              </div>
+              {!targetDealId ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select a deal on the left to upload, list, and download files.
+                </p>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {targetDealId
-                ? 'Upload, list, and download files inside this deal.'
-                : 'Select a deal on the left to upload, list, and download files.'}
-            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                data-testid="workspace-advanced-toggle"
+                className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  showAdvanced
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+                }`}
+              >
+                Advanced
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              data-testid="workspace-advanced-toggle"
-              className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
-                showAdvanced
-                  ? 'border-primary/40 bg-primary/10 text-primary'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
-              }`}
-            >
-              {showAdvanced ? 'Advanced: on' : 'Advanced'}
-            </button>
-          </div>
-        </div>
-
-        <div className="p-4 border-b border-border bg-muted/20 space-y-4">
+          <div className="p-3 border-b border-border bg-muted/20 space-y-3">
           {wizardNext ? (
             <details className="group rounded-xl border border-border bg-background/60 px-4 py-3">
             <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
