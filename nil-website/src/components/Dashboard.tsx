@@ -1,4 +1,4 @@
-import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
+import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, ChevronDown } from 'lucide-react'
@@ -15,7 +15,6 @@ import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { injectedConnector } from '../lib/web3Config'
-import { formatUnits } from 'viem'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
@@ -65,7 +64,6 @@ export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const { connectAsync } = useConnect()
-  const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
@@ -79,7 +77,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
-  const { data: evmBalance, refetch: refetchEvm } = useBalance({
+  const { refetch: refetchEvm } = useBalance({
     address,
     chainId: appConfig.chainId,
   })
@@ -1352,137 +1350,6 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
-        <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-foreground">NilStore Console</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Create a deal (bucket), upload files, and retrieve directly from providers.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleRefreshSummary()}
-              title="Refresh chain state"
-              className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Chain <span className="font-mono text-foreground">{activeChainId}</span>
-            </span>
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
-            </span>
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Deals <span className="font-mono text-foreground">{dealSummary.total}</span>
-            </span>
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Active <span className="font-mono text-foreground">{dealSummary.active}</span>
-            </span>
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Stored <span className="font-mono text-foreground">{formatBytes(dealSummary.totalBytes)}</span>
-            </span>
-            <span className="rounded-full border border-border bg-secondary/60 px-2 py-1">
-              Retrievals <span className="font-mono text-foreground">{dealSummary.retrievals}</span>
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-card rounded-xl border border-border p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-foreground font-semibold">
-              <Coins className="w-4 h-4 text-yellow-500" />
-              Wallet & Funds
-            </div>
-            <button
-              onClick={handleRequestFunds}
-              disabled={faucetLoading}
-              data-testid="faucet-request"
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
-            >
-              {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
-              {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
-            </button>
-          </div>
-
-          {faucetTx && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
-              <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate max-w-[160px]" title={faucetTx}>
-                Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
-              </span>
-              <span className="opacity-75">({faucetTxStatus})</span>
-            </div>
-          )}
-
-          <div className="space-y-4 text-sm text-muted-foreground">
-            <div className="grid gap-3">
-              <div className="rounded-lg border border-border bg-background/60 px-3 py-2" data-testid="wallet-address-full">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">EVM Address</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground break-all">
-                  {address || '—'}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Cosmos Address</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground break-all" data-testid="cosmos-identity">
-                  {nilAddress || '—'}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-              <div className="rounded-lg border border-border bg-background/60 p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
-                <div className="font-mono text-green-600 dark:text-green-400">
-                  {(() => {
-                    if (!evmBalance) return '—'
-                    const symbol = evmBalance.symbol || 'NIL'
-                    const formatted = formatUnits(evmBalance.value, evmBalance.decimals)
-                    const [whole, frac] = formatted.split('.')
-                    const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
-                    return `${trimmed} ${symbol}`
-                  })()}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-background/60 p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">Cosmos stake</div>
-                <div className="font-mono text-blue-600 dark:text-blue-400" data-testid="cosmos-stake-balance">
-                  {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-background/60 p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">Cosmos aatom</div>
-                <div className="font-mono text-foreground" data-testid="cosmos-atom-balance">
-                  {bankBalances.atom ? `${bankBalances.atom} aatom` : '—'}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 border-t border-border/50 pt-3">
-              <button
-                onClick={() => disconnect()}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Disconnect
-              </button>
-              <span className="text-border">|</span>
-              <button
-                onClick={() => switchNetwork()}
-                className="text-xs text-primary hover:text-primary/80 underline"
-              >
-                Force Switch Network
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {statusMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
           statusTone === 'error'
@@ -1959,27 +1826,66 @@ export function Dashboard() {
             </div>
           ) : null}
         </div>
-  
+
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-4 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Testnet funds
+                </div>
+                <div
+                  className="mt-1 font-mono text-[11px] text-muted-foreground truncate"
+                  data-testid="cosmos-identity"
+                  title={nilAddress || undefined}
+                >
+                  {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
+                </div>
+              </div>
+              <button
+                data-testid="faucet-request"
+                onClick={handleRequestFunds}
+                disabled={!address || faucetLoading}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <Coins className="h-4 w-4" />
+                {faucetLoading ? 'Requesting…' : 'Get Testnet NIL'}
+              </button>
+            </div>
+            <div className="px-6 pb-4">
+              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                <span>Balance</span>
+                <span className="font-mono text-foreground" data-testid="cosmos-stake-balance">
+                  {bankBalances.stake || '—'}
+                </span>
+              </div>
+              {faucetTx ? (
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
                 <p className="text-[11px] text-muted-foreground mt-1">
                   Select a deal to manage files (upload, list, download).
                 </p>
               </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void handleRefreshSummary()}
-                title="Refresh deals"
-                className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshSummary()}
+                  title="Refresh deals"
+                  className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
-          </div>
 
             {loading ? (
               <div className="text-center py-10">
