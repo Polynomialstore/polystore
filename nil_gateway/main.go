@@ -547,6 +547,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		dealIDStr      string
 		recordPath     string
 		maxUserMdusStr string
+		fileSizeStr    string
 
 		filename   string
 		bytesTotal uint64
@@ -588,6 +589,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				recordPath = val
 			case "max_user_mdus":
 				maxUserMdusStr = val
+			case "file_size_bytes":
+				fileSizeStr = val
 			}
 			continue
 		}
@@ -620,13 +623,19 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if job != nil {
-			job.setFile(filename, 0)
-			job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
-			job.setBytes(0, 0)
+		if bytesTotal == 0 {
+			if parsed, err := strconv.ParseUint(strings.TrimSpace(fileSizeStr), 10, 64); err == nil && parsed > 0 {
+				bytesTotal = parsed
+			}
 		}
 
-		pw := &uploadProgressWriter{job: job, bytesTotal: 0}
+		if job != nil {
+			job.setFile(filename, bytesTotal)
+			job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
+			job.setBytes(0, bytesTotal)
+		}
+
+		pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
 		reader := &ctxReader{ctx: ingestCtx, r: part}
 		n64, copyErr := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10))
 		_ = part.Close()
@@ -645,11 +654,14 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if n64 > 0 {
-			bytesTotal = uint64(n64)
-		}
-		if job != nil && bytesTotal > 0 {
-			job.setBytes(bytesTotal, bytesTotal)
+		if n64 >= 0 {
+			n := uint64(n64)
+			if n > 0 && bytesTotal == 0 {
+				bytesTotal = n
+			}
+			if job != nil && bytesTotal > 0 {
+				job.setBytes(n, bytesTotal)
+			}
 		}
 	}
 

@@ -792,10 +792,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
 
         const form = new FormData()
-        form.append('file', file)
         form.append('deal_id', dealId)
         form.append('file_path', file.name)
         form.append('upload_id', uploadId)
+        form.append('file_size_bytes', String(file.size))
+        form.append('file', file)
 
         const pollStatus = async () => {
           while (!stopPolling) {
