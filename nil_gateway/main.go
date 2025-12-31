@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -62,6 +63,31 @@ var (
 	execCommandContext = exec.CommandContext
 	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
 )
+
+func configureDefaultUploadDir(routerMode bool, listenAddr string) {
+	if _, ok := os.LookupEnv("NIL_UPLOAD_DIR"); ok {
+		return
+	}
+	if routerMode {
+		return
+	}
+
+	port := ""
+	if host, p, err := net.SplitHostPort(listenAddr); err == nil {
+		_ = host
+		port = p
+	}
+
+	subdir := "sp"
+	if port != "" {
+		subdir = "sp-" + port
+	}
+	uploadDir = filepath.Join("uploads", subdir)
+
+	if _, ok := os.LookupEnv("NIL_SESSION_DB_PATH"); !ok {
+		sessionDBPath = filepath.Join(uploadDir, "sessions.db")
+	}
+}
 
 // runCommand executes an external command, respecting mockCombinedOutput if set.
 func runCommand(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
@@ -298,6 +324,9 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 
 func main() {
 	routerMode := isGatewayRouterMode()
+	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+
+	configureDefaultUploadDir(routerMode, listenAddr)
 
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
@@ -391,7 +420,6 @@ func main() {
 		log.Printf("LibP2P listening on %s", strings.Join(addrs, ", "))
 	}
 
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
