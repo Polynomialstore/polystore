@@ -192,14 +192,13 @@ impl KzgContext {
         } else {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
-            let evals = bytes_to_scalars(blob_bytes)?;
-
             #[cfg(not(target_arch = "wasm32"))]
             {
-                return msm_blst_g1_commitment(&self.g1_points_blst, &evals);
+                return msm_blst_g1_commitment_from_blob(&self.g1_points_blst, blob_bytes);
             }
             #[cfg(target_arch = "wasm32")]
             {
+                let evals = bytes_to_scalars(blob_bytes)?;
                 return Ok(msm_pippenger_g1(&self.g1_points, &evals)
                     .to_affine()
                     .to_compressed());
@@ -654,22 +653,30 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn msm_blst_g1_commitment(points: &[blst_p1_affine], scalars: &[Scalar]) -> Result<KzgCommitment, KzgError> {
-    let n = points.len().min(scalars.len());
+fn msm_blst_g1_commitment_from_blob(
+    points: &[blst_p1_affine],
+    blob_bytes: &[u8],
+) -> Result<KzgCommitment, KzgError> {
+    debug_assert_eq!(blob_bytes.len(), BLOB_SIZE);
+
+    let scalars = blob_bytes.len() / 32;
+    let n = points.len().min(scalars);
     if n == 0 {
-        return Ok(G1Projective::identity().to_affine().to_compressed());
+        return Ok(zero_blob_commitment());
     }
 
     let points = &points[..n];
-    let scalars = &scalars[..n];
 
-    let mut scalar_bytes: Vec<u8> = Vec::with_capacity(n * 32);
-    for s in scalars.iter() {
-        let repr = s.to_repr();
-        scalar_bytes.extend_from_slice(repr.as_ref());
+    let mut scalar_bytes = vec![0u8; n * 32];
+    for (i, chunk) in blob_bytes.chunks_exact(32).take(n).enumerate() {
+        let dst = &mut scalar_bytes[i * 32..(i+1) * 32];
+        for j in 0..32 {
+            dst[j] = chunk[31 - j];
+        }
     }
 
-    let res: blst_p1 = points.mult(&scalar_bytes, 255);
+    // Use 256 bits so arbitrary (non-canonical) bytes still map correctly (mod r).
+    let res: blst_p1 = points.mult(&scalar_bytes, 256);
     let mut out = [0u8; 48];
     unsafe {
         blst_p1_compress(out.as_mut_ptr(), &res);
@@ -907,5 +914,29 @@ mod tests {
 
         let ok = ctx.verify_proof(&commitment, &z_bytes, &y_out, &proof).unwrap();
         assert!(ok, "KZG proof must verify for constant-one blob");
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn lagrange_commitment_blst_matches_scalar_msm_for_random_blob_prefix() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+        if ctx.g1_points_are_monomial {
+            return;
+        }
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(2025);
+        let mut blob = vec![0u8; BLOB_SIZE];
+        rng.fill_bytes(&mut blob);
+
+        let n = 256usize.min(ctx.g1_points.len());
+        let got = super::msm_blst_g1_commitment_from_blob(&ctx.g1_points_blst[..n], &blob).unwrap();
+
+        let evals = bytes_to_scalars(&blob).unwrap();
+        let expected = msm_pippenger_g1(&ctx.g1_points[..n], &evals[..n])
+            .to_affine()
+            .to_compressed();
+
+        assert_eq!(got, expected);
     }
 }
