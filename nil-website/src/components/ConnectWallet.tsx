@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect } from 'wagmi'
-import { Wallet, LogOut, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Wallet, LogOut, RefreshCw, AlertTriangle, Lock } from 'lucide-react'
 import { appConfig } from '../config'
 import { injectedConnector } from '../lib/web3Config'
 import { useNetwork } from '../hooks/useNetwork'
 import { formatUnits } from 'viem'
+import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 
 export function ConnectWallet({ className = '' }: { className?: string }) {
   const { address, isConnected } = useAccount()
@@ -13,6 +14,9 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
   const { disconnect } = useDisconnect()
   const { switchNetwork } = useNetwork()
   const [error, setError] = useState<string | null>(null)
+  const [isUnlocking, setIsUnlocking] = useState(false)
+  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const isLocked = isConnected && unlockState === 'locked'
 
   const { data: balance } = useBalance({
     address,
@@ -47,6 +51,24 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
     }
   }
 
+  const handleUnlock = async () => {
+    setError(null)
+    setIsUnlocking(true)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+      if (!ethereum || typeof ethereum.request !== 'function') {
+        throw new Error('Ethereum provider (MetaMask) not available')
+      }
+      await ethereum.request({ method: 'eth_requestAccounts' })
+      await switchNetwork().catch(() => undefined)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e) || 'Failed to unlock wallet')
+    } finally {
+      setIsUnlocking(false)
+    }
+  }
+
   const handleSwitchNetwork = async () => {
     setError(null)
     try {
@@ -58,15 +80,21 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {!isConnected ? (
+      {!isConnected || isLocked ? (
         <button
-          onClick={handleConnect}
-          disabled={isConnecting}
+          onClick={isLocked ? handleUnlock : handleConnect}
+          disabled={isConnecting || isUnlocking}
           data-testid="connect-wallet"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 hover:bg-secondary border border-transparent hover:border-border text-foreground text-sm font-semibold transition-colors disabled:opacity-60"
         >
-          {isConnecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
-          Connect Wallet
+          {isConnecting || isUnlocking ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : isLocked ? (
+            <Lock className="w-4 h-4" />
+          ) : (
+            <Wallet className="w-4 h-4" />
+          )}
+          {isLocked ? 'Unlock Wallet' : 'Connect Wallet'}
         </button>
       ) : (
         <>

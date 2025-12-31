@@ -3,6 +3,7 @@ import { fetchStatus, ServiceStatus } from '../lib/status'
 import { appConfig } from '../config'
 import { useAccount, useChainId } from 'wagmi'
 import { useTransportContext } from '../context/TransportContext'
+import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 
 function Badge({ label, status }: { label: string; status: ServiceStatus }) {
   const colors =
@@ -27,6 +28,8 @@ function Badge({ label, status }: { label: string; status: ServiceStatus }) {
 export function StatusBar() {
   const chainId = useChainId()
   const { isConnected } = useAccount()
+  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const isLocked = isConnected && unlockState === 'locked'
   const { preference, setPreference, lastTrace } = useTransportContext()
   const [height, setHeight] = useState<number | undefined>(undefined)
   const [chainName, setChainName] = useState<string | undefined>(undefined)
@@ -53,7 +56,9 @@ export function StatusBar() {
   }, [])
 
   const walletBadge =
-    isConnected && chainId
+    isLocked
+      ? <Badge label="Wallet: Locked" status="warn" />
+      : isConnected && chainId
       ? chainId === appConfig.chainId
         ? <Badge label="Wallet: Connected (match)" status="ok" />
         : <Badge label={`Wallet chain ${chainId}`} status="error" />

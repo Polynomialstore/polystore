@@ -9,6 +9,7 @@ import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFetch } from '../hooks/useFetch'
+import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
@@ -116,6 +117,8 @@ export function Dashboard() {
   // Prefer the direct MetaMask ID if available, otherwise fallback to Wagmi
   const activeChainId = metamaskChainId ?? chainId
   const isWrongNetwork = activeChainId !== appConfig.chainId
+  const metaMaskUnlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const isWalletLocked = isConnected && metaMaskUnlockState === 'locked'
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
@@ -916,7 +919,7 @@ export function Dashboard() {
       }
   }
 
-  const handleCreateDeal = async () => {
+  const handleCreateDeal = async (evmCreator: string) => {
     if (!bankBalances.stake && !bankBalances.atom) {
       setStatusTone('error')
       setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
@@ -955,7 +958,7 @@ export function Dashboard() {
           serviceHint = buildServiceHint('General', { replicas })
         }
         const res = await submitDeal({
-          creator: address || nilAddress,
+          creator: evmCreator,
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
@@ -973,8 +976,47 @@ export function Dashboard() {
         }
       } catch (e) {
         setStatusTone('error')
-        setStatusMsg('Deal allocation failed. Check gateway logs.')
+        setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
       }
+  }
+
+  const handleCreateDealClick = async () => {
+    if (!bankBalances.stake && !bankBalances.atom) {
+      setStatusTone('error')
+      setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
+      return
+    }
+
+    try {
+      if (isWalletLocked) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
+        const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
+        const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
+        if (!first || !first.startsWith('0x')) throw new Error('Unlock MetaMask to continue.')
+        await handleCreateDeal(first)
+        return
+      }
+
+      if (!isConnected || !address) {
+        await switchNetwork().catch(() => undefined)
+        const connected = await connectAsync({ connector: injectedConnector })
+        const first = connected?.accounts?.[0]
+        const creator = typeof first === 'string' && first.startsWith('0x') ? first : address
+        if (!creator || !creator.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
+        await handleCreateDeal(creator)
+        return
+      }
+
+      if (!address || !address.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
+      await handleCreateDeal(address)
+    } catch (e) {
+      setStatusTone('error')
+      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
+    }
   }
 
   const handleUpdateContent = async (manifestRoot: string, manifestSize: number): Promise<boolean> => {
@@ -2290,12 +2332,20 @@ export function Dashboard() {
                   )}
                 </div>
                 <button
-                  onClick={handleCreateDeal}
+                  onClick={isWrongNetwork ? handleSwitchNetwork : handleCreateDealClick}
                   disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
                   data-testid="alloc-submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                 >
-                  {dealLoading ? 'Creating...' : 'Create deal'}
+                  {dealLoading
+                    ? 'Creating...'
+                    : isWrongNetwork
+                      ? 'Switch network'
+                      : isWalletLocked
+                        ? 'Unlock wallet'
+                        : !isConnected || !address
+                          ? 'Connect wallet'
+                          : 'Create deal'}
                 </button>
               </div>
             </div>
