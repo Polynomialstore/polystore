@@ -79,7 +79,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	if err := b.AppendFile(baseName, shardOut.FileSize, oldUserCount * RawMduCapacity); err != nil {
+	if err := b.AppendFile(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity); err != nil {
 		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)
 	}
@@ -147,7 +147,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		b.Free()
 		return nil, "", 0, err
 	}
-	
+
 	tmp0, err := os.CreateTemp(uploadDir, "mdu0-append-*.bin")
 	if err != nil {
 		b.Free()
@@ -374,6 +374,9 @@ func buildWitnessMdusFromData(ctx context.Context, witnessData []byte, witnessCo
 }
 
 func copyFile(src, dst string) error {
+	if err := os.Link(src, dst); err == nil {
+		return nil
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err

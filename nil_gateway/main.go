@@ -4545,9 +4545,12 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		// If we can't talk to the chain, we can't validate. Fail safe.
 		log.Printf("SpUploadMdu: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
@@ -4628,9 +4631,12 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("SpUploadShard: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
 		return
@@ -4758,9 +4764,12 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain (fail safe if chain is unreachable).
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("SpUploadManifest: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
 		return
