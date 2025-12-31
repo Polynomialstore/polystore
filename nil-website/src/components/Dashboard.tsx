@@ -2152,7 +2152,9 @@ export function Dashboard() {
                         data-testid={`deal-row-${deal.id}`}
                         onClick={() => {
                           setTargetDealId(String(deal.id ?? ''))
-                          setActiveTab(hint.mode === 'mode2' ? 'mdu' : 'content')
+                          if (!showAdvanced && activeTab === 'content') {
+                            setActiveTab('mdu')
+                          }
                           setPendingScrollTarget('workspace')
                         }}
                         className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
