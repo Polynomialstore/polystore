@@ -173,8 +173,8 @@ export function Dashboard() {
   const [contentFilesLoading, setContentFilesLoading] = useState(false)
   const [contentFilesError, setContentFilesError] = useState<string | null>(null)
   const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
-  const [contentSlabLoading, setContentSlabLoading] = useState(false)
-  const [contentSlabError, setContentSlabError] = useState<string | null>(null)
+  const [, setContentSlabLoading] = useState(false)
+  const [, setContentSlabError] = useState<string | null>(null)
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
@@ -389,7 +389,6 @@ export function Dashboard() {
     [hasAnyContent, hasAnyDeals, hasFunds, hasRetrieval, hasWallet],
   )
   const wizardNext = wizardSteps.find((step) => !step.done) || null
-  const wizardDoneCount = useMemo(() => wizardSteps.filter((step) => step.done).length, [wizardSteps])
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -400,9 +399,6 @@ export function Dashboard() {
   )
   const isTargetDealMode2 = targetDealService.mode === 'mode2'
   const hasSelectedDeal = Boolean(targetDealId)
-  const hasCommittedContent = Boolean(targetDeal?.cid)
-  const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Empty' : '—'
-  const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
 
   useEffect(() => {
     if (hasSelectedDeal && !isTargetDealMode2) {
@@ -1305,6 +1301,244 @@ export function Dashboard() {
     </div>
   )
 
+  const onChainCid = String(targetDeal?.cid || '').trim()
+
+  const dealExplorerTopPanel = (
+    <div className="p-5 space-y-4 bg-muted/10">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setActiveTab('mdu')}
+            data-testid="tab-mdu"
+            className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === 'mdu'
+                ? 'border-primary/40 bg-primary/10 text-foreground'
+                : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
+            }`}
+          >
+            <Upload className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
+            Upload
+          </button>
+
+          {showAdvanced && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('content')}
+              data-testid="tab-content"
+              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                activeTab === 'content'
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
+              }`}
+            >
+              <Database
+                className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`}
+              />
+              Mode 1 (advanced)
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          data-testid="workspace-advanced-toggle"
+          className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            showAdvanced
+              ? 'border-primary/40 bg-primary/10 text-primary'
+              : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+          }`}
+        >
+          Advanced
+        </button>
+      </div>
+
+      {wizardNext
+        ? (() => {
+            const step = wizardNext
+            return (
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 text-[11px] text-muted-foreground">
+                  <span className="font-semibold text-foreground">{step.label}</span>
+                  <span className="mx-2 text-border">|</span>
+                  <span className="truncate">{step.hint}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleWizardAction(step.id)}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                >
+                  {step.actionLabel}
+                  <ArrowDownRight className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })()
+        : null}
+
+      {activeTab === 'content' ? (
+        !showAdvanced ? (
+          <div
+            ref={contentRef}
+            className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          >
+            <div>
+              <div className="font-semibold text-foreground">Advanced tools are hidden</div>
+              <div className="text-xs text-muted-foreground mt-1">Enable Advanced to access gateway sharding (Mode 1).</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(true)}
+              className="inline-flex items-center justify-center rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+            >
+              Enable Advanced
+            </button>
+          </div>
+        ) : (
+          <div ref={contentRef} className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Legacy gateway sharding (Mode 1). For Mode 2, use the Upload tab.
+            </p>
+            <div className="grid grid-cols-1 gap-3 text-sm">
+              <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+                Target deal:{' '}
+                <span className="font-mono text-foreground">{targetDealId ? `#${targetDealId}` : '—'}</span>
+                {!targetDealId ? <span className="ml-2">Select a deal above to continue.</span> : null}
+              </div>
+              {targetDealId && (
+                <div className="text-xs text-muted-foreground">
+                  On-chain:{' '}
+                  {onChainCid ? (
+                    <span className="font-mono text-primary">{`${onChainCid.slice(0, 18)}...`}</span>
+                  ) : (
+                    <span className="italic">Empty container</span>
+                  )}{' '}
+                  • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
+                </div>
+              )}
+              {isTargetDealMode2 && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  This is a Mode 2 deal. Use the Upload tab (Mode 2).
+                </div>
+              )}
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Select file</span>
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={!targetDealId || uploadLoading || isTargetDealMode2}
+                  data-testid="content-file-input"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                />
+              </label>
+              {stagedUpload && (
+                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                  <div>
+                    Staged: <span className="font-mono text-foreground">{stagedUpload.filename}</span>
+                  </div>
+                  <div>
+                    Manifest root:{' '}
+                    <span className="font-mono text-primary select-all" data-testid="staged-manifest-root">
+                      {stagedUpload.cid}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {targetDealId && contentManifestRoot && (
+                <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Files In Slab</div>
+                  {receiptStatus !== 'idle' && (
+                    <div className="text-[11px]">
+                      {receiptStatus === 'submitted' ? (
+                        <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
+                      ) : (
+                        <span className="text-red-500 dark:text-red-400">
+                          Receipt failed{receiptError ? `: ${receiptError}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {contentFilesLoading ? (
+                    <div className="text-xs text-muted-foreground">Loading file table…</div>
+                  ) : contentFiles && contentFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      {contentFiles.map((f) => {
+                        return (
+                          <div
+                            key={`${f.path}:${f.start_offset}`}
+                            className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                {f.path}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">{f.size_bytes} bytes</div>
+                            </div>
+                            <button
+                              onClick={() => handleContentDownload(f)}
+                              disabled={downloading}
+                              data-testid="content-download"
+                              data-file-path={f.path}
+                              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                            >
+                              <ArrowDownRight className="w-4 h-4" />
+                              {downloading ? 'Downloading...' : 'Download'}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground italic">No files yet for this manifest.</div>
+                  )}
+                  {contentFilesError && (
+                    <div className="text-xs text-destructive truncate" title={contentFilesError}>
+                      {contentFilesError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <div className="text-xs text-muted-foreground">
+                {updateTx && (
+                  <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0, 10)}...
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (!stagedUpload) return
+                  void handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)
+                }}
+                disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
+                data-testid="content-commit"
+                className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+              >
+                {updateLoading ? 'Committing...' : 'Commit uploaded content'}
+              </button>
+            </div>
+          </div>
+        )
+      ) : (
+        <div ref={mduRef} className="space-y-4">
+          {targetDealId ? (
+            <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
+              <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Choose a deal from the left to upload, list, and download files.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       {rpcMismatch && (
@@ -1360,6 +1594,7 @@ export function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
+        {/*
         <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
           <div className="px-5 py-2 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -1746,16 +1981,41 @@ export function Dashboard() {
               )}
             </div>
           </div>
+        */}
 
-          {targetDeal ? (
-            <div ref={dealDetailRef} className="min-w-0">
+          <div ref={dealDetailRef} className="min-w-0">
+            {targetDeal ? (
               <DealDetail
                 deal={targetDeal}
                 nilAddress={nilAddress}
                 onFileActivity={recordRecentActivity}
+                topPanel={dealExplorerTopPanel}
               />
-            </div>
-          ) : null}
+            ) : (
+              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <HardDrive className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
+                      <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
+                        {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        Upload, list, and download files inside a deal.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-b border-border">{dealExplorerTopPanel}</div>
+                <div className="p-5 text-sm text-muted-foreground">
+                  {targetDealId ? 'Loading deal details…' : 'Select a deal from the left to view files.'}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="min-w-0 order-1 lg:order-1 space-y-6">

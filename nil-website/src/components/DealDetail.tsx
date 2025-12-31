@@ -79,6 +79,8 @@ interface FileActivity {
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2'
+  const hasCommittedContent = Boolean(String(deal.cid || '').trim())
+  const dealStatusLabel = hasCommittedContent ? 'Active' : 'Empty'
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
   const dealSizeLabel = Number.isFinite(dealSizeBytes) && dealSizeBytes > 0
     ? `${(dealSizeBytes / 1024 / 1024).toFixed(2)} MB`
@@ -597,7 +599,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
 
   return (
-    <div className="mt-6 rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+    <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
       <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
         <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-2 rounded-lg">
@@ -607,6 +609,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                 <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
                 <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      hasCommittedContent
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-border bg-secondary/60 text-muted-foreground'
+                    }`}
+                  >
+                    {dealStatusLabel}
+                  </span>
                   <span className="font-mono text-foreground">{dealSizeLabel}</span>
                   <span className="text-border">|</span>
                   <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
