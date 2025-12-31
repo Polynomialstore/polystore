@@ -2026,7 +2026,17 @@ export function Dashboard() {
         */}
 
           <div ref={dealDetailRef} className="min-w-0">
-            {targetDeal ? (
+            {ownedDeals.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="p-8 text-center">
+                  <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                    <HardDrive className="w-7 h-7 text-muted-foreground" />
+                  </div>
+                  <div className="text-sm font-semibold text-foreground">No deals yet</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
+                </div>
+              </div>
+            ) : targetDeal ? (
               <DealDetail
                 deal={targetDeal}
                 nilAddress={nilAddress}
@@ -2125,17 +2135,9 @@ export function Dashboard() {
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
                 <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
               </div>
-            ) : ownedDeals.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-                  <HardDrive className="w-7 h-7 text-muted-foreground" />
-                </div>
-              <div className="text-sm font-semibold text-foreground">No deals yet</div>
-              <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
-            </div>
-          ) : (
-            <div className="p-2">
-              <div className="space-y-1">
+            ) : ownedDeals.length === 0 ? null : (
+              <div className="p-2">
+                <div className="space-y-1">
                   {ownedDeals.map((deal) => {
                     const isSelected = String(deal.id) === String(targetDealId || '')
                     const hint = parseServiceHint(deal.service_hint)
@@ -2188,10 +2190,10 @@ export function Dashboard() {
                         </div>
                       </button>
                     )
-                })}
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div ref={allocRef} className="border-t border-border bg-muted/20 px-6 py-4">
             <div className="flex items-start justify-between gap-3">
