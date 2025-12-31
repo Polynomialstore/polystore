@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, ChevronDown } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -390,10 +390,6 @@ export function Dashboard() {
   )
   const wizardNext = wizardSteps.find((step) => !step.done) || null
   const wizardDoneCount = useMemo(() => wizardSteps.filter((step) => step.done).length, [wizardSteps])
-  const wizardProgressPct = useMemo(() => {
-    if (wizardSteps.length === 0) return 0
-    return Math.round((wizardDoneCount / wizardSteps.length) * 100)
-  }, [wizardDoneCount, wizardSteps])
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -1365,7 +1361,7 @@ export function Dashboard() {
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
         <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-          <div className="px-5 py-3 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="px-5 py-2 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
@@ -1411,95 +1407,31 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="p-3 border-b border-border bg-muted/20 space-y-3">
+          <div className="px-5 py-2 border-b border-border bg-muted/20 space-y-2">
           {wizardNext ? (
-            <details className="group rounded-xl border border-border bg-background/60 px-4 py-3">
-            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Quick Start
-                    </span>
-                    <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] text-muted-foreground">
-                      {wizardDoneCount}/{wizardSteps.length} complete
-                    </span>
-                  </div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">
-                    {`Next: ${wizardNext.label}`}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {wizardNext.hint}
-                  </div>
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Getting started
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      void handleWizardAction(wizardNext.id)
-                    }}
-                    className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/15"
-                  >
-                    {wizardNext.actionLabel}
-                    <ArrowDownRight className="h-3 w-3" />
-                  </button>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{wizardNext.label}</span>
+                  <span className="text-border">|</span>
+                  <span>
+                    {wizardDoneCount}/{wizardSteps.length}
+                  </span>
                 </div>
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">{wizardNext.hint}</div>
               </div>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500"
-                  style={{ width: `${wizardProgressPct}%` }}
-                />
-              </div>
-            </summary>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {wizardSteps.map((step, idx) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => void handleWizardAction(step.id)}
-                  className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
-                    step.done
-                      ? 'border-emerald-500/25 bg-emerald-500/10'
-                      : wizardNext?.id === step.id
-                        ? 'border-primary/40 bg-primary/10'
-                        : 'border-border bg-background/60 hover:bg-secondary/40'
-                  }`}
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                        step.done
-                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : wizardNext?.id === step.id
-                            ? 'border-primary/30 bg-primary/10 text-primary'
-                            : 'border-border text-muted-foreground'
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">{step.label}</div>
-                      <div className="text-[11px] text-muted-foreground">{step.hint}</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold">
-                    {step.done ? (
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Done
-                      </span>
-                    ) : (
-                      <span className="text-primary">{step.actionLabel}</span>
-                    )}
-                  </div>
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => void handleWizardAction(wizardNext.id)}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+              >
+                {wizardNext.actionLabel}
+                <ArrowDownRight className="h-3 w-3" />
+              </button>
             </div>
-          </details>
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1507,13 +1439,13 @@ export function Dashboard() {
               type="button"
               onClick={() => setActiveTab('mdu')}
               data-testid="tab-mdu"
-              className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 activeTab === 'mdu'
                   ? 'border-primary/40 bg-primary/10 text-foreground'
                   : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
               }`}
             >
-              <Upload className={`h-4 w-4 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
+              <Upload className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
               Upload
             </button>
 
@@ -1522,13 +1454,13 @@ export function Dashboard() {
                 type="button"
                 onClick={() => setActiveTab('content')}
                 data-testid="tab-content"
-                className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   activeTab === 'content'
                     ? 'border-primary/40 bg-primary/10 text-foreground'
                     : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
                 }`}
               >
-                <Database className={`h-4 w-4 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
+                <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
                 Legacy (Mode 1)
               </button>
             )}
