@@ -536,66 +536,133 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	mr, err := r.MultipartReader()
+	if err != nil {
 		http.Error(w, "invalid multipart form", http.StatusBadRequest)
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
+	var (
+		owner          string
+		dealIDStr      string
+		recordPath     string
+		maxUserMdusStr string
+
+		filename   string
+		bytesTotal uint64
+		path       string
+	)
+
+	const maxFieldSize = 1 << 20 // 1 MiB per field (defensive; fields are small)
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			return
+		}
+
+		formName := part.FormName()
+		if formName == "" {
+			_ = part.Close()
+			continue
+		}
+
+		if formName != "file" {
+			b, err := io.ReadAll(io.LimitReader(part, maxFieldSize))
+			_ = part.Close()
+			if err != nil {
+				http.Error(w, "invalid multipart form", http.StatusBadRequest)
+				return
+			}
+			val := strings.TrimSpace(string(b))
+			switch formName {
+			case "owner":
+				owner = val
+			case "deal_id":
+				dealIDStr = val
+			case "file_path":
+				recordPath = val
+			case "max_user_mdus":
+				maxUserMdusStr = val
+			}
+			continue
+		}
+
+		// File upload (streamed: avoids net/http's ParseMultipartForm temp-file buffering).
+		if filename != "" {
+			_ = part.Close()
+			http.Error(w, "only one file is supported", http.StatusBadRequest)
+			return
+		}
+
+		filename = strings.TrimSpace(part.FileName())
+		if filename == "" {
+			_ = part.Close()
+			http.Error(w, "invalid filename", http.StatusBadRequest)
+			return
+		}
+		key := filepath.Base(filename)
+		if strings.TrimSpace(key) == "" || key == "." || key == string(filepath.Separator) {
+			_ = part.Close()
+			http.Error(w, "invalid filename", http.StatusBadRequest)
+			return
+		}
+
+		path = filepath.Join(uploadDir, key)
+		out, err := os.Create(path)
+		if err != nil {
+			_ = part.Close()
+			http.Error(w, "failed to create file", http.StatusInternalServerError)
+			return
+		}
+
+		if job != nil {
+			job.setFile(filename, 0)
+			job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
+			job.setBytes(0, 0)
+		}
+
+		pw := &uploadProgressWriter{job: job, bytesTotal: 0}
+		reader := &ctxReader{ctx: ingestCtx, r: part}
+		n64, copyErr := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10))
+		_ = part.Close()
+		if closeErr := out.Close(); closeErr != nil && copyErr == nil {
+			copyErr = closeErr
+		}
+		if copyErr != nil {
+			if job != nil {
+				job.setError(copyErr.Error())
+			}
+			if errors.Is(copyErr, context.Canceled) || errors.Is(copyErr, context.DeadlineExceeded) {
+				http.Error(w, copyErr.Error(), http.StatusRequestTimeout)
+				return
+			}
+			http.Error(w, "failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		if n64 > 0 {
+			bytesTotal = uint64(n64)
+		}
+		if job != nil && bytesTotal > 0 {
+			job.setBytes(bytesTotal, bytesTotal)
+		}
+	}
+
+	if filename == "" || strings.TrimSpace(path) == "" {
 		http.Error(w, "file field is required", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
 
-	owner := r.FormValue("owner")
-	dealIDStr := r.FormValue("deal_id")
-	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", header.Filename, owner, dealIDStr)
-
-	// Persist file under a deterministic key (filename-based for now).
-	key := strings.TrimSpace(header.Filename)
-	if key == "" {
-		http.Error(w, "invalid filename", http.StatusBadRequest)
-		return
-	}
-	path := filepath.Join(uploadDir, key)
-	out, err := os.Create(path)
-	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
-		return
+	if dealIDStr == "" && dealIDQueryOK {
+		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
 	}
 
-	bytesTotal := uint64(0)
-	if header.Size > 0 {
-		bytesTotal = uint64(header.Size)
-	}
-	if job != nil {
-		job.setFile(header.Filename, bytesTotal)
-		job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
-		job.setBytes(0, bytesTotal)
-	}
-
-	pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
-	reader := &ctxReader{ctx: ingestCtx, r: file}
-	if _, err := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10)); err != nil {
-		_ = out.Close()
-		if job != nil {
-			job.setError(err.Error())
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, err.Error(), http.StatusRequestTimeout)
-			return
-		}
-		http.Error(w, "failed to write file", http.StatusInternalServerError)
-		return
-	}
-	if err := out.Close(); err != nil {
-		if job != nil {
-			job.setError(err.Error())
-		}
-		http.Error(w, "failed to close file", http.StatusInternalServerError)
-		return
-	}
+	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", filename, owner, dealIDStr)
 
 	var cid string
 	var size uint64
@@ -607,7 +674,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	// - NIL_FAKE_INGEST=1: fast SHA256-based manifest_root (dev only, not Triple-Proof valid)
 	// - NIL_FAST_INGEST=1: skip witness generation (faster, still not Triple-Proof valid)
 	maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
-	if raw := strings.TrimSpace(r.FormValue("max_user_mdus")); raw != "" {
+	if raw := strings.TrimSpace(maxUserMdusStr); raw != "" {
 		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
 			maxMdus = parsed
 		}
@@ -651,9 +718,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				recordPath := strings.TrimSpace(r.FormValue("file_path"))
 				if recordPath == "" {
-					recordPath = strings.TrimSpace(header.Filename)
+					recordPath = strings.TrimSpace(filename)
 				}
 				if recordPath != "" {
 					if validated, err := validateNilfsFilePath(recordPath); err == nil {
@@ -733,9 +799,9 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				recordPath := strings.TrimSpace(recordPath)
 				if recordPath == "" {
-					recordPath = strings.TrimSpace(header.Filename)
+					recordPath = strings.TrimSpace(filename)
 				}
 				if recordPath != "" {
 					if validated, err := validateNilfsFilePath(recordPath); err == nil {
@@ -862,7 +928,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"size_bytes":       size,
 		"file_size_bytes":  fileSize,
 		"allocated_length": allocatedLength,
-		"filename":         header.Filename,
+		"filename":         filename,
 		"upload_id":        uploadID,
 	}
 	w.Header().Set("Content-Type", "application/json")
