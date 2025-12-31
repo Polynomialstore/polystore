@@ -336,9 +336,8 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 	for slot := 0; slot < int(n); slot++ {
 		start := slot * shardLen
 		end := start + shardLen
-		shardCopy := make([]byte, shardLen)
-		copy(shardCopy, shardsFlat[start:end])
-		shards = append(shards, shardCopy)
+		// Slice the flat buffer with a capped capacity to prevent accidental overlap via append.
+		shards = append(shards, shardsFlat[start:end:end])
 	}
 	return witness_flat, shards, nil
 }

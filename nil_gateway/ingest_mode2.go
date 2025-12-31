@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -9,9 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -142,8 +145,8 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 	}()
 
-	userRoots := make([][]byte, 0, userMdus)
-	witnessData := new(bytes.Buffer)
+	userRoots := make([][]byte, userMdus)
+	witnessFlats := make([][]byte, userMdus)
 
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -152,53 +155,101 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	defer f.Close()
 
 	rawBuf := make([]byte, RawMduCapacity)
-	for i := uint64(0); i < userMdus; i++ {
-		if err := ctx.Err(); err != nil {
+	{
+		parallelism := mode2EncodeParallelism()
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.SetLimit(parallelism)
+
+		var completed atomic.Uint64
+
+		for i := uint64(0); i < userMdus; i++ {
+			if err := egctx.Err(); err != nil {
+				return nil, "", err
+			}
+
+			n, readErr := io.ReadFull(f, rawBuf)
+			if readErr != nil {
+				if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+					// Last chunk is short (or empty).
+				} else {
+					return nil, "", readErr
+				}
+			}
+
+			chunk := make([]byte, n)
+			copy(chunk, rawBuf[:n])
+			i := i
+
+			eg.Go(func() error {
+				if err := egctx.Err(); err != nil {
+					return err
+				}
+
+				encoded := encodePayloadToMdu(chunk)
+				witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
+				if err != nil {
+					return fmt.Errorf("expand mdu %d: %w", i, err)
+				}
+				root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+				if err != nil {
+					return fmt.Errorf("compute mdu root %d: %w", i, err)
+				}
+				userRoots[i] = root
+				witnessFlats[i] = witnessFlat
+
+				slabIndex := uint64(1) + witnessCount + i
+				for slot := uint64(0); slot < stripe.slotCount; slot++ {
+					if int(slot) >= len(shards) {
+						return fmt.Errorf("missing shard for slot %d", slot)
+					}
+					name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
+					if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+						return err
+					}
+				}
+
+				next := completed.Add(1)
+				if job != nil {
+					job.setSteps(next, totalSteps)
+				}
+
+				return nil
+			})
+		}
+
+		if err := eg.Wait(); err != nil {
 			return nil, "", err
 		}
-		n, readErr := io.ReadFull(f, rawBuf)
-		if readErr != nil {
-			if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
-				// Last chunk is short (or empty).
-			} else {
-				return nil, "", readErr
-			}
-		}
-		chunk := rawBuf[:n]
-		encoded := encodePayloadToMdu(chunk)
+	}
 
-		witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
-		if err != nil {
-			return nil, "", fmt.Errorf("expand mdu %d: %w", i, err)
+	witnessBytesPerUser := uint64(0)
+	for i := uint64(0); i < userMdus; i++ {
+		root := userRoots[i]
+		if len(root) == 0 {
+			return nil, "", fmt.Errorf("missing user root %d", i)
 		}
-		root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
-		if err != nil {
-			return nil, "", fmt.Errorf("compute mdu root %d: %w", i, err)
-		}
-		userRoots = append(userRoots, root)
 		if err := builder.SetRoot(witnessCount+i, root); err != nil {
 			return nil, "", fmt.Errorf("set user root %d: %w", i, err)
 		}
-		_, _ = witnessData.Write(witnessFlat)
 
-		slabIndex := uint64(1) + witnessCount + i
-		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			if int(slot) >= len(shards) {
-				return nil, "", fmt.Errorf("missing shard for slot %d", slot)
-			}
-			name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-			if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
-				return nil, "", err
-			}
+		wf := witnessFlats[i]
+		if len(wf) == 0 {
+			return nil, "", fmt.Errorf("missing witness_flat %d", i)
 		}
-		if job != nil {
-			job.setSteps(i+1, totalSteps)
+		if witnessBytesPerUser == 0 {
+			witnessBytesPerUser = uint64(len(wf))
+		} else if witnessBytesPerUser != uint64(len(wf)) {
+			return nil, "", fmt.Errorf("witness_flat length mismatch (want %d, got %d)", witnessBytesPerUser, len(wf))
 		}
+	}
+
+	witnessBytes := make([]byte, 0, userMdus*witnessBytesPerUser)
+	for i := uint64(0); i < userMdus; i++ {
+		witnessBytes = append(witnessBytes, witnessFlats[i]...)
 	}
 
 	// Build witness MDUs from the concatenated witness commitments.
 	witnessRoots := make([][]byte, 0, witnessCount)
-	witnessBytes := witnessData.Bytes()
 	for i := uint64(0); i < witnessCount; i++ {
 		start := i * RawMduCapacity
 		end := start + RawMduCapacity
@@ -286,6 +337,19 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		witnessMdus:     witnessCount,
 		userMdus:        userMdus,
 	}, finalDir, nil
+}
+
+func mode2EncodeParallelism() int {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_ENCODE_PARALLELISM"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	if n := runtime.GOMAXPROCS(0); n > 0 {
+		return n
+	}
+	return 1
 }
 
 func mode2BuildArtifactsAppend(
@@ -474,51 +538,83 @@ func mode2BuildArtifactsAppend(
 	}
 	defer f.Close()
 	rawBuf := make([]byte, RawMduCapacity)
-	newWitnessBytes := make([]byte, 0, newUserMdus*witnessBytesPerUser)
-	newUserRoots := make([][]byte, 0, newUserMdus)
+	newUserRoots := make([][]byte, newUserMdus)
+	newWitnessFlats := make([][]byte, newUserMdus)
+	{
+		parallelism := mode2EncodeParallelism()
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.SetLimit(parallelism)
+		var completed atomic.Uint64
 
-	for i := uint64(0); i < newUserMdus; i++ {
-		if err := ctx.Err(); err != nil {
-			return nil, "", err
-		}
-		n, readErr := io.ReadFull(f, rawBuf)
-		if readErr != nil {
-			if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
-				// Last chunk is short (or empty).
-			} else {
-				return nil, "", readErr
-			}
-		}
-		chunk := rawBuf[:n]
-		encoded := encodePayloadToMdu(chunk)
-		witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
-		if err != nil {
-			return nil, "", fmt.Errorf("expand new mdu %d: %w", i, err)
-		}
-		if uint64(len(witnessFlat)) != witnessBytesPerUser {
-			return nil, "", fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
-		}
-		root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
-		if err != nil {
-			return nil, "", fmt.Errorf("compute new mdu root %d: %w", i, err)
-		}
-		newUserRoots = append(newUserRoots, root)
-		newWitnessBytes = append(newWitnessBytes, witnessFlat...)
-
-		userIdx := oldUserMdus + i
-		slabIndex := uint64(1) + witnessCount + userIdx
-		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			if int(slot) >= len(shards) {
-				return nil, "", fmt.Errorf("missing shard for slot %d", slot)
-			}
-			name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-			if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+		for i := uint64(0); i < newUserMdus; i++ {
+			if err := egctx.Err(); err != nil {
 				return nil, "", err
 			}
+			n, readErr := io.ReadFull(f, rawBuf)
+			if readErr != nil {
+				if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+					// Last chunk is short (or empty).
+				} else {
+					return nil, "", readErr
+				}
+			}
+
+			chunk := make([]byte, n)
+			copy(chunk, rawBuf[:n])
+			i := i
+
+			eg.Go(func() error {
+				if err := egctx.Err(); err != nil {
+					return err
+				}
+
+				encoded := encodePayloadToMdu(chunk)
+				witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
+				if err != nil {
+					return fmt.Errorf("expand new mdu %d: %w", i, err)
+				}
+				if uint64(len(witnessFlat)) != witnessBytesPerUser {
+					return fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
+				}
+				root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+				if err != nil {
+					return fmt.Errorf("compute new mdu root %d: %w", i, err)
+				}
+				newUserRoots[i] = root
+				newWitnessFlats[i] = witnessFlat
+
+				userIdx := oldUserMdus + i
+				slabIndex := uint64(1) + witnessCount + userIdx
+				for slot := uint64(0); slot < stripe.slotCount; slot++ {
+					if int(slot) >= len(shards) {
+						return fmt.Errorf("missing shard for slot %d", slot)
+					}
+					name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
+					if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+						return err
+					}
+				}
+
+				next := completed.Add(1)
+				if job != nil {
+					job.setSteps(next, totalSteps)
+				}
+				return nil
+			})
 		}
-		if job != nil {
-			job.setSteps(i+1, totalSteps)
+
+		if err := eg.Wait(); err != nil {
+			return nil, "", err
 		}
+	}
+
+	newWitnessBytes := make([]byte, 0, newUserMdus*witnessBytesPerUser)
+	for i := uint64(0); i < newUserMdus; i++ {
+		wf := newWitnessFlats[i]
+		if uint64(len(wf)) != witnessBytesPerUser {
+			return nil, "", fmt.Errorf("missing witness_flat %d", i)
+		}
+		newWitnessBytes = append(newWitnessBytes, wf...)
 	}
 
 	// Recompute all user roots + rebuild witness MDUs from concatenated witness commitments.
@@ -658,16 +754,16 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	job := uploadJobFromContext(ctx)
-	uploaded := uint64(0)
 	totalUploads := stripe.slotCount * (witnessCount + 2 + userMdus)
 	if job != nil {
 		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
 		job.setSteps(0, totalUploads)
 	}
+	var uploaded atomic.Uint64
 	bump := func() {
-		uploaded++
+		next := uploaded.Add(1)
 		if job != nil {
-			job.setSteps(uploaded, totalUploads)
+			job.setSteps(next, totalUploads)
 		}
 	}
 
@@ -679,35 +775,60 @@ func mode2UploadArtifactsToProviders(
 	if len(providers) < int(stripe.slotCount) {
 		return fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
 	}
-	slotBases := make([]string, 0, stripe.slotCount)
-	for slot := uint64(0); slot < stripe.slotCount; slot++ {
-		base, err := resolveProviderHTTPBaseURL(ctx, providers[slot])
-		if err != nil {
+	slotBases := make([]string, stripe.slotCount)
+	{
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.SetLimit(int(stripe.slotCount))
+		for slot := uint64(0); slot < stripe.slotCount; slot++ {
+			slot := int(slot)
+			provider := providers[slot]
+			eg.Go(func() error {
+				base, err := resolveProviderHTTPBaseURL(egctx, provider)
+				if err != nil {
+					return err
+				}
+				slotBases[slot] = strings.TrimRight(base, "/")
+				return nil
+			})
+		}
+		if err := eg.Wait(); err != nil {
 			return err
 		}
-		slotBases = append(slotBases, strings.TrimRight(base, "/"))
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	transport := &http.Transport{
+		MaxIdleConns:        256,
+		MaxIdleConnsPerHost: 32,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 
-	uploadBlob := func(ctx context.Context, url string, headers map[string]string, path string, maxBytes int64) error {
-		body, err := os.ReadFile(path)
+	uploadBlob := func(ctx context.Context, url string, setHeaders func(*http.Request), path string, maxBytes int64) error {
+		fi, err := os.Stat(path)
 		if err != nil {
 			return err
 		}
-		if maxBytes > 0 && int64(len(body)) > maxBytes {
-			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), len(body))
+		if maxBytes > 0 && fi.Size() > maxBytes {
+			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), fi.Size())
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		f, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		for k, v := range headers {
-			req.Header.Set(k, v)
+		defer f.Close()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, f)
+		if err != nil {
+			return err
 		}
+		req.ContentLength = fi.Size()
 		req.Header.Set("Content-Type", "application/octet-stream")
+		if setHeaders != nil {
+			setHeaders(req)
+		}
+
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
@@ -720,46 +841,51 @@ func mode2UploadArtifactsToProviders(
 		return nil
 	}
 
-	// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
-	for _, base := range slotBases {
-		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
-			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-			if err := uploadBlob(ctx, base+"/sp/upload_mdu", map[string]string{
-				"X-Nil-Deal-ID":       dealIDStr,
-				"X-Nil-Mdu-Index":     strconv.FormatUint(mduIndex, 10),
-				"X-Nil-Manifest-Root": manifestRootCanonical,
-			}, path, 10<<20); err != nil {
+	eg, egctx := errgroup.WithContext(ctx)
+	eg.SetLimit(int(stripe.slotCount))
+	for slot := uint64(0); slot < stripe.slotCount; slot++ {
+		slot := int(slot)
+		base := slotBases[slot]
+		eg.Go(func() error {
+			// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
+			for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
+				path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+				if err := uploadBlob(egctx, base+"/sp/upload_mdu", func(req *http.Request) {
+					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
+					req.Header.Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
+					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
+				}, path, 10<<20); err != nil {
+					return err
+				}
+				bump()
+			}
+
+			if err := uploadBlob(egctx, base+"/sp/upload_manifest", func(req *http.Request) {
+				req.Header.Set("X-Nil-Deal-ID", dealIDStr)
+				req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
+			}, filepath.Join(finalDir, "manifest.bin"), 512<<10); err != nil {
 				return err
 			}
 			bump()
-		}
-		if err := uploadBlob(ctx, base+"/sp/upload_manifest", map[string]string{
-			"X-Nil-Deal-ID":       dealIDStr,
-			"X-Nil-Manifest-Root": manifestRootCanonical,
-		}, filepath.Join(finalDir, "manifest.bin"), 512<<10); err != nil {
-			return err
-		}
-		bump()
-	}
 
-	// Striped user shards.
-	for i := uint64(0); i < userMdus; i++ {
-		slabIndex := uint64(1) + witnessCount + i
-		for slot, base := range slotBases {
-			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
-			if err := uploadBlob(ctx, base+"/sp/upload_shard", map[string]string{
-				"X-Nil-Deal-ID":       dealIDStr,
-				"X-Nil-Mdu-Index":     strconv.FormatUint(slabIndex, 10),
-				"X-Nil-Slot":          strconv.Itoa(slot),
-				"X-Nil-Manifest-Root": manifestRootCanonical,
-			}, path, 10<<20); err != nil {
-				return err
+			// Striped user shards for this slot only.
+			for i := uint64(0); i < userMdus; i++ {
+				slabIndex := uint64(1) + witnessCount + i
+				path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
+				if err := uploadBlob(egctx, base+"/sp/upload_shard", func(req *http.Request) {
+					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
+					req.Header.Set("X-Nil-Mdu-Index", strconv.FormatUint(slabIndex, 10))
+					req.Header.Set("X-Nil-Slot", strconv.Itoa(slot))
+					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
+				}, path, 10<<20); err != nil {
+					return err
+				}
+				bump()
 			}
-			bump()
-		}
+			return nil
+		})
 	}
-
-	return nil
+	return eg.Wait()
 }
 
 func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, error) {
