@@ -185,8 +185,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 					return err
 				}
 
-				encoded := encodePayloadToMdu(chunk)
-				witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
+				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 				if err != nil {
 					return fmt.Errorf("expand mdu %d: %w", i, err)
 				}
@@ -568,8 +567,7 @@ func mode2BuildArtifactsAppend(
 					return err
 				}
 
-				encoded := encodePayloadToMdu(chunk)
-				witnessFlat, shards, err := crypto_ffi.ExpandMduRs(encoded, stripe.k, stripe.m)
+				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 				if err != nil {
 					return fmt.Errorf("expand new mdu %d: %w", i, err)
 				}

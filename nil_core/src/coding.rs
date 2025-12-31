@@ -7,6 +7,12 @@ pub const DATA_SHARDS_NUM: usize = 8;
 pub const PARITY_SHARDS_NUM: usize = SHARDS_NUM - DATA_SHARDS_NUM;
 pub const BLOBS_PER_SHARD: usize = 8; // 1MB / 128KB
 
+pub const SCALAR_BYTES: usize = 32;
+pub const SCALAR_PAYLOAD_BYTES: usize = 31;
+pub const SCALARS_PER_BLOB: usize = BLOB_SIZE / SCALAR_BYTES; // 4096
+pub const SCALARS_PER_MDU: usize = BLOBS_PER_MDU * SCALARS_PER_BLOB; // 262_144
+pub const MDU_PAYLOAD_BYTES: usize = SCALARS_PER_MDU * SCALAR_PAYLOAD_BYTES; // 8_126_464
+
 #[derive(Error, Debug)]
 pub enum CodingError {
     #[error("RS Error: {0}")]
@@ -28,12 +34,6 @@ pub struct ExpandedMdu {
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
-    const SCALAR_BYTES: usize = 32;
-    const SCALAR_PAYLOAD_BYTES: usize = 31;
-    const SCALARS_PER_BLOB: usize = BLOB_SIZE / SCALAR_BYTES; // 4096
-    const SCALARS_PER_MDU: usize = BLOBS_PER_MDU * SCALARS_PER_BLOB; // 262_144
-    const MDU_PAYLOAD_BYTES: usize = SCALARS_PER_MDU * SCALAR_PAYLOAD_BYTES; // 8_126_464
-
     let mut mdu = vec![0u8; MDU_SIZE];
     let payload = raw_data.get(..MDU_PAYLOAD_BYTES).unwrap_or(raw_data);
 
@@ -47,6 +47,37 @@ fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
     }
 
     mdu
+}
+
+fn encode_payload_into_blob(payload: &[u8], payload_base: usize, out_blob: &mut [u8]) {
+    debug_assert_eq!(out_blob.len(), BLOB_SIZE);
+
+    out_blob.fill(0);
+    if payload_base >= payload.len() {
+        return;
+    }
+
+    let mut src = payload_base;
+    for scalar_idx in 0..SCALARS_PER_BLOB {
+        if src >= payload.len() {
+            break;
+        }
+        let remaining = payload.len() - src;
+        let chunk_len = remaining.min(SCALAR_PAYLOAD_BYTES);
+        if chunk_len == 0 {
+            break;
+        }
+
+        let dst_scalar = scalar_idx * SCALAR_BYTES;
+        let pad = SCALAR_BYTES - chunk_len;
+        out_blob[dst_scalar + pad..dst_scalar + pad + chunk_len]
+            .copy_from_slice(&payload[src..src + chunk_len]);
+
+        src += chunk_len;
+        if chunk_len < SCALAR_PAYLOAD_BYTES {
+            break;
+        }
+    }
 }
 
 pub fn expand_mdu(ctx: &KzgContext, data: &[u8]) -> Result<ExpandedMdu, CodingError> {
@@ -171,6 +202,74 @@ pub fn expand_mdu_encoded_flat(
             let start = blob_idx * BLOB_SIZE;
             let end = start + BLOB_SIZE;
             row_shards[slot].copy_from_slice(&mdu_bytes[start..end]);
+        }
+        for slot in data_shards..shards_total {
+            row_shards[slot].fill(0);
+        }
+
+        r.encode(&mut row_shards)
+            .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+        for slot in 0..shards_total {
+            let commitment = ctx.blob_to_commitment(row_shards[slot])?;
+            let woff = (slot * rows + row_idx) * 48;
+            out_witness_flat[woff..woff + 48].copy_from_slice(&commitment);
+        }
+    }
+
+    Ok(())
+}
+
+/// Expands a raw payload (up to `MDU_PAYLOAD_BYTES`) into Mode 2 RS shards and witness commitments,
+/// writing the results into flat output buffers.
+///
+/// The payload is encoded into the field-aligned MDU layout (31-byte chunks right-aligned in 32-byte
+/// scalars) before RS encoding.
+pub fn expand_payload_flat(
+    ctx: &KzgContext,
+    payload_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+    out_witness_flat: &mut [u8],
+    out_shards_flat: &mut [u8],
+) -> Result<(), CodingError> {
+    if data_shards == 0 || parity_shards == 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    if BLOBS_PER_MDU % data_shards != 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+
+    let payload = payload_bytes.get(..MDU_PAYLOAD_BYTES).unwrap_or(payload_bytes);
+
+    let rows = BLOBS_PER_MDU / data_shards;
+    let shards_total = data_shards + parity_shards;
+    let shard_len = rows * BLOB_SIZE;
+
+    let expected_witness_len = shards_total * rows * 48;
+    let expected_shards_len = shards_total * shard_len;
+    if out_witness_flat.len() != expected_witness_len || out_shards_flat.len() != expected_shards_len {
+        return Err(CodingError::InvalidSize);
+    }
+
+    let r = ReedSolomon::new(data_shards, parity_shards)
+        .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+    // RS encode and commit row-by-row to keep the working set small (and avoid an intermediate 8 MiB MDU buffer).
+    for row_idx in 0..rows {
+        let mut row_shards: Vec<&mut [u8]> = Vec::with_capacity(shards_total);
+        let base_ptr = out_shards_flat.as_mut_ptr();
+        for slot in 0..shards_total {
+            let offset = slot * shard_len + row_idx * BLOB_SIZE;
+            // SAFETY: each `(slot, row_idx)` maps to a disjoint BLOB_SIZE region within the
+            // `out_shards_flat` buffer.
+            row_shards.push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
+        }
+
+        for slot in 0..data_shards {
+            let blob_idx = row_idx * data_shards + slot;
+            let payload_base = blob_idx * SCALARS_PER_BLOB * SCALAR_PAYLOAD_BYTES;
+            encode_payload_into_blob(payload, payload_base, row_shards[slot]);
         }
         for slot in data_shards..shards_total {
             row_shards[slot].fill(0);

@@ -1,5 +1,5 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
-use crate::coding::{expand_mdu_encoded_flat, reconstruct_mdu_from_shards};
+use crate::coding::{expand_mdu_encoded_flat, expand_payload_flat, reconstruct_mdu_from_shards, MDU_PAYLOAD_BYTES};
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -186,6 +186,73 @@ pub extern "C" fn nil_expand_mdu_rs(
     let witness_out = unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
     let shards_out = unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
     if expand_mdu_encoded_flat(ctx, mdu_slice, ds, ps, witness_out, shards_out).is_err() {
+        return -3;
+    }
+
+    0
+}
+
+/// Expands a raw payload (up to 8,126,464 bytes) into Mode 2 RS shards and witness commitments.
+///
+/// This matches the MDU encoding used by the gateway/browser: 31-byte chunks right-aligned in 32-byte scalars.
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_expand_payload_rs(
+    payload_bytes: *const u8,
+    payload_bytes_len: usize,
+    data_shards: u64,
+    parity_shards: u64,
+    out_witness_flat: *mut u8,
+    out_witness_flat_len: usize,
+    out_shards_flat: *mut u8,
+    out_shards_flat_len: usize,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1,
+    };
+
+    if out_witness_flat.is_null() || out_shards_flat.is_null() {
+        return -2;
+    }
+    if payload_bytes_len > 0 && payload_bytes.is_null() {
+        return -2;
+    }
+    if data_shards == 0 || parity_shards == 0 {
+        return -2;
+    }
+
+    let ds = data_shards as usize;
+    let ps = parity_shards as usize;
+    if ds == 0 || ps == 0 {
+        return -2;
+    }
+    if BLOBS_PER_MDU % ds != 0 {
+        return -2;
+    }
+
+    if payload_bytes_len > MDU_PAYLOAD_BYTES {
+        // Caller should chunk to MDU_PAYLOAD_BYTES (RawMduCapacity). Fail fast to keep the contract tight.
+        return -2;
+    }
+
+    let rows = BLOBS_PER_MDU / ds;
+    let shards_total = ds + ps;
+
+    let expected_witness_len = shards_total * rows * 48;
+    let expected_shards_len = shards_total * rows * BLOB_SIZE;
+    if out_witness_flat_len != expected_witness_len || out_shards_flat_len != expected_shards_len {
+        return -2;
+    }
+
+    let payload_slice = if payload_bytes_len == 0 {
+        &[][..]
+    } else {
+        unsafe { std::slice::from_raw_parts(payload_bytes, payload_bytes_len) }
+    };
+    let witness_out = unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
+    let shards_out = unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
+
+    if expand_payload_flat(ctx, payload_slice, ds, ps, witness_out, shards_out).is_err() {
         return -3;
     }
 
