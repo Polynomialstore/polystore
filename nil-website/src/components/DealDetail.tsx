@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
@@ -48,9 +48,9 @@ async function ensureWasmReady(): Promise<void> {
 
 interface DealDetailProps {
   deal: LcdDeal
-  onClose: () => void
   nilAddress: string
   onFileActivity?: (activity: FileActivity) => void
+  topPanel?: ReactNode
 }
 
 interface HeatState {
@@ -76,7 +76,7 @@ interface FileActivity {
   error?: string
 }
 
-export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDetailProps) {
+export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2'
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
@@ -605,7 +605,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
             </div>
             <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
-                <div className="text-lg font-bold text-foreground">Deal #{deal.id}</div>
+                <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   <span className="font-mono text-foreground">{dealSizeLabel}</span>
                   <span className="text-border">|</span>
@@ -615,14 +615,9 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                 </div>
             </div>
         </div>
-        <button
-          onClick={onClose}
-          data-testid="deal-detail-close"
-          className="text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-md hover:bg-secondary transition-colors"
-        >
-          Close
-        </button>
       </div>
+
+      {topPanel ? <div className="border-b border-border">{topPanel}</div> : null}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-border">
         <button

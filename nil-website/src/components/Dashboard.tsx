@@ -1751,7 +1751,6 @@ export function Dashboard() {
             <div ref={dealDetailRef} className="min-w-0">
               <DealDetail
                 deal={targetDeal}
-                onClose={() => setTargetDealId('')}
                 nilAddress={nilAddress}
                 onFileActivity={recordRecentActivity}
               />
