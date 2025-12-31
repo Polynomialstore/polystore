@@ -9,6 +9,9 @@ use std::path::Path;
 use std::sync::OnceLock;
 use thiserror::Error;
 
+#[cfg(not(target_arch = "wasm32"))]
+use blst::{blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress, MultiPoint, BLST_ERROR};
+
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
 pub const BLOB_SIZE: usize = 131072;
@@ -44,7 +47,8 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 
 pub struct KzgContext {
     g1_points: Vec<G1Affine>,
-    g1_points_projective: Vec<G1Projective>,
+    #[cfg(not(target_arch = "wasm32"))]
+    g1_points_blst: Vec<blst_p1_affine>,
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
     g1_points_are_monomial: bool,
@@ -75,6 +79,8 @@ impl KzgContext {
             .map_err(|_| KzgError::Internal("Bad n_g2".into()))?;
 
         let mut g1_points = Vec::with_capacity(n_g1);
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut g1_points_blst = Vec::with_capacity(n_g1);
         for _ in 0..n_g1 {
             let line = lines
                 .next()
@@ -83,9 +89,22 @@ impl KzgContext {
             if bytes.len() != 48 {
                 return Err(KzgError::Internal("Bad G1 len".into()));
             }
-            let p = Option::from(G1Affine::from_compressed(&bytes.try_into().unwrap()))
+            let mut compressed = [0u8; 48];
+            compressed.copy_from_slice(&bytes);
+
+            let p = Option::from(G1Affine::from_compressed(&compressed))
                 .ok_or(KzgError::Internal("Bad G1 point".into()))?;
             g1_points.push(p);
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let mut out = blst_p1_affine::default();
+                let err = unsafe { blst_p1_uncompress(&mut out, compressed.as_ptr()) };
+                if err != BLST_ERROR::BLST_SUCCESS {
+                    return Err(KzgError::Internal(format!("Bad G1 point (blst): {err:?}")));
+                }
+                g1_points_blst.push(out);
+            }
         }
 
         let mut g2_points = Vec::with_capacity(n_g2);
@@ -115,21 +134,20 @@ impl KzgContext {
         // The KZG verification equation uses the base G1 generator (τ^0).
         // - Monomial SRS: generator is g1_points[0].
         // - Lagrange SRS: generator is the commitment to the all-ones blob (Σ L_i(τ) = 1).
-        let g1_points_projective: Vec<G1Projective> =
-            g1_points.iter().map(|p| G1Projective::from(*p)).collect();
         let g1_generator = if g1_points_are_monomial {
             g1_points[0]
         } else {
             let mut acc = G1Projective::identity();
-            for p in g1_points_projective.iter() {
-                acc += *p;
+            for p in g1_points.iter() {
+                acc += G1Projective::from(*p);
             }
             acc.to_affine()
         };
 
         Ok(Self {
             g1_points,
-            g1_points_projective,
+            #[cfg(not(target_arch = "wasm32"))]
+            g1_points_blst,
             g2_points,
             g1_generator,
             g1_points_are_monomial,
@@ -175,9 +193,17 @@ impl KzgContext {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
             let evals = bytes_to_scalars(blob_bytes)?;
-            Ok(msm_pippenger_g1_projective(&self.g1_points_projective, &evals)
-                .to_affine()
-                .to_compressed())
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                return msm_blst_g1_commitment(&self.g1_points_blst, &evals);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                return Ok(msm_pippenger_g1(&self.g1_points, &evals)
+                    .to_affine()
+                    .to_compressed());
+            }
         }
     }
 
@@ -611,7 +637,7 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
         for (i, point) in points.iter().enumerate() {
             let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
             if w != 0 && w < buckets_len {
-                buckets[w] += G1Projective::from(*point);
+                buckets[w] += *point;
             }
         }
 
@@ -627,6 +653,31 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     acc
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn msm_blst_g1_commitment(points: &[blst_p1_affine], scalars: &[Scalar]) -> Result<KzgCommitment, KzgError> {
+    let n = points.len().min(scalars.len());
+    if n == 0 {
+        return Ok(G1Projective::identity().to_affine().to_compressed());
+    }
+
+    let points = &points[..n];
+    let scalars = &scalars[..n];
+
+    let mut scalar_bytes: Vec<u8> = Vec::with_capacity(n * 32);
+    for s in scalars.iter() {
+        let repr = s.to_repr();
+        scalar_bytes.extend_from_slice(repr.as_ref());
+    }
+
+    let res: blst_p1 = points.mult(&scalar_bytes, 255);
+    let mut out = [0u8; 48];
+    unsafe {
+        blst_p1_compress(out.as_mut_ptr(), &res);
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
 fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 

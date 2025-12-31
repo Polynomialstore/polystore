@@ -1,5 +1,5 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
-use crate::coding::{expand_mdu_encoded, reconstruct_mdu_from_shards};
+use crate::coding::{expand_mdu_encoded_flat, reconstruct_mdu_from_shards};
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -183,39 +183,9 @@ pub extern "C" fn nil_expand_mdu_rs(
     }
 
     let mdu_slice = unsafe { std::slice::from_raw_parts(mdu_bytes, mdu_bytes_len) };
-    let expanded = match expand_mdu_encoded(ctx, mdu_slice, ds, ps) {
-        Ok(v) => v,
-        Err(_) => return -3,
-    };
-
-    // Flatten witness commitments.
-    let mut woff = 0usize;
-    for c in expanded.witness.iter() {
-        if c.len() != 48 {
-            return -3;
-        }
-        unsafe {
-            std::ptr::copy_nonoverlapping(c.as_ptr(), out_witness_flat.add(woff), 48);
-        }
-        woff += 48;
-    }
-    if woff != expected_witness_len {
-        return -3;
-    }
-
-    // Flatten shards.
-    let shard_len = rows * BLOB_SIZE;
-    let mut soff = 0usize;
-    for shard in expanded.shards.iter() {
-        if shard.len() != shard_len {
-            return -3;
-        }
-        unsafe {
-            std::ptr::copy_nonoverlapping(shard.as_ptr(), out_shards_flat.add(soff), shard_len);
-        }
-        soff += shard_len;
-    }
-    if soff != expected_shards_len {
+    let witness_out = unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
+    let shards_out = unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
+    if expand_mdu_encoded_flat(ctx, mdu_slice, ds, ps, witness_out, shards_out).is_err() {
         return -3;
     }
 
