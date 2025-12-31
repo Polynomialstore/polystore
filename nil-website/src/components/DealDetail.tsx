@@ -79,6 +79,13 @@ interface FileActivity {
 export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2'
+  const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
+  const dealSizeLabel = Number.isFinite(dealSizeBytes) && dealSizeBytes > 0
+    ? `${(dealSizeBytes / 1024 / 1024).toFixed(2)} MB`
+    : '0 B'
+  const redundancyLabel = isMode2 && serviceHint.rsK && serviceHint.rsM
+    ? `Mode 2 RS(${serviceHint.rsK},${serviceHint.rsM})`
+    : `Mode 1 x${serviceHint.replicas ?? '—'}`
   const stripeLayout = useMemo(() => {
     const k = serviceHint.rsK ?? 8
     const m = serviceHint.rsM ?? 4
@@ -95,7 +102,6 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
-  const [gatewayReachable, setGatewayReachable] = useState<'unknown' | 'yes' | 'no'>('unknown')
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
@@ -206,25 +212,6 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
       cancelled = true
     }
   }, [dealProvidersKey])
-
-  useEffect(() => {
-    let canceled = false
-    async function pingGateway() {
-      try {
-        setGatewayReachable('unknown')
-        const res = await fetch(`${appConfig.gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-        if (canceled) return
-        setGatewayReachable(res.ok ? 'yes' : 'no')
-      } catch {
-        if (canceled) return
-        setGatewayReachable('no')
-      }
-    }
-    void pingGateway()
-    return () => {
-      canceled = true
-    }
-  }, [])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -619,6 +606,13 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
             <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
                 <div className="text-lg font-bold text-foreground">Deal #{deal.id}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="font-mono text-foreground">{dealSizeLabel}</span>
+                  <span className="text-border">|</span>
+                  <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {redundancyLabel}
+                  </span>
+                </div>
             </div>
         </div>
         <button
@@ -683,23 +677,6 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                       </div>
                     </div>
                   )}
-                  <div className="space-y-1">
-                    <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Size</div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-foreground font-mono">
-                          {deal.size !== '0' ? `${(parseInt(deal.size) / 1024 / 1024).toFixed(2)} MB` : '0 MB'}
-                    </span>
-                    {/* Tier removed */}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Redundancy</div>
-                  <div className="bg-secondary/50 border border-border rounded px-2 py-1 text-[11px] text-foreground">
-                    {isMode2 && serviceHint.rsK && serviceHint.rsM
-                      ? `Mode 2 • RS(${serviceHint.rsK},${serviceHint.rsM})`
-                      : `Mode 1 • Replicas ${serviceHint.replicas ?? '—'}`}
-                  </div>
-                </div>
                   {activeTab === 'info' && (
                     <div className="space-y-1">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
@@ -747,19 +724,22 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                   )}
                 
                     {activeTab === 'files' && deal.cid && (
-                      <div className="sm:col-span-2 mt-2 space-y-3">
+                      <div className="sm:col-span-2 space-y-3">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files</div>
-                          {lastRouteLabel ? (
-                            <div
-                              className="text-[11px] text-muted-foreground"
-                              data-testid="transport-route"
-                              data-transport-attempts={lastAttemptSummary}
-                              data-transport-failure={lastFailureSummary}
-                            >
-                              Route: {lastRouteLabel}
-                            </div>
-                          ) : null}
+                          <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                            Files
+                            {files ? (
+                              <span className="ml-2 text-[11px] font-normal normal-case">({files.length})</span>
+                            ) : null}
+                          </div>
+                          <div
+                            className="text-[11px] text-muted-foreground"
+                            data-testid="transport-route"
+                            data-transport-attempts={lastAttemptSummary}
+                            data-transport-failure={lastFailureSummary}
+                          >
+                            Route: {lastRouteLabel || '—'}
+                          </div>
                         </div>
                         {fileActionError && (
                           <div className="text-[11px] text-red-500 dark:text-red-400">
@@ -865,31 +845,24 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                 key={`${f.path}:${f.start_offset}`}
                                 data-testid="deal-detail-file-row"
                                 data-file-path={f.path}
-                                className="bg-secondary/50 border border-border rounded px-3 py-2 space-y-2"
+                                className="rounded-lg border border-border bg-background/60 px-3 py-2 space-y-2"
                               >
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <div className="min-w-0">
-                                    <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                    <div className="truncate text-sm font-semibold text-foreground" title={f.path}>
                                       {f.path}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground">{f.size_bytes} bytes</div>
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground">
-                                    File cache: {cached ? 'yes' : 'no'} • Gateway: {gatewayReachable} • Slab: {gatewaySlabStatus}
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                                      <span className="font-mono">{f.size_bytes} bytes</span>
+                                      <span className="text-border">|</span>
+                                      <span>File cache: {cached ? 'yes' : 'no'}</span>
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
-                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                        Browser
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        cache {cached ? 'yes' : 'no'} • slab {slabSource === 'opfs' ? 'yes' : 'unknown'}
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                  <div className="contents">
+                                    <div className="contents">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -909,7 +882,8 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={isBusy || !cached}
                                         data-testid="deal-detail-download-browser-cache"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-6 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Download cached bytes (no network)"
                                       >
                                         Cached
                                       </button>
@@ -947,7 +921,8 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={isBusy}
                                         data-testid="deal-detail-download-browser-slab"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-3 inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Download from local slab (OPFS)"
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
                                         {isBusy ? 'Loading...' : 'Slab'}
@@ -967,7 +942,8 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !cached}
                                         data-testid="deal-detail-clear-browser-cache"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-5 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Clear cached file"
                                       >
                                         Clear
                                       </button>
@@ -1043,23 +1019,16 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-1 inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Download (uses cache when available)"
                                       >
                                         Download
                                       </button>
                                     </div>
                                   </div>
 
-                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                        Gateway
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        reach {gatewayReachable} • slab {gatewaySlabStatus}
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                  <div className="contents">
+                                    <div className="contents">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -1096,26 +1065,16 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || gatewaySlabStatus !== 'present'}
                                         data-testid="deal-detail-download-gateway"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-border bg-secondary hover:bg-secondary/70 text-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-4 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Debug: raw fetch via gateway (requires slab present)"
                                       >
-                                        Download
+                                        Gateway
                                       </button>
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                      Requires gateway slab on disk (and debug raw fetch enabled).
                                     </div>
                                   </div>
 
-                                  <div className="min-w-0 rounded border border-border bg-background/40 p-2 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                        SP (interactive)
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        {downloading ? 'in progress' : 'wallet'}
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                  <div className="contents">
+                                    <div className="contents">
                                       <button
                                         onClick={async () => {
                                           setFileActionError(null)
@@ -1182,14 +1141,12 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download-sp"
                                         data-file-path={f.path}
-                                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-2 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
+                                        title="Force a fresh retrieval session (submits receipt)"
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
-                                        Download
+                                        Verify
                                       </button>
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                      Opens a retrieval session and submits the receipt on-chain; then caches in-browser.
                                     </div>
                                   </div>
                                 </div>
@@ -1204,7 +1161,7 @@ export function DealDetail({ deal, onClose, nilAddress, onFileActivity }: DealDe
                   )}
 
                   {activeTab === 'files' && !deal.cid && (
-                    <div className="sm:col-span-2 mt-2 rounded-xl border border-border bg-background/60 p-10 text-center">
+                    <div className="sm:col-span-2 rounded-xl border border-border bg-background/60 p-8 text-center">
                       <div className="text-sm font-semibold text-foreground">No files yet</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         Upload a file inside this deal to store and retrieve.
