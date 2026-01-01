@@ -319,7 +319,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
-	if err := os.Rename(stagingDir, finalDir); err != nil {
+	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
 	}
 	rollback = false
@@ -349,6 +349,25 @@ func mode2EncodeParallelism() int {
 		return n
 	}
 	return 1
+}
+
+func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
+	if err := os.Rename(stagingDir, finalDir); err != nil {
+		// If the destination already exists (e.g. retries / duplicate uploads), treat it
+		// as idempotent success so uploads don't fail on content-addressed paths.
+		if info, statErr := os.Stat(finalDir); statErr == nil && info.IsDir() {
+			manifestPath := filepath.Join(finalDir, "manifest.bin")
+			mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
+			if _, errManifest := os.Stat(manifestPath); errManifest == nil {
+				if _, errMdu0 := os.Stat(mdu0Path); errMdu0 == nil {
+					_ = os.RemoveAll(stagingDir)
+					return nil
+				}
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func mode2BuildArtifactsAppend(
@@ -709,7 +728,7 @@ func mode2BuildArtifactsAppend(
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
-	if err := os.Rename(stagingDir, finalDir); err != nil {
+	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
 	}
 	rollback = false
