@@ -134,6 +134,27 @@ func testRouter() *mux.Router {
 	return r
 }
 
+func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(SpUploadMdu))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL, bytes.NewReader(make([]byte, types.MDU_SIZE)))
+	if err != nil {
+		t.Fatalf("NewRequest failed: %v", err)
+	}
+
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("expected status response, got error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d (%s)", resp.StatusCode, string(body))
+	}
+}
+
 func TestGatewayFetch_MissingParams(t *testing.T) {
 	r := testRouter()
 

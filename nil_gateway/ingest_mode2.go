@@ -351,6 +351,36 @@ func mode2EncodeParallelism() int {
 	return 1
 }
 
+func mode2UploadParallelism(slotCount uint64) int {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_UPLOAD_PARALLELISM"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+
+	slots := int(slotCount)
+	if slots <= 0 {
+		slots = 1
+	}
+
+	// Default to a few concurrent uploads per slot; cap to avoid runaway concurrency
+	// when the deal has many slots.
+	target := slots * 4
+	if target < slots {
+		target = slots
+	}
+	if cpus := runtime.GOMAXPROCS(0); cpus > 0 && target < cpus*2 {
+		target = cpus * 2
+	}
+
+	const max = 64
+	if target > max {
+		return max
+	}
+	return target
+}
+
 func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 	if err := os.Rename(stagingDir, finalDir); err != nil {
 		// If the destination already exists (e.g. retries / duplicate uploads), treat it
@@ -834,9 +864,10 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	transport := &http.Transport{
-		MaxIdleConns:        256,
-		MaxIdleConnsPerHost: 32,
-		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConns:          256,
+		MaxIdleConnsPerHost:   32,
+		ExpectContinueTimeout: 2 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
@@ -861,6 +892,7 @@ func mode2UploadArtifactsToProviders(
 			return err
 		}
 		req.ContentLength = fi.Size()
+		req.Header.Set("Expect", "100-continue")
 		req.Header.Set("Content-Type", "application/octet-stream")
 		if setHeaders != nil {
 			setHeaders(req)
@@ -878,50 +910,80 @@ func mode2UploadArtifactsToProviders(
 		return nil
 	}
 
-	eg, egctx := errgroup.WithContext(ctx)
-	eg.SetLimit(int(stripe.slotCount))
+	type uploadTask struct {
+		url        string
+		path       string
+		maxBytes   int64
+		setHeaders func(*http.Request)
+	}
+
+	tasks := make([]uploadTask, 0, totalUploads)
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
-		slot := int(slot)
-		if _, skip := skipSlots[slot]; skip {
+		if _, skip := skipSlots[int(slot)]; skip {
 			continue
 		}
-		base := slotBases[slot]
-		eg.Go(func() error {
-			// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
-			for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
-				path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-				if err := uploadBlob(egctx, base+"/sp/upload_mdu", func(req *http.Request) {
-					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
-					req.Header.Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
-					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-				}, path, 10<<20); err != nil {
-					return err
-				}
-				bump()
-			}
+		base := slotBases[int(slot)]
+		if base == "" {
+			continue
+		}
 
-			if err := uploadBlob(egctx, base+"/sp/upload_manifest", func(req *http.Request) {
+		slotStr := strconv.FormatUint(slot, 10)
+
+		// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
+		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
+			mduIndexStr := strconv.FormatUint(mduIndex, 10)
+			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+			tasks = append(tasks, uploadTask{
+				url:      base + "/sp/upload_mdu",
+				path:     path,
+				maxBytes: 10 << 20,
+				setHeaders: func(req *http.Request) {
+					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
+					req.Header.Set("X-Nil-Mdu-Index", mduIndexStr)
+					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
+				},
+			})
+		}
+
+		tasks = append(tasks, uploadTask{
+			url:      base + "/sp/upload_manifest",
+			path:     filepath.Join(finalDir, "manifest.bin"),
+			maxBytes: 512 << 10,
+			setHeaders: func(req *http.Request) {
 				req.Header.Set("X-Nil-Deal-ID", dealIDStr)
 				req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-			}, filepath.Join(finalDir, "manifest.bin"), 512<<10); err != nil {
+			},
+		})
+
+		// Striped user shards for this slot only.
+		for i := uint64(0); i < userMdus; i++ {
+			slabIndex := uint64(1) + witnessCount + i
+			slabIndexStr := strconv.FormatUint(slabIndex, 10)
+			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
+			tasks = append(tasks, uploadTask{
+				url:      base + "/sp/upload_shard",
+				path:     path,
+				maxBytes: 10 << 20,
+				setHeaders: func(req *http.Request) {
+					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
+					req.Header.Set("X-Nil-Mdu-Index", slabIndexStr)
+					req.Header.Set("X-Nil-Slot", slotStr)
+					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
+				},
+			})
+		}
+	}
+
+	uploadParallelism := mode2UploadParallelism(stripe.slotCount)
+	eg, egctx := errgroup.WithContext(ctx)
+	eg.SetLimit(uploadParallelism)
+	for _, task := range tasks {
+		task := task
+		eg.Go(func() error {
+			if err := uploadBlob(egctx, task.url, task.setHeaders, task.path, task.maxBytes); err != nil {
 				return err
 			}
 			bump()
-
-			// Striped user shards for this slot only.
-			for i := uint64(0); i < userMdus; i++ {
-				slabIndex := uint64(1) + witnessCount + i
-				path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
-				if err := uploadBlob(egctx, base+"/sp/upload_shard", func(req *http.Request) {
-					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
-					req.Header.Set("X-Nil-Mdu-Index", strconv.FormatUint(slabIndex, 10))
-					req.Header.Set("X-Nil-Slot", strconv.Itoa(slot))
-					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-				}, path, 10<<20); err != nil {
-					return err
-				}
-				bump()
-			}
 			return nil
 		})
 	}

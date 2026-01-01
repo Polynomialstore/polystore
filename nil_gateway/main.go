@@ -4636,6 +4636,15 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default limit 10MB (MDU is 8MB). We also drain the body on early returns to avoid
+	// clients seeing "connection broken" errors when the handler rejects a request before
+	// reading the full payload (common with large uploads + validation failures).
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
+
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
@@ -4685,22 +4694,41 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
 
-	// Check content length to avoid DoS
-	// Default limit 10MB (MDU is 8MB)
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	if n != int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid mdu size: got %d bytes (want %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, n, dealID)
 	w.WriteHeader(http.StatusOK)
@@ -4714,6 +4742,15 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+
+	// Max shard size is <= 8 MiB (8 MiB / K in Mode 2); allow some slack. Drain body
+	// on early returns to avoid large-upload connection resets when validation fails
+	// before reads begin.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
 
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
@@ -4764,24 +4801,45 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Max shard size is <= 8 MiB; allow some slack.
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
 
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	// Shard size depends on the RS params (K), so enforce only an upper bound here.
+	if n <= 0 || n > int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid shard size: got %d bytes (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, n, dealID, slot)
 	w.WriteHeader(http.StatusOK)
@@ -4856,6 +4914,14 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit manifest blob size (manifest is 128 KiB; allow some slack). Drain body on
+	// early returns so clients get a clean status response instead of connection resets.
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
+
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 
@@ -4893,22 +4959,37 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit manifest blob size (manifest is 128 KiB; allow some slack).
-	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
-
 	path := filepath.Join(rootDir, "manifest.bin")
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, n, dealID)
 	w.WriteHeader(http.StatusOK)
