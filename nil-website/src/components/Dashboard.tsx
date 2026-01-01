@@ -314,84 +314,10 @@ export function Dashboard() {
     return counts
   }, [dealHeatById, deals])
 
-  const dealSummary = useMemo(() => {
-    let active = 0
-    let totalBytes = 0
-    for (const deal of deals) {
-      if (String(deal.cid || '').trim()) active += 1
-      const sizeNum = Number(deal.size)
-      if (Number.isFinite(sizeNum) && sizeNum > 0) totalBytes += sizeNum
-    }
-    const retrievals = Object.values(retrievalCountsByDeal).reduce((sum, count) => sum + (Number(count) || 0), 0)
-    return {
-      total: deals.length,
-      active,
-      allocated: Math.max(0, deals.length - active),
-      totalBytes,
-      retrievals,
-    }
-  }, [deals, retrievalCountsByDeal])
-
   const ownedDeals = useMemo(
     () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
     [deals, nilAddress],
   )
-  const hasWallet = Boolean(nilAddress)
-  const hasFunds =
-    parseUint64(bankBalances.stake) > 0n ||
-    parseUint64(bankBalances.atom) > 0n
-  const hasAnyDeals = ownedDeals.length > 0
-  const hasAnyContent = ownedDeals.some((deal) => String(deal.cid || '').trim())
-  const hasRetrieval = dealSummary.retrievals > 0 || receiptStatus === 'submitted'
-  const wizardDeal = useMemo(
-    () => ownedDeals.find((deal) => String(deal.cid || '').trim()) || ownedDeals[ownedDeals.length - 1] || null,
-    [ownedDeals],
-  )
-  const wizardUploadTab = useMemo(() => {
-    const hint = parseServiceHint(wizardDeal?.service_hint)
-    return hint.mode === 'mode2' ? 'mdu' : 'content'
-  }, [wizardDeal?.service_hint])
-  const wizardSteps = useMemo(
-    () => [
-      {
-        id: 'connect',
-        label: 'Connect wallet',
-        hint: 'Link MetaMask to NilChain',
-        done: hasWallet,
-        actionLabel: 'Connect',
-      },
-      {
-        id: 'fund',
-        label: 'Fund with test NIL',
-        hint: 'Request faucet funds',
-        done: hasFunds,
-        actionLabel: 'Request',
-      },
-      {
-        id: 'deal',
-        label: 'Create a deal',
-        hint: 'Allocate a storage bucket',
-        done: hasAnyDeals,
-        actionLabel: 'Create',
-      },
-      {
-        id: 'upload',
-        label: 'Upload your first file',
-        hint: 'Use Mode 2 upload flow',
-        done: hasAnyContent,
-        actionLabel: 'Upload',
-      },
-      {
-        id: 'retrieve',
-        label: 'Download and verify',
-        hint: 'Pull file from providers',
-        done: hasRetrieval,
-        actionLabel: 'Download',
-      },
-    ],
-    [hasAnyContent, hasAnyDeals, hasFunds, hasRetrieval, hasWallet],
-  )
-  const wizardNext = wizardSteps.find((step) => !step.done) || null
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -1254,35 +1180,6 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
-  const handleWizardAction = async (stepId: string) => {
-    if (stepId === 'connect') {
-      await connectAsync({ connector: injectedConnector })
-      return
-    }
-    if (stepId === 'fund') {
-      await handleRequestFunds()
-      return
-    }
-    if (stepId === 'deal') {
-      setPendingScrollTarget('create')
-      return
-    }
-    if (stepId === 'upload') {
-      if (wizardDeal) {
-        setTargetDealId(String(wizardDeal.id ?? ''))
-      }
-      setActiveTab(wizardUploadTab)
-      setPendingScrollTarget('workspace')
-      return
-    }
-    if (stepId === 'retrieve') {
-      if (wizardDeal) {
-        setTargetDealId(String(wizardDeal.id ?? ''))
-        setPendingScrollTarget('deal')
-      }
-    }
-  }
-
   const handleContentDownload = useCallback(
     async (file: NilfsFileEntry) => {
       if (!targetDealId) return
@@ -1393,29 +1290,6 @@ export function Dashboard() {
           )}
         </div>
       </div>
-
-      {wizardNext
-        ? (() => {
-            const step = wizardNext
-            return (
-              <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 text-[11px] text-muted-foreground">
-                  <span className="font-semibold text-foreground">{step.label}</span>
-                  <span className="mx-2 text-border">|</span>
-                  <span className="truncate">{step.hint}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleWizardAction(step.id)}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
-                >
-                  {step.actionLabel}
-                  <ArrowDownRight className="h-3 w-3" />
-                </button>
-              </div>
-            )
-          })()
-        : null}
 
       {activeTab === 'content' ? (
         !showAdvanced ? (
