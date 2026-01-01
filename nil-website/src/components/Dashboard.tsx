@@ -1347,7 +1347,7 @@ export function Dashboard() {
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-muted/10">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
@@ -1381,19 +1381,6 @@ export function Dashboard() {
             </button>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          data-testid="workspace-advanced-toggle"
-          className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            showAdvanced
-              ? 'border-primary/40 bg-primary/10 text-primary'
-              : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
-          }`}
-        >
-          Advanced
-        </button>
       </div>
 
       {wizardNext
@@ -2111,19 +2098,31 @@ export function Dashboard() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Select a deal to manage files (upload, list, download).
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleRefreshSummary()}
-                  title="Refresh deals"
-                  className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+          <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Select a deal to manage files (upload, list, download).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                data-testid="workspace-advanced-toggle"
+                className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
+                  showAdvanced
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+                }`}
+              >
+                Advanced
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRefreshSummary()}
+                title="Refresh deals"
+                className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 </button>
@@ -2426,7 +2425,7 @@ export function Dashboard() {
 
         <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Network &amp; Diagnostics (advanced)
+            Network &amp; routing (advanced)
           </summary>
         <div className="p-6 space-y-6">
           <StatusBar />
