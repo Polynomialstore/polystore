@@ -1104,11 +1104,22 @@ export function Dashboard() {
     manifestRoot: string,
     fileMeta?: { filePath: string; fileSizeBytes: number },
   ) => {
-    if (!nilAddress) return
     const trimmedRoot = manifestRoot.trim()
-    refreshDealsAfterContentCommit(nilAddress, dealId, trimmedRoot)
+    const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
+
+    // Optimistic UI: update the selected deal immediately so Deal Explorer can refresh
+    // while the LCD catches up.
+    setDeals((prev) =>
+      prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
+    )
+    setAllDeals((prev) =>
+      prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
+    )
+
+    if (nilAddress) {
+      refreshDealsAfterContentCommit(nilAddress, dealId, manifestHex)
+    }
     if (fileMeta?.filePath) {
-      const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
       upsertRecentFile({
         dealId,
         filePath: fileMeta.filePath,
