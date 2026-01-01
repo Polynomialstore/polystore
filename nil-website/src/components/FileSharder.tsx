@@ -131,6 +131,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastCommitTxRef = useRef<string | null>(null);
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
   const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -1629,6 +1630,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   };
 
   const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
+  const hasManifestRoot = Boolean(currentManifestRoot && currentManifestRoot.trim());
+  const readyToUpload =
+    hasManifestRoot &&
+    !isUploadComplete &&
+    (collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0));
+  const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
+  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitError);
+  const showStatusPanel =
+    processing ||
+    activeUploading ||
+    readyToUpload ||
+    readyToCommit ||
+    isCommitPending ||
+    isCommitConfirming ||
+    isAlreadyCommitted ||
+    hasError;
+
+  useEffect(() => {
+    const node = logContainerRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [logs.length, processing, activeUploading, readyToCommit, isCommitPending, isCommitConfirming, isAlreadyCommitted, hasError]);
 
   return (
     <div className="w-full space-y-4">
@@ -1700,11 +1723,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </div>
           )}
 
-      {/* Processing Status */}
-      {(processing || activeUploading) && (
+      {showStatusPanel && (
         <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
           <p className="font-bold text-foreground mb-2">Current Activity:</p>
-          <div className="space-y-1">
+          <div className="space-y-2">
+            {hasError ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                {commitError ? `Commit failed: ${commitError.message}` : null}
+                {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
+                {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
+                {!commitError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
+              </div>
+            ) : null}
+
             {processing && (
               <div className="space-y-2" data-testid="wasm-sharding-progress">
                 <div className="flex items-start justify-between gap-3">
@@ -1762,7 +1793,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
                     <div className="opacity-70">Op Time</div>
                     <div className="text-foreground">
-                      {shardProgress.currentOpStartedAtMs ? formatDuration(shardingUi.currentOpMs) : shardProgress.lastOpMs != null ? formatDuration(shardProgress.lastOpMs) : '—'}
+                      {shardProgress.currentOpStartedAtMs
+                        ? formatDuration(shardingUi.currentOpMs)
+                        : shardProgress.lastOpMs != null
+                          ? formatDuration(shardProgress.lastOpMs)
+                          : '—'}
                     </div>
                   </div>
                 </div>
@@ -1795,21 +1830,85 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     <div className="bg-secondary/40 border border-border rounded px-2 py-1">
                       <div className="opacity-70">Current</div>
                       <div className="text-foreground">
-                        {shardProgress.currentMduKind ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}` : '—'}
+                        {shardProgress.currentMduKind
+                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
+                          : '—'}
                       </div>
                     </div>
                   </div>
                 </details>
               </div>
             )}
+
             {activeUploading && (
-              <p className="flex items-center gap-2">
+              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <FileJson className="w-4 h-4 animate-pulse text-green-500" />
                 {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
               </p>
             )}
-            {isCommitPending || isCommitConfirming ? (
-              <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...</p>
+
+            {readyToUpload && !processing && !activeUploading ? (
+              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+                Expansion complete. Ready to upload to Storage Providers.
+              </div>
+            ) : null}
+
+            {readyToCommit && !processing && !activeUploading ? (
+              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+                Upload complete. Commit the manifest root to update your deal on-chain and make the file visible in the Deal Explorer.
+              </div>
+            ) : null}
+
+            {(isCommitPending || isCommitConfirming) && (
+              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...
+              </p>
+            )}
+
+            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    const totalSize = isMode2
+                      ? shardProgress.fileBytesTotal
+                      : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                    commitContent({
+                      dealId,
+                      manifestRoot: currentManifestRoot || '',
+                      fileSize: totalSize,
+                    });
+                  }}
+                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
+                  data-testid="mdu-commit"
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {isCommitPending
+                    ? 'Check Wallet...'
+                    : isCommitConfirming
+                      ? 'Confirming...'
+                      : isAlreadyCommitted
+                        ? 'Committed!'
+                        : 'Commit to Chain'}
+                </button>
+
+                {commitHash && (
+                  <div className="text-xs text-muted-foreground truncate">
+                    Tx: {commitHash}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {logs.length > 0 ? (
+              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
+                <p className="mb-2 text-primary font-bold">System Activity:</p>
+                <div ref={logContainerRef} className="space-y-1 max-h-32 overflow-y-auto">
+                  {logs.map((log, i) => (
+                    <p key={i}>{log}</p>
+                  ))}
+                  {processing && <p className="animate-pulse">...</p>}
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
@@ -1869,40 +1968,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </div>
       )}
 
-      {/* Commit to Chain Button */}
-      {currentManifestRoot && isUploadComplete && (
-        <div className="flex flex-col gap-2">
-            <button
-              onClick={() => {
-                const totalSize = isMode2
-                  ? shardProgress.fileBytesTotal
-                  : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
-                commitContent({
-                    dealId,
-                    manifestRoot: currentManifestRoot,
-                    fileSize: totalSize
-                });
-              }}
-              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted}
-              data-testid="mdu-commit"
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
-            >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isAlreadyCommitted ? 'Committed!' : 'Commit to Chain'}
-            </button>
-            
-            {commitHash && (
-                <div className="text-xs text-muted-foreground truncate">
-                    Tx: {commitHash}
-                </div>
-            )}
-            {commitError && (
-                <div className="text-xs text-red-500">
-                    Error: {commitError.message}
-                </div>
-            )}
-        </div>
-      )}
-
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
@@ -1941,16 +2006,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </div>
               ))}
             </div>
-          
-          <div className="mt-4 p-4 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
-            <p className="mb-2 text-primary font-bold">System Activity:</p>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-                {logs.map((log, i) => (
-                    <p key={i}>{log}</p>
-                ))}
-                {processing && <p className="animate-pulse">...</p>}
-            </div>
-          </div>
         </div>
       )}
       </>
