@@ -253,9 +253,6 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  console.log('Switching to Local MDU tab...')
-  await page.getByTestId('tab-mdu').click()
-
   console.log('Selecting Deal #1...')
   const dealRow = page.getByTestId('deal-row-1')
   await expect(dealRow).toBeVisible({ timeout: 60_000 })

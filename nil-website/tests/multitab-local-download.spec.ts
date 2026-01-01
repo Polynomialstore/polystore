@@ -207,7 +207,6 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   }
 
   // Local MDU flow: shard -> upload -> commit.
-  await page.getByTestId('tab-mdu').click()
   const dealRow = page.getByTestId(`deal-row-${dealId}`)
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()

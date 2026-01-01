@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -1255,26 +1255,12 @@ export function Dashboard() {
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-muted/10">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => setActiveTab('mdu')}
-            data-testid="tab-mdu"
-            className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              activeTab === 'mdu'
-                ? 'border-primary/40 bg-primary/10 text-foreground'
-                : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-            }`}
-          >
-            <Upload className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
-            Upload
-          </button>
-
-          {showAdvanced && (
+      {showAdvanced ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={() => setActiveTab('content')}
+              onClick={() => setActiveTab((prev) => (prev === 'content' ? 'mdu' : 'content'))}
               data-testid="tab-content"
               className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 activeTab === 'content'
@@ -1282,14 +1268,12 @@ export function Dashboard() {
                   : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
               }`}
             >
-              <Database
-                className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`}
-              />
+              <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
               Mode 1 (advanced)
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {activeTab === 'content' ? (
         !showAdvanced ? (
@@ -1583,25 +1567,11 @@ export function Dashboard() {
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => setActiveTab('mdu')}
-              data-testid="tab-mdu"
-              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                activeTab === 'mdu'
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <Upload className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
-              Upload
-            </button>
-
-            {showAdvanced && (
+          {showAdvanced && (
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
-                onClick={() => setActiveTab('content')}
+                onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
                 data-testid="tab-content"
                 className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   activeTab === 'content'
@@ -1610,10 +1580,10 @@ export function Dashboard() {
                 }`}
               >
                 <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
-                Legacy (Mode 1)
+                {activeTab === 'content' ? 'Back to Upload' : 'Legacy (Mode 1)'}
               </button>
-            )}
-        </div>
+            </div>
+          ) : null}
 
         </div>
 

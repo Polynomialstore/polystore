@@ -42,7 +42,6 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
-    await page.getByTestId('tab-mdu').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
@@ -158,7 +157,6 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
-    await page.getByTestId('tab-mdu').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
