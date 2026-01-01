@@ -751,20 +751,6 @@ func mode2UploadArtifactsToProviders(
 		return fmt.Errorf("invalid Mode 2 state")
 	}
 
-	job := uploadJobFromContext(ctx)
-	totalUploads := stripe.slotCount * (witnessCount + 2 + userMdus)
-	if job != nil {
-		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
-		job.setSteps(0, totalUploads)
-	}
-	var uploaded atomic.Uint64
-	bump := func() {
-		next := uploaded.Add(1)
-		if job != nil {
-			job.setSteps(next, totalUploads)
-		}
-	}
-
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
 	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
 	if err != nil {
@@ -773,12 +759,46 @@ func mode2UploadArtifactsToProviders(
 	if len(providers) < int(stripe.slotCount) {
 		return fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
 	}
+
+	localProviderAddr := strings.TrimSpace(cachedProviderAddress(ctx))
+	skipSlots := make(map[int]struct{})
+	if localProviderAddr != "" {
+		for slot := uint64(0); slot < stripe.slotCount; slot++ {
+			if providers[int(slot)] == localProviderAddr {
+				skipSlots[int(slot)] = struct{}{}
+			}
+		}
+	}
+
+	job := uploadJobFromContext(ctx)
+	uploadsPerSlot := witnessCount + 2 + userMdus
+	activeSlots := stripe.slotCount
+	if len(skipSlots) > 0 && activeSlots >= uint64(len(skipSlots)) {
+		activeSlots -= uint64(len(skipSlots))
+	}
+	totalUploads := activeSlots * uploadsPerSlot
+	if job != nil {
+		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
+		job.setSteps(0, totalUploads)
+	}
+
+	var uploaded atomic.Uint64
+	bump := func() {
+		next := uploaded.Add(1)
+		if job != nil {
+			job.setSteps(next, totalUploads)
+		}
+	}
+
 	slotBases := make([]string, stripe.slotCount)
 	{
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(int(stripe.slotCount))
 		for slot := uint64(0); slot < stripe.slotCount; slot++ {
 			slot := int(slot)
+			if _, skip := skipSlots[slot]; skip {
+				continue
+			}
 			provider := providers[slot]
 			eg.Go(func() error {
 				base, err := resolveProviderHTTPBaseURL(egctx, provider)
@@ -843,6 +863,9 @@ func mode2UploadArtifactsToProviders(
 	eg.SetLimit(int(stripe.slotCount))
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		slot := int(slot)
+		if _, skip := skipSlots[slot]; skip {
+			continue
+		}
 		base := slotBases[slot]
 		eg.Go(func() error {
 			// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.

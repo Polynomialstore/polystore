@@ -15,6 +15,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.16.1
 	go.etcd.io/bbolt v1.4.0-alpha.1
 	golang.org/x/crypto v0.45.0
+	golang.org/x/sync v0.18.0
 	nilchain v0.0.0-00010101000000-000000000000
 )
 
@@ -220,7 +221,6 @@ require (
 	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect
 	golang.org/x/term v0.37.0 // indirect
