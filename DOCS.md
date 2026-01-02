@@ -35,3 +35,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 - `README.md`: How to run/build/test the repo.
 - `HAPPY_PATH.md`: Local devnet “happy path” runbook.
 - `DEVNET_MULTI_PROVIDER.md`: How to run a multi-provider devnet and join as a remote provider.
+
+## Planning / Tracking
+
+- `MAINNET_GAP_TRACKER.md`: Tracked gaps between current implementation and the long-term Mainnet plan.
