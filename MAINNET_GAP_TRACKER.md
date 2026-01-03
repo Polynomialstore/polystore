@@ -342,3 +342,5 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint20-mode2-finalize-race`: harden Mode 2 slab finalize against rename races and make finalize idempotent under retries.
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
+- `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
+- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `nil_core` FFI to reduce cross-runtime drift.
