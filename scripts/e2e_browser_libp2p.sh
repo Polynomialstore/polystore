@@ -55,7 +55,7 @@ echo "==> Starting local stack (libp2p enabled)..."
 
 wait_for_http "web" "http://localhost:5173/"
 wait_for_http "gateway" "http://localhost:8080/status"
-wait_for_http "gateway upload" "http://localhost:8080/gateway/upload"
+wait_for_http "gateway health" "http://localhost:8080/health"
 
 echo "==> Running Playwright (libp2p)..."
 (cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/libp2p-fetch.spec.ts)

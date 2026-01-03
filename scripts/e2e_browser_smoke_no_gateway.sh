@@ -49,7 +49,7 @@ echo "==> Starting local stack (gateway disabled)..."
 "$STACK_SCRIPT" start
 
 wait_for_http "web" "http://localhost:5173/"
-wait_for_http "sp gateway" "http://localhost:8082/gateway/upload"
+wait_for_http "sp gateway" "http://localhost:8082/health"
 
 echo "==> Running Playwright (gateway absent)..."
 (cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/gateway-absent-ui.spec.ts)

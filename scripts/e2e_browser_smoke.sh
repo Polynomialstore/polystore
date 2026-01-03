@@ -46,7 +46,7 @@ echo "==> Starting local stack..."
 "$STACK_SCRIPT" start
 
 wait_for_http "web" "http://localhost:5173/"
-wait_for_http "gateway" "http://localhost:8080/gateway/upload"
+wait_for_http "gateway" "http://localhost:8080/health"
 
 echo "==> Running Playwright..."
 (cd "$ROOT_DIR/nil-website" && npm run test:e2e)
