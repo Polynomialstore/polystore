@@ -190,6 +190,8 @@ export function Dashboard() {
   const mduRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const dealDetailRef = useRef<HTMLDivElement | null>(null)
+  const optimisticCidTtlMs = 2 * 60_000
+  const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
@@ -496,12 +498,14 @@ export function Dashboard() {
 
   useEffect(() => {
     if (address) {
+      optimisticCidOverridesRef.current = {}
       const cosmosAddress = ethToNil(address)
       setNilAddress(cosmosAddress)
       fetchDeals(cosmosAddress)
       fetchBalances(cosmosAddress)
       fetchProviders()
     } else {
+        optimisticCidOverridesRef.current = {}
         setDeals([])
         setAllDeals([])
         setProviders([])
@@ -512,10 +516,29 @@ export function Dashboard() {
     setLoading(true)
     try {
         const all = await lcdFetchDeals(appConfig.lcdBase)
-        setAllDeals(all)
-        let filtered = owner ? all.filter((d) => d.owner === owner) : all
+        const overrides = optimisticCidOverridesRef.current
+        const now = Date.now()
+        for (const [id, entry] of Object.entries(overrides)) {
+          if (!entry || entry.expiresAtMs <= now) {
+            delete overrides[id]
+          }
+        }
+        const merged = all.map((deal) => {
+          const id = String(deal.id ?? '')
+          const override = id ? overrides[id] : undefined
+          if (!override) return deal
+          const cid = String(deal.cid || '').trim()
+          const cidHex = toHexFromBase64OrHex(cid) || cid
+          if (cidHex && cidHex === override.cid) {
+            delete overrides[id]
+            return deal
+          }
+          return { ...deal, cid: override.cid }
+        })
+        setAllDeals(merged)
+        let filtered = owner ? merged.filter((d) => d.owner === owner) : merged
         if (owner && filtered.length === 0 && all.length > 0) {
-          filtered = all
+          filtered = merged
         }
         setDeals(filtered)
         return filtered
@@ -973,7 +996,17 @@ export function Dashboard() {
         })
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
-        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, trimmedRoot)
+        optimisticCidOverridesRef.current[String(targetDealId)] = {
+          cid: manifestHex,
+          expiresAtMs: Date.now() + optimisticCidTtlMs,
+        }
+        setDeals((prev) =>
+          prev.map((d) => (String(d.id) === String(targetDealId) ? { ...d, cid: manifestHex } : d)),
+        )
+        setAllDeals((prev) =>
+          prev.map((d) => (String(d.id) === String(targetDealId) ? { ...d, cid: manifestHex } : d)),
+        )
+        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, manifestHex)
         recordUpload('success')
         return true
     } catch (e) {
@@ -1035,6 +1068,10 @@ export function Dashboard() {
 
     // Optimistic UI: update the selected deal immediately so Deal Explorer can refresh
     // while the LCD catches up.
+    optimisticCidOverridesRef.current[String(dealId)] = {
+      cid: manifestHex,
+      expiresAtMs: Date.now() + optimisticCidTtlMs,
+    }
     setDeals((prev) =>
       prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
     )
@@ -1256,35 +1293,16 @@ export function Dashboard() {
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-muted/10">
       {showAdvanced ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => setActiveTab('mdu')}
-              data-testid="tab-upload"
-              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                activeTab === 'mdu'
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <Database className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
-              Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('content')}
-              data-testid="tab-content"
-              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                activeTab === 'content'
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
-              Mode 1 (advanced)
-            </button>
-          </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
+            data-testid="tab-content"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+          >
+            <Database className="h-3.5 w-3.5 text-muted-foreground" />
+            {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
+          </button>
         </div>
       ) : null}
 
