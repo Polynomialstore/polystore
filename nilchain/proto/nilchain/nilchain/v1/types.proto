@@ -6,6 +6,31 @@ import "cosmos_proto/cosmos.proto";
 
 option go_package = "nilchain/x/nilchain/types";
 
+// StripeReplicaProfile defines RS(K,K+M) parameters for Mode 2 (StripeReplica).
+message StripeReplicaProfile {
+  uint32 k = 1; // data slots
+  uint32 m = 2; // parity slots
+}
+
+enum SlotStatus {
+  SLOT_STATUS_UNSPECIFIED = 0;
+  SLOT_STATUS_ACTIVE = 1;
+  SLOT_STATUS_REPAIRING = 2;
+}
+
+// DealSlot is the canonical slot -> provider mapping for a Mode 2 deal.
+message DealSlot {
+  uint32 slot = 1; // 0..N-1
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  SlotStatus status = 3;
+
+  // Make-before-break replacement candidate (optional).
+  string pending_provider = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+
+  int64 status_since_height = 5;
+  uint64 repair_target_gen = 6;
+}
+
 // Deal represents a storage deal between a user and the network.
 message Deal {
   uint64 id = 1;
@@ -24,6 +49,16 @@ message Deal {
   uint64 total_mdus = 14; // Total number of MDUs in the deal
   uint64 spend_window_start_height = 15; // Start height for monthly elasticity spend window
   string spend_window_spent = 16 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Elasticity spend in current window (bond denom units)
+
+  // --- Mode 2 explicit encoding (canonical state) ---
+  StripeReplicaProfile mode2_profile = 17; // set iff redundancy_mode == 2
+  repeated DealSlot mode2_slots = 18; // length N, slot-ordered
+
+  // --- Generation / write coordination ---
+  uint64 current_gen = 19; // increments on manifest_root changes
+
+  // --- Slab accounting (bounds + policy) ---
+  uint64 witness_mdus = 20; // number of witness MDUs committed after MDU #0
 }
 
 // DealHeatState tracks aggregate traffic and performance metrics for a deal.

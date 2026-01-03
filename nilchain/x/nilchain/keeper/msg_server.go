@@ -208,6 +208,27 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		MaxMonthlySpend:        intent.MaxMonthlySpend,
 		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
 		SpendWindowSpent:       math.NewInt(0),
+		CurrentGen:             0,
+		WitnessMdus:            0,
+	}
+	if redundancyMode == 2 {
+		deal.Mode2Profile = &types.StripeReplicaProfile{
+			K: uint32(parsedHint.RSK),
+			M: uint32(parsedHint.RSM),
+		}
+
+		slots := make([]*types.DealSlot, 0, len(assignedProviders))
+		for i, provider := range assignedProviders {
+			slots = append(slots, &types.DealSlot{
+				Slot:              uint32(i),
+				Provider:          provider,
+				Status:            types.SlotStatus_SLOT_STATUS_ACTIVE,
+				PendingProvider:   "",
+				StatusSinceHeight: ctx.BlockHeight(),
+				RepairTargetGen:   0,
+			})
+		}
+		deal.Mode2Slots = slots
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -425,6 +446,27 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		MaxMonthlySpend:        maxMonthlySpend,
 		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
 		SpendWindowSpent:       math.NewInt(0),
+		CurrentGen:             0,
+		WitnessMdus:            0,
+	}
+	if redundancyMode == 2 {
+		deal.Mode2Profile = &types.StripeReplicaProfile{
+			K: uint32(parsedHint.RSK),
+			M: uint32(parsedHint.RSM),
+		}
+
+		slots := make([]*types.DealSlot, 0, len(assignedProviders))
+		for i, provider := range assignedProviders {
+			slots = append(slots, &types.DealSlot{
+				Slot:              uint32(i),
+				Provider:          provider,
+				Status:            types.SlotStatus_SLOT_STATUS_ACTIVE,
+				PendingProvider:   "",
+				StatusSinceHeight: ctx.BlockHeight(),
+				RepairTargetGen:   0,
+			})
+		}
+		deal.Mode2Slots = slots
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {

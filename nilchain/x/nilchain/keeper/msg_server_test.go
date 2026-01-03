@@ -127,6 +127,58 @@ func TestCreateDeal(t *testing.T) {
 	require.Equal(t, int(types.DealBaseReplication), len(unique))
 }
 
+func TestCreateDeal_Mode2TypedState(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register providers.
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_mode2________%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_mode2___________")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	msg := &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+
+	res, err := msgServer.CreateDeal(f.ctx, msg)
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, uint32(2), deal.RedundancyMode)
+	require.NotNil(t, deal.Mode2Profile)
+	require.Equal(t, uint32(8), deal.Mode2Profile.K)
+	require.Equal(t, uint32(4), deal.Mode2Profile.M)
+	require.Len(t, deal.Mode2Slots, int(types.DealBaseReplication))
+	require.Equal(t, uint64(0), deal.CurrentGen)
+	require.Equal(t, uint64(0), deal.WitnessMdus)
+
+	for i, slot := range deal.Mode2Slots {
+		require.NotNil(t, slot)
+		require.Equal(t, uint32(i), slot.Slot)
+		require.Equal(t, deal.Providers[i], slot.Provider)
+		require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot.Status)
+		require.Equal(t, "", slot.PendingProvider)
+	}
+}
+
 // TestCreateDeal_UserOwnedViaHint verifies that the logical Deal owner can be
 // overridden via the service hint encoding (used by the web gateway), while
 // the tx signer (creator) remains a separate account (e.g. faucet/sponsor).

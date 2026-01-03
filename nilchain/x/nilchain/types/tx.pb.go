@@ -1313,7 +1313,6 @@ type MsgProveLiveness struct {
 	DealId  uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
 	EpochId uint64 `protobuf:"varint,3,opt,name=epoch_id,json=epochId,proto3" json:"epoch_id,omitempty"`
 	// Types that are valid to be assigned to ProofType:
-	//
 	//	*MsgProveLiveness_UserReceipt
 	//	*MsgProveLiveness_SystemProof
 	//	*MsgProveLiveness_UserReceiptBatch
