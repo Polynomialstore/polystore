@@ -36,4 +36,9 @@ message Params {
   ]; // Variable retrieval price per 128KiB blob (locked on session open).
 
   uint64 retrieval_burn_bps = 9; // Burn cut in basis points (e.g., 500 = 5%).
+
+  // Length of the elasticity spend window ("month") in blocks.
+  // When the chain height exceeds spend_window_start_height + month_len_blocks,
+  // the window resets and spend_window_spent returns to 0.
+  uint64 month_len_blocks = 10;
 }

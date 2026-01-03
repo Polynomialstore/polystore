@@ -194,18 +194,20 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	currentReplication := uint64(len(assignedProviders))
 
 	deal := types.Deal{
-		Id:                 dealID,
-		ManifestRoot:       nil, // Empty initially
-		Size_:              0,   // Empty initially
-		Owner:              ownerAddrStr,
-		EscrowBalance:      intent.InitialEscrow,
-		StartBlock:         uint64(ctx.BlockHeight()),
-		EndBlock:           uint64(ctx.BlockHeight()) + intent.DurationBlocks,
-		Providers:          assignedProviders,
-		RedundancyMode:     redundancyMode,
-		CurrentReplication: currentReplication,
-		ServiceHint:        serviceHintRaw,
-		MaxMonthlySpend:    intent.MaxMonthlySpend,
+		Id:                     dealID,
+		ManifestRoot:           nil, // Empty initially
+		Size_:                  0,   // Empty initially
+		Owner:                  ownerAddrStr,
+		EscrowBalance:          intent.InitialEscrow,
+		StartBlock:             uint64(ctx.BlockHeight()),
+		EndBlock:               uint64(ctx.BlockHeight()) + intent.DurationBlocks,
+		Providers:              assignedProviders,
+		RedundancyMode:         redundancyMode,
+		CurrentReplication:     currentReplication,
+		ServiceHint:            serviceHintRaw,
+		MaxMonthlySpend:        intent.MaxMonthlySpend,
+		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
+		SpendWindowSpent:       math.NewInt(0),
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -409,18 +411,20 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	currentReplication := uint64(len(assignedProviders))
 
 	deal := types.Deal{
-		Id:                 dealID,
-		ManifestRoot:       nil, // Empty
-		Size_:              0,   // Empty
-		Owner:              ownerAddrStr,
-		EscrowBalance:      initialEscrowAmount,
-		StartBlock:         uint64(ctx.BlockHeight()),
-		EndBlock:           uint64(ctx.BlockHeight()) + msg.DurationBlocks,
-		Providers:          assignedProviders,
-		RedundancyMode:     redundancyMode,
-		CurrentReplication: currentReplication,
-		ServiceHint:        serviceHintRaw,
-		MaxMonthlySpend:    maxMonthlySpend,
+		Id:                     dealID,
+		ManifestRoot:           nil, // Empty
+		Size_:                  0,   // Empty
+		Owner:                  ownerAddrStr,
+		EscrowBalance:          initialEscrowAmount,
+		StartBlock:             uint64(ctx.BlockHeight()),
+		EndBlock:               uint64(ctx.BlockHeight()) + msg.DurationBlocks,
+		Providers:              assignedProviders,
+		RedundancyMode:         redundancyMode,
+		CurrentReplication:     currentReplication,
+		ServiceHint:            serviceHintRaw,
+		MaxMonthlySpend:        maxMonthlySpend,
+		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
+		SpendWindowSpent:       math.NewInt(0),
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -1274,15 +1278,29 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only assigned providers can signal saturation")
 	}
 
-	// --- BUDGET CHECK ---
-	// Cost = (CurrentReplication + 12) * BaseStripeCost
+	// --- ELASTICITY CAPS (RFC: Pricing & Escrow Accounting §6) ---
 	params := k.GetParams(ctx)
-	currentReplication := deal.CurrentReplication
-	newReplication := currentReplication + types.DealBaseReplication
-	estimatedCost := math.NewInt(int64(newReplication)).Mul(math.NewInt(int64(params.BaseStripeCost)))
+	height := uint64(ctx.BlockHeight())
+	if deal.SpendWindowStartHeight == 0 {
+		deal.SpendWindowStartHeight = height
+	}
+	if deal.SpendWindowSpent.IsNil() {
+		deal.SpendWindowSpent = math.NewInt(0)
+	}
 
-	if estimatedCost.GT(deal.MaxMonthlySpend) {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("scaling denied: new cost %s exceeds max monthly spend %s", estimatedCost, deal.MaxMonthlySpend)
+	monthLen := params.MonthLenBlocks
+	if monthLen > 0 && height >= deal.SpendWindowStartHeight+monthLen {
+		deal.SpendWindowStartHeight = height
+		deal.SpendWindowSpent = math.NewInt(0)
+	}
+
+	elasticityCost := math.NewIntFromUint64(params.BaseStripeCost).Mul(math.NewIntFromUint64(types.DealBaseReplication))
+	newSpent := deal.SpendWindowSpent.Add(elasticityCost)
+	if newSpent.GT(deal.MaxMonthlySpend) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("scaling denied: window spend %s + cost %s exceeds max monthly spend %s", deal.SpendWindowSpent, elasticityCost, deal.MaxMonthlySpend)
+	}
+	if deal.EscrowBalance.LT(elasticityCost) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("scaling denied: escrow balance %s is below cost %s", deal.EscrowBalance, elasticityCost)
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
@@ -1295,6 +1313,8 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 
 	deal.Providers = append(deal.Providers, newProviders...)
 	deal.CurrentReplication += types.DealBaseReplication
+	deal.EscrowBalance = deal.EscrowBalance.Sub(elasticityCost)
+	deal.SpendWindowSpent = newSpent
 
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
@@ -1306,6 +1326,8 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute("new_stripe_index", fmt.Sprintf("%d", (deal.CurrentReplication/types.DealBaseReplication))),
 			sdk.NewAttribute("new_providers", fmt.Sprintf("%v", newProviders)),
+			sdk.NewAttribute("elasticity_cost", elasticityCost.String()),
+			sdk.NewAttribute("spend_window_spent", deal.SpendWindowSpent.String()),
 		),
 	)
 

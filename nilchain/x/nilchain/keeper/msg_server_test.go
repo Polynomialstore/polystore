@@ -770,6 +770,12 @@ func TestSignalSaturation(t *testing.T) {
 	require.Equal(t, uint64(24), deal.CurrentReplication)
 	require.Len(t, deal.Providers, 24)
 
+	// Elasticity cost should be debited from escrow and tracked in the spend window.
+	params := f.keeper.GetParams(f.ctx)
+	elasticityCost := math.NewIntFromUint64(params.BaseStripeCost).Mul(math.NewIntFromUint64(types.DealBaseReplication))
+	require.Equal(t, math.NewInt(1000).Sub(elasticityCost), deal.EscrowBalance)
+	require.Equal(t, elasticityCost, deal.SpendWindowSpent)
+
 	// 4. Signal Saturation (Unauthorized)
 	unassignedBz := []byte("unassigned_prov_____")
 	unassigned, _ := f.addressCodec.BytesToString(unassignedBz)

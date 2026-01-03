@@ -22,6 +22,8 @@ message Deal {
   string max_monthly_spend = 12 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // User's monthly spend cap for elasticity
   // Field 13 reserved for removed capacity tiers.
   uint64 total_mdus = 14; // Total number of MDUs in the deal
+  uint64 spend_window_start_height = 15; // Start height for monthly elasticity spend window
+  string spend_window_spent = 16 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Elasticity spend in current window (bond denom units)
 }
 
 // DealHeatState tracks aggregate traffic and performance metrics for a deal.

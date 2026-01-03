@@ -21,6 +21,7 @@ var (
 	KeyBaseRetrievalFee      = []byte("BaseRetrievalFee")
 	KeyRetrievalPricePerBlob = []byte("RetrievalPricePerBlob")
 	KeyRetrievalBurnBps      = []byte("RetrievalBurnBps")
+	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
 )
 
 // ParamKeyTable the param key table for launch module
@@ -39,6 +40,7 @@ func NewParams(
 	baseRetrievalFee sdk.Coin,
 	retrievalPricePerBlob sdk.Coin,
 	retrievalBurnBps uint64,
+	monthLenBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -50,6 +52,7 @@ func NewParams(
 		BaseRetrievalFee:      baseRetrievalFee,
 		RetrievalPricePerBlob: retrievalPricePerBlob,
 		RetrievalBurnBps:      retrievalBurnBps,
+		MonthLenBlocks:        monthLenBlocks,
 	}
 }
 
@@ -64,7 +67,8 @@ func DefaultParams() Params {
 		10, // MinDurationBlocks
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // BaseRetrievalFee (provisional devnet default)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlob (provisional devnet default)
-		500, // RetrievalBurnBps (5%)
+		500,  // RetrievalBurnBps (5%)
+		1000, // MonthLenBlocks (devnet-friendly "month")
 	)
 }
 
@@ -80,6 +84,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyBaseRetrievalFee, &p.BaseRetrievalFee, validateBaseRetrievalFee),
 		paramtypes.NewParamSetPair(KeyRetrievalPricePerBlob, &p.RetrievalPricePerBlob, validateRetrievalPricePerBlob),
 		paramtypes.NewParamSetPair(KeyRetrievalBurnBps, &p.RetrievalBurnBps, validateRetrievalBurnBps),
+		paramtypes.NewParamSetPair(KeyMonthLenBlocks, &p.MonthLenBlocks, validateMonthLenBlocks),
 	}
 }
 
@@ -110,6 +115,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateRetrievalBurnBps(p.RetrievalBurnBps); err != nil {
+		return err
+	}
+	if err := validateMonthLenBlocks(p.MonthLenBlocks); err != nil {
 		return err
 	}
 	return nil
@@ -204,6 +212,14 @@ func validateRetrievalBurnBps(i interface{}) error {
 	}
 	if v > 10000 {
 		return fmt.Errorf("retrieval burn bps must be <= 10000 (got %d)", v)
+	}
+	return nil
+}
+
+func validateMonthLenBlocks(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 	return nil
 }
