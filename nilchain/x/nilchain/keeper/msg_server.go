@@ -732,6 +732,15 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
 	}
+	if stripe.mode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
+		slotIdx, ok := providerSlotIndex(deal, msg.Creator)
+		if ok && int(slotIdx) < len(deal.Mode2Slots) {
+			slot := deal.Mode2Slots[slotIdx]
+			if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; liveness proofs are disabled", slotIdx)
+			}
+		}
+	}
 
 	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool) (bool, error) {
 		if chainedProof == nil {

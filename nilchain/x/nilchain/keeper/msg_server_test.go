@@ -249,6 +249,61 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, candidate, dealAfterComplete.Providers[0])
 }
 
+func TestProveLiveness_RepairingSlotRejected(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register providers.
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_pl_repair____%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_pl_repair______")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	res, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	oldProvider := deal.Mode2Slots[0].Provider
+	candidate := deal.Mode2Slots[1].Provider
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ProveLiveness(f.ctx, &types.MsgProveLiveness{
+		Creator: oldProvider,
+		DealId:  res.DealId,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_SystemProof{
+			SystemProof: &types.ChainedProof{},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "repairing")
+}
+
 // TestCreateDeal_UserOwnedViaHint verifies that the logical Deal owner can be
 // overridden via the service hint encoding (used by the web gateway), while
 // the tx signer (creator) remains a separate account (e.g. faucet/sponsor).
