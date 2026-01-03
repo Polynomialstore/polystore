@@ -995,7 +995,10 @@ func mode2UploadArtifactsToProviders(
 	transport := &http.Transport{
 		MaxIdleConns:          256,
 		MaxIdleConnsPerHost:   32,
-		ExpectContinueTimeout: 2 * time.Second,
+		// Providers validate deal state via LCD before reading bodies; keep a generous
+		// wait window so we don't start streaming 8 MiB payloads only to be rejected
+		// a moment later (which also triggers client-side ContentLength mismatch errors).
+		ExpectContinueTimeout: 10 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
@@ -1033,6 +1036,11 @@ func mode2UploadArtifactsToProviders(
 		}
 		req.ContentLength = fi.Size()
 		req.Header.Set("Content-Type", "application/octet-stream")
+		// Avoid sending large bodies when the SP would reject early (deal validation,
+		// missing headers, etc). This prevents spurious client-side "ContentLength ...
+		// with Body length ..." transport errors when the server responds before
+		// reading the full payload.
+		req.Header.Set("Expect", "100-continue")
 		if task.dealID != "" {
 			req.Header.Set("X-Nil-Deal-ID", task.dealID)
 		}

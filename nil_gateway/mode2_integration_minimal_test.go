@@ -88,6 +88,11 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/sp/upload_shard":
+			if got := strings.TrimSpace(r.Header.Get("Expect")); got != "100-continue" {
+				t.Errorf("missing Expect: 100-continue header (got %q) on %s", got, r.URL.Path)
+				http.Error(w, "missing Expect header", http.StatusBadRequest)
+				return
+			}
 			manifest := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 			mduIdx := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 			slot := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
@@ -108,6 +113,12 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 			http.NotFound(w, r)
 			return
 		case "/sp/upload_mdu", "/sp/upload_manifest":
+			if got := strings.TrimSpace(r.Header.Get("Expect")); got != "100-continue" {
+				t.Errorf("missing Expect: 100-continue header (got %q) on %s", got, r.URL.Path)
+				http.Error(w, "missing Expect header", http.StatusBadRequest)
+				return
+			}
+			_ = r.Body.Close()
 			// Dumb pipe: accept and discard (fetch path uses local disk).
 			w.WriteHeader(http.StatusOK)
 			return
