@@ -30,9 +30,9 @@ This document tracks **what is missing** between the current implementation in t
 ## Critical Path (P0) — Mainnet Blocking
 
 ### P0-CHAIN-001 — Mode 2 generations + repair mode + make‑before‑break replacement
-- **Status:** MISSING
+- **Status:** PARTIAL (DEVNET)
 - **Spec:** `spec.md` §8.4, §5.3, Appendix B (2, 4, 6)
-- **Current state:** Mode 2 exists at the client/gateway level, but the chain does not represent `current_gen` / per-slot repair status, and cannot safely coordinate “repair while appending”.
+- **Current state:** the chain now tracks typed Mode 2 slots + a first-pass `current_gen` and per-slot repair state, but make-before-break replacement, append-safe repair coordination, and read routing around repairing slots are not fully implemented.
 - **DoD:** Chain has explicit generation + slot status; repairs are observable; replacement is make‑before‑break; reads route around repairing slots; append-only commit rules enforced.
 - **Test gate:** new e2e (multi-SP) that simulates slot failure → repair catch-up → slot rejoin without breaking reads.
 
@@ -58,9 +58,9 @@ This document tracks **what is missing** between the current implementation in t
 - **Test gate:** e2e “ghosting provider” scenario that still retrieves via deputy and records evidence.
 
 ### P0-PERF-001 — High-throughput KZG (GPU) + parallel ingest pipeline
-- **Status:** RFC / UNSPECIFIED (implementation missing)
+- **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/kzg_upload_bottleneck_report.md`, `notes/kzg_gpu_design.md`, `notes/roadmap_milestones_strategic.md` (Milestone 2)
-- **Current state:** CPU KZG works; parallelism improved, but mainnet target throughput requires GPU-class acceleration for large uploads.
+- **Current state:** CPU KZG works and the gateway ingest pipeline is parallelized by default; GPU-class acceleration is still missing for mainnet target throughput.
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
@@ -312,3 +312,21 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Sprint 8:** P0-PERF-001, CORE-401 (optional/if required)
 - **Sprint 9:** GW-203, GW-204, CLI-501, CLI-502
 - **Sprint 10:** P0-OPS-001 (+ remaining closure)
+
+---
+
+## Execution Status (Repo)
+
+As of `main` @ `44d93f8`, the repo has executed and merged the following sprint branches (used as **shipping increments** toward devnet/beta stability; not all Mainnet DoDs are fully satisfied yet):
+
+- `sprint0-rfc-freeze`: RFC freezes for Mode 2 state, challenge derivation/quotas, and pricing/escrow.
+- `sprint1-one-core-foundation`: Mode 2 ingest/upload hardening (one-core migration still PARTIAL).
+- `sprint2-economic-model-v1`: enforce elasticity spend caps (full lock-in accounting still PARTIAL).
+- `sprint3-mode2-onchain-encoding`: typed Mode 2 slot state scaffolding on-chain.
+- `sprint4-mode2-repair-workflows`: generation + slot repair state tracking (replacement policy still PARTIAL).
+- `sprint5-unified-liveness-v1`: liveness constraints during repair (quota/challenge derivation still SPECIFIED (RFC)).
+- `sprint6-fraud-proofs-evidence`: non-response evidence recording (full evidence taxonomy still PARTIAL).
+- `sprint7-deputy-system`: router-side fetch failover (full deputy market still PARTIAL).
+- `sprint8-throughput-gpu-defaults`: faster Mode 2 artifact pipeline + WASM UX hardening (GPU KZG still MISSING).
+- `sprint9-enterprise-s3-delegation`: deal-backed S3 adapter + docs/sync scripts (polish still PARTIAL).
+- `sprint10-mainnet-hardening`: Mode 2 idempotency + CI-aligned E2E stability fixes.
