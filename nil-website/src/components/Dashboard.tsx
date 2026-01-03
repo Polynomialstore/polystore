@@ -120,6 +120,64 @@ export function Dashboard() {
   const metaMaskUnlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
   const isWalletLocked = isConnected && metaMaskUnlockState === 'locked'
 
+  const [authorizedAccounts, setAuthorizedAccounts] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!isConnected) {
+      setAuthorizedAccounts(null)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const eth = (window as any).ethereum as
+      | {
+          request?: (args: { method: string }) => Promise<unknown>
+          on?: (event: string, listener: (...args: unknown[]) => void) => void
+          removeListener?: (event: string, listener: (...args: unknown[]) => void) => void
+        }
+      | undefined
+
+    if (!eth || typeof eth.request !== 'function') {
+      setAuthorizedAccounts([])
+      return
+    }
+
+    let cancelled = false
+    const normalize = (accounts: unknown): string[] =>
+      Array.isArray(accounts) ? accounts.filter((a): a is string => typeof a === 'string') : []
+
+    const refresh = async () => {
+      try {
+        const accounts = normalize(await eth.request!({ method: 'eth_accounts' }))
+        if (!cancelled) setAuthorizedAccounts(accounts)
+      } catch {
+        if (!cancelled) setAuthorizedAccounts([])
+      }
+    }
+
+    void refresh()
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = normalize(args[0])
+      if (!cancelled) setAuthorizedAccounts(accounts)
+    }
+
+    if (typeof eth.on === 'function') {
+      eth.on('accountsChanged', handleAccountsChanged)
+    }
+
+    const handleFocus = () => void refresh()
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', handleFocus)
+      if (typeof eth.removeListener === 'function') {
+        eth.removeListener('accountsChanged', handleAccountsChanged)
+      }
+    }
+  }, [isConnected])
+
+  const hasAuthorizedAccount = authorizedAccounts !== null ? authorizedAccounts.length > 0 : true
+
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
   useEffect(() => {
@@ -946,6 +1004,19 @@ export function Dashboard() {
         const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
         const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
         if (!first || !first.startsWith('0x')) throw new Error('Unlock MetaMask to continue.')
+        await handleCreateDeal(first)
+        return
+      }
+
+      if (isConnected && !hasAuthorizedAccount) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
+        const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
+        const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
+        if (!first || !first.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
         await handleCreateDeal(first)
         return
       }
@@ -2232,7 +2303,7 @@ export function Dashboard() {
                       ? 'Switch network'
                       : isWalletLocked
                         ? 'Unlock wallet'
-                        : !isConnected || !address
+                        : !isConnected || !address || !hasAuthorizedAccount
                           ? 'Connect wallet'
                           : 'Create deal'}
                 </button>
