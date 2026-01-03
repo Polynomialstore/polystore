@@ -334,3 +334,10 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint12-mode2-routing-order`: prefer ACTIVE Mode 2 slots for routing/provider ordering.
 - `sprint13-e2e-health-readiness`: standardize E2E readiness checks on `/health`.
 - `sprint14-mode2-upload-reliability`: avoid Go client-side ContentLength mismatch errors via `Expect: 100-continue`.
+- `sprint15-gap-tracker-status`: expand Mainnet gap tracker with per-sprint execution status and DoD mapping.
+- `sprint16-e2e-mode2-stripe-stability`: stabilize Mode 2 StripeReplica E2E flows (upload/commit/retrieve) against UI regressions.
+- `sprint17-proof-context-cleanup`: replace legacy proofs wiring with LCD retrieval sessions + `useProofs` polling where needed.
+- `sprint18-remove-legacy-proofs`: remove stale dashboard UI paths that relied on the old `/proofs` store.
+- `sprint19-upload-benchmark`: print upload wall-time and MiB/s in `scripts/e2e_lifecycle.sh` to prevent silent perf regressions.
+- `sprint20-mode2-finalize-race`: harden Mode 2 slab finalize against rename races and make finalize idempotent under retries.
+- `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
