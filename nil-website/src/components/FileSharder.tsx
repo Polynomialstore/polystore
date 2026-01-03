@@ -1677,7 +1677,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 Checking redundancy mode and gateway availability.
               </div>
             </div>
-          ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
+          ) : (
             <div
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -1699,11 +1699,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-foreground">Upload a file</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {isMode2 && gatewayMode2Enabled
-                        ? gatewayReachable
-                          ? 'Local gateway connected (fast path).'
-                          : 'No local gateway detected (in-browser sharding).'
-                        : 'In-browser sharding.'}
+                      {isMode2 && gatewayMode2Enabled ? (
+                        gatewayReachable ? (
+                          'Local gateway connected (fast path).'
+                        ) : (
+                          'No local gateway detected (in-browser sharding).'
+                        )
+                      ) : wasmStatus === 'initializing' ? (
+                        'Preparing in-browser sharding…'
+                      ) : wasmStatus === 'error' ? (
+                        `In-browser sharding unavailable: ${wasmError || 'init failed'}`
+                      ) : (
+                        'In-browser sharding.'
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1711,14 +1719,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   Choose file
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-              <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                This only runs in your browser. Once ready, the file picker will appear.
               </div>
             </div>
           )}
