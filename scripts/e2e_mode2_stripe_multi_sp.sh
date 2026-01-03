@@ -48,8 +48,8 @@ echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
 wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
 wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
-wait_for_http "gateway router" "http://localhost:8080/gateway/upload" "200,405" 60 1
-wait_for_http "provider #1" "http://localhost:8091/gateway/upload" "200,405" 60 1
+wait_for_http "gateway router" "http://localhost:8080/health" "200" 60 1
+wait_for_http "provider #1" "http://localhost:8091/health" "200" 60 1
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
 
 echo "==> Running Playwright (Mode 2 StripeReplica)..."

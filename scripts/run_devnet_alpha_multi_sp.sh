@@ -511,12 +511,13 @@ start_all() {
     done
     for i in $(seq 1 "$PROVIDER_COUNT"); do
       port="$((PROVIDER_PORT_BASE + i - 1))"
-      wait_for_http "provider$i" "http://localhost:$port/gateway/upload" "200,405" 60 1
+      # Use /health to avoid relying on MethodNotAllowed/NotFound semantics for /gateway/upload.
+      wait_for_http "provider$i" "http://localhost:$port/health" "200" 60 1
     done
   fi
 
   start_router
-  wait_for_http "router" "http://localhost:8080/gateway/upload" "200,405" 60 1
+  wait_for_http "router" "http://localhost:8080/health" "200" 60 1
 
   if [ "$START_WEB" = "1" ]; then
     start_web
