@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"nilchain/x/crypto_ffi"
 )
@@ -13,7 +14,7 @@ import (
 const RawMduCapacity = 8126464
 
 // IngestNewDeal creates a new Deal Slab.
-func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -141,7 +142,10 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64) (*c
 	}
 
 	// 7. Append File Record
-	baseName := filepath.Base(filePath)
+	baseName := strings.TrimSpace(recordPath)
+	if baseName == "" {
+		baseName = filepath.Base(filePath)
+	}
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}

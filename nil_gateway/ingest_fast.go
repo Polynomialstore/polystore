@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"nilchain/x/crypto_ffi"
 )
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.
 // ...
-func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -47,7 +48,10 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64)
 	}
 
 	// 4. Append File Record
-	baseName := filepath.Base(filePath)
+	baseName := strings.TrimSpace(recordPath)
+	if baseName == "" {
+		baseName = filepath.Base(filePath)
+	}
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}

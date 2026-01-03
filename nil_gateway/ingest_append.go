@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -19,7 +20,7 @@ import (
 //
 // NOTE: Mode 1 append currently uses naive MDU-boundary packing:
 // each appended file starts at the next 8 MiB User-Data MDU boundary.
-func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -75,7 +76,10 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Append a new file record starting at next MDU boundary.
-	baseName := filepath.Base(filePath)
+	baseName := strings.TrimSpace(recordPath)
+	if baseName == "" {
+		baseName = filepath.Base(filePath)
+	}
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
