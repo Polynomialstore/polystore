@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -542,6 +543,9 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid manifest root (must be 48-byte hex): %s", msg.Cid)
 	}
 
+	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
+		deal.CurrentGen++
+	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = msg.Size_
 
@@ -555,6 +559,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyCID, msg.Cid),
 			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("current_gen", fmt.Sprintf("%d", deal.CurrentGen)),
 		),
 	)
 
@@ -680,6 +685,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid manifest root: %s", intent.Cid)
 	}
 
+	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
+		deal.CurrentGen++
+	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = intent.SizeBytes
 
@@ -693,6 +701,7 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyCID, intent.Cid),
 			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("current_gen", fmt.Sprintf("%d", deal.CurrentGen)),
 		),
 	)
 

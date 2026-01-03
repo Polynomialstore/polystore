@@ -179,6 +179,76 @@ func TestCreateDeal_Mode2TypedState(t *testing.T) {
 	}
 }
 
+func TestMode2SlotRepairLifecycle(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register providers.
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_repair_______%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_repair__________")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	create := &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+	res, err := msgServer.CreateDeal(f.ctx, create)
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Len(t, deal.Mode2Slots, int(types.DealBaseReplication))
+
+	oldProvider := deal.Mode2Slots[0].Provider
+	candidate := deal.Mode2Slots[1].Provider
+	require.NotEqual(t, oldProvider, candidate)
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.NoError(t, err)
+
+	dealAfterStart, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_REPAIRING, dealAfterStart.Mode2Slots[0].Status)
+	require.Equal(t, oldProvider, dealAfterStart.Mode2Slots[0].Provider)
+	require.Equal(t, candidate, dealAfterStart.Mode2Slots[0].PendingProvider)
+	require.Equal(t, oldProvider, dealAfterStart.Providers[0])
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: user,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
+	require.NoError(t, err)
+
+	dealAfterComplete, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, dealAfterComplete.Mode2Slots[0].Status)
+	require.Equal(t, candidate, dealAfterComplete.Mode2Slots[0].Provider)
+	require.Equal(t, "", dealAfterComplete.Mode2Slots[0].PendingProvider)
+	require.Equal(t, candidate, dealAfterComplete.Providers[0])
+}
+
 // TestCreateDeal_UserOwnedViaHint verifies that the logical Deal owner can be
 // overridden via the service hint encoding (used by the web gateway), while
 // the tx signer (creator) remains a separate account (e.g. faucet/sponsor).

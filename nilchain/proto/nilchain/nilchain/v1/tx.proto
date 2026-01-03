@@ -53,6 +53,12 @@ service Msg {
   // MsgSignalSaturation allows a Storage Provider to signal high load for a deal.
   rpc SignalSaturation(MsgSignalSaturation) returns (MsgSignalSaturationResponse);
 
+  // MsgStartSlotRepair marks a Mode 2 slot as repairing and sets a replacement candidate.
+  rpc StartSlotRepair(MsgStartSlotRepair) returns (MsgStartSlotRepairResponse);
+
+  // MsgCompleteSlotRepair promotes the pending replacement candidate to active.
+  rpc CompleteSlotRepair(MsgCompleteSlotRepair) returns (MsgCompleteSlotRepairResponse);
+
   // MsgAddCredit allows a user to top up the escrow balance for a deal.
   rpc AddCredit(MsgAddCredit) returns (MsgAddCreditResponse);
 
@@ -296,6 +302,35 @@ message MsgSignalSaturationResponse {
   bool success = 1;
   string message = 2;
   repeated string new_providers = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // Newly spawned hot replica providers
+}
+
+// MsgStartSlotRepair starts a make-before-break replacement for a Mode 2 slot.
+message MsgStartSlotRepair {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgStartSlotRepair";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // deal owner
+  uint64 deal_id = 2;
+  uint32 slot = 3; // 0..N-1
+  string pending_provider = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+message MsgStartSlotRepairResponse {
+  bool success = 1;
+}
+
+// MsgCompleteSlotRepair promotes the pending provider to the active slot provider.
+message MsgCompleteSlotRepair {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgCompleteSlotRepair";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // deal owner
+  uint64 deal_id = 2;
+  uint32 slot = 3; // 0..N-1
+}
+
+message MsgCompleteSlotRepairResponse {
+  bool success = 1;
 }
 
 // MsgAddCredit allows a user to top up the escrow balance for a deal.
