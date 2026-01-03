@@ -383,9 +383,14 @@ func mode2UploadParallelism(slotCount uint64) int {
 
 func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 	if err := os.Rename(stagingDir, finalDir); err != nil {
+		info, statErr := os.Stat(finalDir)
+		if statErr != nil {
+			return err
+		}
+
 		// If the destination already exists (e.g. retries / duplicate uploads), treat it
 		// as idempotent success so uploads don't fail on content-addressed paths.
-		if info, statErr := os.Stat(finalDir); statErr == nil && info.IsDir() {
+		if info.IsDir() {
 			manifestPath := filepath.Join(finalDir, "manifest.bin")
 			mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
 			if _, errManifest := os.Stat(manifestPath); errManifest == nil {
@@ -394,7 +399,24 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 					return nil
 				}
 			}
+
+			// The directory exists but doesn't look complete (likely a partial prior attempt).
+			// Delete it and retry so the caller can recover without manual cleanup.
+			_ = os.RemoveAll(finalDir)
+			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
+				return retryErr
+			}
+			return nil
 		}
+
+		// Unexpected: finalDir exists as a file. Best-effort remove and retry.
+		if removeErr := os.Remove(finalDir); removeErr == nil {
+			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
+				return retryErr
+			}
+			return nil
+		}
+
 		return err
 	}
 	return nil
@@ -892,7 +914,6 @@ func mode2UploadArtifactsToProviders(
 			return err
 		}
 		req.ContentLength = fi.Size()
-		req.Header.Set("Expect", "100-continue")
 		req.Header.Set("Content-Type", "application/octet-stream")
 		if setHeaders != nil {
 			setHeaders(req)
