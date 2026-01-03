@@ -1260,7 +1260,20 @@ export function Dashboard() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={() => setActiveTab((prev) => (prev === 'content' ? 'mdu' : 'content'))}
+              onClick={() => setActiveTab('mdu')}
+              data-testid="tab-upload"
+              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                activeTab === 'mdu'
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
+              }`}
+            >
+              <Database className={`h-3.5 w-3.5 ${activeTab === 'mdu' ? 'text-primary' : 'text-muted-foreground'}`} />
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('content')}
               data-testid="tab-content"
               className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 activeTab === 'content'
