@@ -194,40 +194,40 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 				eg.Go(func() error {
 					defer bufPool.Put(buf)
 
-				if err := egctx.Err(); err != nil {
-					return err
-				}
-
-				chunk := buf[:n]
-				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
-				if err != nil {
-					return fmt.Errorf("expand mdu %d: %w", i, err)
-				}
-				root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
-				if err != nil {
-					return fmt.Errorf("compute mdu root %d: %w", i, err)
-				}
-				userRoots[i] = root
-				witnessFlats[i] = witnessFlat
-
-				slabIndex := uint64(1) + witnessCount + i
-				for slot := uint64(0); slot < stripe.slotCount; slot++ {
-					if int(slot) >= len(shards) {
-						return fmt.Errorf("missing shard for slot %d", slot)
-					}
-					name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-					if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+					if err := egctx.Err(); err != nil {
 						return err
 					}
-				}
 
-				next := completed.Add(1)
-				if job != nil {
-					job.setSteps(next, totalSteps)
-				}
+					chunk := buf[:n]
+					witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
+					if err != nil {
+						return fmt.Errorf("expand mdu %d: %w", i, err)
+					}
+					root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+					if err != nil {
+						return fmt.Errorf("compute mdu root %d: %w", i, err)
+					}
+					userRoots[i] = root
+					witnessFlats[i] = witnessFlat
 
-				return nil
-			})
+					slabIndex := uint64(1) + witnessCount + i
+					for slot := uint64(0); slot < stripe.slotCount; slot++ {
+						if int(slot) >= len(shards) {
+							return fmt.Errorf("missing shard for slot %d", slot)
+						}
+						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
+						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+							return err
+						}
+					}
+
+					next := completed.Add(1)
+					if job != nil {
+						job.setSteps(next, totalSteps)
+					}
+
+					return nil
+				})
 			}
 		}
 
@@ -433,8 +433,16 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 			}
 
 			// The directory exists but doesn't look complete (likely a partial prior attempt).
-			// Delete it and retry so the caller can recover without manual cleanup.
-			_ = os.RemoveAll(finalDir)
+			// Best-effort: move staged artifacts into the existing directory (overwriting).
+			// This avoids failing uploads when providers pre-create the destination dir.
+			if mergeErr := mode2MergeStagingIntoFinal(stagingDir, finalDir); mergeErr == nil {
+				return nil
+			}
+
+			// Fallback: delete and retry rename so the caller can recover without manual cleanup.
+			if rmErr := os.RemoveAll(finalDir); rmErr != nil && !os.IsNotExist(rmErr) {
+				return fmt.Errorf("failed to remove incomplete existing slab dir %s: %w", finalDir, rmErr)
+			}
 			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
 				return retryErr
 			}
@@ -449,6 +457,57 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 			return nil
 		}
 
+		return err
+	}
+	return nil
+}
+
+func mode2MergeStagingIntoFinal(stagingDir string, finalDir string) error {
+	entries, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		src := filepath.Join(stagingDir, name)
+		dst := filepath.Join(finalDir, name)
+
+		if entry.IsDir() {
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				return err
+			}
+			if err := mode2MergeStagingIntoFinal(src, dst); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(src); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			continue
+		}
+
+		if err := os.Rename(src, dst); err == nil {
+			continue
+		}
+
+		// Overwrite existing file/dir if present.
+		if rmErr := os.RemoveAll(dst); rmErr != nil && !os.IsNotExist(rmErr) {
+			return rmErr
+		}
+		if err := os.Rename(src, dst); err == nil {
+			continue
+		}
+
+		// Cross-device rename or other edge-case: copy + unlink.
+		if err := copyFile(src, dst); err != nil {
+			return err
+		}
+		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	if err := os.RemoveAll(stagingDir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -677,43 +736,43 @@ func mode2BuildArtifactsAppend(
 				eg.Go(func() error {
 					defer bufPool.Put(buf)
 
-				if err := egctx.Err(); err != nil {
-					return err
-				}
-
-				chunk := buf[:n]
-				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
-				if err != nil {
-					return fmt.Errorf("expand new mdu %d: %w", i, err)
-				}
-				if uint64(len(witnessFlat)) != witnessBytesPerUser {
-					return fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
-				}
-				root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
-				if err != nil {
-					return fmt.Errorf("compute new mdu root %d: %w", i, err)
-				}
-				newUserRoots[i] = root
-				newWitnessFlats[i] = witnessFlat
-
-				userIdx := oldUserMdus + i
-				slabIndex := uint64(1) + witnessCount + userIdx
-				for slot := uint64(0); slot < stripe.slotCount; slot++ {
-					if int(slot) >= len(shards) {
-						return fmt.Errorf("missing shard for slot %d", slot)
-					}
-					name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-					if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+					if err := egctx.Err(); err != nil {
 						return err
 					}
-				}
 
-				next := completed.Add(1)
-				if job != nil {
-					job.setSteps(next, totalSteps)
-				}
-				return nil
-			})
+					chunk := buf[:n]
+					witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
+					if err != nil {
+						return fmt.Errorf("expand new mdu %d: %w", i, err)
+					}
+					if uint64(len(witnessFlat)) != witnessBytesPerUser {
+						return fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
+					}
+					root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+					if err != nil {
+						return fmt.Errorf("compute new mdu root %d: %w", i, err)
+					}
+					newUserRoots[i] = root
+					newWitnessFlats[i] = witnessFlat
+
+					userIdx := oldUserMdus + i
+					slabIndex := uint64(1) + witnessCount + userIdx
+					for slot := uint64(0); slot < stripe.slotCount; slot++ {
+						if int(slot) >= len(shards) {
+							return fmt.Errorf("missing shard for slot %d", slot)
+						}
+						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
+						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+							return err
+						}
+					}
+
+					next := completed.Add(1)
+					if job != nil {
+						job.setSteps(next, totalSteps)
+					}
+					return nil
+				})
 			}
 		}
 

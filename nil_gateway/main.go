@@ -4738,6 +4738,13 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
 
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
+		// Idempotent: already stored.
+		log.Printf("SpUploadMdu: already present %s for deal %d", path, dealID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
@@ -4769,6 +4776,12 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
+			// Race/idempotent: another upload wrote the same MDU.
+			log.Printf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
@@ -4848,6 +4861,14 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
 
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
+		if r.ContentLength <= 0 || info.Size() == r.ContentLength {
+			log.Printf("SpUploadShard: already present %s for deal %d", path, dealID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
 	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
@@ -4880,6 +4901,13 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
+			if r.ContentLength <= 0 || info.Size() == r.ContentLength {
+				log.Printf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
@@ -5004,6 +5032,12 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := filepath.Join(rootDir, "manifest.bin")
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
+		log.Printf("SpUploadManifest: already present %s for deal %d", path, dealID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	tmp, err := os.CreateTemp(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
@@ -5029,7 +5063,17 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if n != int64(types.BLOB_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid manifest size: got %d bytes (want %d)", n, types.BLOB_SIZE), http.StatusBadRequest)
+		return
+	}
+
 	if err := os.Rename(tmpPath, path); err != nil {
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
+			log.Printf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
