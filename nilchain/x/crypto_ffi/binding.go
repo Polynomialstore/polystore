@@ -18,7 +18,7 @@ package crypto_ffi
 	    unsigned char* out_shards_flat,
 	    size_t out_shards_flat_len
 	);
-	int nil_expand_payload_rs(
+int nil_expand_payload_rs(
 	    const unsigned char* payload_bytes,
 	    size_t payload_bytes_len,
 	    unsigned long long data_shards,
@@ -27,6 +27,19 @@ package crypto_ffi
 	    size_t out_witness_flat_len,
 	    unsigned char* out_shards_flat,
 	    size_t out_shards_flat_len
+	);
+	int nil_encode_payload_to_mdu(
+	    const unsigned char* payload_bytes,
+	    size_t payload_bytes_len,
+	    unsigned char* out_mdu_bytes,
+	    size_t out_mdu_bytes_len
+	);
+	int nil_decode_payload_from_mdu(
+	    const unsigned char* mdu_bytes,
+	    size_t mdu_bytes_len,
+	    unsigned long long raw_len,
+	    unsigned char* out_payload,
+	    size_t out_payload_len
 	);
 	int nil_reconstruct_mdu_rs(
 	    const unsigned char* shards_flat,
@@ -125,6 +138,8 @@ import (
 
 	"nilchain/x/nilchain/types" // Import types for MDU_SIZE
 )
+
+const MDU_PAYLOAD_BYTES = 8126464
 
 // --- Layout FFI Wrappers ---
 
@@ -402,6 +417,56 @@ func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, s
 		shards = append(shards, shardsFlat[start:end:end])
 	}
 	return witness_flat, shards, nil
+}
+
+// EncodePayloadToMdu encodes a raw NilFS payload (<= 8,126,464 bytes) into a full 8 MiB MDU buffer
+// using the field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
+func EncodePayloadToMdu(payload []byte) ([]byte, error) {
+	if len(payload) > 0 && len(payload) > MDU_PAYLOAD_BYTES {
+		return nil, fmt.Errorf("payload too large: %d (max %d)", len(payload), MDU_PAYLOAD_BYTES)
+	}
+
+	out := make([]byte, types.MDU_SIZE)
+	var cPayload *C.uchar
+	if len(payload) > 0 {
+		cPayload = (*C.uchar)(unsafe.Pointer(&payload[0]))
+	}
+	res := C.nil_encode_payload_to_mdu(
+		cPayload,
+		C.size_t(len(payload)),
+		(*C.uchar)(unsafe.Pointer(&out[0])),
+		C.size_t(len(out)),
+	)
+	if res != 0 {
+		return nil, fmt.Errorf("nil_encode_payload_to_mdu failed with code: %d", res)
+	}
+	return out, nil
+}
+
+// DecodePayloadFromMdu decodes a raw NilFS payload of the given length from an encoded 8 MiB MDU buffer.
+func DecodePayloadFromMdu(mduBytes []byte, rawLen uint64) ([]byte, error) {
+	if len(mduBytes) != types.MDU_SIZE {
+		return nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mduBytes))
+	}
+	if rawLen > MDU_PAYLOAD_BYTES {
+		return nil, fmt.Errorf("raw_len too large: %d (max %d)", rawLen, MDU_PAYLOAD_BYTES)
+	}
+	if rawLen == 0 {
+		return []byte{}, nil
+	}
+
+	out := make([]byte, rawLen)
+	res := C.nil_decode_payload_from_mdu(
+		(*C.uchar)(unsafe.Pointer(&mduBytes[0])),
+		C.size_t(len(mduBytes)),
+		C.ulonglong(rawLen),
+		(*C.uchar)(unsafe.Pointer(&out[0])),
+		C.size_t(len(out)),
+	)
+	if res != 0 {
+		return nil, fmt.Errorf("nil_decode_payload_from_mdu failed with code: %d", res)
+	}
+	return out, nil
 }
 
 // ReconstructMduRs reconstructs the original encoded 8 MiB MDU from any >=K shards.

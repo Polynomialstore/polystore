@@ -75,59 +75,6 @@ func mode2EnsureCompleteMarker(dir string) {
 	}
 }
 
-func encodePayloadToMdu(raw []byte) []byte {
-	if len(raw) > RawMduCapacity {
-		raw = raw[:RawMduCapacity]
-	}
-	encoded := make([]byte, types.MDU_SIZE)
-	scalarIdx := 0
-	for i := 0; i < len(raw) && scalarIdx < nilfsScalarsPerMdu; i += nilfsScalarPayloadBytes {
-		end := i + nilfsScalarPayloadBytes
-		if end > len(raw) {
-			end = len(raw)
-		}
-		chunk := raw[i:end]
-		pad := nilfsScalarBytes - len(chunk)
-		offset := scalarIdx*nilfsScalarBytes + pad
-		copy(encoded[offset:offset+len(chunk)], chunk)
-		scalarIdx++
-	}
-	return encoded
-}
-
-func decodePayloadFromMdu(encoded []byte, rawLen uint64) ([]byte, error) {
-	if rawLen > RawMduCapacity {
-		rawLen = RawMduCapacity
-	}
-	if rawLen == 0 {
-		return []byte{}, nil
-	}
-	if len(encoded) != types.MDU_SIZE {
-		return nil, fmt.Errorf("invalid MDU size: %d", len(encoded))
-	}
-
-	scalarsUsed := (rawLen + nilfsScalarPayloadBytes - 1) / nilfsScalarPayloadBytes
-	out := make([]byte, rawLen)
-	var outOff uint64
-	for scalarIdx := uint64(0); scalarIdx < scalarsUsed; scalarIdx++ {
-		remaining := rawLen - scalarIdx*nilfsScalarPayloadBytes
-		chunkLen := uint64(nilfsScalarPayloadBytes)
-		base := uint64(1)
-		if remaining < chunkLen {
-			chunkLen = remaining
-			base = uint64(nilfsScalarBytes) - chunkLen
-		}
-		start := scalarIdx*nilfsScalarBytes + base
-		end := start + chunkLen
-		if end > uint64(len(encoded)) {
-			return nil, fmt.Errorf("encoded payload out of bounds: scalar=%d end=%d", scalarIdx, end)
-		}
-		copy(out[outOff:outOff+chunkLen], encoded[start:end])
-		outOff += chunkLen
-	}
-	return out, nil
-}
-
 func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -318,7 +265,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 			}
 			chunk = witnessBytes[start:end]
 		}
-		encoded := encodePayloadToMdu(chunk)
+		encoded, err := crypto_ffi.EncodePayloadToMdu(chunk)
+		if err != nil {
+			return nil, "", fmt.Errorf("encode witness mdu %d: %w", i, err)
+		}
 		root, err := crypto_ffi.ComputeMduMerkleRoot(encoded)
 		if err != nil {
 			return nil, "", fmt.Errorf("compute witness root %d: %w", i, err)
@@ -745,7 +695,7 @@ func mode2BuildArtifactsAppend(
 				segLen = RawMduCapacity
 			}
 		}
-		decoded, err := decodePayloadFromMdu(encoded, segLen)
+		decoded, err := crypto_ffi.DecodePayloadFromMdu(encoded, segLen)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to decode witness mdu %d: %w", i, err)
 		}
@@ -907,7 +857,10 @@ func mode2BuildArtifactsAppend(
 			}
 			chunk = totalWitnessBytes[start:end]
 		}
-		encoded := encodePayloadToMdu(chunk)
+		encoded, err := crypto_ffi.EncodePayloadToMdu(chunk)
+		if err != nil {
+			return nil, "", fmt.Errorf("encode witness mdu %d: %w", i, err)
+		}
 		root, err := crypto_ffi.ComputeMduMerkleRoot(encoded)
 		if err != nil {
 			return nil, "", fmt.Errorf("compute witness root %d: %w", i, err)
@@ -1075,8 +1028,8 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	transport := &http.Transport{
-		MaxIdleConns:          256,
-		MaxIdleConnsPerHost:   32,
+		MaxIdleConns:        256,
+		MaxIdleConnsPerHost: 32,
 		// Providers validate deal state via LCD before reading bodies; keep a generous
 		// wait window so we don't start streaming 8 MiB payloads only to be rejected
 		// a moment later (which also triggers client-side ContentLength mismatch errors).

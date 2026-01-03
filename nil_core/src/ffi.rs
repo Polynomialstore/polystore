@@ -1,5 +1,13 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
-use crate::coding::{expand_mdu_encoded_flat, expand_payload_flat, reconstruct_mdu_from_shards, MDU_PAYLOAD_BYTES};
+use crate::coding::{
+    expand_mdu_encoded_flat,
+    expand_payload_flat,
+    reconstruct_mdu_from_shards,
+    MDU_PAYLOAD_BYTES,
+    SCALAR_BYTES,
+    SCALAR_PAYLOAD_BYTES,
+    SCALARS_PER_MDU,
+};
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -254,6 +262,100 @@ pub extern "C" fn nil_expand_payload_rs(
 
     if expand_payload_flat(ctx, payload_slice, ds, ps, witness_out, shards_out).is_err() {
         return -3;
+    }
+
+    0
+}
+
+/// Encodes a raw NilFS payload (up to 8,126,464 bytes) into a full 8 MiB MDU buffer using the
+/// field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
+///
+/// This is used to materialize witness MDUs deterministically from commitment bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_encode_payload_to_mdu(
+    payload_bytes: *const u8,
+    payload_bytes_len: usize,
+    out_mdu_bytes: *mut u8,
+    out_mdu_bytes_len: usize,
+) -> c_int {
+    if out_mdu_bytes.is_null() || out_mdu_bytes_len != crate::kzg::MDU_SIZE {
+        return -2;
+    }
+    if payload_bytes_len > 0 && payload_bytes.is_null() {
+        return -2;
+    }
+    if payload_bytes_len > MDU_PAYLOAD_BYTES {
+        // Keep the contract strict: callers must chunk to MDU_PAYLOAD_BYTES.
+        return -2;
+    }
+
+    let payload = if payload_bytes_len == 0 {
+        &[][..]
+    } else {
+        unsafe { std::slice::from_raw_parts(payload_bytes, payload_bytes_len) }
+    };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_mdu_bytes, out_mdu_bytes_len) };
+
+    out.fill(0);
+    for (scalar_idx, chunk) in payload.chunks(SCALAR_PAYLOAD_BYTES).enumerate() {
+        if scalar_idx >= SCALARS_PER_MDU {
+            break;
+        }
+        let base = scalar_idx * SCALAR_BYTES;
+        let pad = SCALAR_BYTES - chunk.len();
+        out[base + pad..base + SCALAR_BYTES].copy_from_slice(chunk);
+    }
+
+    0
+}
+
+/// Decodes a NilFS payload from an encoded 8 MiB MDU buffer.
+///
+/// The caller specifies the desired `raw_len` (<= 8,126,464) so that trailing zero padding in the
+/// final scalar is not returned.
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_decode_payload_from_mdu(
+    mdu_bytes: *const u8,
+    mdu_bytes_len: usize,
+    raw_len: u64,
+    out_payload: *mut u8,
+    out_payload_len: usize,
+) -> c_int {
+    if mdu_bytes.is_null() || out_payload.is_null() || mdu_bytes_len != crate::kzg::MDU_SIZE {
+        return -2;
+    }
+
+    let raw_len_usize = match usize::try_from(raw_len) {
+        Ok(v) => v,
+        Err(_) => return -2,
+    };
+    if raw_len_usize > MDU_PAYLOAD_BYTES {
+        return -2;
+    }
+    if out_payload_len != raw_len_usize {
+        return -2;
+    }
+    if raw_len_usize == 0 {
+        return 0;
+    }
+
+    let mdu = unsafe { std::slice::from_raw_parts(mdu_bytes, mdu_bytes_len) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_payload, out_payload_len) };
+
+    let scalars_used = (raw_len_usize + SCALAR_PAYLOAD_BYTES - 1) / SCALAR_PAYLOAD_BYTES;
+    let mut out_off = 0usize;
+    for scalar_idx in 0..scalars_used {
+        let remaining = raw_len_usize.saturating_sub(scalar_idx * SCALAR_PAYLOAD_BYTES);
+        if remaining == 0 {
+            break;
+        }
+        let chunk_len = remaining.min(SCALAR_PAYLOAD_BYTES);
+        let base = scalar_idx * SCALAR_BYTES;
+        let pad = SCALAR_BYTES - chunk_len;
+        let src_start = base + pad;
+        let src_end = src_start + chunk_len;
+        out[out_off..out_off + chunk_len].copy_from_slice(&mdu[src_start..src_end]);
+        out_off += chunk_len;
     }
 
     0
