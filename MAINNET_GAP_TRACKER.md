@@ -341,3 +341,4 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint19-upload-benchmark`: print upload wall-time and MiB/s in `scripts/e2e_lifecycle.sh` to prevent silent perf regressions.
 - `sprint20-mode2-finalize-race`: harden Mode 2 slab finalize against rename races and make finalize idempotent under retries.
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
+- `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
