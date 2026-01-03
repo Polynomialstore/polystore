@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -143,9 +144,16 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 		lastBody = strings.TrimSpace(string(bodyBytes))
 
 		if resp.StatusCode == http.StatusOK {
+			type dealSlot struct {
+				Provider        string          `json:"provider"`
+				PendingProvider string          `json:"pending_provider"`
+				Status          json.RawMessage `json:"status"`
+			}
+
 			var payload struct {
 				Deal struct {
-					Providers []string `json:"providers"`
+					Providers  []string   `json:"providers"`
+					Mode2Slots []dealSlot `json:"mode2_slots"`
 				} `json:"deal"`
 			}
 			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
@@ -154,11 +162,79 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 
 			out := make([]string, 0, len(payload.Deal.Providers))
 			for _, p := range payload.Deal.Providers {
-				p = strings.TrimSpace(p)
-				if p == "" {
-					continue
+				if p = strings.TrimSpace(p); p != "" {
+					out = append(out, p)
 				}
-				out = append(out, p)
+			}
+
+			if len(payload.Deal.Mode2Slots) > 0 {
+				active := make([]string, 0, len(payload.Deal.Mode2Slots))
+				repairing := make([]string, 0, len(payload.Deal.Mode2Slots))
+				unknown := make([]string, 0, len(payload.Deal.Mode2Slots))
+
+				parseStatus := func(raw json.RawMessage) int {
+					raw = bytes.TrimSpace(raw)
+					if len(raw) == 0 {
+						return 0
+					}
+					var statusStr string
+					if err := json.Unmarshal(raw, &statusStr); err == nil {
+						switch strings.ToUpper(strings.TrimSpace(statusStr)) {
+						case "SLOT_STATUS_ACTIVE":
+							return 1
+						case "SLOT_STATUS_REPAIRING":
+							return 2
+						default:
+							return 0
+						}
+					}
+					var statusInt int
+					if err := json.Unmarshal(raw, &statusInt); err == nil {
+						return statusInt
+					}
+					var statusFloat float64
+					if err := json.Unmarshal(raw, &statusFloat); err == nil {
+						return int(statusFloat)
+					}
+					return 0
+				}
+
+				for _, slot := range payload.Deal.Mode2Slots {
+					p := strings.TrimSpace(slot.Provider)
+					if p == "" {
+						continue
+					}
+					switch parseStatus(slot.Status) {
+					case 1:
+						active = append(active, p)
+					case 2:
+						repairing = append(repairing, p)
+					default:
+						unknown = append(unknown, p)
+					}
+				}
+
+				ordered := make([]string, 0, len(active)+len(unknown)+len(repairing)+len(out))
+				seen := make(map[string]bool, len(active)+len(unknown)+len(repairing)+len(out))
+				appendUnique := func(values []string) {
+					for _, v := range values {
+						if v == "" || seen[v] {
+							continue
+						}
+						seen[v] = true
+						ordered = append(ordered, v)
+					}
+				}
+				appendUnique(active)
+				appendUnique(unknown)
+				appendUnique(repairing)
+
+				// Preserve any legacy providers that are not in mode2_slots (e.g. pre-migration deals).
+				appendUnique(out)
+
+				if len(ordered) > 0 {
+					return ordered, nil
+				}
 			}
 			return out, nil
 		}
