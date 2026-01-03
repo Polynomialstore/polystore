@@ -410,6 +410,9 @@ func main() {
 		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	}
 
+	// S3 compatibility routes (deal-backed buckets).
+	registerS3Routes(r)
+
 	p2pServer, err := startLibp2pServerFromEnv(context.Background())
 	if err != nil {
 		log.Fatalf("failed to start libp2p server: %v", err)

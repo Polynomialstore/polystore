@@ -43,6 +43,22 @@ The service wraps a mix of native libraries and CLI tools:
 | `PUT` | `/api/v1/object/{key}` | **Legacy:** saves a raw object to disk for quick demos (not deal-backed). **Target:** treats `{key}` as a NilFS `file_path` within a Deal and ingests it into NilFS, returning `manifest_root` (legacy alias: `cid`). |
 | `GET` | `/api/v1/object/{key}` | **Legacy:** serves a raw object by filename. **Target:** resolves and streams from NilFS by `file_path` (no `uploads/index.json` dependency). |
 
+#### 3.1.1 Path-Style S3 (Deal-Backed Buckets) — Devnet/Enterprise
+The gateway also exposes a **minimal, path-style S3 surface** at the HTTP root for compatibility with standard tooling (`aws-cli`, `rclone`):
+
+- **Bucket naming convention:** `deal-<deal_id>` (example: `deal-0`)
+- **Bucket semantics:** a bucket maps 1:1 to an on-chain Deal.
+- **Key semantics:** the object key maps to a NilFS `file_path` inside that deal.
+
+| Method | Path | Description |
+|:---|:---|:---|
+| `GET` | `/` | List buckets (on-chain deals) as `deal-<id>` names. |
+| `HEAD` | `/{bucket}` | Bucket existence check (Deal exists on chain). |
+| `GET` | `/{bucket}` | List objects (NilFS file table) for the Deal’s current `manifest_root`. |
+| `GET` / `HEAD` | `/{bucket}/{key...}` | Fetch an object from NilFS by `file_path` (supports explicit `Range: bytes=start-end`). |
+| `PUT` | `/{bucket}/{key...}` | Upload an object, ingest via Mode 2, upload to providers, and **commit** via `update-deal-content` (devnet: requires a faucet-authorized deal). |
+| `DELETE` | `/{bucket}/{key...}` | Not implemented yet (NilFS tombstoning still needs wiring). |
+
 ### 3.2 Gateway (Web Frontend Support)
 These endpoints support the `nil-website` "Thin Client" flow.
 
