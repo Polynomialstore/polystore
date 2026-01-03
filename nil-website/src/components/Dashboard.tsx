@@ -2291,11 +2291,12 @@ export function Dashboard() {
       </div>
       </div>
 
-        <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      {showAdvanced ? (
+        <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Network &amp; routing (advanced)
-          </summary>
-        <div className="p-6 space-y-6">
+          </div>
+          <div className="p-6 space-y-6">
           <StatusBar />
           {proofs.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -2511,8 +2512,9 @@ export function Dashboard() {
               </tbody>
             </table>
           </div>
+          </div>
         </div>
-      </details>
+      ) : null}
 
       {downloadToast && (
         <div className="fixed bottom-6 right-6 z-50">
