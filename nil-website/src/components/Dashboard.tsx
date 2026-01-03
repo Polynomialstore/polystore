@@ -2009,11 +2009,11 @@ export function Dashboard() {
                 onClick={() => void handleRefreshSummary()}
                 title="Refresh deals"
                 className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
+          </div>
 
             {loading ? (
               <div className="text-center py-10">
