@@ -21,6 +21,7 @@ EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 VERIFYING_CONTRACT="0x0000000000000000000000000000000000000000"
 # Deterministic dev key (Foundry default #0).
 EVM_PRIVKEY="${EVM_PRIVKEY:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
+UPLOAD_FILE="${UPLOAD_FILE:-$ROOT_DIR/README.md}"
 
 export EVM_PRIVKEY EVM_CHAIN_ID CHAIN_ID VERIFYING_CONTRACT
 
@@ -168,15 +169,34 @@ echo "    Deal ID: $DEAL_ID"
 EVM_NONCE=$((EVM_NONCE + 1))
 
 # 3. Upload File into Deal (Gateway)
-echo "==> Uploading file 'README.md' to Gateway (deal_id=$DEAL_ID)..."
-# Canonical NilFS ingest should be fast; enforce a bounded timeout.
+if [ ! -f "$UPLOAD_FILE" ]; then
+  echo "ERROR: UPLOAD_FILE does not exist: $UPLOAD_FILE" >&2
+  exit 1
+fi
+UPLOAD_BYTES="$(python3 - "$UPLOAD_FILE" <<'PY'
+import os
+import sys
+print(os.path.getsize(sys.argv[1]))
+PY
+)"
+echo "==> Uploading file '$(basename "$UPLOAD_FILE")' (${UPLOAD_BYTES} bytes) to Gateway (deal_id=$DEAL_ID)..."
+# Canonical NilFS ingest should be fast; enforce a bounded timeout (override with UPLOAD_TIMEOUT=...).
 UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
-UPLOAD_START_TS="$(date +%s)"
-UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$ROOT_DIR/README.md" \
+UPLOAD_START_TS="$(python3 -c 'import time; print(time.time())')"
+UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$UPLOAD_FILE" \
   -F "owner=$NIL_ADDRESS" \
   "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")
-UPLOAD_END_TS="$(date +%s)"
-echo "    Upload elapsed: $((UPLOAD_END_TS - UPLOAD_START_TS))s"
+UPLOAD_END_TS="$(python3 -c 'import time; print(time.time())')"
+python3 - <<PY
+import math
+start = float("$UPLOAD_START_TS")
+end = float("$UPLOAD_END_TS")
+elapsed = max(0.0, end - start)
+bytes_total = int("$UPLOAD_BYTES")
+mib = bytes_total / (1024.0 * 1024.0)
+mbps = 0.0 if elapsed <= 0 else mib / elapsed
+print(f"    Upload wall time: {elapsed:.2f}s ({mib:.2f} MiB @ {mbps:.2f} MiB/s)")
+PY
 echo "    Response: $UPLOAD_RESP"
 
 MANIFEST_ROOT=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('manifest_root') or j.get('cid') or '')")
