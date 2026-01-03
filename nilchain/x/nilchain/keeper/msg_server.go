@@ -1768,6 +1768,20 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session not expired")
 	}
 
+	// Non-response evidence: if the session expired without a provider-submitted proof,
+	// record a lightweight evidence marker and degrade provider health.
+	// This is intentionally conservative: sessions that reached PROOF_SUBMITTED are not
+	// treated as non-response (even if the user never confirmed).
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
+		if err := k.recordEvidenceSummary(ctx, session.DealId, session.Provider, "retrieval_non_response", session.SessionId, msg.Creator, false); err != nil {
+			ctx.Logger().Error("failed to record non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
+		}
+		if err := k.IncrementHeat(ctx, session.DealId, 0, true); err != nil {
+			ctx.Logger().Error("failed to increment heat for non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
+		}
+		k.trackProviderHealth(ctx, session.DealId, session.Provider, false)
+	}
+
 	if session.LockedFee.IsPositive() {
 		deal, err := k.Deals.Get(ctx, session.DealId)
 		if err != nil {
@@ -2036,4 +2050,31 @@ func mulUint64(a, b uint64) (uint64, bool) {
 	}
 	out := a * b
 	return out, out/b != a
+}
+
+func (k msgServer) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider string, kind string, sessionID []byte, reporter string, ok bool) error {
+	proofID, err := k.ProofCount.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get next proof id: %w", err)
+	}
+
+	sessionHex := ""
+	if len(sessionID) > 0 {
+		sessionHex = hex.EncodeToString(sessionID)
+	}
+
+	commitment := fmt.Sprintf("evidence:%s deal=%d provider=%s session=%s reporter=%s", kind, dealID, provider, sessionHex, reporter)
+	summary := types.Proof{
+		Id:          proofID,
+		Creator:     provider,
+		Commitment:  commitment,
+		Valid:       ok,
+		BlockHeight: ctx.BlockHeight(),
+	}
+
+	if err := k.Proofs.Set(ctx, proofID, summary); err != nil {
+		return fmt.Errorf("failed to store evidence summary: %w", err)
+	}
+
+	return nil
 }
