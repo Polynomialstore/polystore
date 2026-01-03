@@ -25,6 +25,7 @@ This document tracks **what is missing** between the current implementation in t
 - **PARTIAL (DEVNET)**: exists, but incomplete vs spec/mainnet hardening (often “devnet convenience”)
 - **MISSING**: not implemented
 - **RFC / UNSPECIFIED**: explicitly underspecified in `spec.md` Appendix B; needs policy finalization
+- **SPECIFIED (RFC)**: policy/interfaces frozen in RFCs, but implementation is still missing
 
 ## Critical Path (P0) — Mainnet Blocking
 
@@ -36,9 +37,9 @@ This document tracks **what is missing** between the current implementation in t
 - **Test gate:** new e2e (multi-SP) that simulates slot failure → repair catch-up → slot rejoin without breaking reads.
 
 ### P0-CHAIN-002 — Challenge derivation + proof demand policy + quota enforcement
-- **Status:** RFC / UNSPECIFIED
-- **Spec:** `spec.md` §7.6, Appendix B (3, 4)
-- **Current state:** sessions/proofs exist, but there is no finalized deterministic policy for required proofs and synthetic fill.
+- **Status:** SPECIFIED (RFC)
+- **Spec:** `spec.md` §7.6, Appendix B (3, 4); `rfcs/rfc-challenge-derivation-and-quotas.md`
+- **Current state:** sessions/proofs exist; deterministic quota + synthetic fill policy is now specified, but not implemented in keeper state machines.
 - **DoD:** deterministic challenge derivation from chain state + epoch randomness; quota accounting; penalties for non-compliance distinct from invalid proofs.
 - **Test gate:** keeper unit tests + adversarial sim tests for challenge determinism and anti-grind properties.
 
@@ -72,8 +73,8 @@ This document tracks **what is missing** between the current implementation in t
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
 - **Status:** PARTIAL (DEVNET)
-- **Spec:** `spec.md` §6.1–§6.2; Appendix B (5)
-- **Current state:** deal escrow exists and retrieval fees exist; “lock-in” and full debit schedule policy isn’t complete.
+- **Spec:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B (5); `rfcs/rfc-pricing-and-escrow-accounting.md`
+- **Current state:** deal escrow exists and retrieval fees exist; lock-in + fee settlement is partially implemented, but spend windows and deterministic elasticity debits remain incomplete.
 - **DoD:** clear accounting rules for storage rent + bandwidth; enforce max spend caps; elasticity debits are deterministic and replay-safe.
 - **Test gate:** chain-level econ e2e (create deal → upload → retrieve → check balances/fees/burns) for multiple parameter sets.
 
@@ -90,8 +91,8 @@ This document tracks **what is missing** between the current implementation in t
 
 #### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
 - **Status:** PARTIAL (DEVNET)
-- **Spec:** `spec.md` §6.2, §8.1.3; Appendix B (2)
-- **Notes:** Today, RS profile is encoded in `service_hint` and slots are represented via `providers[]`. Mainnet needs explicit typed state + upgrade strategy.
+- **Spec:** `spec.md` §6.2, §8.1.3; Appendix B (2); `rfcs/rfc-mode2-onchain-state.md`
+- **Notes:** Today, RS profile is encoded in `service_hint` and slots are represented via `providers[]`. Mainnet needs explicit typed state + upgrade strategy (now specified in RFC).
 
 #### CHAIN-102 — Rotation policy + governance-gated bootstrap mode
 - **Status:** MISSING
@@ -177,8 +178,8 @@ This document tracks **what is missing** between the current implementation in t
 
 ## Spec ↔ Implementation Divergences To Track Explicitly
 
-- **Deal sizing naming:** `spec.md` uses `allocated_length`; code uses `Deal.size` on-chain and may surface `allocated_length` as a gateway/UI alias. Decide and converge.
-- **Mode 2 on-chain representation:** `service_hint` encoding works for devnet; mainnet likely needs explicit typed fields for `(K,M)` and slot status.
+- **Deal sizing naming (resolved):** `spec.md` uses `Deal.size`/`size_bytes` (logical bytes) plus `Deal.total_mdus` + `Deal.witness_mdus` (slab bounds). Gateway may still return legacy `allocated_length` as an alias for `total_mdus` (count).
+- **Mode 2 on-chain representation (specified):** explicit typed `(K,M)`, slot mapping, generations, and repair state frozen in `rfcs/rfc-mode2-onchain-state.md`.
 - **EVM simulation posture:** EVM/FeeMarket excluded from simulation to avoid signer panics; ensure this doesn’t mask mainnet correctness issues.
 
 ## Suggested Sequencing (Pragmatic)
@@ -203,6 +204,11 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - Finalize challenge derivation + proof quota policy (Appendix B #3, #4).
   - Finalize pricing/escrow accounting policy (Appendix B #5).
   - Decide and document the `allocated_length` vs `size` vs `total_mdus` naming convergence (see “Divergences” section).
+- **Outputs (Sprint 0):**
+  - `rfcs/rfc-mode2-onchain-state.md`
+  - `rfcs/rfc-challenge-derivation-and-quotas.md`
+  - `rfcs/rfc-pricing-and-escrow-accounting.md`
+  - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
 ### Sprint 1 — “One core” foundation (NilFS + commitments unified)

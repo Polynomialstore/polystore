@@ -12,6 +12,9 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
   - Recommended starting points:
     - `rfcs/rfc-data-granularity-and-economics.md` (thin provisioning + hard cap)
     - `rfcs/rfc-blob-alignment-and-striping.md` (Mode 2 / StripeReplica)
+    - `rfcs/rfc-mode2-onchain-state.md` (Mode 2 on-chain fields + repairs)
+    - `rfcs/rfc-challenge-derivation-and-quotas.md` (synthetic challenges + quota policy)
+    - `rfcs/rfc-pricing-and-escrow-accounting.md` (lock-in pricing + fees + caps)
     - `rfcs/rfc-retrieval-validation.md` and `rfcs/rfc-retrieval-security.md` (retrieval evidence, deputy/griefing)
     - `rfcs/rfc-heat-and-dynamic-placement.md` (heat/placement instrumentation)
 - `rfcs/archive/`: Historical / research-only materials kept for reference.

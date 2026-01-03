@@ -35,7 +35,11 @@ The `Deal` is the central on-chain state object. This spec describes its semanti
 Key fields:
 *   **Identity:** `deal_id` (uint64), `owner` (address).
 *   **Commitment Root:** `manifest_root` (48‑byte KZG commitment, BLS12‑381 G1 compressed). This is the protocol’s anchor for all proofs (§7.3).
-*   **Provisioning:** thin-provisioned container with `total_mdus` (count) and `allocated_length` (bytes), expanded only via content commits (§6.0.3).
+*   **Provisioning:** thin-provisioned container expanded only via content commits (§6.0.3).
+    *   **Logical size:** `Deal.size` / `size_bytes` (sum of non-tombstone NilFS file lengths).
+    *   **Slab bounds:** `Deal.total_mdus` (count of committed MDU roots in the Manifest commitment; includes MDU #0 + witness + user MDUs).
+    *   **Metadata size:** `Deal.witness_mdus` (count of witness MDUs after MDU #0; required to derive the user‑MDU range).
+    *   **Gateway compat:** some REST responses may include legacy `allocated_length` as an alias for `total_mdus` (count), not bytes.
 *   **Placement:** `providers[]` is the assigned provider set.
     *   **Mode 1:** unordered replica set; any single provider can satisfy retrievals.
     *   **Mode 2:** ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3).
@@ -511,7 +515,7 @@ These evidence types collectively support the retrievability invariant: for each
 The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval sessions reduce synthetic proof demand**.
 
 This spec intentionally does not lock constants yet, but the target shape is:
-* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.total_mdus` / `allocated_length`), `ServiceHint` (Hot/Cold), and recent retrieval session volume.
+* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.size` / `Deal.total_mdus`), `ServiceHint` (Hot/Cold), and recent retrieval session volume.
 * **Session credits:** Completed retrieval sessions (and any legacy receipt paths) contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
 * **Synthetic fill:** If `credits < required_e(D,P)`, the chain derives and enforces `required_e(D,P) - credits` synthetic challenges for that epoch.
 * **Penalties:** Invalid proofs are slashable immediately; failure to meet quota SHOULD degrade reputation and eventually lead to eviction (a slower penalty path than invalid proof slashing).
@@ -563,11 +567,11 @@ Self‑healing can be expressed via per‑assignment and per‑provider health m
 This specification defines normative *interfaces* and verification rules but intentionally leaves several “policy” and “parameterization” areas underspecified for v2.4. The following items SHOULD be captured as dedicated RFCs before mainnet hardening:
 
 1. **System Placement Algorithm:** deterministic provider selection/weighting, hint scoring, anti-correlation rules, and upgrade strategy without reshuffling failure domains unexpectedly.
-2. **Mode 2 On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization.
-3. **Challenge Derivation Function:** exact mapping from `(deal_id, epoch_e, provider/slot)` to a finite challenge set with anti-grind properties and coverage guarantees.
-4. **Penalty & Eviction Curve:** concrete slashing parameters, reputation decay, jail/unjail, and eviction thresholds; distinguish invalid-proof slashing vs quota non-compliance.
-5. **Pricing & Escrow Accounting:** bandwidth pricing model, debit schedule, tier reward curves, and how user-funded elasticity is bounded/enforced.
-6. **Write Semantics Beyond Append-Only:** pending-generation promotion rules, rewrite/compaction/delete behavior, and any on-chain finalization criteria.
+2. **Mode 2 On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization. *(See `rfcs/rfc-mode2-onchain-state.md`.)*
+3. **Challenge Derivation Function:** exact mapping from `(deal_id, epoch_e, provider/slot)` to a finite challenge set with anti-grind properties and coverage guarantees. *(See `rfcs/rfc-challenge-derivation-and-quotas.md`.)*
+4. **Penalty & Eviction Curve:** concrete slashing parameters, reputation decay, jail/unjail, and eviction thresholds; distinguish invalid-proof slashing vs quota non-compliance. *(See `rfcs/rfc-challenge-derivation-and-quotas.md`.)*
+5. **Pricing & Escrow Accounting:** bandwidth pricing model, debit schedule, tier reward curves, and how user-funded elasticity is bounded/enforced. *(See `rfcs/rfc-pricing-and-escrow-accounting.md`.)*
+6. **Write Semantics Beyond Append-Only:** pending-generation promotion rules, rewrite/compaction/delete behavior, and any on-chain finalization criteria. *(Near-term repair/write constraints: see `rfcs/rfc-mode2-onchain-state.md`.)*
 7. **Deputy/Proxy Mechanics:** discovery, routing, compensation/delegation (if any), and additional griefing defenses beyond nonce/expiry and rate limits.
 8. **Encryption & Key Management Details:** exact encryption constructions, key derivation/rotation, metadata leakage model, padding strategy, and client recovery UX.
 9. **Transport/Wire Protocol:** concrete fetch/prove message formats, range/chunking rules, retry/backoff, and gateway/SP interoperability requirements.

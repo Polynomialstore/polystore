@@ -56,7 +56,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
         *   **Uniqueness (target):** `file_path` MUST be unique within a deal. If `deal_id` is provided and the target `file_path` already exists, the gateway MUST overwrite deterministically (update-in-place or tombstone + replace) so later fetch/prove cannot return stale bytes.
         *   **Encoding note:** Go’s query parser treats `+` as space. Clients should encode spaces as `%20` (JS `encodeURIComponent`) and servers should treat decoded strings as canonical.
-    *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "file_path": "dir/file.txt", "filename": "file.txt" }`.
+    *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "witness_mdus": 1, "file_path": "dir/file.txt", "filename": "file.txt" }`.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 

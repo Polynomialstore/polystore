@@ -216,7 +216,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
 *   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
-    *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus`.
+    *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus` (count).
     *   **NilFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
 
 ### 4.4 `useTransportRouter` (`src/hooks/useTransportRouter.ts`)
@@ -375,7 +375,7 @@ The website depends on the following services (configured in `config.ts`):
 | **EVM JSON-RPC** | `evmRpc` | `http://localhost:8545` |
 
 ### Key Endpoints
-*   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
+*   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
 *   `POST /sp/upload_shard`: Raw shard bytes with headers `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root` (Mode 2).
 *   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
@@ -481,7 +481,7 @@ This sprint prioritizes a clean separation between:
 *   **Heat (LCD):** `GET /nilchain/nilchain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
-*   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.
+*   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.
 
 ### 9.2 Tests
 *   **Node unit tests:** validate domain normalization and controller orchestration (no React/DOM required).
