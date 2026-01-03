@@ -47,11 +47,14 @@ test.describe('libp2p fetch', () => {
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
 
-    const routingSummary = page.locator('summary', { hasText: 'Network & routing' }).first()
-    if ((await routingSummary.count()) > 0) {
-      await routingSummary.click()
-    }
+    // Transport preference lives under the dashboard Advanced toggle.
+    const advancedToggle = page.getByTestId('workspace-advanced-toggle')
+    await expect(advancedToggle).toBeVisible({ timeout: 60_000 })
+
     const transportSelect = page.getByLabel('Preference')
+    if (!(await transportSelect.isVisible().catch(() => false))) {
+      await advancedToggle.click()
+    }
     await expect(transportSelect).toBeVisible({ timeout: 60_000 })
     await expect(transportSelect.locator('option[value="prefer_p2p"]')).toHaveCount(1)
     await transportSelect.selectOption('prefer_p2p')
@@ -68,13 +71,19 @@ test.describe('libp2p fetch', () => {
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
-    await page.getByTestId('tab-content').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
 
     const fileInput = page.getByTestId('content-file-input')
+    if (!(await fileInput.isVisible().catch(() => false))) {
+      const mode1Toggle = page.getByTestId('tab-content')
+      if (await mode1Toggle.isVisible().catch(() => false)) {
+        await mode1Toggle.click()
+      }
+    }
+    await expect(fileInput).toBeVisible({ timeout: 60_000 })
     await expect(fileInput).toBeEnabled({ timeout: 120_000 })
     await fileInput.setInputFiles({
       name: filePath,

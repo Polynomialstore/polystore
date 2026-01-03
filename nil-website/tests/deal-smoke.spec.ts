@@ -255,14 +255,22 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   }
   await redundancySelect.selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
-  await page.getByTestId('tab-content').click()
+
+  const fileInput = page.getByTestId('content-file-input')
+  if (!(await fileInput.isVisible().catch(() => false))) {
+    const mode1Toggle = page.getByTestId('tab-content')
+    if (await mode1Toggle.isVisible().catch(() => false)) {
+      await mode1Toggle.click()
+    }
+  }
+  await expect(fileInput).toBeVisible({ timeout: 60_000 })
 
   const dealRow = page.getByTestId(`deal-row-${dealId}`)
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()
   await expect(page.getByTestId('workspace-deal-title')).toHaveText(new RegExp(`Deal #${dealId}\\b`))
 
-  await page.getByTestId('content-file-input').setInputFiles({
+  await fileInput.setInputFiles({
     name: filePath,
     mimeType: 'text/plain',
     buffer: fileBytes,

@@ -52,10 +52,16 @@ test.describe('gateway absent', () => {
   await redundancySelect.selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
 
-  await page.getByTestId('tab-content').click()
   await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 120_000 })
 
   const fileInput = page.getByTestId('content-file-input')
+  if (!(await fileInput.isVisible().catch(() => false))) {
+    const mode1Toggle = page.getByTestId('tab-content')
+    if (await mode1Toggle.isVisible().catch(() => false)) {
+      await mode1Toggle.click()
+    }
+  }
+  await expect(fileInput).toBeVisible({ timeout: 120_000 })
   await expect(fileInput).toBeEnabled({ timeout: 120_000 })
   await fileInput.setInputFiles({
     name: 'gateway-absent.txt',
@@ -65,10 +71,6 @@ test.describe('gateway absent', () => {
 
   await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 120_000 })
 
-  const routingSummary = page.locator('summary', { hasText: 'Network & routing' }).first()
-  if ((await routingSummary.count()) > 0) {
-    await routingSummary.click()
-  }
   await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
   })
 })

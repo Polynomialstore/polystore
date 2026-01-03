@@ -385,13 +385,6 @@ test('repro bug: download from commit content widget', async ({
   if (await errorToast.isVisible()) {
       console.log('Error visible on UI:', await errorToast.textContent())
   }
-
-  const contentTab = page.getByTestId('tab-content')
-  if (!(await contentTab.isVisible().catch(() => false))) {
-    await advancedToggle.click()
-    await expect(contentTab).toBeVisible({ timeout: 10_000 })
-  }
-  await contentTab.click()
   console.log('Deal created (click sent).')
 
   const dealRow = page.getByTestId('deal-row-0')
@@ -406,7 +399,17 @@ test('repro bug: download from commit content widget', async ({
   const fileBytes = Buffer.from('repro bug content')
 
   console.log('Uploading file...')
-  await page.getByTestId('content-file-input').setInputFiles({
+  const contentFileInput = page.getByTestId('content-file-input')
+  if (!(await contentFileInput.isVisible().catch(() => false))) {
+    const contentTab = page.getByTestId('tab-content')
+    if (!(await contentTab.isVisible().catch(() => false))) {
+      await advancedToggle.click()
+      await expect(contentTab).toBeVisible({ timeout: 10_000 })
+    }
+    await contentTab.click()
+  }
+  await expect(contentFileInput).toBeVisible({ timeout: 60_000 })
+  await contentFileInput.setInputFiles({
     name: filePath,
     mimeType: 'text/plain',
     buffer: fileBytes,
