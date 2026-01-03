@@ -41,6 +41,21 @@ We provide an automated script to spin up a local chain, register providers, and
 ./e2e_slashing.sh
 ```
 
+### 4. Browser E2E (Playwright)
+
+These scripts start the appropriate local stack and run the targeted Playwright specs used in CI.
+
+```bash
+# Mode 2 (StripeReplica): 12 providers + gateway router
+./scripts/e2e_mode2_stripe_multi_sp.sh
+
+# Gateway absent: upload falls back to direct SP
+./scripts/e2e_browser_smoke_no_gateway.sh
+
+# LibP2P enabled: retrieval uses libp2p transport
+./scripts/e2e_browser_libp2p.sh
+```
+
 ## 📦 Components
 
 *   **`nilchain` (L1):** The consensus layer (Cosmos SDK). Handles deals, proofs (KZG), and economics.
