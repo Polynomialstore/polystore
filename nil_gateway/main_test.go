@@ -609,7 +609,7 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 		t.Fatalf("write input: %v", err)
 	}
 
-	_, manifestRoot, _, err := IngestNewDeal(context.Background(), input, 256)
+	_, manifestRoot, _, err := IngestNewDeal(context.Background(), input, 256, "")
 	if err != nil {
 		t.Fatalf("IngestNewDeal failed: %v", err)
 	}
