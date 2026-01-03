@@ -4,12 +4,28 @@ import { Coins, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
 import { useConnect } from 'wagmi'
 import { injectedConnector } from '../lib/web3Config'
+import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 
 export function FaucetWidget({ className = "" }: { className?: string }) {
   const { address, isConnected } = useAccount()
   const { connect } = useConnect()
   const { requestFunds, loading } = useFaucet()
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [unlocking, setUnlocking] = useState(false)
+  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const isLocked = isConnected && unlockState === 'locked'
+
+  const handleUnlock = async () => {
+    setUnlocking(true)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+      if (!ethereum || typeof ethereum.request !== 'function') return
+      await ethereum.request({ method: 'eth_requestAccounts' })
+    } finally {
+      setUnlocking(false)
+    }
+  }
 
   const handleRequest = async () => {
     if (!address) return
@@ -24,14 +40,15 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
     }
   }
 
-  if (!isConnected) {
+  if (!isConnected || isLocked) {
     return (
         <button
-            onClick={() => connect({ connector: injectedConnector })}
+            onClick={() => (isLocked ? handleUnlock() : connect({ connector: injectedConnector }))}
+            disabled={unlocking}
             className={`flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors shadow-lg shadow-indigo-900/20 ${className}`}
         >
-            <Coins className="w-4 h-4" />
-            Connect to Request Funds
+            {unlocking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
+            {isLocked ? 'Unlock to Request Funds' : 'Connect to Request Funds'}
         </button>
     )
   }

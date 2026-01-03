@@ -1,0 +1,308 @@
+# Mainnet Gap Tracker (NilStore)
+
+This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
+
+**Sources (ordered):**
+- `spec.md` (canonical protocol spec; v2.4 at time of writing)
+- `rfcs/` (design proposals / deep dives; check header status)
+- `notes/roadmap_milestones_strategic.md` (milestone sequencing)
+
+## How To Use
+
+- Keep items **small enough to ship** (1–5 PRs each).
+- Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
+- Prefer tracking **code ownership** by directory:
+  - Chain: `nilchain/`
+  - Gateway/SP: `nil_gateway/`
+  - Core crypto/WASM: `nil_core/`
+  - CLI automation: `nil_cli/`
+  - P2P: `nil_p2p/`
+  - Web UX: `nil-website/`
+
+## Status Legend
+
+- **DONE**: implemented + tested in CI and/or e2e scripts
+- **PARTIAL (DEVNET)**: exists, but incomplete vs spec/mainnet hardening (often “devnet convenience”)
+- **MISSING**: not implemented
+- **RFC / UNSPECIFIED**: explicitly underspecified in `spec.md` Appendix B; needs policy finalization
+
+## Critical Path (P0) — Mainnet Blocking
+
+### P0-CHAIN-001 — Mode 2 generations + repair mode + make‑before‑break replacement
+- **Status:** MISSING
+- **Spec:** `spec.md` §8.4, §5.3, Appendix B (2, 4, 6)
+- **Current state:** Mode 2 exists at the client/gateway level, but the chain does not represent `current_gen` / per-slot repair status, and cannot safely coordinate “repair while appending”.
+- **DoD:** Chain has explicit generation + slot status; repairs are observable; replacement is make‑before‑break; reads route around repairing slots; append-only commit rules enforced.
+- **Test gate:** new e2e (multi-SP) that simulates slot failure → repair catch-up → slot rejoin without breaking reads.
+
+### P0-CHAIN-002 — Challenge derivation + proof demand policy + quota enforcement
+- **Status:** RFC / UNSPECIFIED
+- **Spec:** `spec.md` §7.6, Appendix B (3, 4)
+- **Current state:** sessions/proofs exist, but there is no finalized deterministic policy for required proofs and synthetic fill.
+- **DoD:** deterministic challenge derivation from chain state + epoch randomness; quota accounting; penalties for non-compliance distinct from invalid proofs.
+- **Test gate:** keeper unit tests + adversarial sim tests for challenge determinism and anti-grind properties.
+
+### P0-CHAIN-003 — Fraud proofs / evidence taxonomy (wrong data, non-response, etc.)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §7.5
+- **Current state:** session-based flows exist, but the full evidence/fraud proof pipeline and policy-level outcomes (slash/evict) aren’t complete.
+- **DoD:** on-chain evidence messages/types + verification; slashing/jailing/eviction integration; replay protections; clear invariants.
+- **Test gate:** unit tests for each evidence type + e2e that demonstrates slash on proven bad data.
+
+### P0-P2P-001 — Deputy system + proxy retrieval market + audit debt
+- **Status:** PARTIAL (stub only)
+- **Spec:** `spec.md` §7.7–§7.8; `rfcs/rfc-retrieval-validation.md`; Appendix B (7)
+- **Current state:** `nil_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
+- **DoD:** proxy retrieval works when an SP “ghosts”; failure evidence is produced and aggregated; audit debt tasks are assignable/trackable; griefing mitigations.
+- **Test gate:** e2e “ghosting provider” scenario that still retrieves via deputy and records evidence.
+
+### P0-PERF-001 — High-throughput KZG (GPU) + parallel ingest pipeline
+- **Status:** RFC / UNSPECIFIED (implementation missing)
+- **Spec/Notes:** `notes/kzg_upload_bottleneck_report.md`, `notes/kzg_gpu_design.md`, `notes/roadmap_milestones_strategic.md` (Milestone 2)
+- **Current state:** CPU KZG works; parallelism improved, but mainnet target throughput requires GPU-class acceleration for large uploads.
+- **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
+- **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
+
+### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+- **Status:** PARTIAL (DEVNET)
+- **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
+- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `nil_core` WASM for crypto; risk of drift.
+- **DoD:** NilFS builder/layout + commitment logic live in `nil_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
+
+### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §6.1–§6.2; Appendix B (5)
+- **Current state:** deal escrow exists and retrieval fees exist; “lock-in” and full debit schedule policy isn’t complete.
+- **DoD:** clear accounting rules for storage rent + bandwidth; enforce max spend caps; elasticity debits are deterministic and replay-safe.
+- **Test gate:** chain-level econ e2e (create deal → upload → retrieve → check balances/fees/burns) for multiple parameter sets.
+
+### P0-OPS-001 — Mainnet-grade security + audits + threat model closure
+- **Status:** MISSING
+- **Spec/Notes:** `spec.md` §5, Appendix B (8, 9)
+- **Current state:** devnet-grade hardening exists (auth tokens, strict parsing in many places), but audit posture is not “mainnet ready”.
+- **DoD:** external audits (crypto + chain + gateway), hardening issues resolved, incident response plan, secure defaults.
+- **Test gate:** security test suite + documented audit scope and “must-fix” checklist.
+
+## Domain Backlog (P1/P2) — Organized By Subsystem
+
+### Chain / Protocol (`nilchain/`)
+
+#### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §6.2, §8.1.3; Appendix B (2)
+- **Notes:** Today, RS profile is encoded in `service_hint` and slots are represented via `providers[]`. Mainnet needs explicit typed state + upgrade strategy.
+
+#### CHAIN-102 — Rotation policy + governance-gated bootstrap mode
+- **Status:** MISSING
+- **Spec:** `spec.md` §4.3, §5.1, §5.3; Appendix B (1, 4)
+
+#### CHAIN-103 — HealthState / self-healing placement + eviction curve
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §7.9; Appendix B (1, 4)
+
+#### CHAIN-104 — Deletion semantics (deal cancel, expiry enforcement, crypto-erasure UX hooks)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §6.3, §8.4.4; Appendix B (6, 8)
+- **Notes:** “Crypto-erasure” is a client contract; chain still needs consistent cancellation semantics and post-expiry invariants.
+
+#### CHAIN-105 — Third-party sponsorship / funding flows (viral debt mitigation)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §5.2
+- **Notes:** confirm whether `MsgAddCredit` is sufficient for sponsorship (non-owner funding) and whether UI exposes it.
+
+#### CHAIN-106 — EVM module production posture (simulation vs runtime)
+- **Status:** PARTIAL (DEVNET)
+- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
+- **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
+
+### Gateway / Provider (`nil_gateway/`)
+
+#### GW-201 — Strict session enforcement on data-plane fetches
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` Appendix A “Gateway/API note”, §7.2
+- **DoD:** gateway/SP enforce `X‑Nil‑Session‑Id` when sessions required; out-of-session range fetches are rejected; consistent error JSON.
+
+#### GW-202 — Repair tooling + deterministic reconstruction for Mode 2 slots
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` §8.4, §8.2
+
+#### GW-203 — Upload delegation (third-party uploader pattern)
+- **Status:** MISSING
+- **Notes:** `notes/launch_todos.md`
+
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+- **Status:** PARTIAL (DEVNET)
+- **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
+
+### Web / UX (`nil-website/`)
+
+#### WEB-301 — Provider onboarding wizard (“Become a Provider”)
+- **Status:** MISSING
+- **Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
+
+#### WEB-302 — Hybrid client “unified namespace” + sync manager (OPFS ↔ Gateway ↔ Network)
+- **Status:** PARTIAL (DEVNET)
+- **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
+
+#### WEB-303 — Educational content remediation (Mode 2, Triple Proof, Deputy)
+- **Status:** MISSING
+- **Source:** `nil-website/AGENTS.md` §8
+
+### Core crypto / WASM (`nil_core/`)
+
+#### CORE-401 — WebGPU KZG commitments/proofs (client-side velocity)
+- **Status:** MISSING
+- **Notes:** `notes/kzg_gpu_design.md`
+
+#### CORE-402 — Determinism harness (cross-runtime, cross-platform)
+- **Status:** PARTIAL (DEVNET)
+- **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
+
+### CLI / Automation (`nil_cli/`, `scripts/`)
+
+#### CLI-501 — Enterprise upload job runner (delegated key, scoped funding, teardown)
+- **Status:** MISSING
+- **Notes:** `notes/launch_todos.md`
+
+#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+- **Status:** PARTIAL (DEVNET)
+- **Notes:** `notes/launch_todos.md`
+
+### P2P (`nil_p2p/`)
+
+#### P2P-601 — Production transport + discovery (beyond stubs)
+- **Status:** PARTIAL (DEVNET)
+- **Spec:** `spec.md` Appendix B (9)
+
+## Spec ↔ Implementation Divergences To Track Explicitly
+
+- **Deal sizing naming:** `spec.md` uses `allocated_length`; code uses `Deal.size` on-chain and may surface `allocated_length` as a gateway/UI alias. Decide and converge.
+- **Mode 2 on-chain representation:** `service_hint` encoding works for devnet; mainnet likely needs explicit typed fields for `(K,M)` and slot status.
+- **EVM simulation posture:** EVM/FeeMarket excluded from simulation to avoid signer panics; ensure this doesn’t mask mainnet correctness issues.
+
+## Suggested Sequencing (Pragmatic)
+
+1. **CORE-001 One-core migration** (reduce drift risk first).
+2. **ECON-001 Lock-in + escrow accounting** (mainnet business logic).
+3. **PERF-001 GPU + ingest parallelism** (make the product usable at scale).
+4. **CHAIN-001/002/003/103** (repair, challenges, fraud proofs, health).
+5. **P2P-001 deputy + audit debt** (adversarial resilience).
+6. **OPS-001 audits + hardening** (gate before mainnet).
+
+---
+
+## Sprint Roadmap (Proposed)
+
+Assumption: **2-week engineering sprints**, with a strict “test gate” on every sprint exit. Adjust duration as needed; keep the **scope** bounded.
+
+### Sprint 0 — RFC closure + interfaces freeze (Protocol planning sprint)
+- **Goal:** turn Appendix B “unspecified” items into implementable, testable contracts.
+- **Delivers (Docs + reference code stubs):**
+  - Finalize the target on-chain representation for Mode 2: explicit `(K,M)`, slot mapping, overlay state, slot status, and generation fields (Appendix B #2, #6).
+  - Finalize challenge derivation + proof quota policy (Appendix B #3, #4).
+  - Finalize pricing/escrow accounting policy (Appendix B #5).
+  - Decide and document the `allocated_length` vs `size` vs `total_mdus` naming convergence (see “Divergences” section).
+- **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
+
+### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+- **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
+- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
+- **Delivers:**
+  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
+  - WASM bindings used by `nil-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
+- **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
+
+### Sprint 2 — Economic model v1 (lock-in, caps, top-ups)
+- **Targets:** **P0-ECON-001**, **CHAIN-105**.
+- **Goal:** make “user-funded elasticity + storage rent” real and enforceable (not a narrative).
+- **Delivers:**
+  - Implement pay-at-ingest debit schedule (or equivalent lock-in) for `UpdateDealContent*` and retrieval session fees accounting.
+  - Enforce `max_monthly_spend` in code paths that can increase cost (uploads/elasticity triggers).
+  - Clarify and implement third-party sponsorship semantics (whether `MsgAddCredit` supports it safely, and how UI exposes it).
+- **Test gate:** chain econ e2e (deal → upload → retrieve → verify balances/burns/caps) across multiple parameter sets.
+
+### Sprint 3 — Mode 2 on-chain encoding (explicit state, not service_hint encoding)
+- **Targets:** **CHAIN-101**, plus prerequisites for **P0-CHAIN-001**.
+- **Goal:** move Mode 2 out of “devnet convenience encoding” into explicit typed state.
+- **Delivers:**
+  - Deal stores explicit `(K,M)` (or equivalent) and a canonical ordered `slot → provider` mapping.
+  - Upgrade strategy from legacy `service_hint` encoding (devnet) to typed fields without breaking existing deals.
+- **Test gate:** migration tests + multi-provider e2e that creates Mode 2 deals and verifies slot ordering invariants.
+
+### Sprint 4 — Mode 2 generations + repair mode + make-before-break replacement
+- **Targets:** **P0-CHAIN-001**, **GW-202** (partial).
+- **Goal:** the chain can coordinate repairs safely while allowing append-only writes.
+- **Delivers:**
+  - `current_gen` + slot status (ACTIVE/REPAIRING) + append-only commit enforcement.
+  - Replacement workflow: add new provider in REPAIRING, require catch-up proof/readiness, then promote to ACTIVE (make-before-break).
+  - Gateway repair tooling for deterministic reconstruction and catch-up tasks.
+- **Test gate:** multi-SP e2e that simulates slot failure → repair catch-up → slot rejoin; reads succeed throughout.
+
+### Sprint 5 — Unified liveness v1 (quota + synthetic fill + health)
+- **Targets:** **P0-CHAIN-002**, **CHAIN-103**, **GW-201** (tighten enforcement).
+- **Goal:** make “Retrieval IS Storage” enforceable with deterministic fallback challenges and health accounting.
+- **Delivers:**
+  - Deterministic challenge derivation for synthetic fill + quota accounting.
+  - Session credits reduce synthetic demand; synthetic challenges target only ACTIVE slots.
+  - HealthState per (Deal, Provider/Slot) and eviction/jail integration hooks (policy from Sprint 0).
+  - Enforce session-bound fetch requirements on the data plane (when enabled).
+- **Test gate:** keeper unit tests + adversarial simulation + e2e showing quota enforcement and health impact.
+
+### Sprint 6 — Fraud proofs + evidence pipeline (bad data, non-response)
+- **Targets:** **P0-CHAIN-003**, **CHAIN-102** (policy hooks), **P0-OPS-001** (partial hardening).
+- **Goal:** “wrong bytes” becomes slashable with a clean evidence path.
+- **Delivers:**
+  - On-chain evidence types + verification for wrong data and bounded non-response challenges (per spec shape).
+  - Slashing/jailing/eviction curve wired to evidence outcomes (parameters from Sprint 0).
+  - Clear replay/expiry protections and audit-friendly event emission.
+- **Test gate:** unit tests for each evidence type + e2e that produces a slash on proven bad data.
+
+### Sprint 7 — Deputy system (proxy retrieval) + audit debt v1
+- **Targets:** **P0-P2P-001**, **P2P-601** (incremental), **spec.md** Appendix B #7.
+- **Goal:** handle “ghosting SPs” and scale coverage even when users are idle.
+- **Delivers:**
+  - Deputy discovery + proxy retrieval path (end-to-end) with anti-griefing controls.
+  - Evidence collection for repeated failures, plus the first “audit debt” scheduler shape (even if conservatively parameterized).
+- **Test gate:** e2e ghosting scenario: user retrieves via deputy; evidence recorded; no false slashes from a single deputy.
+
+### Sprint 8 — Throughput (GPU) + production ingest defaults
+- **Targets:** **P0-PERF-001**, **CORE-401** (optional client track), plus perf regression gates.
+- **Goal:** remove the CPU KZG bottleneck for large data ingest; ensure the fast path is default (not behind env flags).
+- **Delivers:**
+  - GPU KZG acceleration in the gateway/CLI ingest path (CUDA/Icicle or equivalent), plus parallel pipeline scheduling.
+  - Benchmark harness + perf regression thresholds (CI “alerts on regression”, local “meets target MB/s”).
+  - Decide whether WebGPU KZG is a mainnet requirement or a post-mainnet UX upgrade; if required, implement minimal viable path.
+- **Test gate:** perf suite + large-file ingest e2e on a reference machine (documented).
+
+### Sprint 9 — Enterprise surface area (S3 polish + delegation tooling)
+- **Targets:** **GW-204**, **GW-203**, **CLI-501**, **CLI-502**.
+- **Goal:** “looks like S3” and supports delegated upload jobs safely.
+- **Delivers:**
+  - S3 adapter correctness + compatibility testing (aws-cli/rclone).
+  - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
+  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+- **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
+
+### Sprint 10 — Mainnet hardening + audits + launch readiness
+- **Targets:** **P0-OPS-001**, plus closure of remaining P0s.
+- **Goal:** turn “working devnet” into “auditable, operable mainnet”.
+- **Delivers:**
+  - Audit scopes (crypto/chain/gateway), fixes, and a “must-fix before mainnet” checklist.
+  - Incident response runbooks, monitoring/alerting, safe defaults, and security posture docs.
+  - Final “Mainnet readiness” e2e suite and release checklist.
+- **Test gate:** security test suite + external audit signoff + final e2e battery green.
+
+## Sprint Coverage Matrix (IDs → Sprint)
+
+- **Sprint 1:** P0-CORE-001, CORE-402 (partial)
+- **Sprint 2:** P0-ECON-001, CHAIN-105
+- **Sprint 3:** CHAIN-101 (and prerequisites for P0-CHAIN-001)
+- **Sprint 4:** P0-CHAIN-001, GW-202 (partial)
+- **Sprint 5:** P0-CHAIN-002, CHAIN-103, GW-201
+- **Sprint 6:** P0-CHAIN-003, CHAIN-102 (hooks), OPS (partial)
+- **Sprint 7:** P0-P2P-001, P2P-601 (incremental)
+- **Sprint 8:** P0-PERF-001, CORE-401 (optional/if required)
+- **Sprint 9:** GW-203, GW-204, CLI-501, CLI-502
+- **Sprint 10:** P0-OPS-001 (+ remaining closure)

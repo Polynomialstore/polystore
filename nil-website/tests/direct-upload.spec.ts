@@ -253,13 +253,12 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  console.log('Switching to Local MDU tab...')
-  await page.getByTestId('tab-mdu').click()
-
   console.log('Selecting Deal #1...')
-  await page.getByTestId('workspace-deal-select').selectOption('1')
+  const dealRow = page.getByTestId('deal-row-1')
+  await expect(dealRow).toBeVisible({ timeout: 60_000 })
+  await dealRow.click()
 
-  await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('mdu-file-input')).toBeAttached({ timeout: 30_000 })
 
   // Find the Client-Side Expansion section
   const filePath = 'test-direct.txt'
@@ -267,7 +266,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   console.log('Uploading file to FileSharder input...')
   // The input is hidden, handleFileSelect is triggered on change.
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByTestId('mdu-file-input').setInputFiles({
     name: filePath,
     mimeType: 'text/plain',
     buffer: fileBytes,

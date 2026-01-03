@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -62,6 +63,31 @@ var (
 	execCommandContext = exec.CommandContext
 	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
 )
+
+func configureDefaultUploadDir(routerMode bool, listenAddr string) {
+	if _, ok := os.LookupEnv("NIL_UPLOAD_DIR"); ok {
+		return
+	}
+	if routerMode {
+		return
+	}
+
+	port := ""
+	if host, p, err := net.SplitHostPort(listenAddr); err == nil {
+		_ = host
+		port = p
+	}
+
+	subdir := "sp"
+	if port != "" {
+		subdir = "sp-" + port
+	}
+	uploadDir = filepath.Join("uploads", subdir)
+
+	if _, ok := os.LookupEnv("NIL_SESSION_DB_PATH"); !ok {
+		sessionDBPath = filepath.Join(uploadDir, "sessions.db")
+	}
+}
 
 // runCommand executes an external command, respecting mockCombinedOutput if set.
 func runCommand(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
@@ -298,6 +324,9 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 
 func main() {
 	routerMode := isGatewayRouterMode()
+	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+
+	configureDefaultUploadDir(routerMode, listenAddr)
 
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
@@ -391,7 +420,6 @@ func main() {
 		log.Printf("LibP2P listening on %s", strings.Join(addrs, ", "))
 	}
 
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
@@ -536,66 +564,145 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	mr, err := r.MultipartReader()
+	if err != nil {
 		http.Error(w, "invalid multipart form", http.StatusBadRequest)
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
+	var (
+		owner          string
+		dealIDStr      string
+		recordPath     string
+		maxUserMdusStr string
+		fileSizeStr    string
+
+		filename   string
+		bytesTotal uint64
+		path       string
+	)
+
+	const maxFieldSize = 1 << 20 // 1 MiB per field (defensive; fields are small)
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			return
+		}
+
+		formName := part.FormName()
+		if formName == "" {
+			_ = part.Close()
+			continue
+		}
+
+		if formName != "file" {
+			b, err := io.ReadAll(io.LimitReader(part, maxFieldSize))
+			_ = part.Close()
+			if err != nil {
+				http.Error(w, "invalid multipart form", http.StatusBadRequest)
+				return
+			}
+			val := strings.TrimSpace(string(b))
+			switch formName {
+			case "owner":
+				owner = val
+			case "deal_id":
+				dealIDStr = val
+			case "file_path":
+				recordPath = val
+			case "max_user_mdus":
+				maxUserMdusStr = val
+			case "file_size_bytes":
+				fileSizeStr = val
+			}
+			continue
+		}
+
+		// File upload (streamed: avoids net/http's ParseMultipartForm temp-file buffering).
+		if filename != "" {
+			_ = part.Close()
+			http.Error(w, "only one file is supported", http.StatusBadRequest)
+			return
+		}
+
+		filename = strings.TrimSpace(part.FileName())
+		if filename == "" {
+			_ = part.Close()
+			http.Error(w, "invalid filename", http.StatusBadRequest)
+			return
+		}
+		key := filepath.Base(filename)
+		if strings.TrimSpace(key) == "" || key == "." || key == string(filepath.Separator) {
+			_ = part.Close()
+			http.Error(w, "invalid filename", http.StatusBadRequest)
+			return
+		}
+
+		path = filepath.Join(uploadDir, key)
+		out, err := os.Create(path)
+		if err != nil {
+			_ = part.Close()
+			http.Error(w, "failed to create file", http.StatusInternalServerError)
+			return
+		}
+
+		if bytesTotal == 0 {
+			if parsed, err := strconv.ParseUint(strings.TrimSpace(fileSizeStr), 10, 64); err == nil && parsed > 0 {
+				bytesTotal = parsed
+			}
+		}
+
+		if job != nil {
+			job.setFile(filename, bytesTotal)
+			job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
+			job.setBytes(0, bytesTotal)
+		}
+
+		pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
+		reader := &ctxReader{ctx: ingestCtx, r: part}
+		n64, copyErr := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10))
+		_ = part.Close()
+		if closeErr := out.Close(); closeErr != nil && copyErr == nil {
+			copyErr = closeErr
+		}
+		if copyErr != nil {
+			if job != nil {
+				job.setError(copyErr.Error())
+			}
+			if errors.Is(copyErr, context.Canceled) || errors.Is(copyErr, context.DeadlineExceeded) {
+				http.Error(w, copyErr.Error(), http.StatusRequestTimeout)
+				return
+			}
+			http.Error(w, "failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		if n64 >= 0 {
+			n := uint64(n64)
+			if n > 0 && bytesTotal == 0 {
+				bytesTotal = n
+			}
+			if job != nil && bytesTotal > 0 {
+				job.setBytes(n, bytesTotal)
+			}
+		}
+	}
+
+	if filename == "" || strings.TrimSpace(path) == "" {
 		http.Error(w, "file field is required", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
 
-	owner := r.FormValue("owner")
-	dealIDStr := r.FormValue("deal_id")
-	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", header.Filename, owner, dealIDStr)
-
-	// Persist file under a deterministic key (filename-based for now).
-	key := strings.TrimSpace(header.Filename)
-	if key == "" {
-		http.Error(w, "invalid filename", http.StatusBadRequest)
-		return
-	}
-	path := filepath.Join(uploadDir, key)
-	out, err := os.Create(path)
-	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
-		return
+	if dealIDStr == "" && dealIDQueryOK {
+		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
 	}
 
-	bytesTotal := uint64(0)
-	if header.Size > 0 {
-		bytesTotal = uint64(header.Size)
-	}
-	if job != nil {
-		job.setFile(header.Filename, bytesTotal)
-		job.setPhase(uploadJobPhaseReceiving, "Receiving file...")
-		job.setBytes(0, bytesTotal)
-	}
-
-	pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
-	reader := &ctxReader{ctx: ingestCtx, r: file}
-	if _, err := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10)); err != nil {
-		_ = out.Close()
-		if job != nil {
-			job.setError(err.Error())
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, err.Error(), http.StatusRequestTimeout)
-			return
-		}
-		http.Error(w, "failed to write file", http.StatusInternalServerError)
-		return
-	}
-	if err := out.Close(); err != nil {
-		if job != nil {
-			job.setError(err.Error())
-		}
-		http.Error(w, "failed to close file", http.StatusInternalServerError)
-		return
-	}
+	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", filename, owner, dealIDStr)
 
 	var cid string
 	var size uint64
@@ -607,7 +714,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	// - NIL_FAKE_INGEST=1: fast SHA256-based manifest_root (dev only, not Triple-Proof valid)
 	// - NIL_FAST_INGEST=1: skip witness generation (faster, still not Triple-Proof valid)
 	maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
-	if raw := strings.TrimSpace(r.FormValue("max_user_mdus")); raw != "" {
+	if raw := strings.TrimSpace(maxUserMdusStr); raw != "" {
 		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
 			maxMdus = parsed
 		}
@@ -651,9 +758,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				recordPath := strings.TrimSpace(r.FormValue("file_path"))
 				if recordPath == "" {
-					recordPath = strings.TrimSpace(header.Filename)
+					recordPath = strings.TrimSpace(filename)
 				}
 				if recordPath != "" {
 					if validated, err := validateNilfsFilePath(recordPath); err == nil {
@@ -733,9 +839,9 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				recordPath := strings.TrimSpace(recordPath)
 				if recordPath == "" {
-					recordPath = strings.TrimSpace(header.Filename)
+					recordPath = strings.TrimSpace(filename)
 				}
 				if recordPath != "" {
 					if validated, err := validateNilfsFilePath(recordPath); err == nil {
@@ -862,7 +968,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"size_bytes":       size,
 		"file_size_bytes":  fileSize,
 		"allocated_length": allocatedLength,
-		"filename":         header.Filename,
+		"filename":         filename,
 		"upload_id":        uploadID,
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -4530,6 +4636,15 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default limit 10MB (MDU is 8MB). We also drain the body on early returns to avoid
+	// clients seeing "connection broken" errors when the handler rejects a request before
+	// reading the full payload (common with large uploads + validation failures).
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
+
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
@@ -4545,9 +4660,12 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		// If we can't talk to the chain, we can't validate. Fail safe.
 		log.Printf("SpUploadMdu: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
@@ -4576,22 +4694,41 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
 
-	// Check content length to avoid DoS
-	// Default limit 10MB (MDU is 8MB)
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	if n != int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid mdu size: got %d bytes (want %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, n, dealID)
 	w.WriteHeader(http.StatusOK)
@@ -4605,6 +4742,15 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+
+	// Max shard size is <= 8 MiB (8 MiB / K in Mode 2); allow some slack. Drain body
+	// on early returns to avoid large-upload connection resets when validation fails
+	// before reads begin.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
 
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
@@ -4628,9 +4774,12 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("SpUploadShard: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
 		return
@@ -4652,24 +4801,45 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Max shard size is <= 8 MiB; allow some slack.
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
 
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	// Shard size depends on the RS params (K), so enforce only an upper bound here.
+	if n <= 0 || n > int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid shard size: got %d bytes (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, n, dealID, slot)
 	w.WriteHeader(http.StatusOK)
@@ -4744,6 +4914,14 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit manifest blob size (manifest is 128 KiB; allow some slack). Drain body on
+	// early returns so clients get a clean status response instead of connection resets.
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
+	defer func() {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}()
+
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 
@@ -4758,9 +4936,12 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain (fail safe if chain is unreachable).
-	_, _, err = fetchDealOwnerAndCID(dealID)
-	if err != nil {
+	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
+	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			http.Error(w, "deal not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("SpUploadManifest: failed to fetch deal %d: %v", dealID, err)
 		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
 		return
@@ -4778,22 +4959,37 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit manifest blob size (manifest is 128 KiB; allow some slack).
-	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
-
 	path := filepath.Join(rootDir, "manifest.bin")
-	f, err := os.Create(path)
+	tmp, err := os.CreateTemp(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
-		http.Error(w, "failed to create file", http.StatusInternalServerError)
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	n, err := io.Copy(f, r.Body)
+	n, err := io.Copy(tmp, r.Body)
 	if err != nil {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
+	if err := tmp.Close(); err != nil {
+		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
+		return
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		return
+	}
+	committed = true
 
 	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, n, dealID)
 	w.WriteHeader(http.StatusOK)

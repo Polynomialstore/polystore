@@ -207,11 +207,12 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   }
 
   // Local MDU flow: shard -> upload -> commit.
-  await page.getByTestId('tab-mdu').click()
-  await page.getByTestId('workspace-deal-select').selectOption(dealId)
-  await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30_000 })
+  const dealRow = page.getByTestId(`deal-row-${dealId}`)
+  await expect(dealRow).toBeVisible({ timeout: 60_000 })
+  await dealRow.click()
+  await expect(page.getByTestId('mdu-file-input')).toBeAttached({ timeout: 30_000 })
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByTestId('mdu-file-input').setInputFiles({
     name: filePath,
     mimeType: 'text/plain',
     buffer: fileBytes,

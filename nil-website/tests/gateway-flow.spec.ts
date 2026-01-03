@@ -41,13 +41,12 @@ test.describe('gateway flow', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await expect(page.getByTestId('workspace-deal-select')).toBeVisible({ timeout: 60_000 })
     await page.getByTestId('workspace-advanced-toggle').click()
 
     await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
     await page.getByTestId('alloc-submit').click()
 
-    await expect(page.getByTestId('workspace-deal-select')).toHaveValue(/\d+/, { timeout: 180_000 })
+    await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
 
     await page.getByTestId('tab-content').click()
 

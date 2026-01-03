@@ -18,6 +18,16 @@ package crypto_ffi
 	    unsigned char* out_shards_flat,
 	    size_t out_shards_flat_len
 	);
+	int nil_expand_payload_rs(
+	    const unsigned char* payload_bytes,
+	    size_t payload_bytes_len,
+	    unsigned long long data_shards,
+	    unsigned long long parity_shards,
+	    unsigned char* out_witness_flat,
+	    size_t out_witness_flat_len,
+	    unsigned char* out_shards_flat,
+	    size_t out_shards_flat_len
+	);
 	int nil_reconstruct_mdu_rs(
 	    const unsigned char* shards_flat,
 	    size_t shards_flat_len,
@@ -336,9 +346,60 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 	for slot := 0; slot < int(n); slot++ {
 		start := slot * shardLen
 		end := start + shardLen
-		shardCopy := make([]byte, shardLen)
-		copy(shardCopy, shardsFlat[start:end])
-		shards = append(shards, shardCopy)
+		// Slice the flat buffer with a capped capacity to prevent accidental overlap via append.
+		shards = append(shards, shardsFlat[start:end:end])
+	}
+	return witness_flat, shards, nil
+}
+
+// ExpandPayloadRs expands a raw payload (up to RawMduCapacity / 8,126,464 bytes) into RS shards and witness commitments.
+//
+// This matches the NilFS field-aligned MDU encoding used by the gateway/browser (31-byte chunks right-aligned in 32-byte scalars).
+//
+// Returns:
+// - witness_flat: slot-major commitments (48 bytes each), length = (k+m)*(64/k)*48
+// - shards: slot-major shard bytes, each length = (64/k)*BLOB_SIZE
+func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, shards [][]byte, err error) {
+	if k == 0 || m == 0 {
+		return nil, nil, errors.New("invalid RS params")
+	}
+	if 64%k != 0 {
+		return nil, nil, errors.New("invalid RS params: k must divide 64")
+	}
+	rows := uint64(64 / k)
+	n := k + m
+	witnessLen := int(n * rows * 48)
+	shardLen := int(rows * uint64(types.BLOB_SIZE))
+	shardsFlatLen := int(n) * shardLen
+
+	witness_flat = make([]byte, witnessLen)
+	shardsFlat := make([]byte, shardsFlatLen)
+
+	var cPayload *C.uchar
+	if len(payload) > 0 {
+		cPayload = (*C.uchar)(unsafe.Pointer(&payload[0]))
+	}
+	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
+	cShards := (*C.uchar)(unsafe.Pointer(&shardsFlat[0]))
+	res := C.nil_expand_payload_rs(
+		cPayload,
+		C.size_t(len(payload)),
+		C.ulonglong(k),
+		C.ulonglong(m),
+		cWitness,
+		C.size_t(len(witness_flat)),
+		cShards,
+		C.size_t(len(shardsFlat)),
+	)
+	if res != 0 {
+		return nil, nil, fmt.Errorf("nil_expand_payload_rs failed with code: %d", res)
+	}
+
+	shards = make([][]byte, 0, n)
+	for slot := 0; slot < int(n); slot++ {
+		start := slot * shardLen
+		end := start + shardLen
+		shards = append(shards, shardsFlat[start:end:end])
 	}
 	return witness_flat, shards, nil
 }

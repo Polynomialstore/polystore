@@ -257,10 +257,10 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('alloc-submit').click()
   await page.getByTestId('tab-content').click()
 
-  const dealSelect = page.getByTestId('workspace-deal-select')
-  await expect(dealSelect.locator(`option[value="${dealId}"]`)).toHaveCount(1, { timeout: 60_000 })
-  await dealSelect.selectOption(dealId)
-  await expect(dealSelect).toHaveValue(dealId)
+  const dealRow = page.getByTestId(`deal-row-${dealId}`)
+  await expect(dealRow).toBeVisible({ timeout: 60_000 })
+  await dealRow.click()
+  await expect(page.getByTestId('workspace-deal-title')).toHaveText(new RegExp(`Deal #${dealId}\\b`))
 
   await page.getByTestId('content-file-input').setInputFiles({
     name: filePath,

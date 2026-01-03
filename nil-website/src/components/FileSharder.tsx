@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
-import { FileJson, Cpu } from 'lucide-react';
+import { FileJson, Cpu, Wallet } from 'lucide-react';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
@@ -77,12 +77,12 @@ function formatDuration(ms: number) {
 }
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { connectAsync } = useConnect();
   const localGateway = useLocalGateway();
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
-  const [wasmError, setWasmError] = useState<string | null>(null);
+  const [, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
@@ -131,6 +131,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastCommitTxRef = useRef<string | null>(null);
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
   const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -792,10 +793,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
 
         const form = new FormData()
-        form.append('file', file)
         form.append('deal_id', dealId)
         form.append('file_path', file.name)
         form.append('upload_id', uploadId)
+        form.append('file_size_bytes', String(file.size))
+        form.append('file', file)
 
         const pollStatus = async () => {
           while (!stopPolling) {
@@ -1628,138 +1630,112 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   };
 
   const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
+  const hasManifestRoot = Boolean(currentManifestRoot && currentManifestRoot.trim());
+  const readyToUpload =
+    hasManifestRoot &&
+    !isUploadComplete &&
+    (collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0));
+  const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
+  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitError);
+  const showStatusPanel =
+    processing ||
+    activeUploading ||
+    readyToUpload ||
+    readyToCommit ||
+    isCommitPending ||
+    isCommitConfirming ||
+    isAlreadyCommitted ||
+    hasError;
+
+  useEffect(() => {
+    const node = logContainerRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [logs.length, processing, activeUploading, readyToCommit, isCommitPending, isCommitConfirming, isAlreadyCommitted, hasError]);
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-4">
       {!isConnected ? (
-          <button 
-            onClick={() => connectAsync({ connector: injectedConnector })}
-            className="w-full py-12 border-2 border-dashed border-border rounded-xl text-muted-foreground font-bold transition-all flex flex-col items-center gap-4 hover:border-primary/50 hover:bg-secondary/50"
-          >
-              <div className="text-4xl">🔌</div>
-              Connect Wallet to Start
-          </button>
-      ) : (
-      <>
-      <div className="flex items-center justify-between px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
-              Connected: <span className="font-mono font-bold">{address?.slice(0,10)}...</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            {isMode2 && (
-              <span
-                title={localGateway.error || undefined}
-                className={`px-2 py-0.5 rounded-full border ${
-                  appConfig.gatewayDisabled
-                    ? 'bg-secondary/40 text-muted-foreground border-border'
-                    : localGateway.status === 'connected'
-                      ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
-                      : localGateway.error
-                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                        : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20'
-                }`}
-              >
-                Gateway:{' '}
-                {appConfig.gatewayDisabled
-                  ? 'disabled'
-                  : localGateway.status === 'connected'
-                    ? 'connected'
-                    : localGateway.error
-                      ? 'unavailable'
-                      : 'checking'}
-              </span>
-            )}
-            <span
-              title={wasmError || undefined}
-              className={`px-2 py-0.5 rounded-full border ${
-                gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
-                  ? 'bg-secondary/40 text-muted-foreground border-border'
-                  : wasmStatus === 'ready'
-                    ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                    : wasmStatus === 'initializing'
-                      ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                      : 'bg-red-500/10 text-red-500 border-red-500/20'
-              }`}
-            >
-              {gatewayMode2Enabled && !localGateway.error && wasmStatus === 'idle'
-                ? 'WASM: standby'
-                : `WASM: ${wasmStatus}`}
-            </span>
-          </div>
-      </div>
-      {isMode2 && stripeParams && (
-        <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="font-semibold text-foreground">Mode 2</div>
-            <div className="text-muted-foreground">
-              RS({stripeParams.k},{stripeParams.m}) • {stripeParams.k + stripeParams.m} providers
-            </div>
-          </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Default: use the local gateway for RS encoding + distribution. Fallback: in-browser WASM sharding + direct uploads.
-          </div>
-        </div>
-      )}
-
-      {/* Dropzone */}
-      {!stripeParamsLoaded ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Checking redundancy mode and gateway availability.
-          </div>
-        </div>
-      ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={`
-            border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200
-            ${isDragging
-              ? 'border-primary bg-primary/10 scale-[1.01]'
-              : 'border-border hover:border-primary/50 bg-card'
-            }
-          `}
+        <button
+          onClick={() => connectAsync({ connector: injectedConnector })}
+          className="w-full rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
         >
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center">
-              <Cpu className="w-7 h-7 text-foreground" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-foreground">Select a file</h3>
-              <p className="text-muted-foreground mt-1 text-sm">
-                {isMode2 && gatewayMode2Enabled
-                  ? gatewayReachable
-                    ? 'Local gateway detected: uploads go through the gateway (WASM fallback if it drops).'
-                    : 'Will try the local gateway first (WASM fallback if unavailable).'
-                  : 'The browser will expand it into MDUs and compute commitments locally (WASM).'}
-              </p>
-              <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                Browse files
-                <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-              </label>
-            </div>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary/60">
+            <Wallet className="h-6 w-6 text-foreground" />
           </div>
-        </div>
+          <div className="text-sm font-semibold text-foreground">Connect wallet to upload</div>
+          <div className="mt-1 text-xs text-muted-foreground">Deals and files are owned by your Nil address.</div>
+        </button>
       ) : (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            This only runs in your browser. Once ready, the file picker will appear.
-          </div>
-        </div>
-      )}
+        <>
+          {/* Dropzone */}
+          {!stripeParamsLoaded ? (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Checking redundancy mode and gateway availability.
+              </div>
+            </div>
+          ) : wasmStatus === 'ready' || (isMode2 && gatewayMode2Enabled) ? (
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              className={`
+                border-2 border-dashed rounded-xl p-6 transition-all duration-200
+                ${isDragging
+                  ? 'border-primary bg-primary/10 scale-[1.01]'
+                  : 'border-border hover:border-primary/50 bg-card'
+                }
+              `}
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
+                    <Cpu className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">Upload a file</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {isMode2 && gatewayMode2Enabled
+                        ? gatewayReachable
+                          ? 'Local gateway connected (fast path).'
+                          : 'No local gateway detected (in-browser sharding).'
+                        : 'In-browser sharding.'}
+                    </div>
+                  </div>
+                </div>
+                <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto">
+                  Choose file
+                  <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <div className="text-sm font-semibold text-foreground">Preparing WASM…</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                This only runs in your browser. Once ready, the file picker will appear.
+              </div>
+            </div>
+          )}
 
-      {/* Processing Status */}
-      {(processing || activeUploading) && (
+      {showStatusPanel && (
         <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
           <p className="font-bold text-foreground mb-2">Current Activity:</p>
-          <div className="space-y-1">
+          <div className="space-y-2">
+            {hasError ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                {commitError ? `Commit failed: ${commitError.message}` : null}
+                {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
+                {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
+                {!commitError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
+              </div>
+            ) : null}
+
             {processing && (
               <div className="space-y-2" data-testid="wasm-sharding-progress">
                 <div className="flex items-start justify-between gap-3">
@@ -1817,7 +1793,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
                     <div className="opacity-70">Op Time</div>
                     <div className="text-foreground">
-                      {shardProgress.currentOpStartedAtMs ? formatDuration(shardingUi.currentOpMs) : shardProgress.lastOpMs != null ? formatDuration(shardProgress.lastOpMs) : '—'}
+                      {shardProgress.currentOpStartedAtMs
+                        ? formatDuration(shardingUi.currentOpMs)
+                        : shardProgress.lastOpMs != null
+                          ? formatDuration(shardProgress.lastOpMs)
+                          : '—'}
                     </div>
                   </div>
                 </div>
@@ -1850,21 +1830,85 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     <div className="bg-secondary/40 border border-border rounded px-2 py-1">
                       <div className="opacity-70">Current</div>
                       <div className="text-foreground">
-                        {shardProgress.currentMduKind ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}` : '—'}
+                        {shardProgress.currentMduKind
+                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
+                          : '—'}
                       </div>
                     </div>
                   </div>
                 </details>
               </div>
             )}
+
             {activeUploading && (
-              <p className="flex items-center gap-2">
+              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <FileJson className="w-4 h-4 animate-pulse text-green-500" />
                 {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
               </p>
             )}
-            {isCommitPending || isCommitConfirming ? (
-              <p className="flex items-center gap-2"><FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...</p>
+
+            {readyToUpload && !processing && !activeUploading ? (
+              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+                Expansion complete. Ready to upload to Storage Providers.
+              </div>
+            ) : null}
+
+            {readyToCommit && !processing && !activeUploading ? (
+              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+                Upload complete. Commit the manifest root to update your deal on-chain and make the file visible in the Deal Explorer.
+              </div>
+            ) : null}
+
+            {(isCommitPending || isCommitConfirming) && (
+              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...
+              </p>
+            )}
+
+            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    const totalSize = isMode2
+                      ? shardProgress.fileBytesTotal
+                      : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                    commitContent({
+                      dealId,
+                      manifestRoot: currentManifestRoot || '',
+                      fileSize: totalSize,
+                    });
+                  }}
+                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
+                  data-testid="mdu-commit"
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {isCommitPending
+                    ? 'Check Wallet...'
+                    : isCommitConfirming
+                      ? 'Confirming...'
+                      : isAlreadyCommitted
+                        ? 'Committed!'
+                        : 'Commit to Chain'}
+                </button>
+
+                {commitHash && (
+                  <div className="text-xs text-muted-foreground truncate">
+                    Tx: {commitHash}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {logs.length > 0 ? (
+              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
+                <p className="mb-2 text-primary font-bold">System Activity:</p>
+                <div ref={logContainerRef} className="space-y-1 max-h-32 overflow-y-auto">
+                  {logs.map((log, i) => (
+                    <p key={i}>{log}</p>
+                  ))}
+                  {processing && <p className="animate-pulse">...</p>}
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
@@ -1924,40 +1968,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </div>
       )}
 
-      {/* Commit to Chain Button */}
-      {currentManifestRoot && isUploadComplete && (
-        <div className="flex flex-col gap-2">
-            <button
-              onClick={() => {
-                const totalSize = isMode2
-                  ? shardProgress.fileBytesTotal
-                  : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
-                commitContent({
-                    dealId,
-                    manifestRoot: currentManifestRoot,
-                    fileSize: totalSize
-                });
-              }}
-              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted}
-              data-testid="mdu-commit"
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
-            >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isAlreadyCommitted ? 'Committed!' : 'Commit to Chain'}
-            </button>
-            
-            {commitHash && (
-                <div className="text-xs text-muted-foreground truncate">
-                    Tx: {commitHash}
-                </div>
-            )}
-            {commitError && (
-                <div className="text-xs text-red-500">
-                    Error: {commitError.message}
-                </div>
-            )}
-        </div>
-      )}
-
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
@@ -1996,16 +2006,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </div>
               ))}
             </div>
-          
-          <div className="mt-4 p-4 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
-            <p className="mb-2 text-primary font-bold">System Activity:</p>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-                {logs.map((log, i) => (
-                    <p key={i}>{log}</p>
-                ))}
-                {processing && <p className="animate-pulse">...</p>}
-            </div>
-          </div>
         </div>
       )}
       </>

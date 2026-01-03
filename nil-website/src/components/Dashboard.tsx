@@ -1,7 +1,7 @@
-import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
+import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -9,13 +9,13 @@ import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFetch } from '../hooks/useFetch'
+import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { injectedConnector } from '../lib/web3Config'
-import { formatUnits } from 'viem'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
@@ -65,7 +65,6 @@ export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const { connectAsync } = useConnect()
-  const { disconnect } = useDisconnect()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
@@ -75,12 +74,11 @@ export function Dashboard() {
   const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [nilAddress, setNilAddress] = useState('')
-  const [activeTab, setActiveTab] = useState<'alloc' | 'content' | 'mdu'>('alloc')
+  const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
-  const { data: evmBalance, refetch: refetchEvm } = useBalance({
+  const { refetch: refetchEvm } = useBalance({
     address,
     chainId: appConfig.chainId,
   })
@@ -119,6 +117,8 @@ export function Dashboard() {
   // Prefer the direct MetaMask ID if available, otherwise fallback to Wagmi
   const activeChainId = metamaskChainId ?? chainId
   const isWrongNetwork = activeChainId !== appConfig.chainId
+  const metaMaskUnlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const isWalletLocked = isConnected && metaMaskUnlockState === 'locked'
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
@@ -154,6 +154,11 @@ export function Dashboard() {
     }
   }
 
+  const handleRefreshSummary = async () => {
+    if (!nilAddress) return
+    await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders(), refetchEvm?.()])
+  }
+
 
   // Step 1: Alloc State
   const [duration, setDuration] = useState('100')
@@ -171,8 +176,8 @@ export function Dashboard() {
   const [contentFilesLoading, setContentFilesLoading] = useState(false)
   const [contentFilesError, setContentFilesError] = useState<string | null>(null)
   const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
-  const [contentSlabLoading, setContentSlabLoading] = useState(false)
-  const [contentSlabError, setContentSlabError] = useState<string | null>(null)
+  const [, setContentSlabLoading] = useState(false)
+  const [, setContentSlabError] = useState<string | null>(null)
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
@@ -185,7 +190,7 @@ export function Dashboard() {
   const mduRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const dealDetailRef = useRef<HTMLDivElement | null>(null)
-  const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | null>(null)
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -309,84 +314,10 @@ export function Dashboard() {
     return counts
   }, [dealHeatById, deals])
 
-  const dealSummary = useMemo(() => {
-    let active = 0
-    let totalBytes = 0
-    for (const deal of deals) {
-      if (String(deal.cid || '').trim()) active += 1
-      const sizeNum = Number(deal.size)
-      if (Number.isFinite(sizeNum) && sizeNum > 0) totalBytes += sizeNum
-    }
-    const retrievals = Object.values(retrievalCountsByDeal).reduce((sum, count) => sum + (Number(count) || 0), 0)
-    return {
-      total: deals.length,
-      active,
-      allocated: Math.max(0, deals.length - active),
-      totalBytes,
-      retrievals,
-    }
-  }, [deals, retrievalCountsByDeal])
-
   const ownedDeals = useMemo(
     () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
     [deals, nilAddress],
   )
-  const hasWallet = Boolean(nilAddress)
-  const hasFunds =
-    parseUint64(bankBalances.stake) > 0n ||
-    parseUint64(bankBalances.atom) > 0n
-  const hasAnyDeals = ownedDeals.length > 0
-  const hasAnyContent = ownedDeals.some((deal) => String(deal.cid || '').trim())
-  const hasRetrieval = dealSummary.retrievals > 0 || receiptStatus === 'submitted'
-  const wizardDeal = useMemo(
-    () => ownedDeals.find((deal) => String(deal.cid || '').trim()) || ownedDeals[ownedDeals.length - 1] || null,
-    [ownedDeals],
-  )
-  const wizardUploadTab = useMemo(() => {
-    const hint = parseServiceHint(wizardDeal?.service_hint)
-    return hint.mode === 'mode2' ? 'mdu' : 'content'
-  }, [wizardDeal?.service_hint])
-  const wizardSteps = useMemo(
-    () => [
-      {
-        id: 'connect',
-        label: 'Connect wallet',
-        hint: 'Link MetaMask to NilChain',
-        done: hasWallet,
-        actionLabel: 'Connect',
-      },
-      {
-        id: 'fund',
-        label: 'Fund with test NIL',
-        hint: 'Request faucet funds',
-        done: hasFunds,
-        actionLabel: 'Request',
-      },
-      {
-        id: 'deal',
-        label: 'Create a deal',
-        hint: 'Allocate a storage bucket',
-        done: hasAnyDeals,
-        actionLabel: 'Create',
-      },
-      {
-        id: 'upload',
-        label: 'Upload your first file',
-        hint: 'Use Mode 2 upload flow',
-        done: hasAnyContent,
-        actionLabel: 'Upload',
-      },
-      {
-        id: 'retrieve',
-        label: 'Download and verify',
-        hint: 'Pull file from providers',
-        done: hasRetrieval,
-        actionLabel: 'Download',
-      },
-    ],
-    [hasAnyContent, hasAnyDeals, hasFunds, hasRetrieval, hasWallet],
-  )
-  const wizardNext = wizardSteps.find((step) => !step.done) || null
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
     return deals.find((d) => d.id === targetDealId) || null
@@ -397,9 +328,6 @@ export function Dashboard() {
   )
   const isTargetDealMode2 = targetDealService.mode === 'mode2'
   const hasSelectedDeal = Boolean(targetDealId)
-  const hasCommittedContent = Boolean(targetDeal?.cid)
-  const activeDealStatus = hasCommittedContent ? 'Active' : hasSelectedDeal ? 'Allocated' : '—'
-  const activeDealModeLabel = hasSelectedDeal ? (isTargetDealMode2 ? 'Mode 2' : 'Mode 1') : '—'
 
   useEffect(() => {
     if (hasSelectedDeal && !isTargetDealMode2) {
@@ -416,10 +344,10 @@ export function Dashboard() {
   useEffect(() => {
     if (targetDealId) return
     if (!nilAddress) return
-    if (ownedDeals.length !== 1) return
-    const onlyDeal = ownedDeals[0]
-    if (!onlyDeal?.id) return
-    setTargetDealId(String(onlyDeal.id))
+    if (ownedDeals.length === 0) return
+    const newestDeal = ownedDeals[ownedDeals.length - 1]
+    if (!newestDeal?.id) return
+    setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
   const mode2Config = useMemo(() => {
     if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
@@ -580,20 +508,6 @@ export function Dashboard() {
     }
   }, [address])
 
-  // Keep the open Deal Explorer panel in sync with deal list refreshes.
-  useEffect(() => {
-    if (!selectedDeal) return
-    const selectedId = String(selectedDeal.id ?? '').trim()
-    if (!selectedId) return
-    const updated =
-      deals.find((d) => String(d.id) === selectedId) ||
-      allDeals.find((d) => String(d.id) === selectedId) ||
-      null
-    if (updated && updated !== selectedDeal) {
-      setSelectedDeal(updated)
-    }
-  }, [allDeals, deals, selectedDeal])
-
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
     try {
@@ -700,15 +614,15 @@ export function Dashboard() {
   useEffect(() => {
     if (!pendingScrollTarget) return
 
+    if (pendingScrollTarget === 'create') {
+      const target = allocRef.current
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setPendingScrollTarget(null)
+      return
+    }
+
     if (pendingScrollTarget === 'workspace') {
-      const target =
-        activeTab === 'alloc'
-          ? allocRef.current
-          : activeTab === 'mdu'
-          ? mduRef.current
-          : activeTab === 'content'
-          ? contentRef.current
-          : workspaceRef.current
+      const target = activeTab === 'mdu' ? mduRef.current : contentRef.current
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setPendingScrollTarget(null)
       return
@@ -720,7 +634,7 @@ export function Dashboard() {
       ;(fileList ?? root).scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     setPendingScrollTarget(null)
-  }, [pendingScrollTarget, activeTab, selectedDeal])
+  }, [pendingScrollTarget, activeTab, targetDealId])
 
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -931,7 +845,7 @@ export function Dashboard() {
       }
   }
 
-  const handleCreateDeal = async () => {
+  const handleCreateDeal = async (evmCreator: string) => {
     if (!bankBalances.stake && !bankBalances.atom) {
       setStatusTone('error')
       setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
@@ -970,7 +884,7 @@ export function Dashboard() {
           serviceHint = buildServiceHint('General', { replicas })
         }
         const res = await submitDeal({
-          creator: address || nilAddress,
+          creator: evmCreator,
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
@@ -988,8 +902,47 @@ export function Dashboard() {
         }
       } catch (e) {
         setStatusTone('error')
-        setStatusMsg('Deal allocation failed. Check gateway logs.')
+        setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
       }
+  }
+
+  const handleCreateDealClick = async () => {
+    if (!bankBalances.stake && !bankBalances.atom) {
+      setStatusTone('error')
+      setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
+      return
+    }
+
+    try {
+      if (isWalletLocked) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
+        const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
+        const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
+        if (!first || !first.startsWith('0x')) throw new Error('Unlock MetaMask to continue.')
+        await handleCreateDeal(first)
+        return
+      }
+
+      if (!isConnected || !address) {
+        await switchNetwork().catch(() => undefined)
+        const connected = await connectAsync({ connector: injectedConnector })
+        const first = connected?.accounts?.[0]
+        const creator = typeof first === 'string' && first.startsWith('0x') ? first : address
+        if (!creator || !creator.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
+        await handleCreateDeal(creator)
+        return
+      }
+
+      if (!address || !address.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
+      await handleCreateDeal(address)
+    } catch (e) {
+      setStatusTone('error')
+      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
+    }
   }
 
   const handleUpdateContent = async (manifestRoot: string, manifestSize: number): Promise<boolean> => {
@@ -1077,11 +1030,22 @@ export function Dashboard() {
     manifestRoot: string,
     fileMeta?: { filePath: string; fileSizeBytes: number },
   ) => {
-    if (!nilAddress) return
     const trimmedRoot = manifestRoot.trim()
-    refreshDealsAfterContentCommit(nilAddress, dealId, trimmedRoot)
+    const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
+
+    // Optimistic UI: update the selected deal immediately so Deal Explorer can refresh
+    // while the LCD catches up.
+    setDeals((prev) =>
+      prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
+    )
+    setAllDeals((prev) =>
+      prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
+    )
+
+    if (nilAddress) {
+      refreshDealsAfterContentCommit(nilAddress, dealId, manifestHex)
+    }
     if (fileMeta?.filePath) {
-      const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
       upsertRecentFile({
         dealId,
         filePath: fileMeta.filePath,
@@ -1216,37 +1180,6 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
-  const handleWizardAction = async (stepId: string) => {
-    if (stepId === 'connect') {
-      await connectAsync({ connector: injectedConnector })
-      return
-    }
-    if (stepId === 'fund') {
-      await handleRequestFunds()
-      return
-    }
-    if (stepId === 'deal') {
-      setActiveTab('alloc')
-      setPendingScrollTarget('workspace')
-      return
-    }
-    if (stepId === 'upload') {
-      if (wizardDeal) {
-        setTargetDealId(String(wizardDeal.id ?? ''))
-      }
-      setActiveTab(wizardUploadTab)
-      setPendingScrollTarget('workspace')
-      return
-    }
-    if (stepId === 'retrieve') {
-      if (wizardDeal) {
-        setTargetDealId(String(wizardDeal.id ?? ''))
-        setSelectedDeal(wizardDeal)
-        setPendingScrollTarget('deal')
-      }
-    }
-  }
-
   const handleContentDownload = useCallback(
     async (file: NilfsFileEntry) => {
       if (!targetDealId) return
@@ -1318,17 +1251,194 @@ export function Dashboard() {
     </div>
   )
 
+  const onChainCid = String(targetDeal?.cid || '').trim()
+
+  const dealExplorerTopPanel = (
+    <div className="p-5 space-y-4 bg-muted/10">
+      {showAdvanced ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setActiveTab((prev) => (prev === 'content' ? 'mdu' : 'content'))}
+              data-testid="tab-content"
+              className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                activeTab === 'content'
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
+              }`}
+            >
+              <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
+              Mode 1 (advanced)
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === 'content' ? (
+        !showAdvanced ? (
+          <div
+            ref={contentRef}
+            className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          >
+            <div>
+              <div className="font-semibold text-foreground">Advanced tools are hidden</div>
+              <div className="text-xs text-muted-foreground mt-1">Enable Advanced to access gateway sharding (Mode 1).</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(true)}
+              className="inline-flex items-center justify-center rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+            >
+              Enable Advanced
+            </button>
+          </div>
+        ) : (
+          <div ref={contentRef} className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Legacy gateway sharding (Mode 1). For Mode 2, use the Upload tab.
+            </p>
+            <div className="grid grid-cols-1 gap-3 text-sm">
+              <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+                Target deal:{' '}
+                <span className="font-mono text-foreground">{targetDealId ? `#${targetDealId}` : '—'}</span>
+                {!targetDealId ? <span className="ml-2">Select a deal above to continue.</span> : null}
+              </div>
+              {targetDealId && (
+                <div className="text-xs text-muted-foreground">
+                  On-chain:{' '}
+                  {onChainCid ? (
+                    <span className="font-mono text-primary">{`${onChainCid.slice(0, 18)}...`}</span>
+                  ) : (
+                    <span className="italic">Empty container</span>
+                  )}{' '}
+                  • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
+                </div>
+              )}
+              {isTargetDealMode2 && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  This is a Mode 2 deal. Use the Upload tab (Mode 2).
+                </div>
+              )}
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Select file</span>
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={!targetDealId || uploadLoading || isTargetDealMode2}
+                  data-testid="content-file-input"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                />
+              </label>
+              {stagedUpload && (
+                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                  <div>
+                    Staged: <span className="font-mono text-foreground">{stagedUpload.filename}</span>
+                  </div>
+                  <div>
+                    Manifest root:{' '}
+                    <span className="font-mono text-primary select-all" data-testid="staged-manifest-root">
+                      {stagedUpload.cid}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {targetDealId && contentManifestRoot && (
+                <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Files In Slab</div>
+                  {receiptStatus !== 'idle' && (
+                    <div className="text-[11px]">
+                      {receiptStatus === 'submitted' ? (
+                        <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
+                      ) : (
+                        <span className="text-red-500 dark:text-red-400">
+                          Receipt failed{receiptError ? `: ${receiptError}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {contentFilesLoading ? (
+                    <div className="text-xs text-muted-foreground">Loading file table…</div>
+                  ) : contentFiles && contentFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      {contentFiles.map((f) => {
+                        return (
+                          <div
+                            key={`${f.path}:${f.start_offset}`}
+                            className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
+                                {f.path}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">{f.size_bytes} bytes</div>
+                            </div>
+                            <button
+                              onClick={() => handleContentDownload(f)}
+                              disabled={downloading}
+                              data-testid="content-download"
+                              data-file-path={f.path}
+                              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
+                            >
+                              <ArrowDownRight className="w-4 h-4" />
+                              {downloading ? 'Downloading...' : 'Download'}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground italic">No files yet for this manifest.</div>
+                  )}
+                  {contentFilesError && (
+                    <div className="text-xs text-destructive truncate" title={contentFilesError}>
+                      {contentFilesError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <div className="text-xs text-muted-foreground">
+                {updateTx && (
+                  <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0, 10)}...
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (!stagedUpload) return
+                  void handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)
+                }}
+                disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
+                data-testid="content-commit"
+                className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+              >
+                {updateLoading ? 'Committing...' : 'Commit uploaded content'}
+              </button>
+            </div>
+          </div>
+        )
+      ) : (
+        <div ref={mduRef} className="space-y-4">
+          {targetDealId ? (
+            <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
+              <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Choose a deal from the left to upload, list, and download files.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
-      <details className="rounded-xl border border-border bg-card shadow-sm">
-        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-foreground">
-          Network &amp; routing <span className="text-xs font-normal text-muted-foreground">(advanced)</span>
-        </summary>
-        <div className="px-4 pb-4">
-          <StatusBar />
-        </div>
-      </details>
-      
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-3">
@@ -1368,110 +1478,6 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-        <div className="flex-1 space-y-3">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">NilStore Console</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Create a deal (bucket), upload files, and retrieve directly from providers.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-              Chain <span className="font-mono text-foreground">{activeChainId}</span>
-            </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-              Providers <span className="font-mono text-foreground">{providerCount || 0}</span>
-            </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-              Deals <span className="font-mono text-foreground">{dealSummary.total}</span>
-            </span>
-            <span className="px-2 py-1 rounded-full border border-border bg-secondary/60">
-              Stored <span className="font-mono text-foreground">{formatBytes(dealSummary.totalBytes)}</span>
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-card rounded-xl border border-border p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-foreground font-semibold">
-              <Coins className="w-4 h-4 text-yellow-500" />
-              Wallet & Funds
-            </div>
-            <button
-              onClick={handleRequestFunds}
-              disabled={faucetLoading}
-              data-testid="faucet-request"
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-md transition-colors disabled:opacity-50"
-            >
-              {faucetLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
-              {faucetLoading ? 'Sending...' : 'Get Testnet NIL'}
-            </button>
-          </div>
-
-          {faucetTx && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
-              <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate max-w-[160px]" title={faucetTx}>
-                Tx: <span className="font-mono">{faucetTx.slice(0, 10)}...{faucetTx.slice(-8)}</span>
-              </span>
-              <span className="opacity-75">({faucetTxStatus})</span>
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground space-y-3">
-            <div className="font-mono text-primary break-all" data-testid="wallet-address-full">
-              Address: {address || nilAddress}
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-secondary/50 border border-border rounded p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
-                <div className="font-mono text-green-600 dark:text-green-400">
-                  {(() => {
-                    if (!evmBalance) return '—'
-                    const symbol = evmBalance.symbol || 'NIL'
-                    const formatted = formatUnits(evmBalance.value, evmBalance.decimals)
-                    const [whole, frac] = formatted.split('.')
-                    const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
-                    return `${trimmed} ${symbol}`
-                  })()}
-                </div>
-              </div>
-              <div className="bg-secondary/50 border border-border rounded p-2">
-                <div className="text-muted-foreground uppercase tracking-wide">Cosmos stake</div>
-                <div className="font-mono text-blue-600 dark:text-blue-400" data-testid="cosmos-stake-balance">
-                  {bankBalances.stake ? `${bankBalances.stake} stake` : '—'}
-                </div>
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Cosmos Identity</div>
-              <div
-                className="font-mono text-primary bg-primary/5 px-3 py-1 rounded text-sm border border-primary/10"
-                data-testid="cosmos-identity"
-              >
-                {nilAddress}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => disconnect()}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Disconnect
-              </button>
-              <span className="text-border">|</span>
-              <button
-                onClick={() => switchNetwork()}
-                className="text-xs text-primary hover:text-primary/80 underline"
-              >
-                Force Switch Network
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {statusMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
           statusTone === 'error'
@@ -1484,333 +1490,109 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">First Upload Wizard</div>
-            <h3 className="text-lg font-semibold text-foreground">Finish your first storage flow</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {wizardNext
-                ? `Next: ${wizardNext.label}. ${wizardNext.hint}`
-                : 'All steps complete. You can upload and retrieve freely.'}
-            </p>
-          </div>
-          {wizardNext && (
-            <button
-              type="button"
-              onClick={() => handleWizardAction(wizardNext.id)}
-              className="inline-flex items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
-            >
-              {wizardNext.actionLabel}
-            </button>
-          )}
-        </div>
-        <div className="mt-4 grid gap-2">
-          {wizardSteps.map((step, idx) => (
-            <div
-              key={step.id}
-              className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
-                step.done ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-background/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
-                    step.done ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'
-                  }`}
-                >
-                  {idx + 1}
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{step.label}</div>
-                  <div className="text-[11px] text-muted-foreground">{step.hint}</div>
-                </div>
+      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
+        {/*
+        <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+          <div className="px-5 py-2 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
+                  {targetDealId ? `Deal #${targetDealId}` : 'Deal workspace'}
+                </h3>
+              {hasSelectedDeal ? (
+                <>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      hasCommittedContent
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-border bg-secondary/60 text-muted-foreground'
+                    }`}
+                  >
+                    {activeDealStatus}
+                  </span>
+                  <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {activeDealModeLabel}
+                  </span>
+                </>
+                ) : null}
               </div>
-              {step.done ? (
-                <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Done
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleWizardAction(step.id)}
-                  className="text-[11px] font-semibold text-primary hover:text-primary/80"
-                >
-                  {step.actionLabel}
-                </button>
-              )}
+              {!targetDealId ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select a deal on the left to upload, list, and download files.
+                </p>
+              ) : null}
             </div>
-          ))}
-        </div>
-      </div>
 
-      <div ref={workspaceRef} className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-        <div className="px-6 py-4 border-b border-border flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Workspace</div>
-            <h3 className="text-lg font-semibold text-foreground">Create a deal and manage files</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Mode 2 is the default. Legacy Mode 1 tools live under Advanced.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <label className="space-y-1 min-w-[220px]">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Current deal</span>
-              <select
-                value={targetDealId ?? ''}
-                onChange={(e) => {
-                  const next = String(e.target.value ?? '')
-                  setTargetDealId(next)
-                  if (!next) setSelectedDeal(null)
-                }}
-                data-testid="workspace-deal-select"
-                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-              >
-                <option value="">Select a deal…</option>
-                {deals
-                  .filter((d) => d.owner === nilAddress)
-                  .map((d) => (
-                    <option key={d.id} value={d.id}>
-                      Deal #{d.id} ({d.cid ? 'Active' : 'Empty'})
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              data-testid="workspace-advanced-toggle"
-              className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
-                showAdvanced
-                  ? 'border-primary/40 bg-primary/10 text-primary'
-                  : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
-              }`}
-            >
-              {showAdvanced ? 'Advanced / Legacy: on' : 'Advanced / Legacy'}
-            </button>
-          </div>
-        </div>
-
-        <div className="p-4 border-b border-border bg-muted/20 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('alloc')}
-              data-testid="tab-alloc"
-              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
-                activeTab === 'alloc'
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-border bg-background/60 hover:bg-secondary/50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Create deal</div>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">Allocate a new bucket.</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('mdu')}
-              data-testid="tab-mdu"
-              className={`rounded-lg border px-4 py-2 text-left transition-colors ${
-                activeTab === 'mdu'
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-border bg-background/60 hover:bg-secondary/50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Upload files</div>
-                <span className="ml-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Recommended
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">Gateway-first upload (WASM fallback).</div>
-            </button>
-            {showAdvanced && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setActiveTab('content')}
-                data-testid="tab-content"
-                className={`rounded-lg border px-4 py-2 text-left transition-colors ${
-                  activeTab === 'content'
-                    ? 'border-primary/40 bg-primary/5'
-                    : 'border-border bg-background/60 hover:bg-secondary/50'
+                onClick={() => setShowAdvanced((v) => !v)}
+                data-testid="workspace-advanced-toggle"
+                className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  showAdvanced
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-primary" />
-                  <div className="text-sm font-semibold text-foreground">Legacy upload (Mode 1)</div>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">Gateway sharding flow.</div>
+                Advanced
               </button>
-            )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected</span>
-              <span className="font-mono text-foreground" data-testid="selected-deal-id">
-                {targetDealId ? `#${targetDealId}` : '—'}
-              </span>
+          <div className="px-5 py-2 border-b border-border bg-muted/20 space-y-2">
+          {wizardNext ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Getting started
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{wizardNext.label}</span>
+                  <span className="text-border">|</span>
+                  <span>
+                    {wizardDoneCount}/{wizardSteps.length}
+                  </span>
+                </div>
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">{wizardNext.hint}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleWizardAction(wizardNext.id)}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+              >
+                {wizardNext.actionLabel}
+                <ArrowDownRight className="h-3 w-3" />
+              </button>
             </div>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</span>
-              <span className="font-semibold text-foreground">{activeDealModeLabel}</span>
+          ) : null}
+
+          {showAdvanced && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
+                data-testid="tab-content"
+                className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  activeTab === 'content'
+                    ? 'border-primary/40 bg-primary/10 text-foreground'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
+                }`}
+              >
+                <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
+                {activeTab === 'content' ? 'Back to Upload' : 'Legacy (Mode 1)'}
+              </button>
             </div>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</span>
-              <span className="font-semibold text-foreground">{activeDealStatus}</span>
-            </div>
-          </div>
+          ) : null}
+
         </div>
 
         <div className="p-6 flex-1">
-            {activeTab === 'alloc' ? (
-                  <div ref={allocRef} className="space-y-4">
-                      <p className="text-xs text-muted-foreground">
-                        Create a deal (a bucket). Mode 2 is the default; Mode 1 is available as legacy.
-                      </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
-                            <input
-                              defaultValue={duration ?? ''}
-                              onChange={(e) => setDuration(e.target.value ?? '')}
-                              data-testid="alloc-duration"
-                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
-                        </label>
-                        <label className="space-y-1">
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial Escrow</span>
-                            <input
-                              defaultValue={initialEscrow ?? ''}
-                              onChange={(e) => setInitialEscrow(e.target.value ?? '')}
-                              data-testid="alloc-initial-escrow"
-                              className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                            />
-                        </label>
-                          <label className="space-y-1">
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">Max Monthly Spend</span>
-                              <input
-                                defaultValue={maxMonthlySpend ?? ''}
-                                onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
-                                data-testid="alloc-max-monthly-spend"
-                                className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                              />
-                          </label>
-                            {!showAdvanced ? (
-                              <div className="sm:col-span-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
-                                <div>
-                                  <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
-                                  <span className="font-mono text-foreground">K={rsK}</span>{' '}
-                                  <span className="font-mono text-foreground">M={rsM}</span>
-                                  <span className="ml-2 text-[11px] text-muted-foreground">
-                                    Toggle Advanced for Mode 1 or custom tuning.
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  Slots required:{' '}
-                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                                  {' '}• Providers available:{' '}
-                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                                  {mode2Config.error && (
-                                    <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                            <>
-                              <label className="space-y-1">
-                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy Mode</span>
-                                <select
-                                  value={redundancyMode}
-                                  onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
-                                  data-testid="alloc-redundancy-mode"
-                                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                >
-                                  <option value="mode2">Mode 2 (Striped RS, recommended)</option>
-                                  <option value="mode1">Mode 1 (Replication, legacy)</option>
-                                </select>
-                              </label>
-                              {redundancyMode === 'mode1' ? (
-                                <label className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={12}
-                                    defaultValue={replication ?? ''}
-                                    onChange={(e) => setReplication(e.target.value ?? '')}
-                                    data-testid="alloc-replication"
-                                    className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                  />
-                                </label>
-                              ) : (
-                                <div className="grid grid-cols-2 gap-3">
-                                  <label className="space-y-1">
-                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={64}
-                                      defaultValue={rsK ?? ''}
-                                      onChange={(e) => setRsK(e.target.value ?? '')}
-                                      data-testid="alloc-rs-k"
-                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                    />
-                                  </label>
-                                  <label className="space-y-1">
-                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={64}
-                                      defaultValue={rsM ?? ''}
-                                      onChange={(e) => setRsM(e.target.value ?? '')}
-                                      data-testid="alloc-rs-m"
-                                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                                    />
-                                  </label>
-                                </div>
-                              )}
-                              {redundancyMode === 'mode2' && (
-                                <div className="text-[11px] text-muted-foreground sm:col-span-2">
-                                  Slots required:{' '}
-                                  <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                                  {' '}• Providers available:{' '}
-                                  <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                                  {mode2Config.error && (
-                                    <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
-                                  )}
-                                </div>
-                              )}
-                            </>
-                          )}
-                      </div>
-                    <div className="flex items-center justify-between pt-2">
-                        <div className="text-xs text-muted-foreground">
-                            {createTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0,10)}...</div>}
-                        </div>
-                        <button
-                            onClick={handleCreateDeal}
-                            disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
-                            data-testid="alloc-submit"
-                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
-                        >
-                            {dealLoading ? 'Creating...' : 'Create Deal'}
-                        </button>
-                    </div>
-                </div>
-                  ) : activeTab === 'content' ? (
+            {activeTab === 'content' ? (
                     !showAdvanced ? (
                       <div ref={contentRef} className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                          <div className="font-semibold text-foreground">Legacy Mode 1 tools are hidden</div>
+                          <div className="font-semibold text-foreground">Advanced tools are hidden</div>
                           <div className="text-xs text-muted-foreground mt-1">
                             Enable Advanced to access gateway sharding (Mode 1).
                           </div>
@@ -2069,217 +1851,439 @@ export function Dashboard() {
                     )
                 ) : (
                 <div ref={mduRef} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    Mode 2 upload: uses the local gateway when available; otherwise falls back to in-browser WASM sharding + direct stripe uploads.
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-                  Target deal:{' '}
-                  <span className="font-mono text-foreground">
-                    {targetDealId ? `#${targetDealId}` : '—'}
-                  </span>
-                  {!targetDealId ? <span className="ml-2">Select a deal above to begin.</span> : null}
-                </div>
-
-                {targetDealId ? (
+                  {targetDealId ? (
                     <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
-                ) : (
-                    <div className="p-8 text-center border border-dashed border-border rounded-xl">
-                        <p className="text-muted-foreground text-sm">Select a deal to begin uploading.</p>
-                    </div>
-                )}
-                </div>
-              )}
-          </div>
-        </div>
-
-      {loading ? (
-        <div className="text-center py-24">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Syncing with NilChain...</p>
-        </div>
-      ) : deals.length === 0 ? (
-        <div className="bg-card rounded-xl p-16 text-center border border-border border-dashed shadow-sm">
-            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-6">
-                <HardDrive className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">No deals yet</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">Create a deal above, then upload files into it.</p>
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div ref={dealDetailRef} className="space-y-6">
-              {selectedDeal ? (
-                <DealDetail
-                  deal={selectedDeal}
-                  onClose={() => setSelectedDeal(null)}
-                  nilAddress={nilAddress}
-                  onFileActivity={recordRecentActivity}
-                />
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deal Library</div>
-                <p className="text-[11px] text-muted-foreground mt-1">Select a deal to view details, upload, or retrieve files.</p>
-              </div>
-              <table className="min-w-full divide-y divide-border" data-testid="deals-table">
-                  <thead className="bg-muted/50">
-                      <tr>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Deal ID</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manifest Root</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                      {deals.map((deal) => (
-                      <tr
-                        key={deal.id}
-                        data-testid={`deal-row-${deal.id}`}
-                        className="hover:bg-muted/50 transition-colors cursor-pointer"
-                          onClick={() => {
-                            setSelectedDeal(deal)
-                            setTargetDealId(String(deal.id ?? ''))
-                          }}
-                        >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">#{deal.id}</td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary"
-                                title={deal.cid}
-                                data-testid={`deal-manifest-${deal.id}`}
-                              >
-                                {deal.cid ? `${deal.cid.slice(0, 18)}...` : <span className="text-muted-foreground italic">Empty</span>}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground" data-testid={`deal-size-${deal.id}`}>
-                                {(() => {
-                                  const sizeNum = Number(deal.size)
-                                  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return '—'
-                                  return `${(sizeNum / 1024 / 1024).toFixed(2)} MB`
-                                })()}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                  {deal.cid ? (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                                          Active
-                                      </span>
-                                  ) : (
-                                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                                          Allocated
-                                      </span>
-                                  )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-muted-foreground">
-                                {deal.providers && deal.providers.length > 0 ? `${deal.providers[0].slice(0, 10)}...${deal.providers[0].slice(-4)}` : '—'}
-                              </td>
-                              <td
-                                className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
-                                data-testid={`deal-retrievals-${deal.id}`}
-                              >
-                                {retrievalCountsByDeal[deal.id] !== undefined ? retrievalCountsByDeal[deal.id] : 0}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                  <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        const dealId = String(deal.id ?? '')
-                                        setTargetDealId(dealId)
-                                        const service = parseServiceHint(deal.service_hint)
-                                        setActiveTab(service.mode === 'mode2' ? 'mdu' : 'content')
-                                        setPendingScrollTarget('workspace')
-                                      }}
-                                      className="px-3 py-1.5 text-xs rounded-md border border-primary/30 text-primary hover:bg-primary/10"
-                                    >
-                                      Upload
-                                    </button>
-                                </td>
-                      </tr>
-                      ))}
-                  </tbody>
-              </table>
-                </div>
-              )}
-            </div>
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
-                <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
-              </div>
-              <div className="p-4 space-y-3">
-                {recentFiles.length === 0 ? (
-                  <div className="text-xs text-muted-foreground italic">
-                    Upload or download a file to see it here.
-                  </div>
-                ) : (
-                  recentFiles.map((entry) => {
-                    const isBusy = recentDownloadId === entry.id || downloading
-                    const actionLabel =
-                      entry.status === 'pending'
-                        ? 'Downloading...'
-                        : entry.status === 'failed'
-                        ? 'Retry'
-                        : 'Download'
-                    return (
-                      <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
-                              {entry.filePath}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRecentDownload(entry)}
-                            disabled={isBusy}
-                            className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
-                          >
-                            <ArrowDownRight className="w-3 h-3" />
-                            {actionLabel}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span className="rounded-full border border-border px-2 py-0.5">
-                            Last: {entry.lastAction}
-                          </span>
-                          <span className={`rounded-full border px-2 py-0.5 ${
-                            entry.status === 'failed'
-                              ? 'border-red-500/40 text-red-500'
-                              : entry.status === 'pending'
-                              ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
-                              : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                          }`}>
-                            {entry.status}
-                          </span>
-                        </div>
-                        {entry.error && (
-                          <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
-                            {entry.error}
-                          </div>
-                        )}
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
+                      <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Choose a deal from the left to upload, list, and download files.
                       </div>
-                    )
-                  })
-                )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        */}
+
+          <div ref={dealDetailRef} className="min-w-0">
+            {ownedDeals.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="p-8 text-center">
+                  <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                    <HardDrive className="w-7 h-7 text-muted-foreground" />
+                  </div>
+                  <div className="text-sm font-semibold text-foreground">No deals yet</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
+                </div>
               </div>
+            ) : targetDeal ? (
+              <DealDetail
+                deal={targetDeal}
+                nilAddress={nilAddress}
+                onFileActivity={recordRecentActivity}
+                topPanel={dealExplorerTopPanel}
+              />
+            ) : (
+              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <HardDrive className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
+                      <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
+                        {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        Upload, list, and download files inside a deal.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-b border-border">{dealExplorerTopPanel}</div>
+                <div className="p-5 text-sm text-muted-foreground">
+                  {targetDealId ? 'Loading deal details…' : 'Select a deal from the left to view files.'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="min-w-0 order-1 lg:order-1 space-y-6">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="px-6 py-4 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Testnet funds
+                </div>
+                <div
+                  className="mt-1 font-mono text-[11px] text-muted-foreground truncate"
+                  data-testid="cosmos-identity"
+                  title={nilAddress || undefined}
+                >
+                  {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
+                </div>
+              </div>
+              <button
+                data-testid="faucet-request"
+                onClick={handleRequestFunds}
+                disabled={!address || faucetLoading}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <Coins className="h-4 w-4" />
+                {faucetLoading ? 'Requesting…' : 'Get Testnet NIL'}
+              </button>
+            </div>
+            <div className="px-6 pb-4">
+              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                <span>Balance</span>
+                <span className="font-mono text-foreground" data-testid="cosmos-stake-balance">
+                  {bankBalances.stake || '—'}
+                </span>
+              </div>
+              {faucetTx ? (
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
+                </div>
+              ) : null}
             </div>
           </div>
 
-        </>
-      )}
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Select a deal to manage files (upload, list, download).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                data-testid="workspace-advanced-toggle"
+                className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
+                  showAdvanced
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+                }`}
+              >
+                Advanced
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRefreshSummary()}
+                title="Refresh deals"
+                className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
 
-      <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Network &amp; Diagnostics (advanced)
-        </summary>
+            {loading ? (
+              <div className="text-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+                <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
+              </div>
+            ) : ownedDeals.length === 0 ? null : (
+              <div className="p-2">
+                <div className="space-y-1">
+                  {ownedDeals.map((deal) => {
+                    const isSelected = String(deal.id) === String(targetDealId || '')
+                    const hint = parseServiceHint(deal.service_hint)
+                    const retrievalCount = retrievalCountsByDeal[deal.id] ?? 0
+                    const sizeNum = Number(deal.size)
+                    const sizeLabel =
+                      Number.isFinite(sizeNum) && sizeNum > 0 ? formatBytes(sizeNum) : '0 B'
+                    return (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        data-testid={`deal-row-${deal.id}`}
+                        onClick={() => {
+                          setTargetDealId(String(deal.id ?? ''))
+                          if (!showAdvanced && activeTab === 'content') {
+                            setActiveTab('mdu')
+                          }
+                          setPendingScrollTarget('workspace')
+                        }}
+                        className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                          isSelected
+                            ? 'border-primary/40 bg-primary/10'
+                            : 'border-border bg-background/60 hover:bg-secondary/40'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-foreground">Deal #{deal.id}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {deal.cid ? 'Active' : 'Empty'}
+                              </span>
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {hint.mode === 'mode2' ? 'Mode 2' : 'Mode 1'}
+                              </span>
+                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                                {sizeLabel}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-[11px] text-muted-foreground">
+                            <span className="font-mono text-foreground">{retrievalCount}</span>
+                            <span className="ml-1 hidden sm:inline">retrievals</span>
+                          </div>
+                        </div>
+                        <div
+                          className="mt-2 truncate font-mono text-[10px] text-muted-foreground"
+                          title={deal.cid || ''}
+                          data-testid={`deal-manifest-${deal.id}`}
+                        >
+                          {deal.cid ? `${deal.cid.slice(0, 22)}…` : 'Manifest: —'}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+          <div ref={allocRef} className="border-t border-border bg-muted/20 px-6 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Create deal</div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Allocate a new deal on NilChain. Deals act like buckets for files.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
+                <input
+                  defaultValue={duration ?? ''}
+                  onChange={(e) => setDuration(e.target.value ?? '')}
+                  data-testid="alloc-duration"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial escrow</span>
+                <input
+                  defaultValue={initialEscrow ?? ''}
+                  onChange={(e) => setInitialEscrow(e.target.value ?? '')}
+                  data-testid="alloc-initial-escrow"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Max monthly spend</span>
+                <input
+                  defaultValue={maxMonthlySpend ?? ''}
+                  onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
+                  data-testid="alloc-max-monthly-spend"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+
+              {!showAdvanced ? (
+                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                  <div>
+                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
+                    <span className="font-mono text-foreground">K={rsK}</span>{' '}
+                    <span className="font-mono text-foreground">M={rsM}</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      Turn on Advanced to use Mode 1 or tune redundancy.
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Slots required:{' '}
+                    <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                    {' '}• Providers available:{' '}
+                    <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                    {mode2Config.error && (
+                      <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="space-y-1">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy mode</span>
+                    <select
+                      value={redundancyMode}
+                      onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
+                      data-testid="alloc-redundancy-mode"
+                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                    >
+                      <option value="mode2">Mode 2 (Striped RS, recommended)</option>
+                      <option value="mode1">Mode 1 (Replication, legacy)</option>
+                    </select>
+                  </label>
+
+                  {redundancyMode === 'mode1' ? (
+                    <label className="space-y-1">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        defaultValue={replication ?? ''}
+                        onChange={(e) => setReplication(e.target.value ?? '')}
+                        data-testid="alloc-replication"
+                        className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                      />
+                    </label>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={64}
+                          defaultValue={rsK ?? ''}
+                          onChange={(e) => setRsK(e.target.value ?? '')}
+                          data-testid="alloc-rs-k"
+                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={64}
+                          defaultValue={rsM ?? ''}
+                          onChange={(e) => setRsM(e.target.value ?? '')}
+                          data-testid="alloc-rs-m"
+                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {redundancyMode === 'mode2' && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Slots required:{' '}
+                      <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                      {' '}• Providers available:{' '}
+                      <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                      {mode2Config.error && (
+                        <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <div className="text-xs text-muted-foreground">
+                  {createTx && (
+                    <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0, 10)}...
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={isWrongNetwork ? handleSwitchNetwork : handleCreateDealClick}
+                  disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
+                  data-testid="alloc-submit"
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                >
+                  {dealLoading
+                    ? 'Creating...'
+                    : isWrongNetwork
+                      ? 'Switch network'
+                      : isWalletLocked
+                        ? 'Unlock wallet'
+                        : !isConnected || !address
+                          ? 'Connect wallet'
+                          : 'Create deal'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
+            <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
+          </div>
+          <div className="p-4 space-y-3">
+            {recentFiles.length === 0 ? (
+              <div className="text-xs text-muted-foreground italic">
+                Upload or download a file to see it here.
+              </div>
+            ) : (
+              recentFiles.map((entry) => {
+                const isBusy = recentDownloadId === entry.id || downloading
+                const actionLabel =
+                  entry.status === 'pending'
+                    ? 'Downloading...'
+                    : entry.status === 'failed'
+                      ? 'Retry'
+                      : 'Download'
+                return (
+                  <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
+                          {entry.filePath}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRecentDownload(entry)}
+                        disabled={isBusy}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        <ArrowDownRight className="w-3 h-3" />
+                        {actionLabel}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span className="rounded-full border border-border px-2 py-0.5">
+                        Last: {entry.lastAction}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 ${
+                        entry.status === 'failed'
+                          ? 'border-red-500/40 text-red-500'
+                          : entry.status === 'pending'
+                            ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
+                            : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                      }`}>
+                        {entry.status}
+                      </span>
+                    </div>
+                    {entry.error && (
+                      <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
+                        {entry.error}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </div>
+      </div>
+
+        <details className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <summary className="cursor-pointer select-none px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Network &amp; routing (advanced)
+          </summary>
         <div className="p-6 space-y-6">
+          <StatusBar />
           {proofs.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">

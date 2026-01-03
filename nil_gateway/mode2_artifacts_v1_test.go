@@ -106,3 +106,36 @@ func TestMode2ArtifactsV1_FixtureHashes(t *testing.T) {
 	}
 }
 
+func TestMode2BuildArtifacts_IdempotentWhenFinalDirExists(t *testing.T) {
+	useTempUploadDir(t)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	fx := readMode2Fixture(t)
+	payload := decodeHex0x(t, fx.PayloadHex)
+	tmp := filepath.Join(t.TempDir(), "fixture.bin")
+	if err := os.WriteFile(tmp, payload, 0o644); err != nil {
+		t.Fatalf("write temp payload: %v", err)
+	}
+
+	const dealID = uint64(7)
+	serviceHint := "General:replicas=12:rs=8+4"
+
+	first, finalDir1, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin")
+	if err != nil {
+		t.Fatalf("mode2BuildArtifacts (first) failed: %v", err)
+	}
+
+	second, finalDir2, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin")
+	if err != nil {
+		t.Fatalf("mode2BuildArtifacts (second) failed: %v", err)
+	}
+
+	if finalDir1 != finalDir2 {
+		t.Fatalf("finalDir mismatch: first=%s second=%s", finalDir1, finalDir2)
+	}
+	if first.manifestRoot.Key != second.manifestRoot.Key {
+		t.Fatalf("manifest_root mismatch: first=%s second=%s", first.manifestRoot.Canonical, second.manifestRoot.Canonical)
+	}
+}
