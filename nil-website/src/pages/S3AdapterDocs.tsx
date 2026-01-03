@@ -48,6 +48,27 @@ export const S3AdapterDocs = () => {
           
           <div className="space-y-6">
             <div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Deal-backed S3 (path-style)</h3>
+              <p className="text-sm text-muted-foreground mb-2">
+                For standard tools, NilGateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
+                <span className="font-mono"> deal-{'{id}'}</span>.
+              </p>
+              <div className="bg-background/50 p-4 rounded-lg font-mono text-sm text-foreground overflow-x-auto border border-border space-y-2">
+                <div># List deals as buckets</div>
+                <div>aws --endpoint-url http://localhost:8080 s3 ls</div>
+                <div className="pt-2"># Upload into a deal</div>
+                <div>aws --endpoint-url http://localhost:8080 s3 cp ./my_photo.jpg s3://deal-0/my_photo.jpg</div>
+                <div className="pt-2"># List files in a deal</div>
+                <div>aws --endpoint-url http://localhost:8080 s3 ls s3://deal-0/</div>
+                <div className="pt-2"># Download</div>
+                <div>aws --endpoint-url http://localhost:8080 s3 cp s3://deal-0/my_photo.jpg ./my_photo.jpg</div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Note: S3 upload currently requires a devnet deal that can be committed by the local gateway (faucet-authorized).
+              </p>
+            </div>
+
+            <div>
               <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
                 <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-mono">PUT</span>
                 /api/v1/object/{'{key}'}
