@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +33,47 @@ type mode2IngestResult struct {
 }
 
 const mode2SlabCompleteMarker = ".slab_complete"
+
+func mode2DirLooksComplete(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, mode2SlabCompleteMarker)); err == nil {
+		return true
+	}
+	manifestPath := filepath.Join(dir, "manifest.bin")
+	mdu0Path := filepath.Join(dir, "mdu_0.bin")
+	manifestInfo, errManifest := os.Stat(manifestPath)
+	if errManifest != nil {
+		return false
+	}
+	mdu0Info, errMdu0 := os.Stat(mdu0Path)
+	if errMdu0 != nil {
+		return false
+	}
+	if !mdu0Info.Mode().IsRegular() || mdu0Info.Size() != int64(types.MDU_SIZE) {
+		return false
+	}
+	// Manifest should be small (currently 128 KiB), but keep the bound permissive for future
+	// upgrades so older slabs still look "complete" to idempotency logic.
+	if !manifestInfo.Mode().IsRegular() || manifestInfo.Size() <= 0 || manifestInfo.Size() > 1<<20 {
+		return false
+	}
+	return true
+}
+
+func mode2EnsureCompleteMarker(dir string) {
+	if dir == "" {
+		return
+	}
+	markerPath := filepath.Join(dir, mode2SlabCompleteMarker)
+	if _, err := os.Stat(markerPath); err == nil {
+		return
+	}
+	if err := os.WriteFile(markerPath, []byte("ok\n"), 0o644); err != nil {
+		return
+	}
+}
 
 func encodePayloadToMdu(raw []byte) []byte {
 	if len(raw) > RawMduCapacity {
@@ -400,7 +442,60 @@ func mode2UploadParallelism(slotCount uint64) int {
 }
 
 func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
+	lockPath := filepath.Join(filepath.Dir(finalDir), "."+filepath.Base(finalDir)+".lock")
+	lockHeld := false
+
+	acquireLock := func() error {
+		// Fast-path: if the slab is already complete, there's nothing to finalize.
+		if mode2DirLooksComplete(finalDir) {
+			mode2EnsureCompleteMarker(finalDir)
+			_ = os.RemoveAll(stagingDir)
+			return nil
+		}
+
+		const attempts = 80
+		for i := 0; i < attempts; i++ {
+			f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+			if err == nil {
+				lockHeld = true
+				_, _ = f.WriteString("pid=" + strconv.Itoa(os.Getpid()) + "\n")
+				_ = f.Close()
+				return nil
+			}
+			if !os.IsExist(err) && !errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("failed to acquire slab lock: %w", err)
+			}
+
+			// Another process is finalizing. If it completes, treat as idempotent.
+			if mode2DirLooksComplete(finalDir) {
+				mode2EnsureCompleteMarker(finalDir)
+				_ = os.RemoveAll(stagingDir)
+				return nil
+			}
+
+			// Best-effort stale lock cleanup: if the lock is old and the directory isn't complete,
+			// remove the lock so progress can continue after crashes.
+			if info, statErr := os.Stat(lockPath); statErr == nil {
+				if age := time.Since(info.ModTime()); age > 2*time.Minute {
+					_ = os.Remove(lockPath)
+				}
+			}
+
+			time.Sleep(25 * time.Millisecond)
+		}
+		return fmt.Errorf("timeout waiting for slab lock %s", lockPath)
+	}
+
+	if err := acquireLock(); err != nil {
+		return err
+	}
+	if lockHeld {
+		defer func() { _ = os.Remove(lockPath) }()
+	}
+
 	if err := os.Rename(stagingDir, finalDir); err != nil {
+		// If another attempt already created/finalized the destination, treat this as
+		// idempotent success and clean up our staging directory.
 		info, statErr := os.Stat(finalDir)
 		if statErr != nil {
 			// Race: destination disappeared after rename error. Retry once.
@@ -412,40 +507,27 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 			return err
 		}
 
-		// If the destination already exists (e.g. retries / duplicate uploads), treat it
-		// as idempotent success so uploads don't fail on content-addressed paths.
 		if info.IsDir() {
-			markerPath := filepath.Join(finalDir, mode2SlabCompleteMarker)
-			if _, markerErr := os.Stat(markerPath); markerErr == nil {
+			if mode2DirLooksComplete(finalDir) {
+				mode2EnsureCompleteMarker(finalDir)
 				_ = os.RemoveAll(stagingDir)
 				return nil
 			}
 
-			manifestPath := filepath.Join(finalDir, "manifest.bin")
-			mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
-			if manifestInfo, errManifest := os.Stat(manifestPath); errManifest == nil {
-				if mdu0Info, errMdu0 := os.Stat(mdu0Path); errMdu0 == nil {
-					if mdu0Info.Size() == int64(types.MDU_SIZE) && manifestInfo.Size() > 0 && manifestInfo.Size() <= 1<<20 {
-						_ = os.RemoveAll(stagingDir)
-						return nil
-					}
-				}
-			}
-
-			// The directory exists but doesn't look complete (likely a partial prior attempt).
 			// Best-effort: move staged artifacts into the existing directory (overwriting).
-			// This avoids failing uploads when providers pre-create the destination dir.
 			if mergeErr := mode2MergeStagingIntoFinal(stagingDir, finalDir); mergeErr == nil {
+				mode2EnsureCompleteMarker(finalDir)
 				return nil
 			}
 
-			// Fallback: delete and retry rename so the caller can recover without manual cleanup.
+			// Under lock, we can safely replace the incomplete directory with our staged copy.
 			if rmErr := os.RemoveAll(finalDir); rmErr != nil && !os.IsNotExist(rmErr) {
 				return fmt.Errorf("failed to remove incomplete existing slab dir %s: %w", finalDir, rmErr)
 			}
 			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
 				return retryErr
 			}
+			mode2EnsureCompleteMarker(finalDir)
 			return nil
 		}
 
