@@ -317,7 +317,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 
 ## Execution Status (Repo)
 
-As of `main` @ `44d93f8`, the repo has executed and merged the following sprint branches (used as **shipping increments** toward devnet/beta stability; not all Mainnet DoDs are fully satisfied yet):
+As of `main` (Jan 2026), the repo has executed and merged the following sprint branches (used as **shipping increments** toward devnet/beta stability; not all Mainnet DoDs are fully satisfied yet):
 
 - `sprint0-rfc-freeze`: RFC freezes for Mode 2 state, challenge derivation/quotas, and pricing/escrow.
 - `sprint1-one-core-foundation`: Mode 2 ingest/upload hardening (one-core migration still PARTIAL).
@@ -330,3 +330,7 @@ As of `main` @ `44d93f8`, the repo has executed and merged the following sprint 
 - `sprint8-throughput-gpu-defaults`: faster Mode 2 artifact pipeline + WASM UX hardening (GPU KZG still MISSING).
 - `sprint9-enterprise-s3-delegation`: deal-backed S3 adapter + docs/sync scripts (polish still PARTIAL).
 - `sprint10-mainnet-hardening`: Mode 2 idempotency + CI-aligned E2E stability fixes.
+- `sprint11-gap-tracker-refresh`: record repo execution status and tighten P0 status notes.
+- `sprint12-mode2-routing-order`: prefer ACTIVE Mode 2 slots for routing/provider ordering.
+- `sprint13-e2e-health-readiness`: standardize E2E readiness checks on `/health`.
+- `sprint14-mode2-upload-reliability`: avoid Go client-side ContentLength mismatch errors via `Expect: 100-continue`.
