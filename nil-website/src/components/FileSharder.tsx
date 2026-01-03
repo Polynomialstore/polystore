@@ -82,7 +82,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const localGateway = useLocalGateway();
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
-  const [, setWasmError] = useState<string | null>(null);
+  const [wasmError, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
