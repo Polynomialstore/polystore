@@ -32,6 +32,7 @@ func mustHTTPMultiaddr(t *testing.T, rawURL string) string {
 
 func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	dealProviderCache = sync.Map{}
+	dealProvidersCache = sync.Map{}
 	providerBaseCache = sync.Map{}
 
 	providerAddr := "nil1provider"
@@ -93,6 +94,76 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "deal_id=1") {
 		t.Fatalf("expected provider query forwarded, got %q", gotQuery)
+	}
+}
+
+func TestRouterGatewayFetch_FailsOverWhenPrimaryUnavailable(t *testing.T) {
+	dealProviderCache = sync.Map{}
+	dealProvidersCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	primaryAddr := "nil1primary"
+	deputyAddr := "nil1deputy"
+
+	var deputyHits int
+	deputySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deputyHits++
+		w.Header().Set("X-Test-Routed", "1")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer deputySrv.Close()
+
+	deputyMaddr := mustHTTPMultiaddr(t, deputySrv.URL)
+	primaryMaddr := "/ip4/127.0.0.1/tcp/1/http" // connection refused
+
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"providers": []string{primaryAddr, deputyAddr},
+				},
+			})
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+			provider := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/")
+			endpoint := deputyMaddr
+			if provider == primaryAddr {
+				endpoint = primaryMaddr
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"provider": map[string]any{
+					"endpoints": []string{endpoint},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := mux.NewRouter()
+	r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w.Header().Get("X-Test-Routed") != "1" {
+		t.Fatalf("expected routed header")
+	}
+	if strings.TrimSpace(w.Body.String()) != "ok" {
+		t.Fatalf("expected ok body, got %q", w.Body.String())
+	}
+	if deputyHits != 1 {
+		t.Fatalf("expected deputy provider to receive request, hits=%d", deputyHits)
 	}
 }
 

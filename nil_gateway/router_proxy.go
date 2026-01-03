@@ -2,17 +2,33 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
-var routerHTTPClient = &http.Client{}
+var routerHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   4 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   4 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          128,
+	},
+}
 
 func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) {
 	setCORS(w)
@@ -64,6 +80,59 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 	}
 }
 
+func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) (bool, error) {
+	base := strings.TrimRight(strings.TrimSpace(providerBaseURL), "/")
+	if base == "" {
+		return false, fmt.Errorf("provider base url is empty")
+	}
+
+	target := base + r.URL.Path
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+
+	ctx := r.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, r.Method, target, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header = r.Header.Clone()
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+
+	resp, err := routerHTTPClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// If the provider is reachable but returns a 5xx, attempt failover to the next candidate.
+	if resp.StatusCode >= http.StatusInternalServerError {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := strings.TrimSpace(string(bodyBytes))
+		if body == "" {
+			body = resp.Status
+		}
+		return false, fmt.Errorf("provider returned %d: %s", resp.StatusCode, body)
+	}
+
+	for k, vals := range resp.Header {
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+	setCORS(w)
+	w.WriteHeader(resp.StatusCode)
+
+	_, copyErr := io.Copy(w, resp.Body)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return true, copyErr
+}
+
 func requireDealIDQuery(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("deal_id"))
 	if raw == "" {
@@ -106,21 +175,47 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	providerAddr, err := resolveDealAssignedProvider(r.Context(), dealID)
+	providers, err := resolveDealProviders(r.Context(), dealID)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrDealNotFound) {
 			status = http.StatusNotFound
 		}
-		writeJSONError(w, status, "failed to resolve deal provider", err.Error())
+		writeJSONError(w, status, "failed to resolve deal providers", err.Error())
 		return
 	}
-	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
-	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
-		return
+
+	var lastErr error
+	for _, providerAddr := range providers {
+		baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		ok, err := tryProxyToProviderBaseURL(w, r, baseURL)
+		if ok {
+			dealProviderCache.Store(dealID, &dealProviderCacheEntry{
+				provider: providerAddr,
+				expires:  time.Now().Add(dealProviderTTL),
+			})
+			if err != nil {
+				// The provider response already started streaming to the client.
+				// We can't safely failover, but keep the error for logging/visibility.
+				lastErr = err
+			}
+			return
+		}
+		if err != nil {
+			lastErr = err
+		}
 	}
-	proxyToProviderBaseURL(w, r, baseURL)
+
+	msg := "failed to contact provider"
+	detail := ""
+	if lastErr != nil {
+		detail = lastErr.Error()
+	}
+	writeJSONError(w, http.StatusBadGateway, msg, detail)
 }
 
 func RouterGatewayListFiles(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }

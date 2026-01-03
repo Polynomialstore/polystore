@@ -19,6 +19,11 @@ type dealProviderCacheEntry struct {
 	expires  time.Time
 }
 
+type dealProvidersCacheEntry struct {
+	providers []string
+	expires   time.Time
+}
+
 type dealHintCacheEntry struct {
 	hint    string
 	expires time.Time
@@ -36,6 +41,7 @@ type providerP2PCacheEntry struct {
 
 var (
 	dealProviderCache  sync.Map // map[uint64]*dealProviderCacheEntry
+	dealProvidersCache sync.Map // map[uint64]*dealProvidersCacheEntry
 	dealHintCache      sync.Map // map[uint64]*dealHintCacheEntry
 	providerBaseCache  sync.Map // map[string]*providerBaseCacheEntry
 	providerP2PCache   sync.Map // map[string]*providerP2PCacheEntry
@@ -301,6 +307,59 @@ func resolveDealAssignedProvider(ctx context.Context, dealID uint64) (string, er
 		expires:  time.Now().Add(dealProviderTTL),
 	})
 	return assigned, nil
+}
+
+func resolveDealProviders(ctx context.Context, dealID uint64) ([]string, error) {
+	if cachedAny, ok := dealProvidersCache.Load(dealID); ok {
+		cached := cachedAny.(*dealProvidersCacheEntry)
+		if time.Now().Before(cached.expires) && len(cached.providers) > 0 {
+			out := make([]string, len(cached.providers))
+			copy(out, cached.providers)
+			return out, nil
+		}
+	}
+
+	var providers []string
+	var err error
+	for attempt := 1; attempt <= 60; attempt++ {
+		providers, err = fetchDealProvidersFromLCD(ctx, dealID)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, ErrDealNotFound) || attempt == 60 {
+			return nil, err
+		}
+		if err := sleepWithContext(ctx, 250*time.Millisecond); err != nil {
+			return nil, err
+		}
+	}
+	if len(providers) == 0 {
+		return nil, fmt.Errorf("deal %d has no assigned providers", dealID)
+	}
+
+	// If we have a cached "preferred" provider for this deal, rotate it to the front.
+	if cachedAny, ok := dealProviderCache.Load(dealID); ok {
+		cached := cachedAny.(*dealProviderCacheEntry)
+		if time.Now().Before(cached.expires) && cached.provider != "" {
+			for i, p := range providers {
+				if p == cached.provider {
+					if i > 0 {
+						copy(providers[1:i+1], providers[0:i])
+						providers[0] = p
+					}
+					break
+				}
+			}
+		}
+	}
+
+	copied := make([]string, len(providers))
+	copy(copied, providers)
+	dealProvidersCache.Store(dealID, &dealProvidersCacheEntry{
+		providers: copied,
+		expires:   time.Now().Add(dealProviderTTL),
+	})
+	return copied, nil
 }
 
 func resolveProviderHTTPBaseURL(ctx context.Context, providerAddr string) (string, error) {
