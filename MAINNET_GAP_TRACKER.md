@@ -190,3 +190,119 @@ This document tracks **what is missing** between the current implementation in t
 5. **P2P-001 deputy + audit debt** (adversarial resilience).
 6. **OPS-001 audits + hardening** (gate before mainnet).
 
+---
+
+## Sprint Roadmap (Proposed)
+
+Assumption: **2-week engineering sprints**, with a strict “test gate” on every sprint exit. Adjust duration as needed; keep the **scope** bounded.
+
+### Sprint 0 — RFC closure + interfaces freeze (Protocol planning sprint)
+- **Goal:** turn Appendix B “unspecified” items into implementable, testable contracts.
+- **Delivers (Docs + reference code stubs):**
+  - Finalize the target on-chain representation for Mode 2: explicit `(K,M)`, slot mapping, overlay state, slot status, and generation fields (Appendix B #2, #6).
+  - Finalize challenge derivation + proof quota policy (Appendix B #3, #4).
+  - Finalize pricing/escrow accounting policy (Appendix B #5).
+  - Decide and document the `allocated_length` vs `size` vs `total_mdus` naming convergence (see “Divergences” section).
+- **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
+
+### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+- **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
+- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
+- **Delivers:**
+  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
+  - WASM bindings used by `nil-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
+- **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
+
+### Sprint 2 — Economic model v1 (lock-in, caps, top-ups)
+- **Targets:** **P0-ECON-001**, **CHAIN-105**.
+- **Goal:** make “user-funded elasticity + storage rent” real and enforceable (not a narrative).
+- **Delivers:**
+  - Implement pay-at-ingest debit schedule (or equivalent lock-in) for `UpdateDealContent*` and retrieval session fees accounting.
+  - Enforce `max_monthly_spend` in code paths that can increase cost (uploads/elasticity triggers).
+  - Clarify and implement third-party sponsorship semantics (whether `MsgAddCredit` supports it safely, and how UI exposes it).
+- **Test gate:** chain econ e2e (deal → upload → retrieve → verify balances/burns/caps) across multiple parameter sets.
+
+### Sprint 3 — Mode 2 on-chain encoding (explicit state, not service_hint encoding)
+- **Targets:** **CHAIN-101**, plus prerequisites for **P0-CHAIN-001**.
+- **Goal:** move Mode 2 out of “devnet convenience encoding” into explicit typed state.
+- **Delivers:**
+  - Deal stores explicit `(K,M)` (or equivalent) and a canonical ordered `slot → provider` mapping.
+  - Upgrade strategy from legacy `service_hint` encoding (devnet) to typed fields without breaking existing deals.
+- **Test gate:** migration tests + multi-provider e2e that creates Mode 2 deals and verifies slot ordering invariants.
+
+### Sprint 4 — Mode 2 generations + repair mode + make-before-break replacement
+- **Targets:** **P0-CHAIN-001**, **GW-202** (partial).
+- **Goal:** the chain can coordinate repairs safely while allowing append-only writes.
+- **Delivers:**
+  - `current_gen` + slot status (ACTIVE/REPAIRING) + append-only commit enforcement.
+  - Replacement workflow: add new provider in REPAIRING, require catch-up proof/readiness, then promote to ACTIVE (make-before-break).
+  - Gateway repair tooling for deterministic reconstruction and catch-up tasks.
+- **Test gate:** multi-SP e2e that simulates slot failure → repair catch-up → slot rejoin; reads succeed throughout.
+
+### Sprint 5 — Unified liveness v1 (quota + synthetic fill + health)
+- **Targets:** **P0-CHAIN-002**, **CHAIN-103**, **GW-201** (tighten enforcement).
+- **Goal:** make “Retrieval IS Storage” enforceable with deterministic fallback challenges and health accounting.
+- **Delivers:**
+  - Deterministic challenge derivation for synthetic fill + quota accounting.
+  - Session credits reduce synthetic demand; synthetic challenges target only ACTIVE slots.
+  - HealthState per (Deal, Provider/Slot) and eviction/jail integration hooks (policy from Sprint 0).
+  - Enforce session-bound fetch requirements on the data plane (when enabled).
+- **Test gate:** keeper unit tests + adversarial simulation + e2e showing quota enforcement and health impact.
+
+### Sprint 6 — Fraud proofs + evidence pipeline (bad data, non-response)
+- **Targets:** **P0-CHAIN-003**, **CHAIN-102** (policy hooks), **P0-OPS-001** (partial hardening).
+- **Goal:** “wrong bytes” becomes slashable with a clean evidence path.
+- **Delivers:**
+  - On-chain evidence types + verification for wrong data and bounded non-response challenges (per spec shape).
+  - Slashing/jailing/eviction curve wired to evidence outcomes (parameters from Sprint 0).
+  - Clear replay/expiry protections and audit-friendly event emission.
+- **Test gate:** unit tests for each evidence type + e2e that produces a slash on proven bad data.
+
+### Sprint 7 — Deputy system (proxy retrieval) + audit debt v1
+- **Targets:** **P0-P2P-001**, **P2P-601** (incremental), **spec.md** Appendix B #7.
+- **Goal:** handle “ghosting SPs” and scale coverage even when users are idle.
+- **Delivers:**
+  - Deputy discovery + proxy retrieval path (end-to-end) with anti-griefing controls.
+  - Evidence collection for repeated failures, plus the first “audit debt” scheduler shape (even if conservatively parameterized).
+- **Test gate:** e2e ghosting scenario: user retrieves via deputy; evidence recorded; no false slashes from a single deputy.
+
+### Sprint 8 — Throughput (GPU) + production ingest defaults
+- **Targets:** **P0-PERF-001**, **CORE-401** (optional client track), plus perf regression gates.
+- **Goal:** remove the CPU KZG bottleneck for large data ingest; ensure the fast path is default (not behind env flags).
+- **Delivers:**
+  - GPU KZG acceleration in the gateway/CLI ingest path (CUDA/Icicle or equivalent), plus parallel pipeline scheduling.
+  - Benchmark harness + perf regression thresholds (CI “alerts on regression”, local “meets target MB/s”).
+  - Decide whether WebGPU KZG is a mainnet requirement or a post-mainnet UX upgrade; if required, implement minimal viable path.
+- **Test gate:** perf suite + large-file ingest e2e on a reference machine (documented).
+
+### Sprint 9 — Enterprise surface area (S3 polish + delegation tooling)
+- **Targets:** **GW-204**, **GW-203**, **CLI-501**, **CLI-502**.
+- **Goal:** “looks like S3” and supports delegated upload jobs safely.
+- **Delivers:**
+  - S3 adapter correctness + compatibility testing (aws-cli/rclone).
+  - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
+  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+- **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
+
+### Sprint 10 — Mainnet hardening + audits + launch readiness
+- **Targets:** **P0-OPS-001**, plus closure of remaining P0s.
+- **Goal:** turn “working devnet” into “auditable, operable mainnet”.
+- **Delivers:**
+  - Audit scopes (crypto/chain/gateway), fixes, and a “must-fix before mainnet” checklist.
+  - Incident response runbooks, monitoring/alerting, safe defaults, and security posture docs.
+  - Final “Mainnet readiness” e2e suite and release checklist.
+- **Test gate:** security test suite + external audit signoff + final e2e battery green.
+
+## Sprint Coverage Matrix (IDs → Sprint)
+
+- **Sprint 1:** P0-CORE-001, CORE-402 (partial)
+- **Sprint 2:** P0-ECON-001, CHAIN-105
+- **Sprint 3:** CHAIN-101 (and prerequisites for P0-CHAIN-001)
+- **Sprint 4:** P0-CHAIN-001, GW-202 (partial)
+- **Sprint 5:** P0-CHAIN-002, CHAIN-103, GW-201
+- **Sprint 6:** P0-CHAIN-003, CHAIN-102 (hooks), OPS (partial)
+- **Sprint 7:** P0-P2P-001, P2P-601 (incremental)
+- **Sprint 8:** P0-PERF-001, CORE-401 (optional/if required)
+- **Sprint 9:** GW-203, GW-204, CLI-501, CLI-502
+- **Sprint 10:** P0-OPS-001 (+ remaining closure)
