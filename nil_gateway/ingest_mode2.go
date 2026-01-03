@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +30,8 @@ type mode2IngestResult struct {
 	witnessMdus     uint64
 	userMdus        uint64
 }
+
+const mode2SlabCompleteMarker = ".slab_complete"
 
 func encodePayloadToMdu(raw []byte) []byte {
 	if len(raw) > RawMduCapacity {
@@ -154,8 +157,13 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	defer f.Close()
 
-	rawBuf := make([]byte, RawMduCapacity)
 	{
+		bufPool := sync.Pool{
+			New: func() any {
+				return make([]byte, RawMduCapacity)
+			},
+		}
+
 		parallelism := mode2EncodeParallelism()
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(parallelism)
@@ -167,24 +175,30 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 				return nil, "", err
 			}
 
-			n, readErr := io.ReadFull(f, rawBuf)
+			buf := bufPool.Get().([]byte)
+			n, readErr := io.ReadFull(f, buf)
 			if readErr != nil {
 				if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 					// Last chunk is short (or empty).
 				} else {
+					bufPool.Put(buf)
 					return nil, "", readErr
 				}
 			}
 
-			chunk := make([]byte, n)
-			copy(chunk, rawBuf[:n])
 			i := i
 
-			eg.Go(func() error {
+			{
+				buf := buf
+				n := n
+				eg.Go(func() error {
+					defer bufPool.Put(buf)
+
 				if err := egctx.Err(); err != nil {
 					return err
 				}
 
+				chunk := buf[:n]
 				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 				if err != nil {
 					return fmt.Errorf("expand mdu %d: %w", i, err)
@@ -214,6 +228,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 
 				return nil
 			})
+			}
 		}
 
 		if err := eg.Wait(); err != nil {
@@ -314,6 +329,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
 		return nil, "", err
 	}
+	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
+		return nil, "", err
+	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
@@ -385,18 +403,32 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 	if err := os.Rename(stagingDir, finalDir); err != nil {
 		info, statErr := os.Stat(finalDir)
 		if statErr != nil {
+			// Race: destination disappeared after rename error. Retry once.
+			if os.IsNotExist(statErr) {
+				if retryErr := os.Rename(stagingDir, finalDir); retryErr == nil {
+					return nil
+				}
+			}
 			return err
 		}
 
 		// If the destination already exists (e.g. retries / duplicate uploads), treat it
 		// as idempotent success so uploads don't fail on content-addressed paths.
 		if info.IsDir() {
+			markerPath := filepath.Join(finalDir, mode2SlabCompleteMarker)
+			if _, markerErr := os.Stat(markerPath); markerErr == nil {
+				_ = os.RemoveAll(stagingDir)
+				return nil
+			}
+
 			manifestPath := filepath.Join(finalDir, "manifest.bin")
 			mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
-			if _, errManifest := os.Stat(manifestPath); errManifest == nil {
-				if _, errMdu0 := os.Stat(mdu0Path); errMdu0 == nil {
-					_ = os.RemoveAll(stagingDir)
-					return nil
+			if manifestInfo, errManifest := os.Stat(manifestPath); errManifest == nil {
+				if mdu0Info, errMdu0 := os.Stat(mdu0Path); errMdu0 == nil {
+					if mdu0Info.Size() == int64(types.MDU_SIZE) && manifestInfo.Size() > 0 && manifestInfo.Size() <= 1<<20 {
+						_ = os.RemoveAll(stagingDir)
+						return nil
+					}
 				}
 			}
 
@@ -607,10 +639,15 @@ func mode2BuildArtifactsAppend(
 		return nil, "", err
 	}
 	defer f.Close()
-	rawBuf := make([]byte, RawMduCapacity)
 	newUserRoots := make([][]byte, newUserMdus)
 	newWitnessFlats := make([][]byte, newUserMdus)
 	{
+		bufPool := sync.Pool{
+			New: func() any {
+				return make([]byte, RawMduCapacity)
+			},
+		}
+
 		parallelism := mode2EncodeParallelism()
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(parallelism)
@@ -620,24 +657,31 @@ func mode2BuildArtifactsAppend(
 			if err := egctx.Err(); err != nil {
 				return nil, "", err
 			}
-			n, readErr := io.ReadFull(f, rawBuf)
+
+			buf := bufPool.Get().([]byte)
+			n, readErr := io.ReadFull(f, buf)
 			if readErr != nil {
 				if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 					// Last chunk is short (or empty).
 				} else {
+					bufPool.Put(buf)
 					return nil, "", readErr
 				}
 			}
 
-			chunk := make([]byte, n)
-			copy(chunk, rawBuf[:n])
 			i := i
 
-			eg.Go(func() error {
+			{
+				buf := buf
+				n := n
+				eg.Go(func() error {
+					defer bufPool.Put(buf)
+
 				if err := egctx.Err(); err != nil {
 					return err
 				}
 
+				chunk := buf[:n]
 				witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 				if err != nil {
 					return fmt.Errorf("expand new mdu %d: %w", i, err)
@@ -670,6 +714,7 @@ func mode2BuildArtifactsAppend(
 				}
 				return nil
 			})
+			}
 		}
 
 		if err := eg.Wait(); err != nil {
@@ -773,6 +818,9 @@ func mode2BuildArtifactsAppend(
 		return nil, "", err
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+		return nil, "", err
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
 		return nil, "", err
 	}
 
@@ -895,28 +943,47 @@ func mode2UploadArtifactsToProviders(
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 
-	uploadBlob := func(ctx context.Context, url string, setHeaders func(*http.Request), path string, maxBytes int64) error {
-		fi, err := os.Stat(path)
+	type uploadTask struct {
+		url          string
+		path         string
+		maxBytes     int64
+		dealID       string
+		manifestRoot string
+		mduIndex     string
+		slot         string
+	}
+
+	uploadBlob := func(ctx context.Context, task uploadTask) error {
+		fi, err := os.Stat(task.path)
 		if err != nil {
 			return err
 		}
-		if maxBytes > 0 && fi.Size() > maxBytes {
-			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), fi.Size())
+		if task.maxBytes > 0 && fi.Size() > task.maxBytes {
+			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(task.path), fi.Size())
 		}
-		f, err := os.Open(path)
+		f, err := os.Open(task.path)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, f)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, task.url, f)
 		if err != nil {
 			return err
 		}
 		req.ContentLength = fi.Size()
 		req.Header.Set("Content-Type", "application/octet-stream")
-		if setHeaders != nil {
-			setHeaders(req)
+		if task.dealID != "" {
+			req.Header.Set("X-Nil-Deal-ID", task.dealID)
+		}
+		if task.mduIndex != "" {
+			req.Header.Set("X-Nil-Mdu-Index", task.mduIndex)
+		}
+		if task.slot != "" {
+			req.Header.Set("X-Nil-Slot", task.slot)
+		}
+		if task.manifestRoot != "" {
+			req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
 		}
 
 		resp, err := client.Do(req)
@@ -929,13 +996,6 @@ func mode2UploadArtifactsToProviders(
 			return fmt.Errorf("upload failed: %s (%s)", resp.Status, strings.TrimSpace(string(msg)))
 		}
 		return nil
-	}
-
-	type uploadTask struct {
-		url        string
-		path       string
-		maxBytes   int64
-		setHeaders func(*http.Request)
 	}
 
 	tasks := make([]uploadTask, 0, totalUploads)
@@ -953,44 +1013,38 @@ func mode2UploadArtifactsToProviders(
 		// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
 		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
 			mduIndexStr := strconv.FormatUint(mduIndex, 10)
-			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
 			tasks = append(tasks, uploadTask{
-				url:      base + "/sp/upload_mdu",
-				path:     path,
-				maxBytes: 10 << 20,
-				setHeaders: func(req *http.Request) {
-					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
-					req.Header.Set("X-Nil-Mdu-Index", mduIndexStr)
-					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-				},
+				url:          base + "/sp/upload_mdu",
+				path:         artifactPath,
+				maxBytes:     10 << 20,
+				dealID:       dealIDStr,
+				manifestRoot: manifestRootCanonical,
+				mduIndex:     mduIndexStr,
 			})
 		}
 
 		tasks = append(tasks, uploadTask{
-			url:      base + "/sp/upload_manifest",
-			path:     filepath.Join(finalDir, "manifest.bin"),
-			maxBytes: 512 << 10,
-			setHeaders: func(req *http.Request) {
-				req.Header.Set("X-Nil-Deal-ID", dealIDStr)
-				req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-			},
+			url:          base + "/sp/upload_manifest",
+			path:         filepath.Join(finalDir, "manifest.bin"),
+			maxBytes:     512 << 10,
+			dealID:       dealIDStr,
+			manifestRoot: manifestRootCanonical,
 		})
 
 		// Striped user shards for this slot only.
 		for i := uint64(0); i < userMdus; i++ {
 			slabIndex := uint64(1) + witnessCount + i
 			slabIndexStr := strconv.FormatUint(slabIndex, 10)
-			path := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
+			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
 			tasks = append(tasks, uploadTask{
-				url:      base + "/sp/upload_shard",
-				path:     path,
-				maxBytes: 10 << 20,
-				setHeaders: func(req *http.Request) {
-					req.Header.Set("X-Nil-Deal-ID", dealIDStr)
-					req.Header.Set("X-Nil-Mdu-Index", slabIndexStr)
-					req.Header.Set("X-Nil-Slot", slotStr)
-					req.Header.Set("X-Nil-Manifest-Root", manifestRootCanonical)
-				},
+				url:          base + "/sp/upload_shard",
+				path:         artifactPath,
+				maxBytes:     10 << 20,
+				dealID:       dealIDStr,
+				manifestRoot: manifestRootCanonical,
+				mduIndex:     slabIndexStr,
+				slot:         slotStr,
 			})
 		}
 	}
@@ -1001,7 +1055,7 @@ func mode2UploadArtifactsToProviders(
 	for _, task := range tasks {
 		task := task
 		eg.Go(func() error {
-			if err := uploadBlob(egctx, task.url, task.setHeaders, task.path, task.maxBytes); err != nil {
+			if err := uploadBlob(egctx, task); err != nil {
 				return err
 			}
 			bump()
