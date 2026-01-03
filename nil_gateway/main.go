@@ -646,13 +646,54 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		path = filepath.Join(uploadDir, key)
-		out, err := os.Create(path)
+		safeToken := func(raw string) string {
+			token := strings.TrimSpace(raw)
+			if token == "" {
+				return ""
+			}
+			token = strings.Map(func(r rune) rune {
+				switch {
+				case r >= 'a' && r <= 'z':
+					return r
+				case r >= 'A' && r <= 'Z':
+					return r
+				case r >= '0' && r <= '9':
+					return r
+				case r == '.' || r == '-' || r == '_':
+					return r
+				default:
+					return '_'
+				}
+			}, token)
+			token = strings.Trim(token, "._-")
+			if token == "" {
+				return ""
+			}
+			if len(token) > 64 {
+				token = token[:64]
+			}
+			return token
+		}
+
+		uploadToken := safeToken(uploadID)
+		fileToken := safeToken(key)
+		if fileToken == "" {
+			fileToken = "upload.bin"
+		}
+		pattern := "upload-*-"
+		if uploadToken != "" {
+			pattern = fmt.Sprintf("upload-%s-*-", uploadToken)
+		}
+		out, err := os.CreateTemp(uploadDir, pattern+fileToken)
 		if err != nil {
 			_ = part.Close()
-			http.Error(w, "failed to create file", http.StatusInternalServerError)
+			http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 			return
 		}
+		path = out.Name()
+		defer func() {
+			_ = os.Remove(path)
+		}()
 
 		if bytesTotal == 0 {
 			if parsed, err := strconv.ParseUint(strings.TrimSpace(fileSizeStr), 10, 64); err == nil && parsed > 0 {

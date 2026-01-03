@@ -954,18 +954,19 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	uploadBlob := func(ctx context.Context, task uploadTask) error {
-		fi, err := os.Stat(task.path)
+		f, err := os.Open(task.path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		fi, err := f.Stat()
 		if err != nil {
 			return err
 		}
 		if task.maxBytes > 0 && fi.Size() > task.maxBytes {
 			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(task.path), fi.Size())
 		}
-		f, err := os.Open(task.path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, task.url, f)
 		if err != nil {
