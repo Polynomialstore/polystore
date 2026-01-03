@@ -7,7 +7,6 @@ import { KZGDeepDive } from "./pages/KZGDeepDive";
 import { ArgonDeepDive } from "./pages/ArgonDeepDive";
 import { ShardingDeepDive } from "./pages/ShardingDeepDive";
 import { TestnetDocs } from "./pages/TestnetDocs";
-import { ProofProvider } from "./context/ProofContext";
 import { Leaderboard } from "./pages/Leaderboard";
 import { S3AdapterDocs } from "./pages/S3AdapterDocs";
 import { GovernanceDocs } from "./pages/GovernanceDocs";
@@ -28,37 +27,35 @@ function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="nilstore-theme">
       <TransportProvider>
-        <ProofProvider>
-          <HashRouter>
-            <Routes>
-              <Route path="/brand" element={<LogoShowcase />} />
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="devnet" element={<Devnet />} />
-                <Route path="testnet" element={<TestnetDocs />} />
-                <Route path="leaderboard" element={<Leaderboard />} />
-                <Route path="performance" element={<PerformanceReport />} />
-                <Route path="proofs" element={<ProofsDashboard />} />
-                <Route path="s3-adapter" element={<S3AdapterDocs />} />
-                <Route path="governance" element={<GovernanceDocs />} />
-                <Route path="economy" element={<EconomyDashboard />} />
-                <Route path="security" element={<Security />} />
-                <Route path="adversarial-simulation" element={<AdversarialSimulation />} />
-                <Route path="litepaper" element={<Litepaper />} />
-                <Route path="whitepaper" element={<Whitepaper />} />
-                <Route path="faq" element={<FAQ />} />
-                <Route path="technology" element={<TechnologyLayout />}>
-                  <Route index element={<Technology />} />
-                  <Route path="sharding" element={<ShardingDeepDive />} />
-                  <Route path="kzg" element={<KZGDeepDive />} />
-                  <Route path="pode" element={<ArgonDeepDive />} />
-                  <Route path="sealing" element={<ArgonDeepDive />} />
-                </Route>
+        <HashRouter>
+          <Routes>
+            <Route path="/brand" element={<LogoShowcase />} />
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="devnet" element={<Devnet />} />
+              <Route path="testnet" element={<TestnetDocs />} />
+              <Route path="leaderboard" element={<Leaderboard />} />
+              <Route path="performance" element={<PerformanceReport />} />
+              <Route path="proofs" element={<ProofsDashboard />} />
+              <Route path="s3-adapter" element={<S3AdapterDocs />} />
+              <Route path="governance" element={<GovernanceDocs />} />
+              <Route path="economy" element={<EconomyDashboard />} />
+              <Route path="security" element={<Security />} />
+              <Route path="adversarial-simulation" element={<AdversarialSimulation />} />
+              <Route path="litepaper" element={<Litepaper />} />
+              <Route path="whitepaper" element={<Whitepaper />} />
+              <Route path="faq" element={<FAQ />} />
+              <Route path="technology" element={<TechnologyLayout />}>
+                <Route index element={<Technology />} />
+                <Route path="sharding" element={<ShardingDeepDive />} />
+                <Route path="kzg" element={<KZGDeepDive />} />
+                <Route path="pode" element={<ArgonDeepDive />} />
+                <Route path="sealing" element={<ArgonDeepDive />} />
               </Route>
-            </Routes>
-          </HashRouter>
-        </ProofProvider>
+            </Route>
+          </Routes>
+        </HashRouter>
       </TransportProvider>
     </ThemeProvider>
   );
