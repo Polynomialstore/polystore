@@ -359,7 +359,7 @@ func fetchEpochSeedFromLCD(ctx context.Context, chainID string, epochID uint64, 
 	if hashHex == "" {
 		return seed, fmt.Errorf("missing block_id.hash")
 	}
-	hashBytes, err := hex.DecodeString(hashHex)
+	hashBytes, err := decodeBlockHashBytes(hashHex)
 	if err != nil {
 		return seed, fmt.Errorf("invalid block_id.hash: %w", err)
 	}
@@ -370,6 +370,22 @@ func fetchEpochSeedFromLCD(ctx context.Context, chainID string, epochID uint64, 
 	buf = binary.BigEndian.AppendUint64(buf, epochID)
 	buf = append(buf, hashBytes...)
 	return sha256.Sum256(buf), nil
+}
+
+func decodeBlockHashBytes(raw string) ([]byte, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("empty")
+	}
+
+	trimmed := strings.TrimPrefix(raw, "0x")
+	if decoded, err := base64.StdEncoding.DecodeString(trimmed); err == nil && len(decoded) > 0 {
+		return decoded, nil
+	}
+	if decoded, err := hex.DecodeString(trimmed); err == nil && len(decoded) > 0 {
+		return decoded, nil
+	}
+	return nil, fmt.Errorf("unsupported encoding")
 }
 
 type dealStateForSystemLiveness struct {
