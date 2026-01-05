@@ -164,12 +164,14 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 
 	// 2. Update Deal Content
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm: evmAddr.Hex(),
-		DealId:     createRes.DealId,
-		Cid:        makeManifestRootHex(0xab), // 48-byte hex
-		SizeBytes:  1024 * 1024 * 100,         // 100 MB
-		Nonce:      2,
-		ChainId:    chainID,
+		CreatorEvm:  evmAddr.Hex(),
+		DealId:      createRes.DealId,
+		Cid:         makeManifestRootHex(0xab), // 48-byte hex
+		SizeBytes:   1024 * 1024 * 100,         // 100 MB
+		TotalMdus:   3,
+		WitnessMdus: 1,
+		Nonce:       2,
+		ChainId:     chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
@@ -243,12 +245,14 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 
 	// 2. Bob tries to update Alice's deal
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm: bobEvmAddr.Hex(),
-		DealId:     createRes.DealId,
-		Cid:        makeManifestRootHex(0xbb),
-		SizeBytes:  100,
-		Nonce:      1,
-		ChainId:    chainID,
+		CreatorEvm:  bobEvmAddr.Hex(),
+		DealId:      createRes.DealId,
+		Cid:         makeManifestRootHex(0xbb),
+		SizeBytes:   100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+		Nonce:       1,
+		ChainId:     chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, bobPrivKey)
 
@@ -306,12 +310,14 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 
 	// 2. Commit 5 GiB content; dynamic sizing should allow this.
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm: evmAddr.Hex(),
-		DealId:     createRes.DealId,
-		Cid:        makeManifestRootHex(0xcc),
-		SizeBytes:  5 * 1024 * 1024 * 1024, // 5 GiB
-		Nonce:      2,
-		ChainId:    chainID,
+		CreatorEvm:  evmAddr.Hex(),
+		DealId:      createRes.DealId,
+		Cid:         makeManifestRootHex(0xcc),
+		SizeBytes:   5 * 1024 * 1024 * 1024, // 5 GiB
+		TotalMdus:   3,
+		WitnessMdus: 1,
+		Nonce:       2,
+		ChainId:     chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 

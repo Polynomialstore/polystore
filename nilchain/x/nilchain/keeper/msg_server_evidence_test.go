@@ -52,10 +52,12 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 		manifestRoot[i] = byte(i + 1)
 	}
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: owner,
-		DealId:  resDeal.DealId,
-		Cid:     "0x" + hexEncode(manifestRoot),
-		Size_:   8 * 1024 * 1024,
+		Creator:     owner,
+		DealId:      resDeal.DealId,
+		Cid:         "0x" + hexEncode(manifestRoot),
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 

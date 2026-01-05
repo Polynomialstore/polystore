@@ -28,8 +28,8 @@ var (
 	// keccak256("CreateDeal(address creator,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)")
 	CreateDealTypeHash = crypto.Keccak256([]byte("CreateDeal(address creator,uint64 duration,string service_hint,string initial_escrow,string max_monthly_spend,uint64 nonce)"))
 
-	// keccak256("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)")
-	UpdateContentTypeHash = crypto.Keccak256([]byte("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 nonce)"))
+	// keccak256("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 total_mdus,uint64 witness_mdus,uint64 nonce)")
+	UpdateContentTypeHash = crypto.Keccak256([]byte("UpdateContent(address creator,uint64 deal_id,string cid,uint64 size,uint64 total_mdus,uint64 witness_mdus,uint64 nonce)"))
 
 	// keccak256("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce)")
 	RetrievalReceiptTypeHashV1 = crypto.Keccak256([]byte("RetrievalReceipt(uint64 deal_id,uint64 epoch_id,string provider,uint64 bytes_served,uint64 nonce)"))
@@ -86,7 +86,7 @@ func HashCreateDeal(intent *EvmCreateDealIntent) (common.Hash, error) {
 }
 
 // HashUpdateContent computes the struct hash for an UpdateContent intent.
-// Fields: creator, deal_id, cid, size, nonce
+// Fields: creator, deal_id, cid, size, total_mdus, witness_mdus, nonce
 func HashUpdateContent(intent *EvmUpdateContentIntent) (common.Hash, error) {
 	creatorAddr := common.HexToAddress(intent.CreatorEvm)
 
@@ -96,6 +96,8 @@ func HashUpdateContent(intent *EvmUpdateContentIntent) (common.Hash, error) {
 		math.PaddedBigBytes(big.NewInt(int64(intent.DealId)), 32),
 		keccak256String(intent.Cid),
 		math.PaddedBigBytes(big.NewInt(int64(intent.SizeBytes)), 32),
+		math.PaddedBigBytes(big.NewInt(int64(intent.TotalMdus)), 32),
+		math.PaddedBigBytes(big.NewInt(int64(intent.WitnessMdus)), 32),
 		math.PaddedBigBytes(big.NewInt(int64(intent.Nonce)), 32),
 	), nil
 }

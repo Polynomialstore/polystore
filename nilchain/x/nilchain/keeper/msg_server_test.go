@@ -470,7 +470,12 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	// Commit Content
 	cid, _ := mustComputeManifestCid(t, [][]byte{make([]byte, 32)})
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: cid, Size_: 100,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         cid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -565,7 +570,12 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 
 	// Commit Content with the real ManifestRoot commitment so VerifyChainedProof can succeed.
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         manifestCid,
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -702,7 +712,12 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 
 	// Commit Content
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+		Creator:     owner,
+		DealId:      resDeal.DealId,
+		Cid:         manifestCid,
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -823,7 +838,12 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         manifestCid,
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -924,7 +944,12 @@ func TestSignalSaturation(t *testing.T) {
 
 	// Commit Content
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user, DealId: dealID, Cid: dummyManifestCid, Size_: 100,
+		Creator:     user,
+		DealId:      dealID,
+		Cid:         dummyManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 

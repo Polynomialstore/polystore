@@ -536,6 +536,21 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if msg.Size_ == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content size cannot be zero")
 	}
+	if msg.TotalMdus == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
+	}
+	metaMdus := uint64(1) + msg.WitnessMdus
+	if msg.TotalMdus <= metaMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", msg.TotalMdus, msg.WitnessMdus)
+	}
+
+	// Append-only invariants (NilFS on slab).
+	if deal.TotalMdus != 0 && msg.TotalMdus < deal.TotalMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus cannot decrease (old=%d new=%d)", deal.TotalMdus, msg.TotalMdus)
+	}
+	if deal.TotalMdus != 0 && msg.WitnessMdus != deal.WitnessMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("witness_mdus cannot change after first commit (old=%d new=%d)", deal.WitnessMdus, msg.WitnessMdus)
+	}
 
 	// Atomic Update
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(msg.Cid, "0x"))
@@ -545,9 +560,22 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
 		deal.CurrentGen++
+		if deal.RedundancyMode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
+			for i, slot := range deal.Mode2Slots {
+				if slot == nil {
+					continue
+				}
+				if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+					slot.RepairTargetGen = deal.CurrentGen
+					deal.Mode2Slots[i] = slot
+				}
+			}
+		}
 	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = msg.Size_
+	deal.TotalMdus = msg.TotalMdus
+	deal.WitnessMdus = msg.WitnessMdus
 
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
@@ -581,6 +609,13 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 	if intent.SizeBytes == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Size cannot be zero")
+	}
+	if intent.TotalMdus == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
+	}
+	metaMdus := uint64(1) + intent.WitnessMdus
+	if intent.TotalMdus <= metaMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", intent.TotalMdus, intent.WitnessMdus)
 	}
 	if strings.TrimSpace(intent.ChainId) != ctx.ChainID() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("intent chain_id %q does not match chain %q", intent.ChainId, ctx.ChainID())
@@ -687,9 +722,28 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 
 	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
 		deal.CurrentGen++
+		if deal.RedundancyMode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
+			for i, slot := range deal.Mode2Slots {
+				if slot == nil {
+					continue
+				}
+				if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+					slot.RepairTargetGen = deal.CurrentGen
+					deal.Mode2Slots[i] = slot
+				}
+			}
+		}
 	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = intent.SizeBytes
+	if deal.TotalMdus != 0 && intent.TotalMdus < deal.TotalMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus cannot decrease (old=%d new=%d)", deal.TotalMdus, intent.TotalMdus)
+	}
+	if deal.TotalMdus != 0 && intent.WitnessMdus != deal.WitnessMdus {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("witness_mdus cannot change after first commit (old=%d new=%d)", deal.WitnessMdus, intent.WitnessMdus)
+	}
+	deal.TotalMdus = intent.TotalMdus
+	deal.WitnessMdus = intent.WitnessMdus
 
 	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)

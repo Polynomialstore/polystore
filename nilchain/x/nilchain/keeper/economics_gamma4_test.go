@@ -261,10 +261,12 @@ func TestGamma4_UpdateDealContent_ChargesTermDepositInBondDenom(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user,
-		DealId:  resDeal.DealId,
-		Cid:     validManifestCid,
-		Size_:   100,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 

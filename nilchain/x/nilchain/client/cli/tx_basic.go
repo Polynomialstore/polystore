@@ -130,11 +130,23 @@ func CmdUpdateDealContent() *cobra.Command {
 				return err
 			}
 
+			totalMdus, err := cmd.Flags().GetUint64("total-mdus")
+			if err != nil {
+				return err
+			}
+
+			witnessMdus, err := cmd.Flags().GetUint64("witness-mdus")
+			if err != nil {
+				return err
+			}
+
 			msg := types.MsgUpdateDealContent{
-				Creator: clientCtx.GetFromAddress().String(),
-				DealId:  dealId,
-				Cid:     cid,
-				Size_:   size,
+				Creator:     clientCtx.GetFromAddress().String(),
+				DealId:      dealId,
+				Cid:         cid,
+				Size_:       size,
+				TotalMdus:   totalMdus,
+				WitnessMdus: witnessMdus,
 			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
@@ -143,9 +155,13 @@ func CmdUpdateDealContent() *cobra.Command {
 	cmd.Flags().Uint64("deal-id", 0, "ID of the deal to update")
 	cmd.Flags().String("cid", "", "New CID (manifest root) for the deal content")
 	cmd.Flags().Uint64("size", 0, "New size of the content in bytes")
+	cmd.Flags().Uint64("total-mdus", 0, "Total committed MDUs (metadata + witness + user)")
+	cmd.Flags().Uint64("witness-mdus", 0, "Witness MDUs committed after MDU #0")
 	_ = cmd.MarkFlagRequired("deal-id")
 	_ = cmd.MarkFlagRequired("cid")
 	_ = cmd.MarkFlagRequired("size")
+	_ = cmd.MarkFlagRequired("total-mdus")
+	_ = cmd.MarkFlagRequired("witness-mdus")
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
 }

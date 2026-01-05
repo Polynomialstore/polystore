@@ -133,6 +133,8 @@ message MsgUpdateDealContent {
   uint64 deal_id = 2;
   string cid = 3; // New Root CID (Manifest)
   uint64 size = 4; // Actual size of the content in bytes
+  uint64 total_mdus = 5; // Total committed MDUs (metadata + witness + user)
+  uint64 witness_mdus = 6; // Witness MDUs committed after MDU #0
 }
 
 message MsgUpdateDealContentResponse {
@@ -168,6 +170,8 @@ message EvmUpdateContentIntent {
   uint64 size_bytes = 4;
   uint64 nonce = 5;
   string chain_id = 6;
+  uint64 total_mdus = 7;
+  uint64 witness_mdus = 8;
 }
 
 // MsgCreateDealFromEvm wraps a signed EVM intent and is executed on nilchaind.

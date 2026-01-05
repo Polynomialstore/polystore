@@ -46,10 +46,12 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 	size := uint64(100 * 1024 * 1024) // 100 MB
 
 	resUpd, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user,
-		DealId:  resDeal.DealId,
-		Cid:     validManifestCid,
-		Size_:   size,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       size,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 	require.True(t, resUpd.Success)
@@ -140,10 +142,12 @@ func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 	size := uint64(5 * 1024 * 1024 * 1024)
 
 	resUpd, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: user,
-		DealId:  resDeal.DealId,
-		Cid:     validManifestCid,
-		Size_:   size,
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       size,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 	require.True(t, resUpd.Success)
