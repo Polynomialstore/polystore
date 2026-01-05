@@ -108,6 +108,30 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 	}
 	defer resp.Body.Close()
 
+	// Slot mismatch is a router concern (Mode 2): treat it as a routing miss so we can
+	// try another provider without leaking a confusing 400 back to the client.
+	if resp.StatusCode == http.StatusBadRequest {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := strings.TrimSpace(string(bodyBytes))
+		if strings.Contains(body, "provider slot mismatch") {
+			return false, fmt.Errorf("provider slot mismatch: %s", body)
+		}
+
+		// Not a routing miss: forward the 400 response to the client.
+		for k, vals := range resp.Header {
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
+		setCORS(w)
+		w.WriteHeader(resp.StatusCode)
+		_, copyErr := w.Write(bodyBytes)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return true, copyErr
+	}
+
 	// If the provider is reachable but returns a 5xx, attempt failover to the next candidate.
 	if resp.StatusCode >= http.StatusInternalServerError {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -185,6 +209,15 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For Mode 2 deals, the router doesn't have enough local context to compute the
+	// exact slot provider for an arbitrary file range. Instead, it tries each
+	// assigned provider until it finds one that can serve the request. If all
+	// providers reject with a slot mismatch (or if the correct provider is down),
+	// fall back to "deputy" mode which allows any provider to reconstruct from K
+	// shards and serve the request.
+	isFetch := strings.HasPrefix(r.URL.Path, "/gateway/fetch/")
+	origRawQuery := r.URL.RawQuery
+
 	var lastErr error
 	for _, providerAddr := range providers {
 		baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
@@ -210,12 +243,47 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if isFetch {
+		q := r.URL.Query()
+		if strings.TrimSpace(q.Get("deputy")) == "" {
+			q.Set("deputy", "1")
+			r.URL.RawQuery = q.Encode()
+		}
+
+		for _, providerAddr := range providers {
+			baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			ok, err := tryProxyToProviderBaseURL(w, r, baseURL)
+			if ok {
+				dealProviderCache.Store(dealID, &dealProviderCacheEntry{
+					provider: providerAddr,
+					expires:  time.Now().Add(dealProviderTTL),
+				})
+				if err != nil {
+					lastErr = err
+				}
+				r.URL.RawQuery = origRawQuery
+				return
+			}
+			if err != nil {
+				lastErr = err
+			}
+		}
+	}
+
 	msg := "failed to contact provider"
 	detail := ""
 	if lastErr != nil {
 		detail = lastErr.Error()
 	}
 	writeJSONError(w, http.StatusBadGateway, msg, detail)
+
+	if isFetch {
+		r.URL.RawQuery = origRawQuery
+	}
 }
 
 func RouterGatewayListFiles(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }

@@ -2083,6 +2083,21 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
+	allowDeputy := false
+	if raw := strings.TrimSpace(q.Get("deputy")); raw != "" {
+		switch strings.ToLower(raw) {
+		case "1", "true", "yes", "y":
+			allowDeputy = true
+		}
+	}
+	if !allowDeputy {
+		if raw := strings.TrimSpace(r.Header.Get("X-Nil-Deputy")); raw != "" {
+			switch strings.ToLower(raw) {
+			case "1", "true", "yes", "y":
+				allowDeputy = true
+			}
+		}
+	}
 	filePath, err := validateNilfsFilePath(q.Get("file_path"))
 	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
 	if reqSig == "" {
@@ -2551,10 +2566,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		expectedProvider := strings.TrimSpace(slots[slot].Provider)
-		if expectedProvider == "" || strings.TrimSpace(providerAddr) != expectedProvider {
-			writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedProvider))
-			return
+		if !allowDeputy {
+			expectedProvider := strings.TrimSpace(slots[slot].Provider)
+			if expectedProvider == "" || strings.TrimSpace(providerAddr) != expectedProvider {
+				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedProvider))
+				return
+			}
+		} else {
+			w.Header().Set("X-Nil-Deputy", "1")
 		}
 	}
 
