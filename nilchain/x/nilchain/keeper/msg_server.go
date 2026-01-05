@@ -3,6 +3,7 @@ package keeper
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1091,10 +1092,47 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if !ok {
 			// Track health for system proofs that fail verification.
 			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+			if pt.SystemProof != nil {
+				extra := make([]byte, 0, 8+4)
+				extra = binary.BigEndian.AppendUint64(extra, pt.SystemProof.MduIndex)
+				extra = binary.BigEndian.AppendUint32(extra, pt.SystemProof.BlobIndex)
+				kind := "system_proof_invalid"
+				eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
+				if err := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", false); err != nil {
+					ctx.Logger().Error("failed to record evidence summary", "error", err)
+				}
+			}
 			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 		}
 		if pt.SystemProof != nil {
 			if err := k.validateAndRecordSystemProof(ctx, msg.EpochId, epochSeed, params, deal, stripe, msg.Creator, pt.SystemProof.MduIndex, pt.SystemProof.BlobIndex); err != nil {
+				// For system proofs, policy failures should not revert the tx: we want
+				// the chain to record evidence and track health deterministically.
+				if sdkerrors.ErrInvalidRequest.Is(err) {
+					k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+
+					extra := make([]byte, 0, 8+4)
+					extra = binary.BigEndian.AppendUint64(extra, pt.SystemProof.MduIndex)
+					extra = binary.BigEndian.AppendUint32(extra, pt.SystemProof.BlobIndex)
+
+					kind := "system_proof_rejected"
+					switch {
+					case strings.Contains(err.Error(), "no synthetic proofs required"):
+						kind = "system_proof_unneeded"
+					case strings.Contains(err.Error(), "quota already satisfied"):
+						kind = "system_proof_redundant"
+					case strings.Contains(err.Error(), "does not match any required"):
+						kind = "system_proof_wrong_challenge"
+					case strings.Contains(err.Error(), "duplicate synthetic"):
+						kind = "system_proof_duplicate"
+					}
+					eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
+					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", false); errEvidence != nil {
+						ctx.Logger().Error("failed to record evidence summary", "error", errEvidence)
+					}
+
+					return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
+				}
 				return nil, err
 			}
 		}
@@ -1399,6 +1437,67 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 			"deal", dealID,
 			"provider", provider,
 			"failures", failures,
+		)
+
+		// PoC eviction outcome for Mode 2: when a provider repeatedly submits bad
+		// proofs, start a make-before-break slot repair by attaching a pending
+		// replacement provider. This avoids blocking reads/writes in the gateway.
+		deal, err := k.Deals.Get(ctx, dealID)
+		if err != nil {
+			ctx.Logger().Error("failed to load deal for provider health eviction", "deal", dealID, "provider", provider, "error", err)
+			return
+		}
+		if deal.RedundancyMode != 2 || deal.Mode2Profile == nil || len(deal.Mode2Slots) == 0 {
+			return
+		}
+		slotIdxU64, ok := providerSlotIndex(deal, provider)
+		if !ok || int(slotIdxU64) >= len(deal.Mode2Slots) {
+			return
+		}
+		slot := uint32(slotIdxU64)
+		entry := deal.Mode2Slots[slot]
+		if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+			return
+		}
+		if strings.TrimSpace(entry.PendingProvider) != "" {
+			return
+		}
+
+		params := k.GetParams(ctx)
+		epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+
+		pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID)
+		if err != nil {
+			ctx.Logger().Error("failed to select replacement provider for health eviction", "deal", dealID, "slot", slotIdxU64, "error", err)
+			return
+		}
+
+		entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+		entry.PendingProvider = strings.TrimSpace(pending)
+		entry.StatusSinceHeight = ctx.BlockHeight()
+		entry.RepairTargetGen = deal.CurrentGen
+		deal.Mode2Slots[slot] = entry
+
+		if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+			ctx.Logger().Error("failed to persist deal after health eviction", "deal", dealID, "error", err)
+			return
+		}
+		_ = k.Mode2MissedEpochs.Remove(ctx, collections.Join(dealID, slot))
+
+		extra := make([]byte, 0, 4)
+		extra = binary.BigEndian.AppendUint32(extra, slot)
+		eid := deriveEvidenceID("provider_degraded_repair_started", dealID, epochID, extra)
+		if err := k.recordEvidenceSummary(ctx, dealID, provider, "provider_degraded_repair_started", eid[:], "chain", false); err != nil {
+			ctx.Logger().Error("failed to record evidence summary", "error", err)
+		}
+
+		ctx.Logger().Info(
+			"slot repair started due to provider health failures",
+			"deal", dealID,
+			"slot", slotIdxU64,
+			"provider", provider,
+			"pending_provider", entry.PendingProvider,
+			"repair_target_gen", entry.RepairTargetGen,
 		)
 	}
 }
@@ -2153,7 +2252,7 @@ func mulUint64(a, b uint64) (uint64, bool) {
 	return out, out/b != a
 }
 
-func (k msgServer) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider string, kind string, sessionID []byte, reporter string, ok bool) error {
+func (k Keeper) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider string, kind string, sessionID []byte, reporter string, ok bool) error {
 	proofID, err := k.ProofCount.Next(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get next proof id: %w", err)

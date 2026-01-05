@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -178,6 +179,13 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+						extra := make([]byte, 0, 4)
+						extra = binary.BigEndian.AppendUint32(extra, slot)
+						eid := deriveEvidenceID("quota_miss_repair_started", dealID, epochID, extra)
+						if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "quota_miss_repair_started", eid[:], "chain", false); err != nil {
+							sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+						}
 
 						sdkCtx.Logger().Info(
 							"slot repair started",
