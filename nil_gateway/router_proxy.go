@@ -132,6 +132,30 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 		return true, copyErr
 	}
 
+	// If this is an on-chain session fetch, a non-assigned provider will reject the
+	// session unless deputy mode is enabled. Treat that as a routing miss so the router
+	// can retry the request with `deputy=1` (or try other providers).
+	if resp.StatusCode == http.StatusForbidden {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := strings.TrimSpace(string(bodyBytes))
+		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) != "" && strings.Contains(body, "session provider mismatch") {
+			return false, fmt.Errorf("session provider mismatch: %s", body)
+		}
+
+		for k, vals := range resp.Header {
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
+		setCORS(w)
+		w.WriteHeader(resp.StatusCode)
+		_, copyErr := w.Write(bodyBytes)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return true, copyErr
+	}
+
 	// If the provider is reachable but returns a 5xx, attempt failover to the next candidate.
 	if resp.StatusCode >= http.StatusInternalServerError {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
