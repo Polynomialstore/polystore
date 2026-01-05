@@ -348,6 +348,8 @@ func main() {
 		go func() {
 			_ = cachedProviderAddress(context.Background())
 		}()
+
+		startSystemLivenessProver()
 	}
 
 	r := mux.NewRouter()
