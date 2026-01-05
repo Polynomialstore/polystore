@@ -34,6 +34,13 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 		return "", fmt.Errorf("mode2 slot map is empty")
 	}
 
+	outgoing := ""
+	if int(slot) >= 0 && int(slot) < len(deal.Mode2Slots) {
+		if s := deal.Mode2Slots[int(slot)]; s != nil {
+			outgoing = strings.TrimSpace(s.Provider)
+		}
+	}
+
 	exclude := make(map[string]struct{}, len(deal.Mode2Slots)*2)
 	for _, s := range deal.Mode2Slots {
 		if s == nil {
@@ -63,8 +70,31 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	}); err != nil {
 		return "", err
 	}
+
+	// Devnet/PoC fallback: when the network has exactly N=K+M providers and the deal
+	// uses all of them, there may be no "unused" candidates to select from. In this
+	// case, deterministically reuse another active provider (excluding the outgoing
+	// one) so repairs remain possible without requiring extra providers.
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("no replacement provider candidates available")
+		if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
+			if strings.TrimSpace(provider.Status) != "Active" {
+				return false, nil
+			}
+			if !providerMatchesServiceHint(provider, deal.ServiceHint) {
+				return false, nil
+			}
+			cand := strings.TrimSpace(provider.Address)
+			if cand == "" || cand == outgoing {
+				return false, nil
+			}
+			candidates = append(candidates, cand)
+			return false, nil
+		}); err != nil {
+			return "", err
+		}
+		if len(candidates) == 0 {
+			return "", fmt.Errorf("no replacement provider candidates available")
+		}
 	}
 
 	seed := k.getEpochSeed(ctx, epochID)
