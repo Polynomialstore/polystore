@@ -41,4 +41,23 @@ message Params {
   // When the chain height exceeds spend_window_start_height + month_len_blocks,
   // the window resets and spend_window_spent returns to 0.
   uint64 month_len_blocks = 10;
+
+  // --- Unified Liveness / Quotas (Mode 1 + Mode 2) ---
+  // Length of a liveness epoch in blocks. Used for deterministic challenge derivation.
+  uint64 epoch_len_blocks = 11;
+
+  // Proof quota per epoch, in basis points of slot-responsible bytes.
+  // See `rfcs/rfc-challenge-derivation-and-quotas.md`.
+  uint64 quota_bps_per_epoch_hot = 12;
+  uint64 quota_bps_per_epoch_cold = 13;
+
+  // Minimum/maximum number of blobs required per epoch per assignment.
+  uint64 quota_min_blobs = 14;
+  uint64 quota_max_blobs = 15;
+
+  // Cap on how much of the quota can be satisfied via organic retrieval credits.
+  uint64 credit_cap_bps = 16;
+
+  // Evict (trigger repair) after this many consecutive missed epochs.
+  uint64 evict_after_missed_epochs = 17;
 }
