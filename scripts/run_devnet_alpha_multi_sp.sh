@@ -228,6 +228,7 @@ ensure_metadata() {
   fi
   python3 - "$genesis" <<'PY' || true
 import json, sys
+import os
 path = sys.argv[1]
 data = json.load(open(path))
 bank = data.get("app_state", {}).get("bank", {})
@@ -269,6 +270,36 @@ pre = sorted(set(pre))
 params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
+
+# Optional devnet overrides for nilchain params (useful for fast CI/E2E loops).
+nilchain = data.get("app_state", {}).get("nilchain", {})
+params = nilchain.get("params", {}) if isinstance(nilchain, dict) else {}
+overrides = {
+    "month_len_blocks": os.getenv("NIL_MONTH_LEN_BLOCKS"),
+    "epoch_len_blocks": os.getenv("NIL_EPOCH_LEN_BLOCKS"),
+    "quota_bps_per_epoch_hot": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_HOT"),
+    "quota_bps_per_epoch_cold": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_COLD"),
+    "quota_min_blobs": os.getenv("NIL_QUOTA_MIN_BLOBS"),
+    "quota_max_blobs": os.getenv("NIL_QUOTA_MAX_BLOBS"),
+    "credit_cap_bps": os.getenv("NIL_CREDIT_CAP_BPS"),
+    "evict_after_missed_epochs": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS"),
+}
+for key, raw in overrides.items():
+    if raw is None:
+        continue
+    raw = raw.strip()
+    if raw == "":
+        continue
+    try:
+        val = int(raw, 10)
+    except Exception:
+        continue
+    if val < 0:
+        continue
+    params[key] = str(val)
+if isinstance(nilchain, dict):
+    nilchain["params"] = params
+    data["app_state"]["nilchain"] = nilchain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
