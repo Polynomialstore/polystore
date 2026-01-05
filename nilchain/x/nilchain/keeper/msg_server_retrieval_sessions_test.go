@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
@@ -121,6 +122,11 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 		Proofs:    []types.ChainedProof{proof},
 	})
 	require.NoError(t, err)
+
+	creditsKey := collections.Join(collections.Join(resDeal.DealId, assignedProvider), uint64(1))
+	credits, err := f.keeper.Mode1EpochCredits.Get(sdk.UnwrapSDKContext(f.ctx), creditsKey)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), credits)
 
 	session, err := f.keeper.RetrievalSessions.Get(sdk.UnwrapSDKContext(f.ctx), openRes.SessionId)
 	require.NoError(t, err)

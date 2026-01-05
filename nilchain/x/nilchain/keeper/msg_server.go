@@ -2011,6 +2011,16 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		}
 	}
 
+	// Count retrieval proofs as liveness credits for unified quota accounting.
+	epochID := k.currentEpoch(ctx)
+	if epochID != 0 {
+		for _, p := range msg.Proofs {
+			if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, p.MduIndex, p.BlobIndex); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	switch session.Status {
 	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
 		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
