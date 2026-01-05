@@ -765,6 +765,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	var size uint64
 	var fileSize uint64
 	var allocatedLength uint64
+	var totalMdus uint64
+	var witnessMdus uint64
 
 	// Canonical NilFS ingest by default (MDU #0 + Witness + User MDUs + ManifestRoot).
 	// Legacy/fake modes are only enabled behind explicit env flags:
@@ -829,6 +831,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 				cid = res.manifestRoot.Canonical
 				allocatedLength = res.allocatedLength
+				totalMdus = res.allocatedLength
+				witnessMdus = res.witnessMdus
 				fileSize = res.fileSize
 				size = res.sizeBytes
 			} else {
@@ -843,6 +847,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					fileSize = size
+					totalMdus = allocatedLength
+					witnessMdus = 1
 
 					case os.Getenv("NIL_FAST_INGEST") == "1":
 						b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
@@ -856,6 +862,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					}
 					cid = manifestRoot
 					allocatedLength = allocLen
+					totalMdus = allocLen
+					if b != nil {
+						witnessMdus = b.GetWitnessCount()
+					}
 					if info, err := os.Stat(path); err == nil {
 						fileSize = uint64(info.Size())
 					}
@@ -875,6 +885,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					}
 					cid = manifestRoot
 					allocatedLength = allocLen
+					totalMdus = allocLen
+					if b != nil {
+						witnessMdus = b.GetWitnessCount()
+					}
 					if info, err := os.Stat(path); err == nil {
 						fileSize = uint64(info.Size())
 					}
@@ -899,6 +913,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 				cid = res.manifestRoot.Canonical
 				allocatedLength = res.allocatedLength
+				totalMdus = res.allocatedLength
+				witnessMdus = res.witnessMdus
 				fileSize = res.fileSize
 				size = res.sizeBytes
 			} else {
@@ -919,6 +935,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 				cid = manifestRoot
 				allocatedLength = allocLen
+				totalMdus = allocLen
+				if b != nil {
+					witnessMdus = b.GetWitnessCount()
+				}
 				if info, err := os.Stat(path); err == nil {
 					fileSize = uint64(info.Size())
 				}
@@ -938,6 +958,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fileSize = size
+			totalMdus = allocatedLength
+			witnessMdus = 1
 
 			case os.Getenv("NIL_FAST_INGEST") == "1":
 				// Semi-canonical dev path: NilFS slab without Witness MDUs.
@@ -952,6 +974,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			cid = manifestRoot
 			allocatedLength = allocLen
+			totalMdus = allocLen
+			if b != nil {
+				witnessMdus = b.GetWitnessCount()
+			}
 			if info, err := os.Stat(path); err == nil {
 				fileSize = uint64(info.Size())
 			}
@@ -972,6 +998,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			cid = manifestRoot
 			allocatedLength = allocLen
+			totalMdus = allocLen
+			if b != nil {
+				witnessMdus = b.GetWitnessCount()
+			}
 			if info, err := os.Stat(path); err == nil {
 				fileSize = uint64(info.Size())
 			}
@@ -984,6 +1014,9 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	// Backstop: preserve previous behavior if we could not compute a non-zero total size.
 	if size == 0 {
 		size = fileSize
+	}
+	if totalMdus == 0 && allocatedLength > 0 {
+		totalMdus = allocatedLength
 	}
 
 	if job != nil && strings.TrimSpace(cid) != "" {
@@ -1001,6 +1034,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"size_bytes":       size,
 		"file_size_bytes":  fileSize,
 		"allocated_length": allocatedLength,
+		"total_mdus":       totalMdus,
+		"witness_mdus":     witnessMdus,
 		"filename":         filename,
 		"upload_id":        uploadID,
 	}
@@ -1135,10 +1170,12 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateDealContentRequest struct {
-	Creator   string `json:"creator"`
-	DealID    uint64 `json:"deal_id"`
-	Cid       string `json:"cid"`
-	SizeBytes uint64 `json:"size_bytes"`
+	Creator     string `json:"creator"`
+	DealID      uint64 `json:"deal_id"`
+	Cid         string `json:"cid"`
+	SizeBytes   uint64 `json:"size_bytes"`
+	TotalMdus   uint64 `json:"total_mdus"`
+	WitnessMdus uint64 `json:"witness_mdus"`
 }
 
 // GatewayUpdateDealContent is a legacy/devnet helper to commit content to a deal
@@ -1156,15 +1193,29 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.Cid == "" || req.SizeBytes == 0 { // DealID can be 0, which is valid.
+	if req.Cid == "" || req.SizeBytes == 0 || req.TotalMdus == 0 { // DealID can be 0, which is valid.
 		http.Error(w, "missing fields", http.StatusBadRequest)
+		return
+	}
+	if req.TotalMdus <= 1+req.WitnessMdus {
+		http.Error(w, "total_mdus must be > 1 + witness_mdus", http.StatusBadRequest)
 		return
 	}
 
 	dealIDStr := strconv.FormatUint(req.DealID, 10)
 	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
+	totalMdusStr := strconv.FormatUint(req.TotalMdus, 10)
+	witnessMdusStr := strconv.FormatUint(req.WitnessMdus, 10)
 
-	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
+	log.Printf(
+		"Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
+		nilchaindBin,
+		dealIDStr,
+		req.Cid,
+		sizeStr,
+		totalMdusStr,
+		witnessMdusStr,
+	)
 
 	out, err := runTxWithRetry(
 		r.Context(),
@@ -1172,6 +1223,8 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		"--deal-id", dealIDStr,
 		"--cid", req.Cid,
 		"--size", sizeStr,
+		"--total-mdus", totalMdusStr,
+		"--witness-mdus", witnessMdusStr,
 		"--chain-id", chainID,
 		"--from", "faucet",
 		"--yes",
@@ -1430,9 +1483,11 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	// Light validation
 	rawCid, okCid := req.Intent["cid"].(string)
 	rawSize, okSize := req.Intent["size_bytes"]
+	rawTotalMdus, okTotalMdus := req.Intent["total_mdus"]
+	rawWitnessMdus, okWitnessMdus := req.Intent["witness_mdus"]
 
-	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize {
-		http.Error(w, "intent must include cid and size_bytes", http.StatusBadRequest)
+	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize || !okTotalMdus || !okWitnessMdus {
+		http.Error(w, "intent must include cid, size_bytes, total_mdus, and witness_mdus", http.StatusBadRequest)
 		return
 	}
 
@@ -1454,6 +1509,42 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "size_bytes must be positive", http.StatusBadRequest)
 			return
 		}
+	}
+	parseUint64 := func(raw any) (uint64, bool) {
+		switch v := raw.(type) {
+		case float64:
+			if v < 0 {
+				return 0, false
+			}
+			return uint64(v), true
+		case int64:
+			if v < 0 {
+				return 0, false
+			}
+			return uint64(v), true
+		case json.Number:
+			n, err := v.Int64()
+			if err != nil || n < 0 {
+				return 0, false
+			}
+			return uint64(n), true
+		default:
+			return 0, false
+		}
+	}
+	totalMdus, ok := parseUint64(rawTotalMdus)
+	if !ok || totalMdus == 0 {
+		http.Error(w, "total_mdus must be a positive integer", http.StatusBadRequest)
+		return
+	}
+	witnessMdus, ok := parseUint64(rawWitnessMdus)
+	if !ok {
+		http.Error(w, "witness_mdus must be a non-negative integer", http.StatusBadRequest)
+		return
+	}
+	if totalMdus <= 1+witnessMdus {
+		http.Error(w, "total_mdus must be > 1 + witness_mdus", http.StatusBadRequest)
+		return
 	}
 
 	tmp, err := os.CreateTemp(uploadDir, "evm-update-*.json")
