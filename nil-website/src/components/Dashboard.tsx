@@ -43,6 +43,8 @@ type StagedUpload = {
   sizeBytes: number
   fileSizeBytes: number
   allocatedLength?: number
+  totalMdus?: number
+  witnessMdus?: number
   filename: string
 }
 
@@ -887,18 +889,22 @@ export function Dashboard() {
       }
 
       const result = await upload(file, address, opts)
+      const totalMdus = result.totalMdus ?? result.allocatedLength
+      const witnessMdus = result.witnessMdus
       setStagedUpload({
         cid: result.cid,
         sizeBytes: result.sizeBytes,
         fileSizeBytes: result.fileSizeBytes,
         allocatedLength: result.allocatedLength,
+        totalMdus,
+        witnessMdus,
         filename: result.filename || file.name,
       })
       setStatusTone('neutral')
       setStatusMsg(`File uploaded and sharded. New manifest root: ${result.cid.slice(0, 16)}...`)
 
       // Auto-commit into the selected deal.
-      await handleUpdateContent(result.cid, result.sizeBytes)
+      await handleUpdateContent(result.cid, result.sizeBytes, totalMdus, witnessMdus)
     } catch (e) {
       console.error(e)
       setStatusTone('error')
@@ -1039,12 +1045,34 @@ export function Dashboard() {
     }
   }
 
-  const handleUpdateContent = async (manifestRoot: string, manifestSize: number): Promise<boolean> => {
+  const handleUpdateContent = async (
+    manifestRoot: string,
+    manifestSize: number,
+    totalMdusMaybe?: number,
+    witnessMdusMaybe?: number,
+  ): Promise<boolean> => {
     if (!targetDealId) { alert('Select a deal to commit into'); return false }
     if (!manifestRoot) { alert('Upload a file first'); return false }
 
+    if (!address || !address.startsWith('0x')) {
+      alert('Connect MetaMask to commit content on-chain.')
+      return false
+    }
+
     const trimmedRoot = manifestRoot.trim()
     const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
+    const totalMdusRaw = totalMdusMaybe ?? stagedUpload?.totalMdus ?? stagedUpload?.allocatedLength
+    const witnessMdusRaw = witnessMdusMaybe ?? stagedUpload?.witnessMdus
+    const totalMdus = Number(totalMdusRaw || 0)
+    const witnessMdus = Number(witnessMdusRaw || 0)
+    if (!Number.isFinite(totalMdus) || totalMdus <= 0) {
+      alert('Upload did not include total_mdus; retry upload.')
+      return false
+    }
+    if (!Number.isFinite(witnessMdus) || witnessMdus < 0) {
+      alert('Upload did not include witness_mdus; retry upload.')
+      return false
+    }
     const recordUpload = (status: 'success' | 'failed', error?: string) => {
       if (!stagedUpload?.filename) return
       upsertRecentFile({
@@ -1060,10 +1088,12 @@ export function Dashboard() {
 
     try {
         await submitUpdate({
-            creator: address || nilAddress,
+            creator: address,
             dealId: Number(targetDealId),
             cid: trimmedRoot,
-            sizeBytes: manifestSize
+            sizeBytes: manifestSize,
+            totalMdus,
+            witnessMdus,
         })
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
@@ -1511,7 +1541,12 @@ export function Dashboard() {
               <button
                 onClick={() => {
                   if (!stagedUpload) return
-                  void handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)
+                  void handleUpdateContent(
+                    stagedUpload.cid,
+                    stagedUpload.sizeBytes,
+                    stagedUpload.totalMdus,
+                    stagedUpload.witnessMdus,
+                  )
                 }}
                 disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
                 data-testid="content-commit"
@@ -1941,7 +1976,15 @@ export function Dashboard() {
                               {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
                           </div>
                           <button
-                              onClick={() => stagedUpload && handleUpdateContent(stagedUpload.cid, stagedUpload.sizeBytes)}
+                              onClick={() =>
+                                stagedUpload &&
+                                handleUpdateContent(
+                                  stagedUpload.cid,
+                                  stagedUpload.sizeBytes,
+                                  stagedUpload.totalMdus,
+                                  stagedUpload.witnessMdus,
+                                )
+                              }
                               disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
                               data-testid="content-commit"
                               className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"

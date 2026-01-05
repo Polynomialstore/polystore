@@ -9,6 +9,8 @@ export interface UpdateDealContentInput {
   dealId: number
   cid: string
   sizeBytes: number
+  totalMdus: number
+  witnessMdus: number
 }
 
 export function useUpdateDealContent() {
@@ -26,10 +28,15 @@ export function useUpdateDealContent() {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
       const manifestRoot = String(input.cid || '').trim() as Hex
+      const totalMdus = Number(input.totalMdus)
+      const witnessMdus = Number(input.witnessMdus)
+      if (!Number.isFinite(totalMdus) || totalMdus <= 0) throw new Error('totalMdus must be > 0')
+      if (!Number.isFinite(witnessMdus) || witnessMdus < 0) throw new Error('witnessMdus must be >= 0')
+      if (totalMdus <= 1 + witnessMdus) throw new Error('totalMdus must be > 1 + witnessMdus')
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
-        args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes)],
+        args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes), BigInt(totalMdus), BigInt(witnessMdus)],
       })
 
       const txHash = (await ethereum.request({

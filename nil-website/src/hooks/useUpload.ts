@@ -7,6 +7,8 @@ export interface UploadResult {
   sizeBytes: number
   fileSizeBytes: number
   allocatedLength?: number
+  totalMdus?: number
+  witnessMdus?: number
   filename: string
 }
 

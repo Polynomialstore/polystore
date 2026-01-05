@@ -34,6 +34,8 @@ export const UpdateContentTypes = {
     { name: 'deal_id', type: 'uint64' },
     { name: 'cid', type: 'string' },
     { name: 'size', type: 'uint64' },
+    { name: 'total_mdus', type: 'uint64' },
+    { name: 'witness_mdus', type: 'uint64' },
     { name: 'nonce', type: 'uint64' },
   ],
 } as const
@@ -52,6 +54,8 @@ export interface UpdateContentIntent {
   deal_id: number
   cid: string
   size_bytes: number
+  total_mdus: number
+  witness_mdus: number
   nonce: number
 }
 
@@ -91,6 +95,8 @@ export function buildUpdateContentTypedData(intent: UpdateContentIntent, chainId
       deal_id: Number(intent.deal_id),
       cid: intent.cid,
       size: Number(intent.size_bytes),
+      total_mdus: Number(intent.total_mdus),
+      witness_mdus: Number(intent.witness_mdus),
       nonce: Number(intent.nonce),
     },
   }

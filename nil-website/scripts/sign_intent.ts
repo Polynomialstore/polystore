@@ -124,12 +124,24 @@ async function main() {
     console.error('CID env var required for update-content')
     process.exit(1)
   }
+  const totalMdus = Number(process.env.TOTAL_MDUS || 0)
+  const witnessMdus = Number(process.env.WITNESS_MDUS || 0)
+  if (!Number.isFinite(totalMdus) || totalMdus <= 0) {
+    console.error('TOTAL_MDUS env var required for update-content')
+    process.exit(1)
+  }
+  if (!Number.isFinite(witnessMdus) || witnessMdus < 0) {
+    console.error('WITNESS_MDUS env var required for update-content')
+    process.exit(1)
+  }
 
   const intent: UpdateContentIntent = {
     creator_evm: account.address,
     deal_id: Number(process.env.DEAL_ID || 0),
     cid,
     size_bytes: Number(process.env.SIZE_BYTES || 0),
+    total_mdus: totalMdus,
+    witness_mdus: witnessMdus,
     nonce: Number(process.env.NONCE || 1),
   }
 

@@ -8,6 +8,8 @@ interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
   manifestRoot: string; // The canonical 0x-prefixed hex string
   fileSize: number; // Size in bytes
+  totalMdus: number;
+  witnessMdus: number;
   onSuccess?: (txHash: string) => void;
   onError?: (error: Error) => void;
 }
@@ -20,7 +22,7 @@ export function useDirectCommit() {
   });
 
   const commitContent = useCallback((options: DirectCommitOptions) => {
-    const { dealId, manifestRoot, fileSize } = options;
+    const { dealId, manifestRoot, fileSize, totalMdus, witnessMdus } = options;
     
     // Ensure manifestRoot is bytes (0x prefixed)
     const formattedRoot = manifestRoot.startsWith('0x') ? manifestRoot : `0x${manifestRoot}`;
@@ -29,7 +31,7 @@ export function useDirectCommit() {
       address: appConfig.nilstorePrecompile as Hex,
       abi: NILSTORE_PRECOMPILE_ABI,
       functionName: 'updateDealContent',
-      args: [BigInt(dealId), formattedRoot as Hex, BigInt(fileSize)],
+      args: [BigInt(dealId), formattedRoot as Hex, BigInt(fileSize), BigInt(totalMdus), BigInt(witnessMdus)],
     });
   }, [writeContract]);
 

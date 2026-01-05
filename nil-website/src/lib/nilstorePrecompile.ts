@@ -21,6 +21,8 @@ export const NILSTORE_PRECOMPILE_ABI = [
       { name: 'dealId', type: 'uint64' },
       { name: 'manifestRoot', type: 'bytes' },
       { name: 'sizeBytes', type: 'uint64' },
+      { name: 'totalMdus', type: 'uint64' },
+      { name: 'witnessMdus', type: 'uint64' },
     ],
     outputs: [{ name: 'ok', type: 'bool' }],
   },
@@ -273,4 +275,3 @@ export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): 
     args: [sessionIds],
   })
 }
-

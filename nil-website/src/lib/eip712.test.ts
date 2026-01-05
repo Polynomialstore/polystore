@@ -47,6 +47,8 @@ test('UpdateContent typed data hashes to chain digest', async () => {
     deal_id: 0,
     cid: '0xdeadbeef',
     size_bytes: 1234,
+    total_mdus: 3,
+    witness_mdus: 1,
     nonce: 2,
   }
 
@@ -55,7 +57,7 @@ test('UpdateContent typed data hashes to chain digest', async () => {
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0x7dedec3bdb9f467336903adbb108d6a92d381655900f2cfc1f46306fe7bc4587',
+    '0xae22efabff0b24f208b7e1e688c822a2798543c8ceab3db5979f3de7892b6529',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)

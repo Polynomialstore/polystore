@@ -1872,10 +1872,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     const totalSize = isMode2
                       ? shardProgress.fileBytesTotal
                       : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                    const witnessMdus = Math.max(0, Number(shardProgress.totalWitnessMdus) || 0)
+                    const userMdus = Math.max(0, Number(shardProgress.totalUserMdus) || 0)
+                    const totalMdus = Math.max(0, 1 + witnessMdus + userMdus)
                     commitContent({
                       dealId,
                       manifestRoot: currentManifestRoot || '',
                       fileSize: totalSize,
+                      totalMdus,
+                      witnessMdus,
                     });
                   }}
                   disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
