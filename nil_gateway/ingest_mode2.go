@@ -965,19 +965,19 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
-	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
+	slots, err := resolveDealMode2Slots(ctx, dealID)
 	if err != nil {
 		return err
 	}
-	if len(providers) < int(stripe.slotCount) {
-		return fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
+	if len(slots) < int(stripe.slotCount) {
+		return fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
 	}
 
 	localProviderAddr := strings.TrimSpace(cachedProviderAddress(ctx))
 	skipSlots := make(map[int]struct{})
 	if localProviderAddr != "" {
 		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			if providers[int(slot)] == localProviderAddr {
+			if strings.TrimSpace(slots[int(slot)].Provider) == localProviderAddr {
 				skipSlots[int(slot)] = struct{}{}
 			}
 		}
@@ -1012,7 +1012,10 @@ func mode2UploadArtifactsToProviders(
 			if _, skip := skipSlots[slot]; skip {
 				continue
 			}
-			provider := providers[slot]
+			provider := strings.TrimSpace(slots[slot].Provider)
+			if provider == "" {
+				return fmt.Errorf("slot %d has empty provider assignment", slot)
+			}
 			eg.Go(func() error {
 				base, err := resolveProviderHTTPBaseURL(egctx, provider)
 				if err != nil {

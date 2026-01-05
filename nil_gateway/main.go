@@ -2542,23 +2542,28 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusInternalServerError, "failed to map provider slot", serr.Error())
 			return
 		}
-		providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+		slots, err := resolveDealMode2Slots(r.Context(), dealID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to resolve providers", err.Error())
 			return
 		}
-		if int(slot) >= len(providers) {
+		if int(slot) >= len(slots) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		expectedProvider := strings.TrimSpace(providers[slot])
+		expectedProvider := strings.TrimSpace(slots[slot].Provider)
 		if expectedProvider == "" || strings.TrimSpace(providerAddr) != expectedProvider {
 			writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedProvider))
 			return
 		}
 	}
 
-	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, 1, mduIdx, mduPath, manifestPath, blobIndex, leafIndex, stripe.leafCount, absOffset)
+	epochID := currentEpochID(r.Context())
+	if isDownloadSession && dlEpochID != 0 {
+		epochID = dlEpochID
+	}
+
+	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, epochID, mduIdx, mduPath, manifestPath, blobIndex, leafIndex, stripe.leafCount, absOffset)
 	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
 		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
@@ -2571,10 +2576,6 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var fetchSessionID string
-	epochID := currentEpochID(r.Context())
-	if isDownloadSession && dlEpochID != 0 {
-		epochID = dlEpochID
-	}
 	if isDownloadSession {
 		var wrapper struct {
 			ProofDetail json.RawMessage `json:"proof_details"`
@@ -2859,16 +2860,16 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 
 	providerAddr := ""
 	if stripe.mode == 2 {
-		providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+		slots, err := resolveDealMode2Slots(r.Context(), dealID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to resolve providers", err.Error())
 			return
 		}
-		if int(startSlot) >= len(providers) {
+		if int(startSlot) >= len(slots) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		providerAddr = strings.TrimSpace(providers[startSlot])
+		providerAddr = strings.TrimSpace(slots[startSlot].Provider)
 	} else {
 		providerAddr = cachedProviderAddress(r.Context())
 		if strings.TrimSpace(providerAddr) == "" {

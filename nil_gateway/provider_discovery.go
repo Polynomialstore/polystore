@@ -30,6 +30,11 @@ type dealHintCacheEntry struct {
 	expires time.Time
 }
 
+type dealMode2SlotsCacheEntry struct {
+	slots   []mode2SlotAssignment
+	expires time.Time
+}
+
 type providerBaseCacheEntry struct {
 	baseURL string
 	expires time.Time
@@ -40,16 +45,23 @@ type providerP2PCacheEntry struct {
 	expires time.Time
 }
 
+type mode2SlotAssignment struct {
+	Provider        string
+	PendingProvider string
+	Status          int
+}
+
 var (
-	dealProviderCache  sync.Map // map[uint64]*dealProviderCacheEntry
-	dealProvidersCache sync.Map // map[uint64]*dealProvidersCacheEntry
-	dealHintCache      sync.Map // map[uint64]*dealHintCacheEntry
-	providerBaseCache  sync.Map // map[string]*providerBaseCacheEntry
-	providerP2PCache   sync.Map // map[string]*providerP2PCacheEntry
-	providerCacheTTL   = 30 * time.Second
-	dealProviderTTL    = 10 * time.Second
-	dealHintTTL        = 10 * time.Second
-	errNoHTTPMultiaddr = errors.New("no supported http multiaddr")
+	dealProviderCache   sync.Map // map[uint64]*dealProviderCacheEntry
+	dealProvidersCache  sync.Map // map[uint64]*dealProvidersCacheEntry
+	dealHintCache       sync.Map // map[uint64]*dealHintCacheEntry
+	dealMode2SlotsCache sync.Map // map[uint64]*dealMode2SlotsCacheEntry
+	providerBaseCache   sync.Map // map[string]*providerBaseCacheEntry
+	providerP2PCache    sync.Map // map[string]*providerP2PCacheEntry
+	providerCacheTTL    = 30 * time.Second
+	dealProviderTTL     = 10 * time.Second
+	dealHintTTL         = 10 * time.Second
+	errNoHTTPMultiaddr  = errors.New("no supported http multiaddr")
 )
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
@@ -129,6 +141,33 @@ func httpBaseURLFromMultiaddr(endpoint string) (string, error) {
 	return fmt.Sprintf("%s://%s:%d", scheme, host, port), nil
 }
 
+func parseMode2SlotStatus(raw json.RawMessage) int {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return 0
+	}
+	var statusStr string
+	if err := json.Unmarshal(raw, &statusStr); err == nil {
+		switch strings.ToUpper(strings.TrimSpace(statusStr)) {
+		case "SLOT_STATUS_ACTIVE":
+			return 1
+		case "SLOT_STATUS_REPAIRING":
+			return 2
+		default:
+			return 0
+		}
+	}
+	var statusInt int
+	if err := json.Unmarshal(raw, &statusInt); err == nil {
+		return statusInt
+	}
+	var statusFloat float64
+	if err := json.Unmarshal(raw, &statusFloat); err == nil {
+		return int(statusFloat)
+	}
+	return 0
+}
+
 func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
@@ -172,39 +211,12 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 				repairing := make([]string, 0, len(payload.Deal.Mode2Slots))
 				unknown := make([]string, 0, len(payload.Deal.Mode2Slots))
 
-				parseStatus := func(raw json.RawMessage) int {
-					raw = bytes.TrimSpace(raw)
-					if len(raw) == 0 {
-						return 0
-					}
-					var statusStr string
-					if err := json.Unmarshal(raw, &statusStr); err == nil {
-						switch strings.ToUpper(strings.TrimSpace(statusStr)) {
-						case "SLOT_STATUS_ACTIVE":
-							return 1
-						case "SLOT_STATUS_REPAIRING":
-							return 2
-						default:
-							return 0
-						}
-					}
-					var statusInt int
-					if err := json.Unmarshal(raw, &statusInt); err == nil {
-						return statusInt
-					}
-					var statusFloat float64
-					if err := json.Unmarshal(raw, &statusFloat); err == nil {
-						return int(statusFloat)
-					}
-					return 0
-				}
-
 				for _, slot := range payload.Deal.Mode2Slots {
 					p := strings.TrimSpace(slot.Provider)
 					if p == "" {
 						continue
 					}
-					switch parseStatus(slot.Status) {
+					switch parseMode2SlotStatus(slot.Status) {
 					case 1:
 						active = append(active, p)
 					case 2:
@@ -251,6 +263,132 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 		}
 	}
 	return nil, fmt.Errorf("LCD returned 500: %s", lastBody)
+}
+
+func fetchDealMode2SlotsFromLCD(ctx context.Context, dealID uint64) ([]mode2SlotAssignment, error) {
+	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	var lastBody string
+	for attempt := 1; attempt <= 10; attempt++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := lcdHTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("LCD request failed: %w", err)
+		}
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		lastBody = strings.TrimSpace(string(bodyBytes))
+
+		if resp.StatusCode == http.StatusOK {
+			type dealSlot struct {
+				Slot            uint64          `json:"slot"`
+				Provider        string          `json:"provider"`
+				PendingProvider string          `json:"pending_provider"`
+				Status          json.RawMessage `json:"status"`
+			}
+
+			var payload struct {
+				Deal struct {
+					Providers  []string   `json:"providers"`
+					Mode2Slots []dealSlot `json:"mode2_slots"`
+				} `json:"deal"`
+			}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				return nil, fmt.Errorf("failed to decode LCD response: %w", err)
+			}
+			if len(payload.Deal.Mode2Slots) == 0 {
+				if len(payload.Deal.Providers) == 0 {
+					return nil, fmt.Errorf("deal %d has no providers", dealID)
+				}
+				slots := make([]mode2SlotAssignment, 0, len(payload.Deal.Providers))
+				for i, p := range payload.Deal.Providers {
+					p = strings.TrimSpace(p)
+					if p == "" {
+						return nil, fmt.Errorf("deal %d providers[%d] is empty", dealID, i)
+					}
+					slots = append(slots, mode2SlotAssignment{
+						Provider: p,
+						Status:   1,
+					})
+				}
+				return slots, nil
+			}
+
+			var maxSlot uint64
+			seen := make(map[uint64]struct{}, len(payload.Deal.Mode2Slots))
+			for _, slot := range payload.Deal.Mode2Slots {
+				if _, ok := seen[slot.Slot]; ok {
+					return nil, fmt.Errorf("duplicate mode2_slots entry for slot %d", slot.Slot)
+				}
+				seen[slot.Slot] = struct{}{}
+				if slot.Slot > maxSlot {
+					maxSlot = slot.Slot
+				}
+			}
+
+			slots := make([]mode2SlotAssignment, maxSlot+1)
+			for _, slot := range payload.Deal.Mode2Slots {
+				slots[slot.Slot] = mode2SlotAssignment{
+					Provider:        strings.TrimSpace(slot.Provider),
+					PendingProvider: strings.TrimSpace(slot.PendingProvider),
+					Status:          parseMode2SlotStatus(slot.Status),
+				}
+			}
+			return slots, nil
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrDealNotFound
+		}
+		if !isRetryableLCDStatus(resp.StatusCode) || attempt == 10 {
+			return nil, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, lastBody)
+		}
+
+		if err := sleepWithContext(ctx, time.Duration(attempt)*150*time.Millisecond); err != nil {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("LCD returned 500: %s", lastBody)
+}
+
+func resolveDealMode2Slots(ctx context.Context, dealID uint64) ([]mode2SlotAssignment, error) {
+	if cachedAny, ok := dealMode2SlotsCache.Load(dealID); ok {
+		cached := cachedAny.(*dealMode2SlotsCacheEntry)
+		if time.Now().Before(cached.expires) && len(cached.slots) > 0 {
+			out := make([]mode2SlotAssignment, len(cached.slots))
+			copy(out, cached.slots)
+			return out, nil
+		}
+	}
+
+	var slots []mode2SlotAssignment
+	var err error
+	for attempt := 1; attempt <= 60; attempt++ {
+		slots, err = fetchDealMode2SlotsFromLCD(ctx, dealID)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, ErrDealNotFound) || attempt == 60 {
+			return nil, err
+		}
+		if err := sleepWithContext(ctx, 250*time.Millisecond); err != nil {
+			return nil, err
+		}
+	}
+	if len(slots) == 0 {
+		return nil, fmt.Errorf("deal %d has no mode2_slots", dealID)
+	}
+
+	copied := make([]mode2SlotAssignment, len(slots))
+	copy(copied, slots)
+	dealMode2SlotsCache.Store(dealID, &dealMode2SlotsCacheEntry{
+		slots:   copied,
+		expires: time.Now().Add(dealProviderTTL),
+	})
+
+	out := make([]mode2SlotAssignment, len(copied))
+	copy(out, copied)
+	return out, nil
 }
 
 func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, error) {

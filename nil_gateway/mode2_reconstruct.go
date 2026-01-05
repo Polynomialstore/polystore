@@ -26,15 +26,15 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		return "", fmt.Errorf("invalid stripe params")
 	}
 
-	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
-	if err != nil {
-		return "", err
-	}
 	if stripe.slotCount == 0 {
 		return "", fmt.Errorf("invalid stripe params")
 	}
-	if len(providers) < int(stripe.slotCount) {
-		return "", fmt.Errorf("not enough providers for Mode 2 (need %d, got %d)", stripe.slotCount, len(providers))
+	slots, err := resolveDealMode2Slots(ctx, dealID)
+	if err != nil {
+		return "", err
+	}
+	if len(slots) < int(stripe.slotCount) {
+		return "", fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
 	}
 
 	shards := make([][]byte, stripe.slotCount)
@@ -55,7 +55,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 			return err
 		}
 
-		base, err := resolveProviderHTTPBaseURL(ctx, providers[slot])
+		base, err := resolveProviderHTTPBaseURL(ctx, slots[slot].Provider)
 		if err != nil {
 			return err
 		}

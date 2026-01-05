@@ -82,3 +82,54 @@ func TestFetchDealProvidersFromLCD_FallsBackToProvidersWhenNoMode2Slots(t *testi
 	}
 }
 
+func TestResolveDealMode2Slots_PreservesSlotOrder(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+
+	const dealID = 999
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/999" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"deal": {
+				"providers": ["providerA", "providerB", "providerC", "providerD"],
+				"mode2_slots": [
+					{"slot": 2, "provider": "providerC", "status": 1},
+					{"slot": 0, "provider": "providerA", "status": "SLOT_STATUS_ACTIVE"},
+					{"slot": 3, "provider": "providerD", "status": 2, "pending_provider": "providerZ"},
+					{"slot": 1, "provider": "providerB", "status": "SLOT_STATUS_ACTIVE"}
+				]
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+	dealMode2SlotsCache.Delete(uint64(dealID))
+
+	slots, err := resolveDealMode2Slots(context.Background(), dealID)
+	if err != nil {
+		t.Fatalf("resolveDealMode2Slots returned error: %v", err)
+	}
+	if len(slots) != 4 {
+		t.Fatalf("expected 4 slots, got %d", len(slots))
+	}
+	if slots[0].Provider != "providerA" {
+		t.Fatalf("slots[0].Provider expected providerA, got %q", slots[0].Provider)
+	}
+	if slots[1].Provider != "providerB" {
+		t.Fatalf("slots[1].Provider expected providerB, got %q", slots[1].Provider)
+	}
+	if slots[2].Provider != "providerC" {
+		t.Fatalf("slots[2].Provider expected providerC, got %q", slots[2].Provider)
+	}
+	if slots[3].Provider != "providerD" {
+		t.Fatalf("slots[3].Provider expected providerD, got %q", slots[3].Provider)
+	}
+	if slots[3].Status != 2 || slots[3].PendingProvider != "providerZ" {
+		t.Fatalf("slots[3] expected status=2 pending=providerZ, got status=%d pending=%q", slots[3].Status, slots[3].PendingProvider)
+	}
+}
