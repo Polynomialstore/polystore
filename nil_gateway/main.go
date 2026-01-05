@@ -2914,7 +2914,13 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		providerAddr = strings.TrimSpace(slots[startSlot].Provider)
+		assign := slots[startSlot]
+		providerAddr = strings.TrimSpace(assign.Provider)
+		// Make-before-break: route retrieval sessions around repairing slots by preferring the
+		// pending provider when present.
+		if assign.Status == 2 && strings.TrimSpace(assign.PendingProvider) != "" {
+			providerAddr = strings.TrimSpace(assign.PendingProvider)
+		}
 	} else {
 		providerAddr = cachedProviderAddress(r.Context())
 		if strings.TrimSpace(providerAddr) == "" {

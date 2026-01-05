@@ -839,7 +839,12 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			if ok && int(slotIdx) < len(deal.Mode2Slots) {
 				slot := deal.Mode2Slots[slotIdx]
 				if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
-					return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; system proofs are disabled", slotIdx)
+					// Make-before-break: allow the pending provider to submit system proofs so it
+					// can satisfy quota and trigger an automatic swap. Disallow the outgoing
+					// provider from continuing to claim liveness during repair.
+					if strings.TrimSpace(slot.PendingProvider) == "" || strings.TrimSpace(slot.PendingProvider) != creator {
+						return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; system proofs disabled for outgoing provider", slotIdx)
+					}
 				}
 			}
 		}
@@ -1788,10 +1793,26 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	isAssignedProvider := false
-	for _, p := range deal.Providers {
-		if p == msg.Provider {
-			isAssignedProvider = true
-			break
+	if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 {
+		for _, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if strings.TrimSpace(slot.Provider) == strings.TrimSpace(msg.Provider) {
+				isAssignedProvider = true
+				break
+			}
+			if strings.TrimSpace(slot.PendingProvider) != "" && strings.TrimSpace(slot.PendingProvider) == strings.TrimSpace(msg.Provider) {
+				isAssignedProvider = true
+				break
+			}
+		}
+	} else {
+		for _, p := range deal.Providers {
+			if p == msg.Provider {
+				isAssignedProvider = true
+				break
+			}
 		}
 	}
 	if !isAssignedProvider {
@@ -1833,12 +1854,6 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
 		if !ok || providerSlot != startSlot {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
-		}
-		if deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 && int(startSlot) < len(deal.Mode2Slots) {
-			slot := deal.Mode2Slots[startSlot]
-			if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
-				return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; open-session disabled", startSlot)
-			}
 		}
 	}
 	if deal.TotalMdus != 0 {

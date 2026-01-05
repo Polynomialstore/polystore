@@ -79,6 +79,9 @@ func providerSlotIndex(deal types.Deal, provider string) (uint64, bool) {
 			if strings.TrimSpace(slot.Provider) == target {
 				return uint64(slot.Slot), true
 			}
+			if strings.TrimSpace(slot.PendingProvider) != "" && strings.TrimSpace(slot.PendingProvider) == target {
+				return uint64(slot.Slot), true
+			}
 		}
 	}
 	for i, p := range deal.Providers {
