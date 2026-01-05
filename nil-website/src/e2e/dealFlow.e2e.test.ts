@@ -90,6 +90,8 @@ test(
       deal_id: Number(dealId),
       cid: manifestRoot,
       size_bytes: Number(uploadJson.size_bytes ?? 0),
+      total_mdus: Number(uploadJson.total_mdus ?? 0),
+      witness_mdus: Number(uploadJson.witness_mdus ?? 0),
       nonce: Date.now() + 1,
     }
     const updateTyped = asViemTypedData(buildUpdateContentTypedData(updateIntent, CHAIN_ID))
