@@ -810,18 +810,18 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-				if chainCID == "" {
-					if stripe.mode == 2 {
-						if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-							http.Error(w, "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
+		if chainCID == "" {
+			if stripe.mode == 2 {
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
 					return
 				}
 
-					res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, fileRecordPath)
-					if err != nil {
-						if job != nil {
-							job.setError(err.Error())
-						}
+				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, fileRecordPath)
+				if err != nil {
+					if job != nil {
+						job.setError(err.Error())
+					}
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
@@ -850,11 +850,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					totalMdus = allocatedLength
 					witnessMdus = 1
 
-					case os.Getenv("NIL_FAST_INGEST") == "1":
-						b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
-						if err != nil {
-							if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-								http.Error(w, err.Error(), http.StatusRequestTimeout)
+				case os.Getenv("NIL_FAST_INGEST") == "1":
+					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
 							return
 						}
 						http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
@@ -873,11 +873,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 						size = totalSizeBytesFromMdu0(b)
 					}
 
-					default:
-						b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
-						if err != nil {
-							if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-								http.Error(w, err.Error(), http.StatusRequestTimeout)
+				default:
+					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							http.Error(w, err.Error(), http.StatusRequestTimeout)
 							return
 						}
 						http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
@@ -898,12 +898,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-				if stripe.mode == 2 {
-					res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, chainCID, fileRecordPath)
-					if err != nil {
-						if job != nil {
-							job.setError(err.Error())
-						}
+			if stripe.mode == 2 {
+				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, chainCID, fileRecordPath)
+				if err != nil {
+					if job != nil {
+						job.setError(err.Error())
+					}
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
@@ -919,15 +919,15 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				size = res.sizeBytes
 			} else {
 				// Append path: load existing slab by on-chain manifest root, then append.
-					if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-						http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
-						return
-					}
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
+					return
+				}
 
-					b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus, fileRecordPath)
-					if err != nil {
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							http.Error(w, err.Error(), http.StatusRequestTimeout)
+				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus, fileRecordPath)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
 						return
 					}
 					http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
@@ -961,12 +961,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			totalMdus = allocatedLength
 			witnessMdus = 1
 
-			case os.Getenv("NIL_FAST_INGEST") == "1":
-				// Semi-canonical dev path: NilFS slab without Witness MDUs.
-				b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
+		case os.Getenv("NIL_FAST_INGEST") == "1":
+			// Semi-canonical dev path: NilFS slab without Witness MDUs.
+			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					http.Error(w, err.Error(), http.StatusRequestTimeout)
 					return
 				}
 				http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
@@ -985,12 +985,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				size = totalSizeBytesFromMdu0(b)
 			}
 
-			default:
-				// Full canonical ingest (Triple-Proof valid).
-				b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
+		default:
+			// Full canonical ingest (Triple-Proof valid).
+			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					http.Error(w, err.Error(), http.StatusRequestTimeout)
 					return
 				}
 				http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
@@ -2020,9 +2020,10 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionExpires := time.Unix(int64(reqExpiresAt), 0)
+	epochID := currentEpochID(r.Context())
 	downloadID, err := storeDownloadSession(downloadSession{
 		DealID:     dealID,
-		EpochID:    1,
+		EpochID:    epochID,
 		Owner:      owner,
 		Provider:   providerAddr,
 		FilePath:   filePath,
@@ -2040,7 +2041,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"download_session": downloadID,
 		"deal_id":          dealID,
-		"epoch_id":         1,
+		"epoch_id":         epochID,
 		"provider":         providerAddr,
 		"file_path":        filePath,
 		"expires_at":       uint64(sessionExpires.Unix()),
@@ -2262,6 +2263,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dlSession downloadSession
+	var dlEpochID uint64
 	if isDownloadSession {
 		if isOnchainSession {
 			// Verify on-chain session state
@@ -2313,6 +2315,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, "download_session does not match request", "file_path mismatch")
 				return
 			}
+			dlEpochID = dlSession.EpochID
 		}
 	}
 
@@ -2568,6 +2571,10 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var fetchSessionID string
+	epochID := currentEpochID(r.Context())
+	if isDownloadSession && dlEpochID != 0 {
+		epochID = dlEpochID
+	}
 	if isDownloadSession {
 		var wrapper struct {
 			ProofDetail json.RawMessage `json:"proof_details"`
@@ -2606,7 +2613,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 			sessionID, serr := storeFetchSession(fetchSession{
 				DealID:      dealID,
-				EpochID:     1,
+				EpochID:     epochID,
 				Owner:       owner,
 				Provider:    providerAddr,
 				FilePath:    filePath,
@@ -2628,7 +2635,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
 	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
-	w.Header().Set("X-Nil-Epoch", "1") // Fixed Epoch 1 for Devnet
+	w.Header().Set("X-Nil-Epoch", strconv.FormatUint(epochID, 10))
 	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(servedLen, 10))
 	w.Header().Set("X-Nil-Provider", providerAddr)
 	w.Header().Set("X-Nil-File-Path", filePath)
