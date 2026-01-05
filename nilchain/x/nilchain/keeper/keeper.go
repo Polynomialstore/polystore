@@ -47,6 +47,17 @@ type Keeper struct {
 	RetrievalSessionsByOwner    collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionsByProvider collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+
+	// --- Unified Liveness v1 (epoch + quotas) ---
+	EpochSeeds           collections.Map[uint64, []byte]
+	Mode1EpochCredits    collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1EpochSynthetic  collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1MissedEpochs    collections.Map[collections.Pair[uint64, string], uint64]
+	Mode2EpochCredits    collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochSynthetic  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2MissedEpochs    collections.Map[collections.Pair[uint64, uint32], uint64]
+	CreditSeen           collections.Map[[]byte, bool]
+	SyntheticSeen        collections.Map[[]byte, bool]
 }
 
 func NewKeeper(
@@ -97,6 +108,52 @@ func NewKeeper(
 				collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
 				collections.Uint64Value,
 			),
+
+			EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
+			Mode1EpochCredits: collections.NewMap(
+				sb,
+				types.Mode1EpochCreditsKey,
+				"mode1_epoch_credits",
+				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
+				collections.Uint64Value,
+			),
+			Mode1EpochSynthetic: collections.NewMap(
+				sb,
+				types.Mode1EpochSyntheticKey,
+				"mode1_epoch_synthetic",
+				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
+				collections.Uint64Value,
+			),
+			Mode1MissedEpochs: collections.NewMap(
+				sb,
+				types.Mode1MissedEpochsKey,
+				"mode1_missed_epochs",
+				collections.PairKeyCodec(collections.Uint64Key, collections.StringKey),
+				collections.Uint64Value,
+			),
+			Mode2EpochCredits: collections.NewMap(
+				sb,
+				types.Mode2EpochCreditsKey,
+				"mode2_epoch_credits",
+				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+				collections.Uint64Value,
+			),
+			Mode2EpochSynthetic: collections.NewMap(
+				sb,
+				types.Mode2EpochSyntheticKey,
+				"mode2_epoch_synthetic",
+				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+				collections.Uint64Value,
+			),
+			Mode2MissedEpochs: collections.NewMap(
+				sb,
+				types.Mode2MissedEpochsKey,
+				"mode2_missed_epochs",
+				collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+				collections.Uint64Value,
+			),
+			CreditSeen:    collections.NewMap(sb, types.CreditSeenKey, "credit_seen", collections.BytesKey, collections.BoolValue),
+			SyntheticSeen: collections.NewMap(sb, types.SyntheticSeenKey, "synthetic_seen", collections.BytesKey, collections.BoolValue),
 		}
 
 	schema, err := sb.Build()

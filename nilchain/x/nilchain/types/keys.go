@@ -36,4 +36,15 @@ var (
 	RetrievalSessionsByOwnerKey     = collections.NewPrefix("RetrievalSessionsByOwner/value/")
 	RetrievalSessionsByProviderKey  = collections.NewPrefix("RetrievalSessionsByProvider/value/")
 	RetrievalSessionNonceKey        = collections.NewPrefix("RetrievalSessionNonce/value/")
+
+	// --- Unified Liveness v1 (epoch + quotas) ---
+	EpochSeedKey            = collections.NewPrefix("EpochSeed/value/")
+	Mode1EpochCreditsKey    = collections.NewPrefix("Mode1EpochCredits/value/")
+	Mode1EpochSyntheticKey  = collections.NewPrefix("Mode1EpochSynthetic/value/")
+	Mode1MissedEpochsKey    = collections.NewPrefix("Mode1MissedEpochs/value/")
+	Mode2EpochCreditsKey    = collections.NewPrefix("Mode2EpochCredits/value/")
+	Mode2EpochSyntheticKey  = collections.NewPrefix("Mode2EpochSynthetic/value/")
+	Mode2MissedEpochsKey    = collections.NewPrefix("Mode2MissedEpochs/value/")
+	CreditSeenKey           = collections.NewPrefix("CreditSeen/value/")
+	SyntheticSeenKey        = collections.NewPrefix("SyntheticSeen/value/")
 )

@@ -3,6 +3,7 @@ package keeper
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -11,62 +12,148 @@ import (
 
 // CheckMissedProofs iterates over all deals and slashes providers who have missed their proof window.
 func (k Keeper) CheckMissedProofs(ctx context.Context) error {
-	// Iterate over all active deals
-	// Note: In production, this should be optimized (e.g., iterate over a queue sorted by NextProofHeight)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	params := k.GetParams(sdkCtx)
+	if params.EpochLenBlocks == 0 {
+		return nil
+	}
+	if !isEpochEnd(sdkCtx.BlockHeight(), params.EpochLenBlocks) {
+		return nil
+	}
+	epochID := epochIDAtHeight(sdkCtx.BlockHeight(), params.EpochLenBlocks)
+	if epochID == 0 {
+		return nil
+	}
+	height := uint64(sdkCtx.BlockHeight())
+
 	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
-		// Only check active deals
-		currentHeight := uint64(sdk.UnwrapSDKContext(ctx).BlockHeight())
-		if currentHeight < deal.StartBlock || currentHeight > deal.EndBlock {
+		if height < deal.StartBlock || height > deal.EndBlock {
+			return false, nil
+		}
+		in, ok := slabInputs(deal)
+		if !ok {
 			return false, nil
 		}
 
-		for _, providerAddr := range deal.Providers {
-			// Get LastProofHeight
-			lastProof, err := k.DealProviderStatus.Get(ctx, collections.Join(dealID, providerAddr))
-			if err != nil {
-				if !errors.Is(err, collections.ErrNotFound) {
-					// If error is real error, return it? Or log and continue?
-                    // For safety, we log and assume start block.
-                    sdk.UnwrapSDKContext(ctx).Logger().Error("Failed to get last proof height", "error", err)
-				}
-				lastProof = deal.StartBlock
-			}
+		stripe, serr := stripeParamsForDeal(deal)
+		if serr != nil {
+			sdkCtx.Logger().Error("quota enforcement skipped: invalid stripe params", "deal", dealID, "error", serr)
+			return false, nil
+		}
 
-			// Check if overdue
-			if currentHeight > lastProof + types.ProofWindow {
-				// SLASHDOWN!
-				sdkCtx := sdk.UnwrapSDKContext(ctx)
-				sdkCtx.Logger().Info("Slashing provider for downtime", "provider", providerAddr, "deal", dealID, "last_proof", lastProof, "current", currentHeight)
-
-				// Slash Amount: 10 stake (placeholder)
-				slashAmt := sdk.NewCoins(sdk.NewInt64Coin("stake", 10000000))
-				
-				pAddr, err := sdk.AccAddressFromBech32(providerAddr)
-				if err != nil {
-					sdkCtx.Logger().Error("Invalid provider address during slash", "address", providerAddr)
+		switch stripe.mode {
+		case 1:
+			for _, provider := range deal.Providers {
+				quota := requiredBlobsMode1(params, deal, in)
+				if quota == 0 {
 					continue
 				}
+				keyEpoch := mode1EpochKey(dealID, provider, epochID)
 
-				// Attempt slash
-				err = k.BankKeeper.SendCoinsFromAccountToModule(sdkCtx, pAddr, types.ModuleName, slashAmt)
-				if err != nil {
-					// Insufficient funds -> Jail?
-					// For now just log
-					sdkCtx.Logger().Info("Slashing failed (insufficient funds)", "provider", providerAddr)
+				creditsRaw, err := k.Mode1EpochCredits.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+				synth, err := k.Mode1EpochSynthetic.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+
+				creditCap := creditCapBlobs(params, quota)
+				credits := creditsRaw
+				if creditCap < credits {
+					credits = creditCap
+				}
+
+				total := credits + synth
+				missedKey := collections.Join(dealID, provider)
+				if total < quota {
+					prev, err := k.Mode1MissedEpochs.Get(ctx, missedKey)
+					if err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
+					if err := k.Mode1MissedEpochs.Set(ctx, missedKey, prev+1); err != nil {
+						return false, err
+					}
+					sdkCtx.Logger().Info(
+						"quota missed (mode1)",
+						"epoch", epochID,
+						"deal", dealID,
+						"provider", provider,
+						"quota", quota,
+						"credits", credits,
+						"synthetic", synth,
+						"missed_epochs", prev+1,
+					)
 				} else {
-					// Burn
-					if err := k.BankKeeper.BurnCoins(sdkCtx, types.ModuleName, slashAmt); err != nil {
-						sdkCtx.Logger().Error("Failed to burn slashed coins", "error", err)
+					if err := k.Mode1MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
+				}
+			}
+		case 2:
+			if stripe.slotCount == 0 {
+				return false, nil
+			}
+			quota := requiredBlobsMode2(params, deal, stripe, in)
+			if quota == 0 {
+				return false, nil
+			}
+			for slotIdx := uint64(0); slotIdx < stripe.slotCount; slotIdx++ {
+				slot := uint32(slotIdx)
+				if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
+					s := deal.Mode2Slots[slot]
+					if s != nil && s.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+						continue
 					}
 				}
 
-				// Update LastProofHeight to CurrentHeight to give them a new window
-				// and prevent slashing every block for the same incident.
-				if err := k.DealProviderStatus.Set(ctx, collections.Join(dealID, providerAddr), currentHeight); err != nil {
-					sdkCtx.Logger().Error("Failed to update proof status after slash", "error", err)
+				keyEpoch := mode2EpochKey(dealID, slot, epochID)
+				creditsRaw, err := k.Mode2EpochCredits.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+				synth, err := k.Mode2EpochSynthetic.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+
+				creditCap := creditCapBlobs(params, quota)
+				credits := creditsRaw
+				if creditCap < credits {
+					credits = creditCap
+				}
+
+				total := credits + synth
+				missedKey := collections.Join(dealID, slot)
+				if total < quota {
+					prev, err := k.Mode2MissedEpochs.Get(ctx, missedKey)
+					if err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
+					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, prev+1); err != nil {
+						return false, err
+					}
+					sdkCtx.Logger().Info(
+						"quota missed (mode2)",
+						"epoch", epochID,
+						"deal", dealID,
+						"slot", slotIdx,
+						"quota", quota,
+						"credits", credits,
+						"synthetic", synth,
+						"missed_epochs", prev+1,
+					)
+				} else {
+					if err := k.Mode2MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
 				}
 			}
+		default:
+			return false, fmt.Errorf("unexpected stripe mode %d", stripe.mode)
 		}
+
 		return false, nil
 	})
 
