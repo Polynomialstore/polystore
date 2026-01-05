@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -99,6 +100,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 			if quota == 0 {
 				return false, nil
 			}
+			dealChanged := false
 			for slotIdx := uint64(0); slotIdx < stripe.slotCount; slotIdx++ {
 				slot := uint32(slotIdx)
 				if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
@@ -131,7 +133,8 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
 					}
-					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, prev+1); err != nil {
+					nextMissed := prev + 1
+					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
 						return false, err
 					}
 					sdkCtx.Logger().Info(
@@ -142,12 +145,58 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"quota", quota,
 						"credits", credits,
 						"synthetic", synth,
-						"missed_epochs", prev+1,
+						"missed_epochs", nextMissed,
 					)
+
+					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
+							continue
+						}
+						entry := deal.Mode2Slots[slot]
+						if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+							continue
+						}
+						if strings.TrimSpace(entry.PendingProvider) != "" {
+							continue
+						}
+
+						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
+						if err != nil {
+							sdkCtx.Logger().Error(
+								"failed to select replacement provider",
+								"deal", dealID,
+								"slot", slotIdx,
+								"error", err,
+							)
+							continue
+						}
+
+						entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+						entry.PendingProvider = strings.TrimSpace(pending)
+						entry.StatusSinceHeight = sdkCtx.BlockHeight()
+						entry.RepairTargetGen = deal.CurrentGen
+						deal.Mode2Slots[slot] = entry
+						dealChanged = true
+						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+						sdkCtx.Logger().Info(
+							"slot repair started",
+							"deal", dealID,
+							"slot", slotIdx,
+							"provider", entry.Provider,
+							"pending_provider", entry.PendingProvider,
+							"repair_target_gen", entry.RepairTargetGen,
+						)
+					}
 				} else {
 					if err := k.Mode2MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
 					}
+				}
+			}
+			if dealChanged {
+				if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+					return false, err
 				}
 			}
 		default:
