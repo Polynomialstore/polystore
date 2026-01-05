@@ -44,7 +44,9 @@ const nilstoreABIJSON = `[
     "inputs":[
       {"name":"dealId","type":"uint64"},
       {"name":"manifestRoot","type":"bytes"},
-      {"name":"sizeBytes","type":"uint64"}
+      {"name":"sizeBytes","type":"uint64"},
+      {"name":"totalMdus","type":"uint64"},
+      {"name":"witnessMdus","type":"uint64"}
     ],
     "outputs":[{"name":"ok","type":"bool"}]
   },
@@ -664,6 +666,17 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 	if err != nil || sizeBytes == 0 {
 		return nil, errors.New("updateDealContent: sizeBytes must be > 0")
 	}
+	totalMdus, err := asUint64(args["totalMdus"])
+	if err != nil || totalMdus == 0 {
+		return nil, errors.New("updateDealContent: totalMdus must be > 0")
+	}
+	witnessMdus, err := asUint64(args["witnessMdus"])
+	if err != nil {
+		return nil, errors.New("updateDealContent: invalid witnessMdus")
+	}
+	if totalMdus <= 1+witnessMdus {
+		return nil, errors.New("updateDealContent: totalMdus must be > 1 + witnessMdus")
+	}
 
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
@@ -671,10 +684,12 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 
 	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
 	_, err = msgServer.UpdateDealContent(sdk.WrapSDKContext(ctx), &types.MsgUpdateDealContent{
-		Creator: creator,
-		DealId:  dealID,
-		Cid:     cid,
-		Size_:   sizeBytes,
+		Creator:     creator,
+		DealId:      dealID,
+		Cid:         cid,
+		Size_:       sizeBytes,
+		TotalMdus:   totalMdus,
+		WitnessMdus: witnessMdus,
 	})
 	if err != nil {
 		return nil, err
