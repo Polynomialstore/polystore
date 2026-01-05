@@ -44,6 +44,7 @@ var (
 	Mode1MissedEpochsKey       = collections.NewPrefix("Mode1MissedEpochs/value/")
 	Mode2EpochCreditsKey       = collections.NewPrefix("Mode2EpochCredits/value/")
 	Mode2EpochSyntheticKey     = collections.NewPrefix("Mode2EpochSynthetic/value/")
+	Mode2EpochSlotServedKey    = collections.NewPrefix("Mode2EpochSlotServed/value/")
 	Mode2EpochDeputyServedKey  = collections.NewPrefix("Mode2EpochDeputyServed/value/")
 	Mode2MissedEpochsKey       = collections.NewPrefix("Mode2MissedEpochs/value/")
 	Mode2DeputyMissedEpochsKey = collections.NewPrefix("Mode2DeputyMissedEpochs/value/")

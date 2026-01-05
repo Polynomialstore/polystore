@@ -2111,6 +2111,28 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 	startGlobal := session.StartMduIndex*stripe.leafCount + uint64(session.StartBlobIndex)
 
+	activeProviderForMode2Slot := func(slot uint32) (string, bool) {
+		if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
+			entry := deal.Mode2Slots[slot]
+			if entry == nil {
+				return "", false
+			}
+			p := strings.TrimSpace(entry.Provider)
+			if p == "" {
+				return "", false
+			}
+			return p, true
+		}
+		if int(slot) < len(deal.Providers) {
+			p := strings.TrimSpace(deal.Providers[slot])
+			if p == "" {
+				return "", false
+			}
+			return p, true
+		}
+		return "", false
+	}
+
 	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
 		if chainedProof == nil {
 			return false, nil
@@ -2175,6 +2197,26 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	epochID := k.currentEpoch(ctx)
 	if epochID != 0 {
 		for _, p := range msg.Proofs {
+			if stripe.mode == 2 {
+				slotU64, serr := leafSlotIndex(uint64(p.BlobIndex), stripe.rows)
+				if serr != nil {
+					return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+				}
+				if slotU64 > uint64(^uint32(0)) {
+					return nil, sdkerrors.ErrInvalidRequest.Wrap("slot index overflow")
+				}
+				slot := uint32(slotU64)
+				if active, ok := activeProviderForMode2Slot(slot); ok && active == msg.Creator {
+					keyEpoch := mode2EpochKey(deal.Id, slot, epochID)
+					prev, err := k.Mode2EpochSlotServed.Get(ctx, keyEpoch)
+					if err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return nil, err
+					}
+					if err := k.Mode2EpochSlotServed.Set(ctx, keyEpoch, prev+1); err != nil {
+						return nil, err
+					}
+				}
+			}
 			if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, p.MduIndex, p.BlobIndex); err != nil {
 				return nil, err
 			}

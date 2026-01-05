@@ -113,6 +113,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				if err != nil && !errors.Is(err, collections.ErrNotFound) {
 					return false, err
 				}
+				slotServed, err := k.Mode2EpochSlotServed.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
 				deputyServed, err := k.Mode2EpochDeputyServed.Get(ctx, keyEpoch)
 				if err != nil && !errors.Is(err, collections.ErrNotFound) {
 					return false, err
@@ -182,10 +186,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					}
 				}
 
-				// Deputy audit debt: if the slot provider served zero organic credits but the slot
-				// was still served by another provider, treat it as a "ghosted" slot and start
-				// repairs even if synthetic fill satisfies quota.
-				if deputyServed > 0 && creditsRaw == 0 {
+				// Deputy audit debt: if another provider served blobs for this slot but the slot's
+				// active provider served none, treat it as a "ghosted" slot and start repairs even
+				// if system liveness + synthetic fill satisfies quota.
+				if deputyServed > 0 && slotServed == 0 {
 					prev, err := k.Mode2DeputyMissedEpochs.Get(ctx, missedKey)
 					if err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
@@ -196,11 +200,12 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					}
 
 					sdkCtx.Logger().Info(
-						"deputy-served slot had zero credits",
+						"deputy-served slot had zero retrieval service",
 						"epoch", epochID,
 						"deal", dealID,
 						"slot", slotIdx,
 						"deputy_served", deputyServed,
+						"slot_served", slotServed,
 						"missed_epochs", nextMissed,
 					)
 

@@ -337,13 +337,19 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
 
 	epochID := uint64(1)
-	// Quota is expected to be >=1 for this tiny deal; synth=1 should satisfy it.
+	// Even if the slot meets its quota via system proofs + synthetic fill, deputy-served
+	// retrievals with zero slot-served retrievals should trigger repair.
+	require.NoError(t, f.keeper.Mode2EpochCredits.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, uint32(0)), epochID),
+		10,
+	))
 	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(
 		sdkCtx,
 		collections.Join(collections.Join(dealID, uint32(0)), epochID),
-		1,
+		10,
 	))
-	// Slot 0 was served by a deputy (but slot credits remain zero).
+	// Slot 0 was served by a deputy (but the slot provider served no retrievals).
 	require.NoError(t, f.keeper.Mode2EpochDeputyServed.Set(
 		sdkCtx,
 		collections.Join(collections.Join(dealID, uint32(0)), epochID),
