@@ -2080,8 +2080,16 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
 	}
-	if msg.Creator != session.Provider {
-		return nil, sdkerrors.ErrUnauthorized.Wrap("only session provider may submit proofs")
+	creator := strings.TrimSpace(msg.Creator)
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	}
+	// Deputy/P2P flows: allow any registered provider to submit a valid session proof.
+	if _, err := k.Providers.Get(ctx, creator); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", msg.Creator)
+		}
+		return nil, err
 	}
 
 	if isSessionExpired(ctx, &session) {
@@ -2092,6 +2100,23 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
+	}
+
+	// Pin the first provider to submit the session proofs. This is the provider that
+	// will be paid when the session is completed/confirmed.
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN ||
+		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED {
+		existing, err := k.RetrievalSessionProofProvider.Get(ctx, msg.SessionId)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return nil, err
+		}
+		if errors.Is(err, collections.ErrNotFound) || strings.TrimSpace(existing) == "" {
+			if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
+				return nil, err
+			}
+		} else if strings.TrimSpace(existing) != creator {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session proofs already submitted by a different provider")
+		}
 	}
 
 	deal, err := k.Deals.Get(ctx, session.DealId)
@@ -2206,7 +2231,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 					return nil, sdkerrors.ErrInvalidRequest.Wrap("slot index overflow")
 				}
 				slot := uint32(slotU64)
-				if active, ok := activeProviderForMode2Slot(slot); ok && active == msg.Creator {
+				if active, ok := activeProviderForMode2Slot(slot); ok && active == creator {
 					keyEpoch := mode2EpochKey(deal.Id, slot, epochID)
 					prev, err := k.Mode2EpochSlotServed.Get(ctx, keyEpoch)
 					if err != nil && !errors.Is(err, collections.ErrNotFound) {
@@ -2217,7 +2242,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 					}
 				}
 			}
-			if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, p.MduIndex, p.BlobIndex); err != nil {
+			if err := k.recordCreditForProof(ctx, epochID, deal, stripe, creator, p.MduIndex, p.BlobIndex); err != nil {
 				return nil, err
 			}
 		}
@@ -2316,7 +2341,14 @@ func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.Retrie
 	}
 
 	if providerCut.IsPositive() {
-		providerAddr, err := sdk.AccAddressFromBech32(session.Provider)
+		payTo := strings.TrimSpace(session.Provider)
+		if sessionID := session.SessionId; len(sessionID) == 32 {
+			if proofProvider, err := k.RetrievalSessionProofProvider.Get(ctx, sessionID); err == nil && strings.TrimSpace(proofProvider) != "" {
+				payTo = strings.TrimSpace(proofProvider)
+			}
+		}
+
+		providerAddr, err := sdk.AccAddressFromBech32(payTo)
 		if err != nil {
 			return sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
 		}
@@ -2327,6 +2359,9 @@ func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.Retrie
 	}
 
 	session.LockedFee = math.ZeroInt()
+	if sessionID := session.SessionId; len(sessionID) == 32 {
+		_ = k.RetrievalSessionProofProvider.Remove(ctx, sessionID)
+	}
 	return nil
 }
 

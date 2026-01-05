@@ -36,6 +36,7 @@ var (
 	RetrievalSessionsByOwnerKey    = collections.NewPrefix("RetrievalSessionsByOwner/value/")
 	RetrievalSessionsByProviderKey = collections.NewPrefix("RetrievalSessionsByProvider/value/")
 	RetrievalSessionNonceKey       = collections.NewPrefix("RetrievalSessionNonce/value/")
+	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

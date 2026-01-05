@@ -47,6 +47,7 @@ type Keeper struct {
 	RetrievalSessionsByOwner    collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionsByProvider collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessionProofProvider collections.Map[[]byte, string]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -112,6 +113,7 @@ func NewKeeper(
 			collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
 			collections.Uint64Value,
 		),
+		RetrievalSessionProofProvider: collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(

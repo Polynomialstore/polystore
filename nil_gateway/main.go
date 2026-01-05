@@ -2305,8 +2305,13 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			}
 			providerAddr := cachedProviderAddress(r.Context())
 			if strings.TrimSpace(onchainSession.Provider) != strings.TrimSpace(providerAddr) {
-				writeJSONError(w, http.StatusForbidden, "session provider mismatch", fmt.Sprintf("expected %s, got %s", onchainSession.Provider, providerAddr))
-				return
+				// Deputy / router fallback: allow any provider to serve an on-chain session so long
+				// as they can produce valid proofs, but require the deputy flag.
+				if !allowDeputy {
+					writeJSONError(w, http.StatusForbidden, "session provider mismatch", fmt.Sprintf("expected %s, got %s", onchainSession.Provider, providerAddr))
+					return
+				}
+				w.Header().Set("X-Nil-Deputy", "1")
 			}
 			if onchainSession.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
 				writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", onchainSession.Status))
