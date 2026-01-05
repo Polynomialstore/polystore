@@ -88,9 +88,6 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
 	}
-	if deal.Owner != msg.Creator {
-		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner can complete slot repair")
-	}
 	if deal.RedundancyMode != 2 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair is only supported for Mode 2 deals")
 	}
@@ -111,6 +108,14 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d has no pending repair", msg.Slot)
 	}
 
+	creator := strings.TrimSpace(msg.Creator)
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	}
+	if creator != deal.Owner && creator != strings.TrimSpace(slot.PendingProvider) {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner or pending provider can complete slot repair")
+	}
+
 	oldProvider := slot.Provider
 	slot.Provider = slot.PendingProvider
 	slot.PendingProvider = ""
@@ -124,6 +129,10 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 		deal.Providers[slotIdx] = slot.Provider
 	}
 
+	// Rotate the deterministic challenge set after replacement so a failing provider
+	// cannot keep replaying historical proofs.
+	deal.CurrentGen++
+
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
@@ -135,6 +144,7 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 			sdk.NewAttribute("slot", fmt.Sprintf("%d", msg.Slot)),
 			sdk.NewAttribute("old_provider", oldProvider),
 			sdk.NewAttribute("new_provider", slot.Provider),
+			sdk.NewAttribute("current_gen", fmt.Sprintf("%d", deal.CurrentGen)),
 		),
 	)
 

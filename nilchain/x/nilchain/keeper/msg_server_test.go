@@ -280,7 +280,7 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, oldProvider, dealAfterStart.Providers[0])
 
 	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
-		Creator: user,
+		Creator: candidate,
 		DealId:  res.DealId,
 		Slot:    0,
 	})
@@ -292,6 +292,7 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, candidate, dealAfterComplete.Mode2Slots[0].Provider)
 	require.Equal(t, "", dealAfterComplete.Mode2Slots[0].PendingProvider)
 	require.Equal(t, candidate, dealAfterComplete.Providers[0])
+	require.Equal(t, dealAfterStart.CurrentGen+1, dealAfterComplete.CurrentGen)
 }
 
 func TestProveLiveness_RepairingSlotRejected(t *testing.T) {

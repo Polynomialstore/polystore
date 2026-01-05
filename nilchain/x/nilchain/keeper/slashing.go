@@ -104,13 +104,6 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 			dealChanged := false
 			for slotIdx := uint64(0); slotIdx < stripe.slotCount; slotIdx++ {
 				slot := uint32(slotIdx)
-				if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
-					s := deal.Mode2Slots[slot]
-					if s != nil && s.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
-						continue
-					}
-				}
-
 				keyEpoch := mode2EpochKey(dealID, slot, epochID)
 				creditsRaw, err := k.Mode2EpochCredits.Get(ctx, keyEpoch)
 				if err != nil && !errors.Is(err, collections.ErrNotFound) {
@@ -129,6 +122,61 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 
 				total := credits + synth
 				missedKey := collections.Join(dealID, slot)
+
+				// Repair coordination: when a slot is REPAIRING, allow the pending provider to
+				// satisfy the same quota via synthetic proofs. Once the quota is met for an
+				// epoch, complete the make-before-break swap automatically.
+				if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
+					entry := deal.Mode2Slots[slot]
+					if entry != nil && entry.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && strings.TrimSpace(entry.PendingProvider) != "" {
+						if total >= quota {
+							oldProvider := entry.Provider
+							newProvider := strings.TrimSpace(entry.PendingProvider)
+
+							entry.Provider = newProvider
+							entry.PendingProvider = ""
+							entry.Status = types.SlotStatus_SLOT_STATUS_ACTIVE
+							entry.StatusSinceHeight = sdkCtx.BlockHeight()
+							entry.RepairTargetGen = 0
+							deal.Mode2Slots[slot] = entry
+
+							// Keep legacy providers[] aligned when possible.
+							if int(slot) >= 0 && int(slot) < len(deal.Providers) {
+								deal.Providers[slot] = newProvider
+							}
+
+							deal.CurrentGen++
+							dealChanged = true
+							_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+							extra := make([]byte, 0, 4)
+							extra = binary.BigEndian.AppendUint32(extra, slot)
+							eid := deriveEvidenceID("slot_repair_completed", dealID, epochID, extra)
+							if err := k.recordEvidenceSummary(sdkCtx, dealID, strings.TrimSpace(oldProvider), "slot_repair_completed", eid[:], "chain", true); err != nil {
+								sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+							}
+
+							sdkCtx.Logger().Info(
+								"slot repair completed",
+								"deal", dealID,
+								"slot", slotIdx,
+								"old_provider", oldProvider,
+								"new_provider", newProvider,
+								"epoch", epochID,
+								"quota", quota,
+								"credits", credits,
+								"synthetic", synth,
+								"current_gen", deal.CurrentGen,
+							)
+						}
+						// Do not count missed epochs while repairing.
+						continue
+					}
+					if entry != nil && entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+						continue
+					}
+				}
+
 				if total < quota {
 					prev, err := k.Mode2MissedEpochs.Get(ctx, missedKey)
 					if err != nil && !errors.Is(err, collections.ErrNotFound) {
