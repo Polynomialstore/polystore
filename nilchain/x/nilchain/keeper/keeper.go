@@ -49,15 +49,18 @@ type Keeper struct {
 	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
-	EpochSeeds           collections.Map[uint64, []byte]
-	Mode1EpochCredits    collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
-	Mode1EpochSynthetic  collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
-	Mode1MissedEpochs    collections.Map[collections.Pair[uint64, string], uint64]
-	Mode2EpochCredits    collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2EpochSynthetic  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2MissedEpochs    collections.Map[collections.Pair[uint64, uint32], uint64]
-	CreditSeen           collections.Map[[]byte, bool]
-	SyntheticSeen        collections.Map[[]byte, bool]
+	EpochSeeds              collections.Map[uint64, []byte]
+	Mode1EpochCredits       collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1EpochSynthetic     collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1MissedEpochs       collections.Map[collections.Pair[uint64, string], uint64]
+	Mode2EpochCredits       collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochSynthetic     collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochDeputyServed  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2MissedEpochs       collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2DeputyMissedEpochs collections.Map[collections.Pair[uint64, uint32], uint64]
+	CreditSeen              collections.Map[[]byte, bool]
+	SyntheticSeen           collections.Map[[]byte, bool]
+	DeputySeen              collections.Map[[]byte, bool]
 }
 
 func NewKeeper(
@@ -75,7 +78,7 @@ func NewKeeper(
 
 	sb := collections.NewSchemaBuilder(storeService)
 
-		k := Keeper{
+	k := Keeper{
 		storeService:  storeService,
 		cdc:           cdc,
 		addressCodec:  addressCodec,
@@ -93,68 +96,83 @@ func NewKeeper(
 		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		ProviderRewards:         collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
-			ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
-			ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-			EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
-			DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+		ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
+		ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
+		DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
 
-			RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
-			RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
-			RetrievalSessionsByProvider: collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
-			RetrievalSessionNonces: collections.NewMap(
-				sb,
-				types.RetrievalSessionNonceKey,
-				"retrieval_session_nonces",
-				collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
-				collections.Uint64Value,
-			),
+		RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
+		RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+		RetrievalSessionsByProvider: collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+		RetrievalSessionNonces: collections.NewMap(
+			sb,
+			types.RetrievalSessionNonceKey,
+			"retrieval_session_nonces",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
+			collections.Uint64Value,
+		),
 
-			EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
-			Mode1EpochCredits: collections.NewMap(
-				sb,
-				types.Mode1EpochCreditsKey,
-				"mode1_epoch_credits",
-				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
-				collections.Uint64Value,
-			),
-			Mode1EpochSynthetic: collections.NewMap(
-				sb,
-				types.Mode1EpochSyntheticKey,
-				"mode1_epoch_synthetic",
-				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
-				collections.Uint64Value,
-			),
-			Mode1MissedEpochs: collections.NewMap(
-				sb,
-				types.Mode1MissedEpochsKey,
-				"mode1_missed_epochs",
-				collections.PairKeyCodec(collections.Uint64Key, collections.StringKey),
-				collections.Uint64Value,
-			),
-			Mode2EpochCredits: collections.NewMap(
-				sb,
-				types.Mode2EpochCreditsKey,
-				"mode2_epoch_credits",
-				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
-				collections.Uint64Value,
-			),
-			Mode2EpochSynthetic: collections.NewMap(
-				sb,
-				types.Mode2EpochSyntheticKey,
-				"mode2_epoch_synthetic",
-				collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
-				collections.Uint64Value,
-			),
-			Mode2MissedEpochs: collections.NewMap(
-				sb,
-				types.Mode2MissedEpochsKey,
-				"mode2_missed_epochs",
-				collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
-				collections.Uint64Value,
-			),
-			CreditSeen:    collections.NewMap(sb, types.CreditSeenKey, "credit_seen", collections.BytesKey, collections.BoolValue),
-			SyntheticSeen: collections.NewMap(sb, types.SyntheticSeenKey, "synthetic_seen", collections.BytesKey, collections.BoolValue),
-		}
+		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
+		Mode1EpochCredits: collections.NewMap(
+			sb,
+			types.Mode1EpochCreditsKey,
+			"mode1_epoch_credits",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode1EpochSynthetic: collections.NewMap(
+			sb,
+			types.Mode1EpochSyntheticKey,
+			"mode1_epoch_synthetic",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode1MissedEpochs: collections.NewMap(
+			sb,
+			types.Mode1MissedEpochsKey,
+			"mode1_missed_epochs",
+			collections.PairKeyCodec(collections.Uint64Key, collections.StringKey),
+			collections.Uint64Value,
+		),
+		Mode2EpochCredits: collections.NewMap(
+			sb,
+			types.Mode2EpochCreditsKey,
+			"mode2_epoch_credits",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode2EpochSynthetic: collections.NewMap(
+			sb,
+			types.Mode2EpochSyntheticKey,
+			"mode2_epoch_synthetic",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode2EpochDeputyServed: collections.NewMap(
+			sb,
+			types.Mode2EpochDeputyServedKey,
+			"mode2_epoch_deputy_served",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode2MissedEpochs: collections.NewMap(
+			sb,
+			types.Mode2MissedEpochsKey,
+			"mode2_missed_epochs",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
+		Mode2DeputyMissedEpochs: collections.NewMap(
+			sb,
+			types.Mode2DeputyMissedEpochsKey,
+			"mode2_deputy_missed_epochs",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
+		CreditSeen:    collections.NewMap(sb, types.CreditSeenKey, "credit_seen", collections.BytesKey, collections.BoolValue),
+		SyntheticSeen: collections.NewMap(sb, types.SyntheticSeenKey, "synthetic_seen", collections.BytesKey, collections.BoolValue),
+		DeputySeen:    collections.NewMap(sb, types.DeputySeenKey, "deputy_seen", collections.BytesKey, collections.BoolValue),
+	}
 
 	schema, err := sb.Build()
 	if err != nil {

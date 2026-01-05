@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	epochSeedTag      = []byte("nilstore/epoch/v1")
-	challengeSeedTag  = []byte("nilstore/chal/v1")
-	creditSeenTag     = []byte("nilstore/credit/v1")
-	syntheticSeenTag  = []byte("nilstore/synth/v1")
+	epochSeedTag     = []byte("nilstore/epoch/v1")
+	challengeSeedTag = []byte("nilstore/chal/v1")
+	creditSeenTag    = []byte("nilstore/credit/v1")
+	syntheticSeenTag = []byte("nilstore/synth/v1")
+	deputySeenTag    = []byte("nilstore/deputy/v1")
 )
 
 func (k Keeper) BeginBlock(goCtx context.Context) error {
@@ -239,6 +240,18 @@ func syntheticSeenKey(epochID uint64, dealID uint64, assignment []byte, mduIndex
 	return sum[:]
 }
 
+func deputySeenKey(epochID uint64, dealID uint64, assignment []byte, mduIndex uint64, blobIndex uint64) []byte {
+	buf := make([]byte, 0, len(deputySeenTag)+8+8+len(assignment)+8+8)
+	buf = append(buf, deputySeenTag...)
+	buf = binary.BigEndian.AppendUint64(buf, epochID)
+	buf = binary.BigEndian.AppendUint64(buf, dealID)
+	buf = append(buf, assignment...)
+	buf = binary.BigEndian.AppendUint64(buf, mduIndex)
+	buf = binary.BigEndian.AppendUint64(buf, blobIndex)
+	sum := sha256.Sum256(buf)
+	return sum[:]
+}
+
 func assignmentBytesMode1(provider string) ([]byte, error) {
 	addr, err := sdk.AccAddressFromBech32(provider)
 	if err != nil {
@@ -442,6 +455,30 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 				eid := deriveEvidenceID("deputy_served", deal.Id, epochID, extra)
 				if err := k.recordEvidenceSummary(ctx, deal.Id, active, "deputy_served", eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record deputy evidence summary", "error", err)
+				}
+
+				// Audit debt: track deputy-served leaf proofs so epoch-end enforcement
+				// can start repairs even if synthetic fill meets quota.
+				assignment := assignmentBytesMode2(slotU)
+				seenKey := deputySeenKey(epochID, deal.Id, assignment, mduIndex, uint64(blobIndex))
+				_, err := k.DeputySeen.Get(ctx, seenKey)
+				if err == nil {
+					return nil
+				}
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return err
+				}
+				if err := k.DeputySeen.Set(ctx, seenKey, true); err != nil {
+					return err
+				}
+
+				deputyKey := collections.Join(collections.Join(deal.Id, slotU), epochID)
+				current, err := k.Mode2EpochDeputyServed.Get(ctx, deputyKey)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return err
+				}
+				if err := k.Mode2EpochDeputyServed.Set(ctx, deputyKey, current+1); err != nil {
+					return err
 				}
 			}
 			return nil

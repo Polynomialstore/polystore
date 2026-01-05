@@ -113,6 +113,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				if err != nil && !errors.Is(err, collections.ErrNotFound) {
 					return false, err
 				}
+				deputyServed, err := k.Mode2EpochDeputyServed.Get(ctx, keyEpoch)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
 
 				creditCap := creditCapBlobs(params, quota)
 				credits := creditsRaw
@@ -148,6 +152,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 							deal.CurrentGen++
 							dealChanged = true
 							_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+							_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
 
 							extra := make([]byte, 0, 4)
 							extra = binary.BigEndian.AppendUint32(extra, slot)
@@ -174,6 +179,83 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					}
 					if entry != nil && entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
 						continue
+					}
+				}
+
+				// Deputy audit debt: if the slot provider served zero organic credits but the slot
+				// was still served by another provider, treat it as a "ghosted" slot and start
+				// repairs even if synthetic fill satisfies quota.
+				if deputyServed > 0 && creditsRaw == 0 {
+					prev, err := k.Mode2DeputyMissedEpochs.Get(ctx, missedKey)
+					if err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
+					nextMissed := prev + 1
+					if err := k.Mode2DeputyMissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
+						return false, err
+					}
+
+					sdkCtx.Logger().Info(
+						"deputy-served slot had zero credits",
+						"epoch", epochID,
+						"deal", dealID,
+						"slot", slotIdx,
+						"deputy_served", deputyServed,
+						"missed_epochs", nextMissed,
+					)
+
+					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
+							continue
+						}
+						entry := deal.Mode2Slots[slot]
+						if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+							continue
+						}
+						if strings.TrimSpace(entry.PendingProvider) != "" {
+							continue
+						}
+
+						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
+						if err != nil {
+							sdkCtx.Logger().Error(
+								"failed to select replacement provider",
+								"deal", dealID,
+								"slot", slotIdx,
+								"error", err,
+							)
+							continue
+						}
+
+						entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+						entry.PendingProvider = strings.TrimSpace(pending)
+						entry.StatusSinceHeight = sdkCtx.BlockHeight()
+						entry.RepairTargetGen = deal.CurrentGen
+						deal.Mode2Slots[slot] = entry
+						dealChanged = true
+						_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
+						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+						extra := make([]byte, 0, 4)
+						extra = binary.BigEndian.AppendUint32(extra, slot)
+						eid := deriveEvidenceID("deputy_miss_repair_started", dealID, epochID, extra)
+						if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "deputy_miss_repair_started", eid[:], "chain", false); err != nil {
+							sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+						}
+
+						sdkCtx.Logger().Info(
+							"slot repair started (deputy miss)",
+							"deal", dealID,
+							"slot", slotIdx,
+							"provider", entry.Provider,
+							"pending_provider", entry.PendingProvider,
+							"repair_target_gen", entry.RepairTargetGen,
+						)
+						continue
+					}
+				} else {
+					if err := k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
 					}
 				}
 
