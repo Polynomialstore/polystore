@@ -2161,16 +2161,6 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
 		}
-		if stripe.mode == 2 {
-			slot, serr := leafSlotIndex(expectedBlob, stripe.rows)
-			if serr != nil {
-				return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
-			}
-			providerSlot, ok := providerSlotIndex(deal, session.Provider)
-			if !ok || providerSlot != slot {
-				return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for proof")
-			}
-		}
 
 		ok, err := verifyChainedProof(&p)
 		if err != nil {
