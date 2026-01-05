@@ -2567,9 +2567,28 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !allowDeputy {
-			expectedProvider := strings.TrimSpace(slots[slot].Provider)
-			if expectedProvider == "" || strings.TrimSpace(providerAddr) != expectedProvider {
-				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedProvider))
+			assign := slots[slot]
+			expectedActive := strings.TrimSpace(assign.Provider)
+			expectedPending := ""
+			if assign.Status == 2 {
+				expectedPending = strings.TrimSpace(assign.PendingProvider)
+			}
+
+			localProvider := strings.TrimSpace(providerAddr)
+			allowed := false
+			if expectedPending != "" && localProvider == expectedPending {
+				allowed = true
+			}
+			if !allowed && expectedActive != "" && localProvider == expectedActive {
+				allowed = true
+			}
+
+			if !allowed {
+				hint := fmt.Sprintf("expected %s", expectedActive)
+				if expectedPending != "" {
+					hint = fmt.Sprintf("expected %s (or pending %s)", expectedActive, expectedPending)
+				}
+				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", hint)
 				return
 			}
 		} else {
