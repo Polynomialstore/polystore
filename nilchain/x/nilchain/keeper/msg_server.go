@@ -766,6 +766,22 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiveness) (*types.MsgProveLivenessResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	params := k.GetParams(ctx)
+	if params.EpochLenBlocks == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("epoch_len_blocks is 0 (unified liveness disabled)")
+	}
+	currentEpoch := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+	if msg.EpochId == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("epoch_id is required")
+	}
+	if msg.EpochId != currentEpoch {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("epoch_id must equal current epoch %d", currentEpoch)
+	}
+	epochSeed, err := k.epochSeed(ctx, currentEpoch)
+	if err != nil {
+		return nil, err
+	}
+
 	deal, err := k.Deals.Get(ctx, msg.DealId)
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
@@ -863,7 +879,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return v, nil
 	}
 
-	hChallenge := int64(deal.StartBlock)
+	epochStartHeight := int64(1)
+	if msg.EpochId > 1 && params.EpochLenBlocks > 0 {
+		epochStartHeight = int64((msg.EpochId-1)*params.EpochLenBlocks) + 1
+	}
+	hChallenge := epochStartHeight
 
 	// 4. Calculate Tier based on block height latency
 	hProof := ctx.BlockHeight()
@@ -903,8 +923,6 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			}
 		}
 	}
-
-	params := k.GetParams(ctx)
 
 	// --- INFLATIONARY DECAY ---
 	// BaseReward = 1 NIL * (1 / 2^(Height/Interval))
@@ -1056,6 +1074,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			ctx.Logger().Error("failed to increment heat", "error", err)
 		}
 
+		if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, msg.Creator, receipt.ProofDetails.MduIndex, receipt.ProofDetails.BlobIndex); err != nil {
+			return err
+		}
+
 		return nil
 	}
 
@@ -1070,6 +1092,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			// Track health for system proofs that fail verification.
 			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
 			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
+		}
+		if pt.SystemProof != nil {
+			if err := k.validateAndRecordSystemProof(ctx, msg.EpochId, epochSeed, params, deal, stripe, msg.Creator, pt.SystemProof.MduIndex, pt.SystemProof.BlobIndex); err != nil {
+				return nil, err
+			}
 		}
 	case *types.MsgProveLiveness_UserReceipt:
 		isUserReceipt = true
@@ -1207,6 +1234,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 			if err := k.IncrementHeat(ctx, deal.Id, chunk.RangeLen, false); err != nil {
 				ctx.Logger().Error("failed to increment heat", "error", err)
+			}
+
+			if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, msg.Creator, chunk.ProofDetails.MduIndex, chunk.ProofDetails.BlobIndex); err != nil {
+				return nil, err
 			}
 		}
 

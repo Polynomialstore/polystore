@@ -9,6 +9,7 @@ import (
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"nilchain/x/nilchain/types"
 )
@@ -379,4 +380,174 @@ func (k Keeper) recordSyntheticMode2(ctx sdk.Context, epochID uint64, dealID uin
 func (k Keeper) currentEpoch(ctx sdk.Context) uint64 {
 	params := k.GetParams(ctx)
 	return epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+}
+
+func (k Keeper) epochSeed(ctx sdk.Context, epochID uint64) ([32]byte, error) {
+	var seed [32]byte
+	if epochID == 0 {
+		return seed, nil
+	}
+
+	seedBytes, err := k.EpochSeeds.Get(ctx, epochID)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return seed, err
+	}
+
+	if errors.Is(err, collections.ErrNotFound) || len(seedBytes) != 32 {
+		sum := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
+		if err := k.EpochSeeds.Set(ctx, epochID, sum[:]); err != nil {
+			return seed, err
+		}
+		seedBytes = sum[:]
+	}
+	copy(seed[:], seedBytes)
+	return seed, nil
+}
+
+func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types.Deal, stripe stripeParams, provider string, mduIndex uint64, blobIndex uint32) error {
+	if epochID == 0 {
+		return nil
+	}
+
+	if stripe.mode == 2 {
+		slot, err := leafSlotIndex(uint64(blobIndex), stripe.rows)
+		if err != nil {
+			return err
+		}
+		key := collections.Join(collections.Join(deal.Id, uint32(slot)), epochID)
+		return k.recordCreditMode2(ctx, epochID, deal.Id, uint32(slot), key, mduIndex, uint64(blobIndex))
+	}
+
+	assignment, err := assignmentBytesMode1(provider)
+	if err != nil {
+		return err
+	}
+	key := collections.Join(collections.Join(deal.Id, provider), epochID)
+	return k.recordCredit(ctx, epochID, deal.Id, assignment, key, mduIndex, uint64(blobIndex))
+}
+
+func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, seed [32]byte, params types.Params, deal types.Deal, stripe stripeParams, provider string, mduIndex uint64, blobIndex uint32) error {
+	if epochID == 0 {
+		return nil
+	}
+
+	in, hasSlab := slabInputs(deal)
+	if !hasSlab || in.userMdus == 0 {
+		return nil
+	}
+
+	var quotaBlobs uint64
+	switch stripe.mode {
+	case 2:
+		quotaBlobs = requiredBlobsMode2(params, deal, stripe, in)
+	default:
+		quotaBlobs = requiredBlobsMode1(params, deal, in)
+	}
+
+	creditCap := creditCapBlobs(params, quotaBlobs)
+
+	if stripe.mode == 2 {
+		slot, err := leafSlotIndex(uint64(blobIndex), stripe.rows)
+		if err != nil {
+			return err
+		}
+
+		creditKey := collections.Join(collections.Join(deal.Id, uint32(slot)), epochID)
+		credits, err := k.Mode2EpochCredits.Get(ctx, creditKey)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return err
+		}
+		if creditCap > 0 && credits > creditCap {
+			credits = creditCap
+		}
+
+		syntheticRequired := uint64(0)
+		if quotaBlobs > credits {
+			syntheticRequired = quotaBlobs - credits
+		}
+		if syntheticRequired == 0 {
+			return sdkerrors.ErrInvalidRequest.Wrap("no synthetic proofs required for this epoch")
+		}
+
+		synth, err := k.Mode2EpochSynthetic.Get(ctx, creditKey)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return err
+		}
+		if synth >= syntheticRequired {
+			return sdkerrors.ErrInvalidRequest.Wrap("synthetic quota already satisfied for this epoch")
+		}
+
+		slotU := uint64(slot)
+		found := false
+		for i := uint64(0); i < syntheticRequired; i++ {
+			expMdu, expBlob := deriveMode2Challenge(seed, deal.Id, deal.CurrentGen, slotU, i, in, stripe)
+			if expMdu == mduIndex && expBlob == blobIndex {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return sdkerrors.ErrInvalidRequest.Wrap("system proof does not match any required synthetic challenge")
+		}
+
+		counted, err := k.recordSyntheticMode2(ctx, epochID, deal.Id, uint32(slot), creditKey, mduIndex, uint64(blobIndex))
+		if err != nil {
+			return err
+		}
+		if !counted {
+			return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
+		}
+		return nil
+	}
+
+	assignment, err := assignmentBytesMode1(provider)
+	if err != nil {
+		return err
+	}
+	key := collections.Join(collections.Join(deal.Id, provider), epochID)
+
+	credits, err := k.Mode1EpochCredits.Get(ctx, key)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	if creditCap > 0 && credits > creditCap {
+		credits = creditCap
+	}
+
+	syntheticRequired := uint64(0)
+	if quotaBlobs > credits {
+		syntheticRequired = quotaBlobs - credits
+	}
+	if syntheticRequired == 0 {
+		return sdkerrors.ErrInvalidRequest.Wrap("no synthetic proofs required for this epoch")
+	}
+
+	synth, err := k.Mode1EpochSynthetic.Get(ctx, key)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	if synth >= syntheticRequired {
+		return sdkerrors.ErrInvalidRequest.Wrap("synthetic quota already satisfied for this epoch")
+	}
+
+	found := false
+	for i := uint64(0); i < syntheticRequired; i++ {
+		expMdu, expBlob := deriveMode1Challenge(seed, deal.Id, deal.CurrentGen, assignment, i, in)
+		if expMdu == mduIndex && expBlob == blobIndex {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return sdkerrors.ErrInvalidRequest.Wrap("system proof does not match any required synthetic challenge")
+	}
+
+	counted, err := k.recordSynthetic(ctx, epochID, deal.Id, assignment, key, mduIndex, uint64(blobIndex))
+	if err != nil {
+		return err
+	}
+	if !counted {
+		return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
+	}
+	return nil
 }
