@@ -788,21 +788,39 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
 	}
 
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+
+	creator := strings.TrimSpace(msg.Creator)
 	isAssignedProvider := false
-	for _, p := range deal.Providers {
-		if p == msg.Creator {
-			isAssignedProvider = true
-			break
+	if stripe.mode == 2 && len(deal.Mode2Slots) > 0 {
+		for _, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if strings.TrimSpace(slot.Provider) == creator {
+				isAssignedProvider = true
+				break
+			}
+			if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && strings.TrimSpace(slot.PendingProvider) == creator {
+				isAssignedProvider = true
+				break
+			}
+		}
+	} else {
+		for _, p := range deal.Providers {
+			if strings.TrimSpace(p) == creator {
+				isAssignedProvider = true
+				break
+			}
 		}
 	}
 	if !isAssignedProvider {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
 	}
 
-	stripe, err := stripeParamsForDeal(deal)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
-	}
 	if stripe.mode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
 		slotIdx, ok := providerSlotIndex(deal, msg.Creator)
 		if ok && int(slotIdx) < len(deal.Mode2Slots) {
@@ -833,9 +851,37 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			if serr != nil {
 				return false, nil
 			}
-			providerSlot, ok := providerSlotIndex(deal, msg.Creator)
-			if !ok || providerSlot != slot {
-				return false, nil
+
+			if len(deal.Mode2Slots) > 0 {
+				if int(slot) >= len(deal.Mode2Slots) {
+					return false, nil
+				}
+				entry := deal.Mode2Slots[int(slot)]
+				if entry == nil {
+					return false, nil
+				}
+
+				expectedActive := strings.TrimSpace(entry.Provider)
+				expectedPending := ""
+				if entry.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+					expectedPending = strings.TrimSpace(entry.PendingProvider)
+				}
+				actual := strings.TrimSpace(msg.Creator)
+				allowed := false
+				if actual != "" && expectedActive != "" && actual == expectedActive {
+					allowed = true
+				}
+				if !allowed && actual != "" && expectedPending != "" && actual == expectedPending {
+					allowed = true
+				}
+				if !allowed {
+					return false, nil
+				}
+			} else {
+				providerSlot, ok := providerSlotIndex(deal, msg.Creator)
+				if !ok || providerSlot != slot {
+					return false, nil
+				}
 			}
 		}
 
@@ -1109,25 +1155,36 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				// For system proofs, policy failures should not revert the tx: we want
 				// the chain to record evidence and track health deterministically.
 				if sdkerrors.ErrInvalidRequest.Is(err) {
-					k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
-
 					extra := make([]byte, 0, 8+4)
 					extra = binary.BigEndian.AppendUint64(extra, pt.SystemProof.MduIndex)
 					extra = binary.BigEndian.AppendUint32(extra, pt.SystemProof.BlobIndex)
 
 					kind := "system_proof_rejected"
+					evidenceOK := false
+					penalize := true
 					switch {
 					case strings.Contains(err.Error(), "no synthetic proofs required"):
 						kind = "system_proof_unneeded"
+						evidenceOK = true
+						penalize = false
 					case strings.Contains(err.Error(), "quota already satisfied"):
 						kind = "system_proof_redundant"
+						evidenceOK = true
+						penalize = false
 					case strings.Contains(err.Error(), "does not match any required"):
 						kind = "system_proof_wrong_challenge"
 					case strings.Contains(err.Error(), "duplicate synthetic"):
 						kind = "system_proof_duplicate"
+						evidenceOK = true
+						penalize = false
+					case strings.Contains(err.Error(), "unauthorized provider"):
+						kind = "system_proof_wrong_provider"
+					}
+					if penalize {
+						k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
 					}
 					eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
-					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", false); errEvidence != nil {
+					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", evidenceOK); errEvidence != nil {
 						ctx.Logger().Error("failed to record evidence summary", "error", errEvidence)
 					}
 

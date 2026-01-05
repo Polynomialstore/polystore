@@ -414,8 +414,41 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 		if err != nil {
 			return err
 		}
-		key := collections.Join(collections.Join(deal.Id, uint32(slot)), epochID)
-		return k.recordCreditMode2(ctx, epochID, deal.Id, uint32(slot), key, mduIndex, uint64(blobIndex))
+
+		slotU := uint32(slot)
+		activeProvider, pendingProvider := mode2SlotProviders(deal, slotU)
+		creator := strings.TrimSpace(provider)
+		active := strings.TrimSpace(activeProvider)
+		pending := strings.TrimSpace(pendingProvider)
+
+		// Only count credits toward the slot if the proof was submitted by the slot's
+		// active provider (or the pending provider while repairing). Deputy proofs
+		// should not reduce the synthetic quota for a missing slot.
+		allowed := false
+		if creator != "" && creator == active {
+			allowed = true
+		}
+		if !allowed && creator != "" && pending != "" && creator == pending {
+			allowed = true
+		}
+		if !allowed {
+			// Best-effort evidence: the slot was served by someone else (deputy).
+			if active != "" {
+				extra := make([]byte, 0, 4+8+4+len(creator))
+				extra = binary.BigEndian.AppendUint32(extra, slotU)
+				extra = binary.BigEndian.AppendUint64(extra, mduIndex)
+				extra = binary.BigEndian.AppendUint32(extra, blobIndex)
+				extra = append(extra, []byte(creator)...)
+				eid := deriveEvidenceID("deputy_served", deal.Id, epochID, extra)
+				if err := k.recordEvidenceSummary(ctx, deal.Id, active, "deputy_served", eid[:], "chain", false); err != nil {
+					ctx.Logger().Error("failed to record deputy evidence summary", "error", err)
+				}
+			}
+			return nil
+		}
+
+		key := collections.Join(collections.Join(deal.Id, slotU), epochID)
+		return k.recordCreditMode2(ctx, epochID, deal.Id, slotU, key, mduIndex, uint64(blobIndex))
 	}
 
 	assignment, err := assignmentBytesMode1(provider)
@@ -452,7 +485,23 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return err
 		}
 
-		creditKey := collections.Join(collections.Join(deal.Id, uint32(slot)), epochID)
+		slotU := uint32(slot)
+		activeProvider, pendingProvider := mode2SlotProviders(deal, slotU)
+		creator := strings.TrimSpace(provider)
+		active := strings.TrimSpace(activeProvider)
+		pending := strings.TrimSpace(pendingProvider)
+		allowed := false
+		if creator != "" && creator == active {
+			allowed = true
+		}
+		if !allowed && creator != "" && pending != "" && creator == pending {
+			allowed = true
+		}
+		if !allowed {
+			return sdkerrors.ErrInvalidRequest.Wrapf("system proof from unauthorized provider for slot %d", slot)
+		}
+
+		creditKey := collections.Join(collections.Join(deal.Id, slotU), epochID)
 		credits, err := k.Mode2EpochCredits.Get(ctx, creditKey)
 		if err != nil && !errors.Is(err, collections.ErrNotFound) {
 			return err
@@ -477,10 +526,10 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return sdkerrors.ErrInvalidRequest.Wrap("synthetic quota already satisfied for this epoch")
 		}
 
-		slotU := uint64(slot)
+		slotU64 := uint64(slotU)
 		found := false
 		for i := uint64(0); i < syntheticRequired; i++ {
-			expMdu, expBlob := deriveMode2Challenge(seed, deal.Id, deal.CurrentGen, slotU, i, in, stripe)
+			expMdu, expBlob := deriveMode2Challenge(seed, deal.Id, deal.CurrentGen, slotU64, i, in, stripe)
 			if expMdu == mduIndex && expBlob == blobIndex {
 				found = true
 				break
@@ -490,7 +539,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return sdkerrors.ErrInvalidRequest.Wrap("system proof does not match any required synthetic challenge")
 		}
 
-		counted, err := k.recordSyntheticMode2(ctx, epochID, deal.Id, uint32(slot), creditKey, mduIndex, uint64(blobIndex))
+		counted, err := k.recordSyntheticMode2(ctx, epochID, deal.Id, slotU, creditKey, mduIndex, uint64(blobIndex))
 		if err != nil {
 			return err
 		}
@@ -550,4 +599,22 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 		return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
 	}
 	return nil
+}
+
+func mode2SlotProviders(deal types.Deal, slot uint32) (active string, pending string) {
+	if deal.RedundancyMode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
+		entry := deal.Mode2Slots[int(slot)]
+		if entry == nil {
+			return "", ""
+		}
+		active = strings.TrimSpace(entry.Provider)
+		if entry.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+			pending = strings.TrimSpace(entry.PendingProvider)
+		}
+		return active, pending
+	}
+	if int(slot) >= 0 && int(slot) < len(deal.Providers) {
+		active = strings.TrimSpace(deal.Providers[int(slot)])
+	}
+	return active, ""
 }
