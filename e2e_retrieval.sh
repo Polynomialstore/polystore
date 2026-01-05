@@ -195,7 +195,7 @@ echo ">>> Deal Created with ID: $DEAL_ID"
 
 # 3. Commit Content
 echo ">>> Committing Content..."
-yes | $BINARY tx nilchain update-deal-content --deal-id $DEAL_ID --cid $MANIFEST_ROOT --size $SIZE --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657
+yes | $BINARY tx nilchain update-deal-content --deal-id $DEAL_ID --cid $MANIFEST_ROOT --size $SIZE --total-mdus 3 --witness-mdus 1 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --node tcp://127.0.0.1:26657
 
 echo ">>> Content Committed. Waiting for block..."
 sleep 2

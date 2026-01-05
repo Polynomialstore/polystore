@@ -122,6 +122,28 @@ except Exception:
 PY
 "${UPLOAD_RESP}")"
 
+TOTAL_MDUS="$(python3 - <<'PY'
+import json, sys
+doc = json.loads(sys.argv[1])
+total = doc.get("total_mdus") or doc.get("totalMdus") or doc.get("allocated_length") or 0
+try:
+  print(int(total))
+except Exception:
+  print(0)
+PY
+"${UPLOAD_RESP}")"
+
+WITNESS_MDUS="$(python3 - <<'PY'
+import json, sys
+doc = json.loads(sys.argv[1])
+w = doc.get("witness_mdus") or doc.get("witnessMdus") or 0
+try:
+  print(int(w))
+except Exception:
+  print(0)
+PY
+"${UPLOAD_RESP}")"
+
 if [[ -z "${MANIFEST_ROOT}" ]]; then
   echo "error: gateway upload returned no manifest_root. response: ${UPLOAD_RESP}" >&2
   exit 1
@@ -132,6 +154,7 @@ if [[ "${SIZE_BYTES}" == "0" ]]; then
 fi
 
 echo ">> Upload complete. manifest_root=${MANIFEST_ROOT} size_bytes=${SIZE_BYTES}"
+echo ">> Slab counts. total_mdus=${TOTAL_MDUS} witness_mdus=${WITNESS_MDUS}"
 
 echo ">> Committing deal content (EVM intent relay)..."
 UPDATE_JSON="$((
@@ -142,6 +165,8 @@ UPDATE_JSON="$((
   CID="$MANIFEST_ROOT" \
   DEAL_ID="$DEAL_ID" \
   SIZE_BYTES="$SIZE_BYTES" \
+  TOTAL_MDUS="$TOTAL_MDUS" \
+  WITNESS_MDUS="$WITNESS_MDUS" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
 ))"
 
@@ -166,4 +191,3 @@ echo ">> Done."
 echo "deal_id=${DEAL_ID}"
 echo "manifest_root=${MANIFEST_ROOT}"
 echo "nilfs_path=${NILFS_PATH}"
-

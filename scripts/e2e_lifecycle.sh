@@ -201,11 +201,19 @@ echo "    Response: $UPLOAD_RESP"
 
 MANIFEST_ROOT=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('manifest_root') or j.get('cid') or '')")
 SIZE_BYTES=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('size_bytes') or j.get('sizeBytes') or '')")
+TOTAL_MDUS=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('total_mdus') or j.get('totalMdus') or j.get('allocated_length') or '')")
+WITNESS_MDUS=$(echo "$UPLOAD_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('witness_mdus') or j.get('witnessMdus') or '')")
 echo "    Manifest Root: $MANIFEST_ROOT"
 echo "    Size: $SIZE_BYTES"
+echo "    Total MDUs: $TOTAL_MDUS"
+echo "    Witness MDUs: $WITNESS_MDUS"
 
 if [ -z "$MANIFEST_ROOT" ] || [ -z "$SIZE_BYTES" ] || [ "$MANIFEST_ROOT" == "null" ]; then
     echo "ERROR: Failed to extract manifest_root or size_bytes"
+    exit 1
+fi
+if [ -z "$TOTAL_MDUS" ] || [ -z "$WITNESS_MDUS" ]; then
+    echo "ERROR: Failed to extract total_mdus or witness_mdus"
     exit 1
 fi
 
@@ -219,6 +227,8 @@ for i in $(seq 1 5); do
     DEAL_ID="$DEAL_ID" \
     CID="$MANIFEST_ROOT" \
     SIZE_BYTES="$SIZE_BYTES" \
+    TOTAL_MDUS="$TOTAL_MDUS" \
+    WITNESS_MDUS="$WITNESS_MDUS" \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
   )
   UPDATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
@@ -343,11 +353,19 @@ echo "    Response: $UPLOAD2_RESP"
 
 MANIFEST_ROOT_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('manifest_root') or j.get('cid') or '')")
 SIZE_BYTES_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('size_bytes') or j.get('sizeBytes') or '')")
+TOTAL_MDUS_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('total_mdus') or j.get('totalMdus') or j.get('allocated_length') or '')")
+WITNESS_MDUS_2=$(echo "$UPLOAD2_RESP" | python3 -c "import sys, json; j=json.load(sys.stdin); print(j.get('witness_mdus') or j.get('witnessMdus') or '')")
 echo "    New Manifest Root: $MANIFEST_ROOT_2"
 echo "    New File Size: $SIZE_BYTES_2"
+echo "    Total MDUs: $TOTAL_MDUS_2"
+echo "    Witness MDUs: $WITNESS_MDUS_2"
 
 if [ -z "$MANIFEST_ROOT_2" ] || [ "$MANIFEST_ROOT_2" == "null" ]; then
     echo "ERROR: Failed to extract new manifest_root"
+    exit 1
+fi
+if [ -z "$TOTAL_MDUS_2" ] || [ -z "$WITNESS_MDUS_2" ]; then
+    echo "ERROR: Failed to extract total_mdus or witness_mdus"
     exit 1
 fi
 
@@ -361,6 +379,8 @@ for i in $(seq 1 5); do
     DEAL_ID="$DEAL_ID" \
     CID="$MANIFEST_ROOT_2" \
     SIZE_BYTES="$SIZE_BYTES_2" \
+    TOTAL_MDUS="$TOTAL_MDUS_2" \
+    WITNESS_MDUS="$WITNESS_MDUS_2" \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
   )
   UPDATE2_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \

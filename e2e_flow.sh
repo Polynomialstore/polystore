@@ -115,7 +115,7 @@ sleep 5
 
 # Update Deal Content - Step 2: Content
 echo ">>> Updating Deal Content..."
-yes | $BINARY tx nilchain update-deal-content --deal-id 1 --cid "QmTestCid" --size 8388608 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx nilchain update-deal-content --deal-id 1 --cid "QmTestCid" --size 8388608 --total-mdus 3 --witness-mdus 1 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 sleep 5
 
 # Verify Deal Created

@@ -129,7 +129,7 @@ echo ">>> Deal created with ID $DEAL_ID"
 echo ">>> Updating Content with dummy manifest root..."
 DUMMY_MANIFEST_ROOT="0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 set +e
-yes | $BINARY tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 8388608 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync >/dev/null
+yes | $BINARY tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 8388608 --total-mdus 3 --witness-mdus 1 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync >/dev/null
 set -e
 sleep 2
 

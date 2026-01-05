@@ -191,7 +191,7 @@ PY
 SIZE_BYTES=131072
 
 banner "Updating deal content"
-run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" \
+run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 

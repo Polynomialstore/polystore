@@ -123,7 +123,7 @@ echo "[E2E] Deal ID: $DEAL_ID"
 
 echo "[E2E] Committing dummy content..."
 DUMMY_MANIFEST_ROOT="0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-UPDATE_RES=$(yes | "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 1024 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+UPDATE_RES=$(yes | "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 1024 --total-mdus 3 --witness-mdus 1 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 UPDATE_HASH=$(echo "$UPDATE_RES" | jq -r '.txhash')
 sleep 4
 UPDATE_TX=$("$BINARY" query tx "$UPDATE_HASH" --home "$HOME_DIR" --node tcp://127.0.0.1:26657 --output json 2>/dev/null | tail -n 1)

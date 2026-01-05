@@ -54,7 +54,7 @@ echo "=== 3. Committing Content ==="
 $NILCHAIND_BIN tx nilchain update-deal-content --help
 COMMIT_RESP=$(timeout 10s curl -s -X POST http://localhost:8080/gateway/update-deal-content \
   -H "Content-Type: application/json" \
-  -d "{\"deal_id\":$DEAL_ID, \"cid\":\"$MANIFEST_ROOT\", \"size_bytes\":$SIZE}")
+  -d "{\"deal_id\":$DEAL_ID, \"cid\":\"$MANIFEST_ROOT\", \"size_bytes\":$SIZE, \"total_mdus\":3, \"witness_mdus\":1}")
 echo "Commit Resp: $COMMIT_RESP"
 
 if [[ "$COMMIT_RESP" == *"failed"* ]]; then

@@ -82,9 +82,11 @@ echo "Using OWNER_ADDR=$OWNER_ADDR"
 UPLOAD_RESP="$(timeout 60s curl -s -X POST -F "file=@${TEST_FILE}" -F "owner=${OWNER_ADDR}" "$GATEWAY_BASE/gateway/upload")"
 echo "Upload response: $UPLOAD_RESP"
 
-		CID="$(echo "$UPLOAD_RESP" | jq -r '.cid')"
+	CID="$(echo "$UPLOAD_RESP" | jq -r '.cid')"
 		MANIFEST_ROOT="$(echo "$UPLOAD_RESP" | jq -r '.manifest_root // .cid')"
 	SIZE_BYTES="$(echo "$UPLOAD_RESP" | jq -r '.size_bytes')"
+  TOTAL_MDUS="$(echo "$UPLOAD_RESP" | jq -r '.total_mdus // .allocated_length // 0')"
+  WITNESS_MDUS="$(echo "$UPLOAD_RESP" | jq -r '.witness_mdus // 0')"
 	if [ -z "$CID" ] || [ "$CID" = "null" ] || [ -z "$MANIFEST_ROOT" ] || [ "$MANIFEST_ROOT" = "null" ] || [ -z "$SIZE_BYTES" ] || [ "$SIZE_BYTES" = "null" ]; then
 	  echo "Failed to parse cid/manifest_root/size_bytes from upload response"
 	  exit 1
@@ -129,7 +131,9 @@ echo "Create-deal response: $CREATE_RESP"
 	{
 	  "deal_id": $DEAL_ID,
 	  "cid": "$MANIFEST_ROOT",
-	  "size_bytes": $SIZE_BYTES
+	  "size_bytes": $SIZE_BYTES,
+    "total_mdus": $TOTAL_MDUS,
+    "witness_mdus": $WITNESS_MDUS
 	}
 	JSON
 	)"
