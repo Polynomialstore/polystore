@@ -123,6 +123,7 @@ func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeSta
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
@@ -713,5 +714,81 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	fetchedContent, _ := io.ReadAll(fetchW.Body)
 	if string(fetchedContent) != string(fileContent) {
 		t.Fatalf("Fetched content mismatch. Expected: %q, Got: %q", string(fileContent), string(fetchedContent))
+	}
+}
+
+func TestGatewayOpenSession_UnsignedDoesNotRequireNonce(t *testing.T) {
+	useTempUploadDir(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	owner := testDealOwner(t)
+
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
+
+	// Minimal NilFS slab with a single small file.
+	fileContent := []byte("hello from open-session")
+	manifestRoot := mustTestManifestRoot(t, "open-session-unsigned")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile("note.txt", uint64(len(fileContent)), 0)
+
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
+	manifestBlob := make([]byte, 128*1024)
+	if err := os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+		t.Fatalf("write manifest.bin: %v", err)
+	}
+
+	witnessPlain := make([]byte, 64*48)
+	for i := 0; i < len(witnessPlain); i++ {
+		witnessPlain[i] = 0xaa
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644); err != nil {
+		t.Fatalf("write mdu_2.bin: %v", err)
+	}
+
+	// Stub LCD to serve Deal ID 0 owner/cid.
+	dealID := uint64(0)
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: manifestRoot.Canonical},
+	}
+	srv := dynamicMockDealServer(dealStates)
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	r := testRouter()
+
+	openURL := fmt.Sprintf("/gateway/open-session/%s?deal_id=%d&owner=%s&file_path=note.txt", manifestRoot.Canonical, dealID, owner)
+	req := httptest.NewRequest(http.MethodPost, openURL, nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GatewayOpenSession failed: %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("expected json response: %v", err)
+	}
+	if strings.TrimSpace(fmt.Sprint(out["download_session"])) == "" {
+		t.Fatalf("expected download_session in response, got: %v", out)
 	}
 }

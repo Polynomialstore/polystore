@@ -2015,13 +2015,25 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Anti-replay: only consume the request nonce once we've fully validated the deal state.
-	if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
-		writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
-		return
+	if requireRetrievalReqSig {
+		// Anti-replay: only consume the request nonce once we've fully validated the deal state.
+		if err := checkAndStoreRequestReplay(dealID, owner, reqNonce, reqExpiresAt); err != nil {
+			writeJSONError(w, http.StatusConflict, "replay rejected", err.Error())
+			return
+		}
 	}
 
-	sessionExpires := time.Unix(int64(reqExpiresAt), 0)
+	sessionExpires := time.Now().Add(10 * time.Minute)
+	if requireRetrievalReqSig {
+		sessionExpires = time.Unix(int64(reqExpiresAt), 0)
+	} else if strings.TrimSpace(reqExpiresStr) != "" {
+		if v, err := strconv.ParseUint(reqExpiresStr, 10, 64); err == nil && v > 0 {
+			candidate := time.Unix(int64(v), 0)
+			if candidate.After(time.Now()) {
+				sessionExpires = candidate
+			}
+		}
+	}
 	epochID := currentEpochID(r.Context())
 	downloadID, err := storeDownloadSession(downloadSession{
 		DealID:     dealID,
