@@ -4,15 +4,34 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
+
+var mode2ShardHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   3 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   3 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 8 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          128,
+		MaxIdleConnsPerHost:   16,
+	},
+	Timeout: 30 * time.Second,
+}
 
 func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams) (string, error) {
 	path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
@@ -37,6 +56,24 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		return "", fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
 	}
 
+	activeSlots := make([]uint64, 0, stripe.slotCount)
+	unknownSlots := make([]uint64, 0, stripe.slotCount)
+	repairingSlots := make([]uint64, 0, stripe.slotCount)
+	for slot := uint64(0); slot < stripe.slotCount; slot++ {
+		switch slots[slot].Status {
+		case 1:
+			activeSlots = append(activeSlots, slot)
+		case 2:
+			repairingSlots = append(repairingSlots, slot)
+		default:
+			unknownSlots = append(unknownSlots, slot)
+		}
+	}
+	orderedSlots := make([]uint64, 0, stripe.slotCount)
+	orderedSlots = append(orderedSlots, activeSlots...)
+	orderedSlots = append(orderedSlots, unknownSlots...)
+	orderedSlots = append(orderedSlots, repairingSlots...)
+
 	shards := make([][]byte, stripe.slotCount)
 	present := make([]bool, stripe.slotCount)
 	presentCount := uint64(0)
@@ -55,16 +92,47 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 			return err
 		}
 
-		base, err := resolveProviderHTTPBaseURL(ctx, slots[slot].Provider)
-		if err != nil {
-			return err
+		assign := slots[slot]
+		providers := make([]string, 0, 2)
+		if assign.Status == 2 {
+			// Route reads around repairing slots: prefer the pending provider, and only fall
+			// back to the outgoing provider when necessary.
+			if p := strings.TrimSpace(assign.PendingProvider); p != "" {
+				providers = append(providers, p)
+			}
 		}
-		shardBytes, err := fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot)
-		if err != nil {
-			return err
+		if p := strings.TrimSpace(assign.Provider); p != "" {
+			providers = append(providers, p)
 		}
-		if uint64(len(shardBytes)) != expectedShardSize {
-			return fmt.Errorf("shard %d has invalid size: %d", slot, len(shardBytes))
+		if len(providers) == 0 {
+			return fmt.Errorf("slot %d has no provider assignments", slot)
+		}
+
+		var shardBytes []byte
+		var lastErr error
+		for _, provider := range providers {
+			base, err := resolveProviderHTTPBaseURL(ctx, provider)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			shardBytes, err = fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if uint64(len(shardBytes)) != expectedShardSize {
+				lastErr = fmt.Errorf("shard %d has invalid size: %d", slot, len(shardBytes))
+				shardBytes = nil
+				continue
+			}
+			break
+		}
+		if shardBytes == nil {
+			if lastErr != nil {
+				return lastErr
+			}
+			return fmt.Errorf("shard fetch failed for slot %d", slot)
 		}
 		shards[slot] = shardBytes
 		if !present[slot] {
@@ -76,12 +144,18 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	}
 
 	// Prefer local shards first. Fetch remote shards until we have >=K present.
-	for slot := uint64(0); slot < stripe.slotCount && presentCount < stripe.k; slot++ {
+	for _, slot := range orderedSlots {
+		if presentCount >= stripe.k {
+			break
+		}
 		_ = tryLoadSlot(slot)
 	}
 	if presentCount < stripe.k {
 		// Second pass: try all slots to pick up parity shards if earlier ones were missing.
-		for slot := uint64(0); slot < stripe.slotCount && presentCount < stripe.k; slot++ {
+		for _, slot := range orderedSlots {
+			if presentCount >= stripe.k {
+				break
+			}
 			if present[slot] {
 				continue
 			}
@@ -128,7 +202,7 @@ func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, 
 	q.Set("slot", strconv.FormatUint(slot, 10))
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := mode2ShardHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

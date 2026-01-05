@@ -213,16 +213,28 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 
 				for _, slot := range payload.Deal.Mode2Slots {
 					p := strings.TrimSpace(slot.Provider)
-					if p == "" {
+					pending := strings.TrimSpace(slot.PendingProvider)
+					if p == "" && pending == "" {
 						continue
 					}
 					switch parseMode2SlotStatus(slot.Status) {
 					case 1:
-						active = append(active, p)
+						if p != "" {
+							active = append(active, p)
+						}
 					case 2:
-						repairing = append(repairing, p)
+						// When a slot is repairing, prefer routing to the pending provider
+						// (make-before-break) and de-prioritize the outgoing provider.
+						if pending != "" {
+							active = append(active, pending)
+						}
+						if p != "" {
+							repairing = append(repairing, p)
+						}
 					default:
-						unknown = append(unknown, p)
+						if p != "" {
+							unknown = append(unknown, p)
+						}
 					}
 				}
 

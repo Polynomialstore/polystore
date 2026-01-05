@@ -974,22 +974,38 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	localProviderAddr := strings.TrimSpace(cachedProviderAddress(ctx))
-	skipSlots := make(map[int]struct{})
-	if localProviderAddr != "" {
-		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			if strings.TrimSpace(slots[int(slot)].Provider) == localProviderAddr {
-				skipSlots[int(slot)] = struct{}{}
-			}
+
+	type slotTarget struct {
+		slot     uint64
+		provider string
+	}
+
+	targets := make([]slotTarget, 0, stripe.slotCount)
+	for slot := uint64(0); slot < stripe.slotCount; slot++ {
+		assign := slots[int(slot)]
+		provider := strings.TrimSpace(assign.Provider)
+		pending := strings.TrimSpace(assign.PendingProvider)
+
+		// Make-before-break: once a slot is repairing, stop blocking on the outgoing provider.
+		// Upload all new shards + replicated metadata to the pending provider so it can catch up.
+		if assign.Status == 2 && pending != "" {
+			provider = pending
 		}
+
+		if provider == "" {
+			// If the slot is repairing and pending_provider is unset, treat the slot as temporarily
+			// unavailable for uploads (reads should route around repairing slots).
+			continue
+		}
+		if localProviderAddr != "" && provider == localProviderAddr {
+			continue
+		}
+		targets = append(targets, slotTarget{slot: slot, provider: provider})
 	}
 
 	job := uploadJobFromContext(ctx)
 	uploadsPerSlot := witnessCount + 2 + userMdus
-	activeSlots := stripe.slotCount
-	if len(skipSlots) > 0 && activeSlots >= uint64(len(skipSlots)) {
-		activeSlots -= uint64(len(skipSlots))
-	}
-	totalUploads := activeSlots * uploadsPerSlot
+	totalUploads := uint64(len(targets)) * uploadsPerSlot
 	if job != nil {
 		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
 		job.setSteps(0, totalUploads)
@@ -1003,25 +1019,29 @@ func mode2UploadArtifactsToProviders(
 		}
 	}
 
-	slotBases := make([]string, stripe.slotCount)
+	providerBases := make(map[string]string, len(targets))
 	{
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(int(stripe.slotCount))
-		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			slot := int(slot)
-			if _, skip := skipSlots[slot]; skip {
+
+		var mu sync.Mutex
+		seen := make(map[string]struct{}, len(targets))
+		for _, target := range targets {
+			providerAddr := target.provider
+			if _, ok := seen[providerAddr]; ok {
 				continue
 			}
-			provider := strings.TrimSpace(slots[slot].Provider)
-			if provider == "" {
-				return fmt.Errorf("slot %d has empty provider assignment", slot)
-			}
+			seen[providerAddr] = struct{}{}
+			providerAddrLocal := providerAddr
+
 			eg.Go(func() error {
-				base, err := resolveProviderHTTPBaseURL(egctx, provider)
+				base, err := resolveProviderHTTPBaseURL(egctx, providerAddrLocal)
 				if err != nil {
 					return err
 				}
-				slotBases[slot] = strings.TrimRight(base, "/")
+				mu.Lock()
+				providerBases[providerAddrLocal] = strings.TrimRight(base, "/")
+				mu.Unlock()
 				return nil
 			})
 		}
@@ -1105,16 +1125,12 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	tasks := make([]uploadTask, 0, totalUploads)
-	for slot := uint64(0); slot < stripe.slotCount; slot++ {
-		if _, skip := skipSlots[int(slot)]; skip {
-			continue
-		}
-		base := slotBases[int(slot)]
+	for _, target := range targets {
+		slot := target.slot
+		base := providerBases[target.provider]
 		if base == "" {
 			continue
 		}
-
-		slotStr := strconv.FormatUint(slot, 10)
 
 		// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
 		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
@@ -1142,6 +1158,7 @@ func mode2UploadArtifactsToProviders(
 		for i := uint64(0); i < userMdus; i++ {
 			slabIndex := uint64(1) + witnessCount + i
 			slabIndexStr := strconv.FormatUint(slabIndex, 10)
+			slotStr := strconv.FormatUint(slot, 10)
 			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_shard",
