@@ -1633,6 +1633,12 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		if !ok || providerSlot != startSlot {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
 		}
+		if deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 && int(startSlot) < len(deal.Mode2Slots) {
+			slot := deal.Mode2Slots[startSlot]
+			if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; open-session disabled", startSlot)
+			}
+		}
 	}
 	if deal.TotalMdus != 0 {
 		if msg.StartMduIndex >= deal.TotalMdus {
