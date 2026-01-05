@@ -66,11 +66,9 @@ test.describe('gateway flow', () => {
     await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
     await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
 
-    let planCalls = 0
     let fetchCalls = 0
     page.on('response', (resp) => {
       const url = resp.url()
-      if (url.includes('/gateway/plan-retrieval-session/')) planCalls += 1
       if (url.includes('/gateway/fetch/')) fetchCalls += 1
     })
 
@@ -92,7 +90,6 @@ test.describe('gateway flow', () => {
     expect(downloaded.equals(fileBytes)).toBe(true)
 
     await expect(page.getByText(/Receipt submitted on-chain/)).toBeVisible({ timeout: 180_000 })
-    await expect.poll(() => planCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
   })
 })

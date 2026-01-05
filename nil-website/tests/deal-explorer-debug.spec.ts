@@ -44,7 +44,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     result: [['nil1provider'], [sessionId]],
   })
 
-  let planCalls = 0
+  let fetchCalls = 0
   let gatewayRawCalls = 0
   let gatewayProofCalls = 0
   let spProofCalls = 0
@@ -130,7 +130,6 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   })
 
   await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
-    planCalls += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -151,6 +150,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   })
 
   await page.route('**/gateway/fetch/**', async (route) => {
+    fetchCalls += 1
     await route.fulfill({
       status: 206,
       headers: {
@@ -320,17 +320,17 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   await downloadButton.click()
   const dl1 = await download1
   expect(await streamToBuffer(await dl1.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBeGreaterThan(0)
+  expect(fetchCalls).toBeGreaterThan(0)
   await expect(fileRow).toContainText('File cache: yes')
 
-  const planCallsAfterFirst = planCalls
+  const fetchCallsAfterFirst = fetchCalls
 
   // Browser Download again: should use cached bytes (no extra plan calls).
   const download2 = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl2 = await download2
   expect(await streamToBuffer(await dl2.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBe(planCallsAfterFirst)
+  expect(fetchCalls).toBe(fetchCallsAfterFirst)
 
   // Clear cache and force another SP retrieval.
   await page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`).click()
@@ -340,10 +340,10 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   await downloadButton.click()
   const dl3 = await download3
   expect(await streamToBuffer(await dl3.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBeGreaterThan(planCallsAfterFirst)
+  expect(fetchCalls).toBeGreaterThan(fetchCallsAfterFirst)
 
   // Gateway raw fetch path should not require a plan call.
-  const planCallsBeforeGateway = planCalls
+  const fetchCallsBeforeGateway = fetchCalls
   const rawDownloadButton = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
   await expect(rawDownloadButton).toBeVisible({ timeout: 60_000 })
   const download4 = page.waitForEvent('download', { timeout: 60_000 })
@@ -351,7 +351,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   const dl4 = await download4
   expect(await streamToBuffer(await dl4.createReadStream())).toEqual(fileBytes)
   expect(gatewayRawCalls).toBe(1)
-  expect(planCalls).toBe(planCallsBeforeGateway)
+  expect(fetchCalls).toBe(fetchCallsBeforeGateway)
   expect(gatewayProofCalls).toBeGreaterThan(0)
   expect(spProofCalls).toBe(0)
 })

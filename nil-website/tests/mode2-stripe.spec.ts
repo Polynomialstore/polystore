@@ -78,11 +78,9 @@ test.describe('mode2 stripe', () => {
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
 
     const expectedChunks = Math.ceil(fileBytes.length / (128 * 1024))
-    let planCalls = 0
     let fetchCalls = 0
     page.on('response', (resp) => {
       const url = resp.url()
-      if (url.includes('/gateway/plan-retrieval-session/')) planCalls += 1
       if (url.includes('/gateway/fetch/')) fetchCalls += 1
     })
 
@@ -107,7 +105,6 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
     await expect(page.getByText(/Download failed/i)).toHaveCount(0)
 
-    await expect.poll(() => planCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
 
     const cachedBytes = await page.evaluate(

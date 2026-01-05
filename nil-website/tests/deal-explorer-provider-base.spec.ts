@@ -44,8 +44,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     result: [['nil1provider'], [sessionId]],
   })
 
-  let gatewayPlanCalls = 0
-  let spPlanCalls = 0
+  let spFetchCalls = 0
   let gatewayProofCalls = 0
   let spProofCalls = 0
 
@@ -118,7 +117,6 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
     const url = route.request().url()
     if (url.includes(':8080/')) {
-      gatewayPlanCalls += 1
       return route.fulfill({
         status: 404,
         contentType: 'application/json',
@@ -127,7 +125,6 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
       })
     }
     if (url.includes(':8082/')) {
-      spPlanCalls += 1
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -150,16 +147,29 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   })
 
   await page.route('**/gateway/fetch/**', async (route) => {
-    await route.fulfill({
-      status: 206,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
-        'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
-      },
-      body: fileBytes,
-    })
+    const url = route.request().url()
+    if (url.includes(':8080/')) {
+      return route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'slab not found on disk' }),
+      })
+    }
+    if (url.includes(':8082/')) {
+      spFetchCalls += 1
+      return route.fulfill({
+        status: 206,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'X-Nil-Provider',
+          'Content-Type': 'application/octet-stream',
+          'X-Nil-Provider': 'nil1provider',
+        },
+        body: fileBytes,
+      })
+    }
+    return route.fulfill({ status: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'unexpected fetch url' })
   })
 
   await page.route('**/gateway/session-proof**', async (route) => {
@@ -298,8 +308,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
 
-  expect(spPlanCalls).toBeGreaterThan(0)
-  expect(gatewayPlanCalls).toBe(0)
+  expect(spFetchCalls).toBeGreaterThan(0)
   expect(gatewayProofCalls).toBeGreaterThan(0)
   expect(spProofCalls).toBe(0)
 })

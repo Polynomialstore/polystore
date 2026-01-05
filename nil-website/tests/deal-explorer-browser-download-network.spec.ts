@@ -44,7 +44,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     result: [['nil1provider'], [sessionId]],
   })
 
-  let planCalls = 0
+  let fetchCalls = 0
   let gatewayProofCalls = 0
   let spProofCalls = 0
   let listFilesCalls = 0
@@ -149,7 +149,6 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   })
 
   await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
-    planCalls += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -170,6 +169,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   })
 
   await page.route('**/gateway/fetch/**', async (route) => {
+    fetchCalls += 1
     await route.fulfill({
       status: 206,
       headers: {
@@ -327,7 +327,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   await downloadButton.click()
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBeGreaterThan(0)
+  expect(fetchCalls).toBeGreaterThan(0)
   expect(gatewayProofCalls).toBeGreaterThan(0)
   expect(spProofCalls).toBe(0)
 })
