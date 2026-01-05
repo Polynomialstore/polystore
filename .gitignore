@@ -16,6 +16,8 @@ nilchain/validator_key.json
 validator_key.json
 libnil_core.dylib
 .nilchain_retrieval
+.nilchain_open_session/
+.nilchain_retrieval_fees/
 nil_s3/uploads/
 uploads/sessions.db
 .gemini
