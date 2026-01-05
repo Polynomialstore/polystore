@@ -794,44 +794,58 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	}
 
 	creator := strings.TrimSpace(msg.Creator)
-	isAssignedProvider := false
-	if stripe.mode == 2 && len(deal.Mode2Slots) > 0 {
-		for _, slot := range deal.Mode2Slots {
-			if slot == nil {
-				continue
-			}
-			if strings.TrimSpace(slot.Provider) == creator {
-				isAssignedProvider = true
-				break
-			}
-			if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && strings.TrimSpace(slot.PendingProvider) == creator {
-				isAssignedProvider = true
-				break
-			}
-		}
-	} else {
-		for _, p := range deal.Providers {
-			if strings.TrimSpace(p) == creator {
-				isAssignedProvider = true
-				break
-			}
-		}
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
 	}
-	if !isAssignedProvider {
-		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
+	// Outer guardrail for deputy flows: only a registered provider may submit proofs.
+	if _, err := k.Providers.Get(ctx, creator); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", msg.Creator)
+		}
+		return nil, err
 	}
 
-	if stripe.mode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
-		slotIdx, ok := providerSlotIndex(deal, msg.Creator)
-		if ok && int(slotIdx) < len(deal.Mode2Slots) {
-			slot := deal.Mode2Slots[slotIdx]
-			if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
-				return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; liveness proofs are disabled", slotIdx)
+	_, isSystemProof := msg.ProofType.(*types.MsgProveLiveness_SystemProof)
+	if isSystemProof {
+		isAssignedProvider := false
+		if stripe.mode == 2 && len(deal.Mode2Slots) > 0 {
+			for _, slot := range deal.Mode2Slots {
+				if slot == nil {
+					continue
+				}
+				if strings.TrimSpace(slot.Provider) == creator {
+					isAssignedProvider = true
+					break
+				}
+				if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && strings.TrimSpace(slot.PendingProvider) == creator {
+					isAssignedProvider = true
+					break
+				}
+			}
+		} else {
+			for _, p := range deal.Providers {
+				if strings.TrimSpace(p) == creator {
+					isAssignedProvider = true
+					break
+				}
+			}
+		}
+		if !isAssignedProvider {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
+		}
+
+		if stripe.mode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
+			slotIdx, ok := providerSlotIndex(deal, msg.Creator)
+			if ok && int(slotIdx) < len(deal.Mode2Slots) {
+				slot := deal.Mode2Slots[slotIdx]
+				if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
+					return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is repairing; system proofs are disabled", slotIdx)
+				}
 			}
 		}
 	}
 
-	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool) (bool, error) {
+	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool, requireSlotAuth bool) (bool, error) {
 		if chainedProof == nil {
 			return false, nil
 		}
@@ -846,7 +860,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if uint64(chainedProof.BlobIndex) >= stripe.leafCount {
 			return false, nil
 		}
-		if stripe.mode == 2 {
+		if stripe.mode == 2 && requireSlotAuth {
 			slot, serr := leafSlotIndex(uint64(chainedProof.BlobIndex), stripe.rows)
 			if serr != nil {
 				return false, nil
@@ -866,7 +880,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				if entry.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
 					expectedPending = strings.TrimSpace(entry.PendingProvider)
 				}
-				actual := strings.TrimSpace(msg.Creator)
+				actual := creator
 				allowed := false
 				if actual != "" && expectedActive != "" && actual == expectedActive {
 					allowed = true
@@ -878,7 +892,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 					return false, nil
 				}
 			} else {
-				providerSlot, ok := providerSlotIndex(deal, msg.Creator)
+				providerSlot, ok := providerSlotIndex(deal, creator)
 				if !ok || providerSlot != slot {
 					return false, nil
 				}
@@ -1041,7 +1055,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 
 		// Verify triple-proof.
-		ok, err := verifyChainedProof(&receipt.ProofDetails, false)
+		ok, err := verifyChainedProof(&receipt.ProofDetails, false, false)
 		if err != nil {
 			return sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
 		}
@@ -1130,7 +1144,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	switch pt := msg.ProofType.(type) {
 	case *types.MsgProveLiveness_SystemProof:
-		ok, err := verifyChainedProof(pt.SystemProof, true)
+		ok, err := verifyChainedProof(pt.SystemProof, true, true)
 		if err != nil {
 			ctx.Logger().Error("Triple Proof Verification Error", "err", err)
 			ok = false
@@ -1300,7 +1314,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			seenLeaves[chunk.LeafIndex] = struct{}{}
 
 			// Verify triple-proof.
-			ok, err := verifyChainedProof(&chunk.ProofDetails, false)
+			ok, err := verifyChainedProof(&chunk.ProofDetails, false, false)
 			if err != nil {
 				return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
 			}
