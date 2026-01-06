@@ -22,7 +22,7 @@ import (
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
 // mduIndex is the index in the Deal Slab (0=Manifest, 1..W=Witness, W+1..=Data).
 // mduPath must point to the encoded 8 MiB MDU bytes stored on disk.
-func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string) (string, error) {
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, ownerAddr string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -61,9 +61,15 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 
 	manifestBlobPath := manifestPath
 
-	// 4. Sign Receipt
+	// 4. Sign Receipt (Must be signed by Deal Owner)
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
+
+	// Use provided ownerAddr if available, otherwise fallback to provider (legacy behavior)
+	signer := ownerAddr
+	if signer == "" {
+		signer = providerKeyName
+	}
 
 	signOut, err := execNilchaind(
 		signCtx,
@@ -75,7 +81,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		trustedSetup,
 		manifestBlobPath, // Pass the specific 128KB Blob
 		mduIndexStr,
-		"--from", providerKeyName,
+		"--from", signer,
 		"--home", homeDir,
 		"--keyring-backend", "test",
 		"--offline",
@@ -88,12 +94,18 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		return "", fmt.Errorf("sign-retrieval-receipt failed: %w (output: %s)", err, string(signOut))
 	}
 
+	cleanSignOut := extractJSONBody(signOut)
+	if len(cleanSignOut) == 0 {
+		// Fallback if extraction failed (maybe no logs?) or empty
+		cleanSignOut = signOut
+	}
+
 	tmpFile, err := os.CreateTemp(uploadDir, "receipt-*.json")
 	if err != nil {
 		return "", fmt.Errorf("CreateTemp failed: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	if _, err := tmpFile.Write(signOut); err != nil {
+	if _, err := tmpFile.Write(cleanSignOut); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("writing receipt file failed: %w", err)

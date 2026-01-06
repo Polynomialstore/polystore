@@ -1813,7 +1813,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath)
+	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath, dealOwner)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", "check nilchaind logs")
