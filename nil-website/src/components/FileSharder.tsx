@@ -890,12 +890,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             size_bytes?: number
             file_size_bytes?: number
             allocated_length?: number
+            total_mdus?: number
+            witness_mdus?: number
           } | null
 
           const statusRoot = String(lastJob?.result?.manifest_root || '')
+          const statusTotalMdus = Number(lastJob?.result?.total_mdus ?? 0) || 0
+          const statusWitnessMdus = Number(lastJob?.result?.witness_mdus ?? 0) || 0
           const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
           if (!root) throw new Error('gateway upload returned no manifest_root')
           const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
+          const gatewayTotalMdus = Number(payload?.total_mdus ?? statusTotalMdus) || 0
+          const gatewayWitnessMdus = Number(payload?.witness_mdus ?? statusWitnessMdus) || 0
+          const gatewayUserMdus = gatewayTotalMdus > 0 ? Math.max(0, gatewayTotalMdus - 1 - gatewayWitnessMdus) : 0
 
           setCurrentManifestRoot(root)
           setCurrentManifestBlob(null)
@@ -909,6 +916,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             phase: 'done',
             label: 'Gateway Mode 2 ingest complete. Ready to commit.',
             fileBytesTotal: gatewaySizeBytes,
+            totalUserMdus: gatewayUserMdus,
+            totalWitnessMdus: gatewayWitnessMdus,
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
@@ -1868,20 +1877,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const totalSize = isMode2
                       ? shardProgress.fileBytesTotal
                       : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+
                     const witnessMdus = Math.max(0, Number(shardProgress.totalWitnessMdus) || 0)
-                    const userMdus = Math.max(0, Number(shardProgress.totalUserMdus) || 0)
-                    const totalMdus = Math.max(0, 1 + witnessMdus + userMdus)
-                    commitContent({
-                      dealId,
-                      manifestRoot: currentManifestRoot || '',
-                      fileSize: totalSize,
-                      totalMdus,
-                      witnessMdus,
-                    });
+                    const totalMdus = isMode2
+                      ? Math.max(0, 1 + witnessMdus + Math.max(0, Number(shardProgress.totalUserMdus) || 0))
+                      : Math.max(0, collectedMdus.length)
+
+                    try {
+                      await commitContent({
+                        dealId,
+                        manifestRoot: currentManifestRoot || '',
+                        fileSize: totalSize,
+                        totalMdus,
+                        witnessMdus,
+                      })
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : String(e)
+                      addLog(`Commit failed: ${msg}`)
+                    }
                   }}
                   disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
                   data-testid="mdu-commit"

@@ -1,8 +1,8 @@
-import { useCallback } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile';
-import { appConfig } from '../config';
-import { Hex } from 'viem';
+import { useCallback } from 'react'
+import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
+import type { Hex } from 'viem'
+import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { appConfig } from '../config'
 
 interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
@@ -15,25 +15,50 @@ interface DirectCommitOptions {
 }
 
 export function useDirectCommit() {
-  const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
+  const { data: hash, writeContractAsync, isPending, error: writeError } = useWriteContract()
   
   const { isLoading: isConfirming, isSuccess, error: receiptError } = useWaitForTransactionReceipt({
     hash,
   });
 
-  const commitContent = useCallback((options: DirectCommitOptions) => {
-    const { dealId, manifestRoot, fileSize, totalMdus, witnessMdus } = options;
+  const commitContent = useCallback(async (options: DirectCommitOptions) => {
+    const { dealId, manifestRoot, fileSize, totalMdus, witnessMdus } = options
     
     // Ensure manifestRoot is bytes (0x prefixed)
     const formattedRoot = manifestRoot.startsWith('0x') ? manifestRoot : `0x${manifestRoot}`;
 
-    writeContract({
-      address: appConfig.nilstorePrecompile as Hex,
-      abi: NILSTORE_PRECOMPILE_ABI,
-      functionName: 'updateDealContent',
-      args: [BigInt(dealId), formattedRoot as Hex, BigInt(fileSize), BigInt(totalMdus), BigInt(witnessMdus)],
-    });
-  }, [writeContract]);
+    const totalMdusInt = Math.max(0, Number(totalMdus))
+    const witnessMdusInt = Math.max(0, Number(witnessMdus))
+    if (!Number.isFinite(totalMdusInt) || totalMdusInt <= 0) {
+      throw new Error('Commit requires totalMdus > 0')
+    }
+    if (!Number.isFinite(witnessMdusInt) || witnessMdusInt < 0) {
+      throw new Error('Commit requires witnessMdus >= 0')
+    }
+    if (totalMdusInt <= 1 + witnessMdusInt) {
+      throw new Error('Commit requires totalMdus > 1 + witnessMdus')
+    }
+
+    try {
+      const txHash = await writeContractAsync({
+        address: appConfig.nilstorePrecompile as Hex,
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'updateDealContent',
+        args: [
+          BigInt(dealId),
+          formattedRoot as Hex,
+          BigInt(fileSize),
+          BigInt(totalMdusInt),
+          BigInt(witnessMdusInt),
+        ],
+      })
+      options.onSuccess?.(String(txHash))
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e))
+      options.onError?.(error)
+      throw error
+    }
+  }, [writeContractAsync]);
 
   return {
     commitContent,

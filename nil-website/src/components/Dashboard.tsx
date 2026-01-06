@@ -1978,7 +1978,7 @@ export function Dashboard() {
                           <button
                               onClick={() =>
                                 stagedUpload &&
-                                handleUpdateContent(
+                                void handleUpdateContent(
                                   stagedUpload.cid,
                                   stagedUpload.sizeBytes,
                                   stagedUpload.totalMdus,

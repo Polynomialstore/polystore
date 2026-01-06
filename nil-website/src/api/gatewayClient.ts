@@ -48,8 +48,8 @@ export async function gatewayUpload(
   const sizeBytesRaw = obj['size_bytes'] ?? obj['sizeBytes'] ?? 0
   const fileSizeRaw = obj['file_size_bytes'] ?? obj['fileSizeBytes'] ?? sizeBytesRaw
   const allocatedRaw = obj['allocated_length']
-  const totalMdusRaw = obj['total_mdus']
-  const witnessMdusRaw = obj['witness_mdus']
+  const totalMdusRaw = obj['total_mdus'] ?? obj['totalMdus']
+  const witnessMdusRaw = obj['witness_mdus'] ?? obj['witnessMdus']
 
   return {
     cid: String(obj['cid'] ?? obj['manifest_root'] ?? ''),
