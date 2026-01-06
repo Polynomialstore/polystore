@@ -750,6 +750,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           steps_total?: number
           result?: {
             manifest_root?: string
+            total_mdus?: number
+            witness_mdus?: number
           }
         }
 
@@ -767,6 +769,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const obj = value as Record<string, unknown>
           const resultObj = obj.result && typeof obj.result === 'object' ? (obj.result as Record<string, unknown>) : null
           const manifestRoot = resultObj && typeof resultObj.manifest_root === 'string' ? resultObj.manifest_root : undefined
+          const totalMdus = resultObj ? asNumber(resultObj.total_mdus) : undefined
+          const witnessMdus = resultObj ? asNumber(resultObj.witness_mdus) : undefined
 
           return {
             status: typeof obj.status === 'string' ? obj.status : undefined,
@@ -777,7 +781,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             bytes_total: asNumber(obj.bytes_total),
             steps_done: asNumber(obj.steps_done),
             steps_total: asNumber(obj.steps_total),
-            result: manifestRoot ? { manifest_root: manifestRoot } : undefined,
+            result: manifestRoot || totalMdus !== undefined || witnessMdus !== undefined
+              ? { manifest_root: manifestRoot, total_mdus: totalMdus, witness_mdus: witnessMdus }
+              : undefined,
           }
         }
 
