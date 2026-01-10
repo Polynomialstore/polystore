@@ -181,6 +181,91 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 	return true, copyErr
 }
 
+func bufferRequestBody(r *http.Request) (*os.File, int64, error) {
+	tmpFile, err := os.CreateTemp("", "nil-router-upload-*")
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tmpFile.Close()
+		}
+	}()
+
+	size, copyErr := io.Copy(tmpFile, r.Body)
+	if copyErr != nil {
+		err = copyErr
+		return nil, 0, err
+	}
+	if closeErr := r.Body.Close(); closeErr != nil && err == nil {
+		err = closeErr
+		return nil, 0, err
+	}
+	if _, seekErr := tmpFile.Seek(0, io.SeekStart); seekErr != nil {
+		err = seekErr
+		return nil, 0, err
+	}
+	return tmpFile, size, nil
+}
+
+func tryProxyUploadToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string, bodyFile *os.File, contentLength int64) (bool, error) {
+	base := strings.TrimRight(strings.TrimSpace(providerBaseURL), "/")
+	if base == "" {
+		return false, fmt.Errorf("provider base url is empty")
+	}
+
+	if _, err := bodyFile.Seek(0, io.SeekStart); err != nil {
+		return false, err
+	}
+
+	target := base + r.URL.Path
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+
+	ctx := r.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, r.Method, target, bodyFile)
+	if err != nil {
+		return false, err
+	}
+	req.Header = r.Header.Clone()
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	req.ContentLength = contentLength
+
+	resp, err := routerHTTPClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// If the provider is reachable but returns a 5xx, attempt failover to the next candidate.
+	if resp.StatusCode >= http.StatusInternalServerError {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := strings.TrimSpace(string(bodyBytes))
+		if body == "" {
+			body = resp.Status
+		}
+		return false, fmt.Errorf("provider returned %d: %s", resp.StatusCode, body)
+	}
+
+	for k, vals := range resp.Header {
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+	setCORS(w)
+	w.WriteHeader(resp.StatusCode)
+
+	_, copyErr := io.Copy(w, resp.Body)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return true, copyErr
+}
+
 func requireDealIDQuery(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("deal_id"))
 	if raw == "" {
@@ -340,21 +425,49 @@ func RouterGatewayUpload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	providerAddr, err := resolveDealAssignedProvider(r.Context(), dealID)
+	providers, err := resolveDealProviders(r.Context(), dealID)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrDealNotFound) {
 			status = http.StatusNotFound
 		}
-		writeJSONError(w, status, "failed to resolve deal provider", err.Error())
+		writeJSONError(w, status, "failed to resolve deal providers", err.Error())
 		return
 	}
-	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+
+	tmpFile, size, err := bufferRequestBody(r)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
+		writeJSONError(w, http.StatusBadRequest, "failed to read upload body", err.Error())
 		return
 	}
-	proxyToProviderBaseURL(w, r, baseURL)
+	defer func() {
+		tmpPath := tmpFile.Name()
+		if err := tmpFile.Close(); err == nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	var lastErr error
+	for _, providerAddr := range providers {
+		baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		ok, err := tryProxyUploadToProviderBaseURL(w, r, baseURL, tmpFile, size)
+		if ok {
+			dealProviderCache.Store(dealID, &dealProviderCacheEntry{
+				provider: providerAddr,
+				expires:  time.Now().Add(dealProviderTTL),
+			})
+			return
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no providers available")
+	}
+	writeJSONError(w, http.StatusBadGateway, "failed to contact provider", lastErr.Error())
 }
 
 func RouterGatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
