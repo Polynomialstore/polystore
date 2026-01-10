@@ -29,11 +29,12 @@ These are the baseline parameter defaults to implement and calibrate.
 | Bonding | unbonding | `provider_unbonding_blocks = MONTH_LEN_BLOCKS` | same | same |
 | Pricing | `target_GiBMonth_price` | 0.10 | 0.10 | 1.00 |
 | Pricing | `target_GiBRetrieval_price` | 0.05 | 0.05 | 0.10 |
-| Pricing | `base_retrieval_fee` | 0.001 NIL | 0.001 NIL | 0.01 NIL |
+| Pricing | `base_retrieval_fee` | 0.0001 NIL | 0.0001 NIL | 0.0002 NIL |
 | Pricing | `retrieval_burn_bps` | 500 (5%) | 500 (5%) | 1000 (10%) |
 | Replacement | cooldown | per-slot, 7 days | same | same |
 | Replacement | attempt cap | 3 / window | same | same |
 | Deputy | audit debt funding | Option A (protocol-funded audit budget) | same | same |
+| Deputy | audit budget sizing | `audit_budget_bps=200`, cap `500`, carryover≤2 epochs | same | `audit_budget_bps=100`, cap `200`, carryover≤2 epochs |
 | Deputy | proxy premium (`premium_bps`) | 2000 (20%) | 2000 (20%) | 1000 (10%) |
 | Deputy | evidence incentives | `evidence_bond=0.01`, `failure_bounty=0.02` | same | same |
 | Deputy | evidence bond burn on no conviction | burn 50% on TTL expiry | same | same |
@@ -128,8 +129,9 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Retrieval fees:**
 - Base fee (burned): `base_retrieval_fee`
-  - Dev/test: 0.001 NIL
-  - Mainnet: 0.01 NIL
+  - Dev/test: 0.0001 NIL
+  - Mainnet: 0.0002 NIL
+  - Rationale: keep “base fee share” under ~20% for typical 1–10 MiB reads; monitor spam metrics closely.
 - Variable fee (locked at open, settled at completion): `retrieval_price_per_blob` per 128 KiB blob
   - derive from GiB retrieval target:
     - `retrieval_price_per_blob ≈ target_GiBRetrieval_price / 8192`
@@ -201,6 +203,23 @@ Proposed defaults:
 - Option A (recommended): protocol-funded audit budget (minted per epoch) pays audit retrieval traffic.
 - Option B: SP-funded audits, reimbursed via storage rewards (simpler, more liquidity pressure).
 
+**Option A implementation (closed): audit budget sizing + caps**
+
+Define an “epoch slot rent” baseline:
+- `epoch_slot_rent = storage_price * total_active_slot_bytes * epoch_len_blocks`
+
+Mint audit budget as a bounded fraction of `epoch_slot_rent`:
+- `audit_budget_mint = ceil(audit_budget_bps / 10_000 * epoch_slot_rent)`
+- hard cap: `audit_budget_mint <= ceil(audit_budget_cap_bps / 10_000 * epoch_slot_rent)`
+- carryover: allow unused budget to roll forward up to `audit_budget_carryover_epochs = 2` epochs (avoid unbounded accumulation).
+
+Proposed params:
+- Devnet/testnet: `audit_budget_bps=200` (2%), `audit_budget_cap_bps=500` (5%), `audit_budget_carryover_epochs=2`
+- Mainnet: `audit_budget_bps=100` (1%), `audit_budget_cap_bps=200` (2%), `audit_budget_carryover_epochs=2`
+
+Implementation note:
+- `total_active_slot_bytes` should be computed deterministically from chain state (Mode 2 slots in `ACTIVE`, plus Mode 1 assignments), and must exclude `REPAIRING` slots.
+
 ### B6) Organic retrieval credits (quota reduction) — accrual + caps + phase-in
 
 Adopt credit accrual rules per `rfcs/rfc-challenge-derivation-and-quotas.md`.
@@ -248,6 +267,8 @@ These are recommended dashboards/alerts before changing defaults.
 - Deputy-served fraction of retrievals: target <1%; alert >5%.
 - Evidence quality: convictions/submissions target 30–70%; alert <10% (spam) or >90% (systemic outage).
 - Audit debt backlog: target clears in <2 epochs; alert if sustained growth.
+- Audit budget utilization: `spent/minted` per epoch; alert if >95% (cap binding) or <10% sustained (overmint or not used).
+- Audit budget fairness: distribution of audit spend across providers; alert if top-10 consume >60% without matching slot-byte share.
 
 ### Credits
 - Credit usage vs cap: monitor `credits_blobs/quota_blobs` by hot/cold; alert if many hit cap immediately.
@@ -284,7 +305,7 @@ These are “agree on targets” items rather than “can’t implement” items
 - the exact **bps** values and jail durations (B1) vs observed fault rates
 - bond sizes (B2) vs operator constraints on testnet
 - pricing targets (B3) vs target UX and provider costs
-- audit budget sizing details for Option A (B5): how much to mint per epoch and how to cap it
+- base retrieval fee level (B3): baseline is low; if spam emerges, increase carefully to preserve small-read UX
 - evidence-bond burn fraction (B5): baseline is 50% but can be tuned if it chills reporting or invites spam
 - credit cap phase-in schedule (B6) vs measurable determinism confidence
 - “trusted allowlist override” for repeated repair failures: whether to allow on testnet, and how it is governance-gated (or omitted) on mainnet

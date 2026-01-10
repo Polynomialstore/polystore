@@ -6,6 +6,7 @@ Companion docs:
 
 ## Stage 0 — Policy freeze → params + interfaces (unblocks engineering)
 - [ ] Extend `nilchain/proto/nilchain/nilchain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
+- [ ] Encode audit budget sizing/caps (Option A): `audit_budget_bps`, `audit_budget_cap_bps`, and bounded carryover (≤2 epochs) for unused budget.
 - [ ] Document chosen defaults + rationale in `notes/mainnet_policy_resolution_jan2026.md` and reference from `MAINNET_GAP_TRACKER.md`.
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)

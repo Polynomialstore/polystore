@@ -1,6 +1,6 @@
 # Follow-up Prompt: Contentious Mainnet Econ/Security Decisions
 
-Context: `notes/mainnet_policy_resolution_jan2026.md` records baseline defaults for the remaining underspecified items (slashing/jailing, bonding, pricing, replacement, deputy incentives, credits phase-in). Some decisions remain contentious or require product/governance sign-off (e.g., audit budget sizing, evidence-bond burn fraction, and any “trusted override” for repeated repair failures).
+Context: `notes/mainnet_policy_resolution_jan2026.md` records baseline defaults for the remaining underspecified items (slashing/jailing, bonding, pricing, replacement, deputy incentives, credits phase-in). Some decisions remain contentious or require product/governance sign-off (e.g., base retrieval fee level vs spam risk, evidence-bond burn fraction, and any “trusted override” for repeated repair failures).
 
 Use `assets_for_prompt.md` and `notes/mainnet_policy_resolution_jan2026.md`.
 
@@ -37,7 +37,7 @@ For each topic below, choose an option (or propose a better option) and justify 
 - How to cap repair attempts and what the fallback escalation should be after repeated failures.
 
 ### 5) Deputy market + audit debt (B5)
-- Audit debt funding is set to Option A; decide **audit budget sizing** and caps (how much to mint per epoch and limits).
+- Audit debt funding is set to Option A; decide **any adjustments** to audit budget sizing/caps after observing testnet signals.
 - Proxy premium default: 10% vs 20% vs dynamic.
 - Evidence incentives: evidence bond/bounty sizes and the burn fraction on non-conviction (baseline is 50% burn on TTL expiry).
 

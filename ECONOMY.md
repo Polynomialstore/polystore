@@ -76,8 +76,8 @@ Proposed targets:
 ### 5.2 Retrieval Fees (Session Settlement)
 
 - `base_retrieval_fee`: burned at session open (anti-spam).
-  - Devnet/testnet: `0.001 NIL`
-  - Mainnet: `0.01 NIL`
+  - Devnet/testnet: `0.0001 NIL`
+  - Mainnet: `0.0002 NIL`
 - `retrieval_price_per_blob`: locked at session open; settled at completion; per `128 KiB` blob.
   - derive from a GiB target: `retrieval_price_per_blob ≈ target_GiBRetrieval_price / 8192`
   - Devnet/testnet: `0.05 NIL / GiB`
@@ -109,6 +109,14 @@ Baseline decisions:
 - Audit debt funding: Option A (protocol-funded audit budget).
 - Proxy retrieval premium: 20% (devnet/testnet), 10% (mainnet).
 - Non-response evidence incentives: `evidence_bond=0.01 NIL`, `failure_bounty=0.02 NIL`, burn 50% of evidence bond on TTL expiry.
+
+Audit budget sizing (Option A):
+- Define: `epoch_slot_rent = storage_price * total_active_slot_bytes * epoch_len_blocks`
+- Mint: `audit_budget_mint = ceil(audit_budget_bps/10_000 * epoch_slot_rent)`, capped by `audit_budget_cap_bps`.
+- Carryover: unused budget may roll forward up to 2 epochs (bounded).
+- Defaults:
+  - Devnet/testnet: `audit_budget_bps=200`, `audit_budget_cap_bps=500`, carryover≤2 epochs
+  - Mainnet: `audit_budget_bps=100`, `audit_budget_cap_bps=200`, carryover≤2 epochs
 
 See `notes/mainnet_policy_resolution_jan2026.md`.
 
