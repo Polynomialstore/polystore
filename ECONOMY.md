@@ -57,6 +57,52 @@ Providers earn tokens via:
 *   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
 *   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
 
+## 5. Protocol Parameters (Proposal Defaults)
+
+This section records **proposed** defaults intended to unblock implementation and testnet calibration.
+
+Canonical accounting rules are frozen in `rfcs/rfc-pricing-and-escrow-accounting.md`. Policy defaults and open questions are tracked in `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.1 Storage Price (Lock-in at Ingest)
+
+Derive `storage_price` (Dec per byte per block) from a human target “GiB-month price”:
+
+`storage_price = target_GiBMonth_price / (GiB * MONTH_LEN_BLOCKS)`
+
+Proposed targets:
+- Devnet/testnet: `0.10 NIL / GiB-month`
+- Mainnet: `1.00 NIL / GiB-month`
+
+### 5.2 Retrieval Fees (Session Settlement)
+
+- `base_retrieval_fee`: burned at session open (anti-spam).
+  - Devnet/testnet: `0.001 NIL`
+  - Mainnet: `0.01 NIL`
+- `retrieval_price_per_blob`: locked at session open; settled at completion; per `128 KiB` blob.
+  - derive from a GiB target: `retrieval_price_per_blob ≈ target_GiBRetrieval_price / 8192`
+  - Devnet/testnet: `0.05 NIL / GiB`
+  - Mainnet: `0.10 NIL / GiB`
+- `retrieval_burn_bps`: burn cut on completion.
+  - Devnet/testnet: `500` (5%)
+  - Mainnet: `1000` (10%)
+
+### 5.3 Slashing/Jailing Ladder (Hard vs Soft Failures)
+
+Proposed intent:
+- Invalid proofs / wrong-data proofs are **hard faults** (slash immediately).
+- Non-response is **thresholded** (convict only after N failures within a window).
+- Quota shortfall is **soft** (HealthState decay → repair/evict; no slash by default).
+
+See `notes/mainnet_policy_resolution_jan2026.md` for the proposed parameter table.
+
+### 5.4 Provider Bonding
+
+Proposed model:
+- a base provider bond (anti-sybil), plus
+- assignment collateral scaled by slot bytes and `storage_price`.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
+
 ## 4. S3 Adapter (Web2 Gateway)
 
 The `nil_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.

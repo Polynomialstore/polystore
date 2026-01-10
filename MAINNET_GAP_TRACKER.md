@@ -6,6 +6,7 @@ This document tracks **what is missing** between the current implementation in t
 - `spec.md` (canonical protocol spec; v2.4 at time of writing)
 - `rfcs/` (design proposals / deep dives; check header status)
 - `notes/roadmap_milestones_strategic.md` (milestone sequencing)
+- `notes/mainnet_policy_resolution_jan2026.md` (proposal: concrete defaults for remaining econ/repair/deputy policies)
 
 ## How To Use
 

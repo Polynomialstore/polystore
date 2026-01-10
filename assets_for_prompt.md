@@ -7,6 +7,7 @@ This document tracks **what is missing** between the current implementation in t
 - `spec.md` (canonical protocol spec; v2.4 at time of writing)
 - `rfcs/` (design proposals / deep dives; check header status)
 - `notes/roadmap_milestones_strategic.md` (milestone sequencing)
+- `notes/mainnet_policy_resolution_jan2026.md` (proposal: concrete defaults for remaining econ/repair/deputy policies)
 
 ## How To Use
 
@@ -348,6 +349,275 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 
 ```
 
+```MAINNET_ECON_PARITY_CHECKLIST.md
+# Mainnet Parity + Devnet/Testnet Launch Checklist
+
+Companion docs:
+- `notes/mainnet_policy_resolution_jan2026.md` (concrete proposal for “B” + staged plan)
+- `MAINNET_GAP_TRACKER.md` (canonical gap tracking + DoDs + test gates)
+
+## Stage 0 — Policy freeze → params + interfaces (unblocks engineering)
+- [ ] Encode B1/B2/B4/B5/B6 as chain params (with validation + genesis defaults).
+- [ ] Document chosen defaults + rationale in `notes/mainnet_policy_resolution_jan2026.md` and reference from `MAINNET_GAP_TRACKER.md`.
+
+## Stage 1 — Storage lock-in pricing + escrow accounting (A1)
+- [ ] Implement pay-at-ingest lock-in pricing on `UpdateDealContent*` per `rfcs/rfc-pricing-and-escrow-accounting.md` (`nilchain/`).
+- [ ] Implement deterministic spend window reset + deterministic elasticity debits (`nilchain/`).
+- [ ] Add econ e2e: create deal → upload/commit → verify escrow and module account flows (`scripts/`, `tests/`).
+
+## Stage 2 — Retrieval session economics (A2)
+- [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`nilchain/`).
+- [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`nilchain/`).
+- [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
+
+## Stage 3 — Deterministic challenge derivation + quotas + synthetic fill (A3)
+- [ ] Implement deterministic challenge derivation + quota accounting (SPECIFIED in `rfcs/rfc-challenge-derivation-and-quotas.md`) (`nilchain/`).
+- [ ] Implement enforcement outcomes: invalid proof → hard fault; quota shortfall → HealthState decay (no slash by default) (`nilchain/`).
+- [ ] Add keeper unit tests for determinism + exclusions (REPAIRING slots excluded).
+- [ ] Add adversarial sim test gate for anti-grind properties (`scripts/`, `performance/`).
+
+## Stage 4 — HealthState + eviction curve (A6)
+- [ ] Implement per-(deal, provider/slot) HealthState updates from hard/soft failures (`nilchain/`).
+- [ ] Implement eviction triggers (`evict_after_missed_epochs_hot/cold`) and hook into Mode 2 repair start (`nilchain/`).
+- [ ] Add queries/events for observability; add unit tests.
+
+## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
+- [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
+- [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `nil_gateway/`).
+- [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
+
+## Stage 6 — Evidence / fraud proofs pipeline (A4)
+- [ ] Implement evidence taxonomy + verification + replay protection (`nilchain/`).
+- [ ] Wire penalties (slash/jail/evict) to B1 params; integrate with repair start (`nilchain/`).
+- [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
+
+## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`nil_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
+- [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
+
+## B) Policy decisions to encode (proposal summary)
+
+See `notes/mainnet_policy_resolution_jan2026.md` for full details.
+
+- [ ] **B1 Slashing/jailing ladder:** hard faults slash immediately; non-response uses threshold/window; quota shortfall decays HealthState.
+- [ ] **B2 Bonding:** base provider bond + assignment collateral scaled by slot bytes and `storage_price`.
+- [ ] **B3 Pricing defaults:** derive `storage_price` from GiB-month target; define retrieval base + per-blob + burn bps; define halving interval policy.
+- [ ] **B4 Replacement selection:** deterministic candidate ranking seeded by epoch randomness; cooldown + attempt caps.
+- [ ] **B5 Deputy incentives:** proxy premium payout + evidence bond/bounty + audit debt funding choice (Option A vs B).
+- [ ] **B6 Credits phase-in:** implement accounting first; enable quota reduction caps later (devnet→testnet→mainnet).
+
+## Test gates (launch blockers)
+- [ ] Chain econ e2e with multiple parameter sets (`scripts/`, `tests/`).
+- [ ] Challenge determinism + anti-grind sim (`scripts/`, `performance/`).
+- [ ] Ghosting-provider deputy e2e (`scripts/`).
+- [ ] Health/repair e2e (replacement without read outage) (`scripts/`).
+
+```
+
+```mainnet_policy_resolution_jan2026.md
+# Mainnet Policy Resolution (Jan 2026, Proposal)
+
+This document captures a **concrete, implementable proposal** for the remaining underspecified Mainnet economics + reliability policies, and a staged delivery plan to reach devnet/testnet launch readiness.
+
+It is intended to turn the “B) underspecified items” in `MAINNET_ECON_PARITY_CHECKLIST.md` into **explicit parameters and keeper state transitions**.
+
+## Scope
+
+- **Economics:** escrow accounting, lock-in pricing, retrieval fee settlement, inflation/reward schedule hooks
+- **Security/evidence:** slashing/jailing/ejection policy ladder, replay protections
+- **Reliability:** deterministic repair/replacement selection, health tracking, deputy/proxy market incentives
+
+## B) Underspecified Items — Proposed Resolutions
+
+### B1) Slashing + jailing policy (hard vs soft failures)
+
+**Intent:**
+- **Hard faults** (cryptographically verifiable) are slashable immediately.
+- **Soft faults** (statistical / threshold-verifiable) should not slash on a single report; use a threshold within a window; otherwise decay HealthState and eventually repair/evict.
+- **Quota shortfall** is a *soft* failure: default is **no slash**, only HealthState decay + repair trigger.
+
+**Evidence classes:**
+1) **Hard-fault (chain-verifiable):**
+   - Invalid synthetic proof (verification fails)
+   - Wrong data fraud proof (bytes/proof mismatch)
+   - **Action:** immediate slash + jail + trigger slot repair
+2) **Soft-fault (threshold-verifiable):**
+   - Non-response proof-of-failure (deputy transcript hash + attestation)
+   - **Action:** convict only after distinct failures exceed threshold within window; otherwise HealthState decay
+3) **Protocol non-compliance (no evidence):**
+   - Quota shortfall at epoch end
+   - **Action:** HealthState decay; repair trigger after `evict_after_missed_epochs_*`
+
+**Proposed params (defaults):**
+| Param | Default | Meaning |
+|---|---:|---|
+| `slash_invalid_proof_bps` | 50 | 0.5% slash on invalid proof (hard-fault) |
+| `slash_wrong_data_bps` | 500 | 5% slash on wrong data proof (hard-fault) |
+| `slash_nonresponse_bps` | 100 | 1% slash once non-response conviction triggers |
+| `jail_invalid_proof_epochs` | 3 | jail duration after invalid proof |
+| `jail_wrong_data_epochs` | 30 | jail duration after wrong-data fraud proof |
+| `jail_nonresponse_epochs` | 10 | jail duration after confirmed non-response |
+| `nonresponse_threshold` | 3 | ≥3 distinct failures needed to convict |
+| `nonresponse_window_epochs` | 6 | failures must occur within this window |
+| `evict_after_missed_epochs_hot` | 2 | hot deals: start repair after 2 missed epochs |
+| `evict_after_missed_epochs_cold` | 6 | cold deals: start repair after 6 missed epochs |
+| `max_strikes_before_global_jail` | 10 | global jail after repeated repair triggers |
+| `strike_window_epochs` | 100 | rolling window for “strikes” |
+
+Notes:
+- Splitting `evict_after_missed_epochs` by service class (“hot/cold”) is recommended so sensitivity matches quota rates.
+- Values are **starting defaults**; expect calibration during testnet.
+
+### B2) Provider staking / bond requirements
+
+**Goal:** slashing must be economically material and scale with responsibility.
+
+**Proposed model (two-layer bond):**
+1) **Base provider bond** (anti-sybil, minimum skin-in-the-game)
+   - `min_provider_bond` default: 10,000 NIL (mainnet), 100 stake (devnet/testnet)
+2) **Assignment collateral requirement** (scales with slot-responsible bytes)
+   - Define:
+     - `slot_bytes(deal, slot)` from Mode 2 profile (or Mode 1 full replica bytes)
+     - `MONTH_LEN_BLOCKS` protocol param
+   - Require:
+     - `required_bond = ceil(bond_months * storage_price * MONTH_LEN_BLOCKS * slot_bytes)`
+   - `bond_months` default: 2
+3) **Unbonding / lock**
+   - `provider_unbonding_blocks` default: `MONTH_LEN_BLOCKS`
+   - provider cannot drop below requirement while assigned to active slots (or while a pending repair candidate)
+4) **Failure handling**
+   - if provider bond < required: ineligible for new assignments; can trigger eviction on affected deals
+
+Fallback (simpler, weaker): flat bond only (no assignment collateral).
+
+### B3) Pricing parameters + equilibrium targets
+
+**Accounting contract (frozen):** see `rfcs/rfc-pricing-and-escrow-accounting.md`.
+
+**Deriving storage price from “GiB-month”:**
+- `storage_price = target_GiBMonth_price / (GiB * MONTH_LEN_BLOCKS)`
+
+**Proposed defaults:**
+- Devnet/testnet: `target_GiBMonth_price = 0.10 NIL / GiB-month`
+- Mainnet: `target_GiBMonth_price = 1.00 NIL / GiB-month`
+
+**Retrieval fees:**
+- Base fee (burned): `base_retrieval_fee`
+  - Dev/test: 0.001 NIL
+  - Mainnet: 0.01 NIL
+- Variable fee (locked at open, settled at completion): `retrieval_price_per_blob` per 128 KiB blob
+  - derive from GiB retrieval target:
+    - `retrieval_price_per_blob ≈ target_GiBRetrieval_price / 8192`
+  - Dev/test: `target_GiBRetrieval_price = 0.05 NIL / GiB`
+  - Mainnet: `target_GiBRetrieval_price = 0.10 NIL / GiB`
+- Burn cut on completion: `retrieval_burn_bps`
+  - Dev/test: 500 (5%)
+  - Mainnet: 1000 (10%)
+
+**Inflation decay / halving schedule:**
+- Keep `HalvingIntervalBlocks` roughly “1 year in blocks” as a sticky parameter; allow governance to adjust base reward but avoid frequent halving-interval changes.
+
+### B4) Repair/replacement selection policy (deterministic, anti-grind)
+
+**Trigger repair when:**
+- hard-fault evidence occurs (immediate), or
+- `missed_epochs > evict_after_missed_epochs_{hot,cold}` (from HealthState)
+
+**Deterministic candidate selection:**
+- seed:
+  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+- rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
+
+**Eligibility filter:**
+- not jailed
+- sufficient capacity (if tracked)
+- sufficient bond (B2)
+- not already in deal (including pending provider)
+- meets protocol version constraints
+
+**Anti-churn controls (proposed params):**
+| Param | Default | Meaning |
+|---|---:|---|
+| `replacement_cooldown_blocks` | 7 days in blocks | limit replacement churn per slot |
+| `max_repair_attempts_per_slot_per_window` | 3 | cap candidate attempts |
+| `repair_attempt_window_blocks` | `MONTH_LEN_BLOCKS` | rolling window for attempts |
+
+### B5) Deputy market compensation + evidence incentives + audit debt funding
+
+**Proxy retrieval payment (premium):**
+- Open proxy session locks `base_fee + variable_fee + premium_fee` from deal escrow.
+- `premium_fee = ceil(variable_fee * premium_bps / 10_000)`
+- Proposed `premium_bps`:
+  - Dev/test: 2000 (20%)
+  - Mainnet: 1000 (10%)
+- On success: provider paid as normal; deputy receives `premium_fee`.
+
+**Evidence incentives (non-response):**
+- require deputy to lock `evidence_bond` when submitting proof-of-failure
+- if conviction triggers within window: refund bond + pay `failure_bounty`
+- if not convicted within window: partially burn bond (anti-grief)
+
+Proposed defaults:
+| Param | Default |
+|---|---:|
+| `evidence_bond` | 0.01 NIL |
+| `failure_bounty` | 0.02 NIL |
+| `proof_of_failure_ttl_epochs` | `nonresponse_window_epochs` |
+
+**Audit debt funding options:**
+- Option A (recommended): protocol-funded audit budget (minted per epoch) pays audit retrieval traffic.
+- Option B: SP-funded audits, reimbursed via storage rewards (simpler, more liquidity pressure).
+
+### B6) Organic retrieval credits (quota reduction) — accrual + caps + phase-in
+
+Adopt credit accrual rules per `rfcs/rfc-challenge-derivation-and-quotas.md`.
+
+**Proposed caps:**
+- `credit_cap_bps_hot = 5000` (up to 50% quota via credits)
+- `credit_cap_bps_cold = 2500` (up to 25% quota via credits)
+
+**Phase-in plan:**
+- Devnet: implement accounting, set credit caps to 0 (no quota reduction yet)
+- Testnet: enable conservative caps (hot 25%, cold 10%)
+- Mainnet: increase to target caps once determinism/evidence gates are green
+
+## A) Delivery Plan — Staged Roadmap (Test-Gated)
+
+This aligns with the “A) well-defined steps” in `MAINNET_ECON_PARITY_CHECKLIST.md`.
+
+0) Policy freeze → encode params + interfaces (unblocks engineering)
+1) Storage lock-in pricing + escrow accounting + spend windows
+2) Retrieval session fee lifecycle (burn/lock/settle/refund)
+3) Deterministic challenge derivation + quotas + synthetic fill scheduling
+4) HealthState + eviction curve (soft failures → repair triggers)
+5) Mode 2 make-before-break repair + promotion + read routing around REPAIRING
+6) Evidence / fraud proofs pipeline (verify + replay-protect + penalty wiring)
+7) Deputy market + audit debt end-to-end (proxy retrieval + evidence aggregation + compensation)
+
+Each stage should ship with its own test gate (keeper unit tests and/or e2e scripts), as specified in `MAINNET_GAP_TRACKER.md`.
+
+## Risks if policy is deferred (top 5)
+
+1) Slashing not economically material → “honesty is optional.”
+2) Undercollateralized providers → slashing does not deter large deal cheating.
+3) Replacement grinding/churn → capture or instability via repeated replacements.
+4) Deputy market never clears → ghosting providers become unrecoverable outages.
+5) Quota/credit instability → either no coverage (too many credits) or too strict (provider churn).
+
+## Open items (explicitly contentious)
+
+These are “agree on targets” items rather than “can’t implement” items:
+- the exact **bps** values and jail durations (B1) vs observed fault rates
+- bond sizes (B2) vs operator constraints on testnet
+- pricing targets (B3) vs target UX and provider costs
+- audit debt funding (B5): Option A vs Option B (inflation vs liquidity pressure)
+- credit cap phase-in schedule (B6) vs measurable determinism confidence
+
+
+```
+
 ```ECONOMY.md
 # NilStore Economy & Tokenomics
 
@@ -407,6 +677,52 @@ Providers earn tokens via:
 ### 3.3 Sinks (Burning)
 *   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
 *   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
+
+## 5. Protocol Parameters (Proposal Defaults)
+
+This section records **proposed** defaults intended to unblock implementation and testnet calibration.
+
+Canonical accounting rules are frozen in `rfcs/rfc-pricing-and-escrow-accounting.md`. Policy defaults and open questions are tracked in `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.1 Storage Price (Lock-in at Ingest)
+
+Derive `storage_price` (Dec per byte per block) from a human target “GiB-month price”:
+
+`storage_price = target_GiBMonth_price / (GiB * MONTH_LEN_BLOCKS)`
+
+Proposed targets:
+- Devnet/testnet: `0.10 NIL / GiB-month`
+- Mainnet: `1.00 NIL / GiB-month`
+
+### 5.2 Retrieval Fees (Session Settlement)
+
+- `base_retrieval_fee`: burned at session open (anti-spam).
+  - Devnet/testnet: `0.001 NIL`
+  - Mainnet: `0.01 NIL`
+- `retrieval_price_per_blob`: locked at session open; settled at completion; per `128 KiB` blob.
+  - derive from a GiB target: `retrieval_price_per_blob ≈ target_GiBRetrieval_price / 8192`
+  - Devnet/testnet: `0.05 NIL / GiB`
+  - Mainnet: `0.10 NIL / GiB`
+- `retrieval_burn_bps`: burn cut on completion.
+  - Devnet/testnet: `500` (5%)
+  - Mainnet: `1000` (10%)
+
+### 5.3 Slashing/Jailing Ladder (Hard vs Soft Failures)
+
+Proposed intent:
+- Invalid proofs / wrong-data proofs are **hard faults** (slash immediately).
+- Non-response is **thresholded** (convict only after N failures within a window).
+- Quota shortfall is **soft** (HealthState decay → repair/evict; no slash by default).
+
+See `notes/mainnet_policy_resolution_jan2026.md` for the proposed parameter table.
+
+### 5.4 Provider Bonding
+
+Proposed model:
+- a base provider bond (anti-sybil), plus
+- assignment collateral scaled by slot bytes and `storage_price`.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 

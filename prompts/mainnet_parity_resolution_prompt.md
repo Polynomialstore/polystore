@@ -1,6 +1,8 @@
 # Prompt: Mainnet Parity + Devnet/Testnet Launch Resolution
 
-You are tasked with proposing concrete resolutions for all **underspecified items** and turning the **well-defined items** into an executable plan. Use the brief in `assets_for_prompt.md` as the source of truth.
+You are tasked with producing a concrete, implementable Mainnet parity plan: **finalize remaining policy** and **turn it into staged engineering work**.
+
+Use the brief in `assets_for_prompt.md` as the source of truth. The repo includes a current proposal in `notes/mainnet_policy_resolution_jan2026.md`; treat it as the **baseline** and either **confirm** it or propose specific revisions with rationale.
 
 ## A) Well-defined high-level steps (must produce an implementation plan)
 - Storage lock-in + escrow accounting (pay-at-ingest, deterministic debits, spend windows)
@@ -19,8 +21,12 @@ You are tasked with proposing concrete resolutions for all **underspecified item
 - Challenge economics (organic retrieval credits: accrual rules, caps, phase-in)
 
 ## Required outputs
-1. A **proposal** that resolves every item in B with clear parameters or decision options (include pros/cons where relevant).
-2. A **delivery plan** that turns A into a staged implementation roadmap with test gates, repo areas, and dependencies.
-3. A short **risk list** (top 5) if any item in B is deferred.
+1. A **policy resolution** for every item in B:
+   - either “accept baseline” from `notes/mainnet_policy_resolution_jan2026.md`, or
+   - “change baseline” with explicit new values and a brief rationale.
+2. A **parameter sheet** mapping each decision to a concrete on-chain param name, with separate defaults for `devnet`, `testnet`, and `mainnet` where applicable.
+3. A **delivery plan** that turns A into a staged roadmap (Stage 0–7), including dependencies, repo areas, and test gates (unit/e2e/sim).
+4. A short **risk list** (top 5) if any B item is deferred or implemented later.
+5. A short **contentious/underspecified list** (if any): items that still need human decision, with 2–3 crisp options each.
 
 Keep it crisp and actionable for engineering.
