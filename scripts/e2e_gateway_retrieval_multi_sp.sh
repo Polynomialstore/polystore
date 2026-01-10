@@ -34,9 +34,24 @@ echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
 sleep 6
-DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
-DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
+TX_QUERY=$($NILCHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
+DEAL_ID=$(echo "$TX_QUERY" | jq -r '
+  .events? // []
+  | map(select(.type == "nilchain.nilchain.v1.EventCreateDeal" or .type == "create_deal"))
+  | map(.attributes // [])
+  | add
+  | map(select(.key == "deal_id" or .key == "id"))
+  | .[0].value // empty
+')
+if [ -z "$DEAL_ID" ]; then
+  DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
+  DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
+fi
 echo "Deal ID: $DEAL_ID"
+if [ -z "$DEAL_ID" ] || [ "$DEAL_ID" == "null" ]; then
+    echo "Create deal failed: deal_id not found"
+    exit 1
+fi
 
 # 4. Upload Content (via Router)
 banner "Uploading Content"
