@@ -1,6 +1,6 @@
 # Follow-up Prompt: Contentious Mainnet Econ/Security Decisions
 
-Context: `notes/mainnet_policy_resolution_jan2026.md` proposes concrete defaults for the remaining underspecified items (slashing/jailing, bonding, pricing, replacement, deputy incentives, credits phase-in). Some of these defaults may be contentious or require product/governance sign-off.
+Context: `notes/mainnet_policy_resolution_jan2026.md` records baseline defaults for the remaining underspecified items (slashing/jailing, bonding, pricing, replacement, deputy incentives, credits phase-in). Some decisions remain contentious or require product/governance sign-off (e.g., audit budget sizing, evidence-bond burn fraction, and any “trusted override” for repeated repair failures).
 
 Use `assets_for_prompt.md` and `notes/mainnet_policy_resolution_jan2026.md`.
 
@@ -37,9 +37,9 @@ For each topic below, choose an option (or propose a better option) and justify 
 - How to cap repair attempts and what the fallback escalation should be after repeated failures.
 
 ### 5) Deputy market + audit debt (B5)
-- Audit debt funding: Option A (protocol-funded audit budget) vs Option B (SP-funded/reimbursed).
+- Audit debt funding is set to Option A; decide **audit budget sizing** and caps (how much to mint per epoch and limits).
 - Proxy premium default: 10% vs 20% vs dynamic.
-- Evidence incentives: evidence bond/bounty sizes and whether bonds burn partially or fully on non-conviction.
+- Evidence incentives: evidence bond/bounty sizes and the burn fraction on non-conviction (baseline is 50% burn on TTL expiry).
 
 ### 6) Credits phase-in (B6)
 - Enable credits on devnet vs testnet only vs mainnet only.
@@ -49,4 +49,3 @@ For each topic below, choose an option (or propose a better option) and justify 
 - A table of final decisions (devnet/testnet/mainnet defaults where relevant).
 - 3–5 bullet “why” notes per topic.
 - A list of “monitoring signals” to calibrate each parameter on testnet (metrics and thresholds).
-

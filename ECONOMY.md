@@ -59,7 +59,7 @@ Providers earn tokens via:
 
 ## 5. Protocol Parameters (Proposal Defaults)
 
-This section records **proposed** defaults intended to unblock implementation and testnet calibration.
+This section records **baseline defaults** intended to unblock implementation and testnet calibration.
 
 Canonical accounting rules are frozen in `rfcs/rfc-pricing-and-escrow-accounting.md`. Policy defaults and open questions are tracked in `notes/mainnet_policy_resolution_jan2026.md`.
 
@@ -100,6 +100,24 @@ See `notes/mainnet_policy_resolution_jan2026.md` for the proposed parameter tabl
 Proposed model:
 - a base provider bond (anti-sybil), plus
 - assignment collateral scaled by slot bytes and `storage_price`.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.5 Deputy Market + Audit Debt (Defaults)
+
+Baseline decisions:
+- Audit debt funding: Option A (protocol-funded audit budget).
+- Proxy retrieval premium: 20% (devnet/testnet), 10% (mainnet).
+- Non-response evidence incentives: `evidence_bond=0.01 NIL`, `failure_bounty=0.02 NIL`, burn 50% of evidence bond on TTL expiry.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.6 Credits (Organic Retrieval → Quota Reduction)
+
+Baseline phase-in:
+- Devnet: accounting only; credits do not reduce quota (caps=0).
+- Testnet: credits enabled with conservative caps (hot 25%, cold 10%).
+- Mainnet: launch with caps=0; enable later after determinism + evidence gates are green.
 
 See `notes/mainnet_policy_resolution_jan2026.md`.
 

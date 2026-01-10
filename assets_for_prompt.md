@@ -357,7 +357,7 @@ Companion docs:
 - `MAINNET_GAP_TRACKER.md` (canonical gap tracking + DoDs + test gates)
 
 ## Stage 0 — Policy freeze → params + interfaces (unblocks engineering)
-- [ ] Encode B1/B2/B4/B5/B6 as chain params (with validation + genesis defaults).
+- [ ] Extend `nilchain/proto/nilchain/nilchain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
 - [ ] Document chosen defaults + rationale in `notes/mainnet_policy_resolution_jan2026.md` and reference from `MAINNET_GAP_TRACKER.md`.
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)
@@ -417,9 +417,9 @@ See `notes/mainnet_policy_resolution_jan2026.md` for full details.
 ```
 
 ```mainnet_policy_resolution_jan2026.md
-# Mainnet Policy Resolution (Jan 2026, Proposal)
+# Mainnet Policy Resolution (Jan 2026, Final Defaults + Implementation Notes)
 
-This document captures a **concrete, implementable proposal** for the remaining underspecified Mainnet economics + reliability policies, and a staged delivery plan to reach devnet/testnet launch readiness.
+This document captures **final baseline defaults** (devnet/testnet/mainnet where applicable) for the remaining underspecified Mainnet economics + reliability policies, plus implementation notes and calibration signals.
 
 It is intended to turn the “B) underspecified items” in `MAINNET_ECON_PARITY_CHECKLIST.md` into **explicit parameters and keeper state transitions**.
 
@@ -428,6 +428,47 @@ It is intended to turn the “B) underspecified items” in `MAINNET_ECON_PARITY
 - **Economics:** escrow accounting, lock-in pricing, retrieval fee settlement, inflation/reward schedule hooks
 - **Security/evidence:** slashing/jailing/ejection policy ladder, replay protections
 - **Reliability:** deterministic repair/replacement selection, health tracking, deputy/proxy market incentives
+
+## Final Defaults (Devnet / Testnet / Mainnet)
+
+These are the baseline parameter defaults to implement and calibrate.
+
+| Topic | Decision | Devnet | Testnet | Mainnet |
+|---|---|---:|---:|---:|
+| Slashing/jailing | Quota shortfall | no slash (HealthState-only) | same | same |
+| Slashing/jailing | `slash_invalid_proof_bps` | 50 (0.5%) | 50 (0.5%) | 50 (0.5%) |
+| Slashing/jailing | `slash_wrong_data_bps` | 500 (5%) | 500 (5%) | 500 (5%) |
+| Slashing/jailing | `slash_nonresponse_bps` | 100 (1%) | 100 (1%) | 100 (1%) |
+| Slashing/jailing | jail params | `3/30/10` epochs | same | same |
+| Slashing/jailing | non-response conviction | `threshold=3` in `window=6` epochs | same | same |
+| Slashing/jailing | hot/cold eviction | `2` / `6` missed epochs | same | same |
+| Bonding | model | base bond + assignment collateral | same | same |
+| Bonding | `min_provider_bond` | 100 `stake` | 100 `stake` | 10,000 `NIL` |
+| Bonding | `bond_months` | 2 | 2 | 2 |
+| Bonding | unbonding | `provider_unbonding_blocks = MONTH_LEN_BLOCKS` | same | same |
+| Pricing | `target_GiBMonth_price` | 0.10 | 0.10 | 1.00 |
+| Pricing | `target_GiBRetrieval_price` | 0.05 | 0.05 | 0.10 |
+| Pricing | `base_retrieval_fee` | 0.001 NIL | 0.001 NIL | 0.01 NIL |
+| Pricing | `retrieval_burn_bps` | 500 (5%) | 500 (5%) | 1000 (10%) |
+| Replacement | cooldown | per-slot, 7 days | same | same |
+| Replacement | attempt cap | 3 / window | same | same |
+| Deputy | audit debt funding | Option A (protocol-funded audit budget) | same | same |
+| Deputy | proxy premium (`premium_bps`) | 2000 (20%) | 2000 (20%) | 1000 (10%) |
+| Deputy | evidence incentives | `evidence_bond=0.01`, `failure_bounty=0.02` | same | same |
+| Deputy | evidence bond burn on no conviction | burn 50% on TTL expiry | same | same |
+| Credits | phase-in | accounting only; caps=0 | enabled w/ caps | disabled at launch; caps=0 |
+| Credits | caps (hot/cold) | `0/0` | `2500/1000` | launch `0/0` → later `5000/2500` |
+
+## Implementation Note: Params That Exist Today vs Proposed Additions
+
+The current on-chain params are defined in `nilchain/proto/nilchain/nilchain/v1/params.proto` and already include (non-exhaustive):
+- `storage_price`, `base_retrieval_fee`, `retrieval_price_per_blob`, `retrieval_burn_bps`
+- `month_len_blocks`, `epoch_len_blocks`
+- `quota_bps_per_epoch_hot/cold`, `quota_min_blobs`, `quota_max_blobs`
+- `credit_cap_bps`
+- `evict_after_missed_epochs` (single value; proposal suggests a hot/cold split)
+
+This proposal introduces additional parameters (slashing/jailing, bonding, replacement cooldown/attempt caps, deputy premiums, evidence incentives, and credit cap splits). These require **adding new fields** to `Params` (and wiring validation/defaults) before keeper logic can rely on them.
 
 ## B) Underspecified Items — Proposed Resolutions
 
@@ -469,6 +510,7 @@ It is intended to turn the “B) underspecified items” in `MAINNET_ECON_PARITY
 Notes:
 - Splitting `evict_after_missed_epochs` by service class (“hot/cold”) is recommended so sensitivity matches quota rates.
 - Values are **starting defaults**; expect calibration during testnet.
+- Jail params are expressed in **epochs**, but should be enforced using **block height** (e.g., `jail_end_height = now + jail_epochs*epoch_len_blocks`) to avoid ambiguity if epoch params change later.
 
 ### B2) Provider staking / bond requirements
 
@@ -544,6 +586,10 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 | `max_repair_attempts_per_slot_per_window` | 3 | cap candidate attempts |
 | `repair_attempt_window_blocks` | `MONTH_LEN_BLOCKS` | rolling window for attempts |
 
+**Repeated failure fallback (behavioral rule):**
+- After a slot hits `max_repair_attempts_per_slot_per_window`, enter a **repair backoff** until the attempt window resets (avoid thrash), and emit an operator-visible alert/event.
+- Optional testnet ops escape hatch: a “trusted/top-bonded allowlist” override. On mainnet this must be governance-controlled (or omitted).
+
 ### B5) Deputy market compensation + evidence incentives + audit debt funding
 
 **Proxy retrieval payment (premium):**
@@ -558,6 +604,10 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 - require deputy to lock `evidence_bond` when submitting proof-of-failure
 - if conviction triggers within window: refund bond + pay `failure_bounty`
 - if not convicted within window: partially burn bond (anti-grief)
+- baseline default: burn **50%** of `evidence_bond` on TTL expiry and refund 50% (discourages spam without chilling reporting).
+
+Suggested param for implementation:
+- `evidence_bond_burn_bps_on_expiry = 5000` (burn 50% when a proof-of-failure does not result in conviction within TTL).
 
 Proposed defaults:
 | Param | Default |
@@ -581,7 +631,48 @@ Adopt credit accrual rules per `rfcs/rfc-challenge-derivation-and-quotas.md`.
 **Phase-in plan:**
 - Devnet: implement accounting, set credit caps to 0 (no quota reduction yet)
 - Testnet: enable conservative caps (hot 25%, cold 10%)
-- Mainnet: increase to target caps once determinism/evidence gates are green
+- Mainnet: **launch with caps = 0**; enable after determinism + evidence gates are green; then increase to target caps (hot 50%, cold 25%)
+
+## Calibration Signals (Testnet Monitoring)
+
+These are recommended dashboards/alerts before changing defaults.
+
+### Slashing + jailing
+- Invalid proof rate: target <0.1%, alert >0.5%.
+- Wrong-data convictions: target ~0; any non-zero is severity-1 triage.
+- Non-response conviction rate: target <1% of sessions, alert >3%.
+- Jailed provider share: target <5%, alert >10% sustained.
+- Repair triggers/day from soft failures: hot target <0.5%/day, cold <0.2%/day.
+
+### Provider bonding
+- Participation: active providers with bond ≥ min and meeting collateral requirement (expect growth; alert on plateau).
+- Candidate rejected for insufficient bond: target ~0 after initial week; alert >1% of selections.
+- Bond headroom distribution: target median >25%; alert if many near ~0%.
+- Assignment concentration: top-10 providers’ share of slot bytes (target <60% early; alert if increasing).
+
+### Pricing
+- Affordability: median escrow duration at creation ≥ requested duration; alert on systematic underfunding.
+- Retrieval spam: sessions opened per block per address; alert if one address dominates (>5%/hour).
+- Base fee share for 1–10 MiB reads: target <20%; alert if base fee dominates typical reads.
+- Burn/mint ratio: track; alert if burn ≈0 (no sink) or >30% (may starve incentives).
+
+### Replacement + churn
+- Repair completion latency (start→promotion): track median/P95 by service class.
+- First-candidate success rate: target >70%; alert <40%.
+- Replacements per slot per month: target <0.2; alert >1.0.
+- Slots hitting attempt cap: target ~0; alert on repeated caps (tooling/eligibility issues).
+
+### Deputy + audit debt
+- Proxy success rate: target >99%; track time-to-first-byte P95 vs SLA.
+- Deputy-served fraction of retrievals: target <1%; alert >5%.
+- Evidence quality: convictions/submissions target 30–70%; alert <10% (spam) or >90% (systemic outage).
+- Audit debt backlog: target clears in <2 epochs; alert if sustained growth.
+
+### Credits
+- Credit usage vs cap: monitor `credits_blobs/quota_blobs` by hot/cold; alert if many hit cap immediately.
+- Synthetic coverage floor: hot ≥50%, cold ≥75% (given caps).
+- Duplicate attempts rate: repeated credit ids rejected (wash indicators).
+- State growth: per-epoch credit uniqueness set size; alert if pruning lags.
 
 ## A) Delivery Plan — Staged Roadmap (Test-Gated)
 
@@ -612,9 +703,10 @@ These are “agree on targets” items rather than “can’t implement” items
 - the exact **bps** values and jail durations (B1) vs observed fault rates
 - bond sizes (B2) vs operator constraints on testnet
 - pricing targets (B3) vs target UX and provider costs
-- audit debt funding (B5): Option A vs Option B (inflation vs liquidity pressure)
+- audit budget sizing details for Option A (B5): how much to mint per epoch and how to cap it
+- evidence-bond burn fraction (B5): baseline is 50% but can be tuned if it chills reporting or invites spam
 - credit cap phase-in schedule (B6) vs measurable determinism confidence
-
+- “trusted allowlist override” for repeated repair failures: whether to allow on testnet, and how it is governance-gated (or omitted) on mainnet
 
 ```
 
@@ -680,7 +772,7 @@ Providers earn tokens via:
 
 ## 5. Protocol Parameters (Proposal Defaults)
 
-This section records **proposed** defaults intended to unblock implementation and testnet calibration.
+This section records **baseline defaults** intended to unblock implementation and testnet calibration.
 
 Canonical accounting rules are frozen in `rfcs/rfc-pricing-and-escrow-accounting.md`. Policy defaults and open questions are tracked in `notes/mainnet_policy_resolution_jan2026.md`.
 
@@ -721,6 +813,24 @@ See `notes/mainnet_policy_resolution_jan2026.md` for the proposed parameter tabl
 Proposed model:
 - a base provider bond (anti-sybil), plus
 - assignment collateral scaled by slot bytes and `storage_price`.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.5 Deputy Market + Audit Debt (Defaults)
+
+Baseline decisions:
+- Audit debt funding: Option A (protocol-funded audit budget).
+- Proxy retrieval premium: 20% (devnet/testnet), 10% (mainnet).
+- Non-response evidence incentives: `evidence_bond=0.01 NIL`, `failure_bounty=0.02 NIL`, burn 50% of evidence bond on TTL expiry.
+
+See `notes/mainnet_policy_resolution_jan2026.md`.
+
+### 5.6 Credits (Organic Retrieval → Quota Reduction)
+
+Baseline phase-in:
+- Devnet: accounting only; credits do not reduce quota (caps=0).
+- Testnet: credits enabled with conservative caps (hot 25%, cold 10%).
+- Mainnet: launch with caps=0; enable later after determinism + evidence gates are green.
 
 See `notes/mainnet_policy_resolution_jan2026.md`.
 
