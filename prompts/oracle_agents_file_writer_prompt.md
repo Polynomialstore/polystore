@@ -7,6 +7,7 @@ You must use the repo context and the existing tasks/code structure. Do **not** 
 ## Inputs (read these files first)
 
 - `AGENTS_MAINNET_PARITY.md` (current draft to improve; keep task IDs stable)
+- `oracle_agents_assets.md` (optional bundle: concatenated excerpts/files in fenced blocks; treat each fence label as the filename)
 - `MAINNET_ECON_PARITY_CHECKLIST.md` (stage ordering)
 - `MAINNET_GAP_TRACKER.md` (P0 DoDs + test gates)
 - `notes/mainnet_policy_resolution_jan2026.md` (final defaults + monitoring signals)
@@ -93,4 +94,3 @@ Avoid:
 Prefer:
 - Small, testable tasks; explicit commands; explicit filepaths.
 - “If X fails, look at Y log” guidance for scripts.
-
