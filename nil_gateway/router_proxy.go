@@ -214,9 +214,9 @@ func tryProxyUploadToProviderBaseURL(w http.ResponseWriter, r *http.Request, pro
 		return false, fmt.Errorf("provider base url is empty")
 	}
 
-	if _, err := bodyFile.Seek(0, io.SeekStart); err != nil {
-		return false, err
-	}
+	// Use a SectionReader so the HTTP client doesn't close the shared temp file
+	// across provider retries.
+	bodyReader := io.NewSectionReader(bodyFile, 0, contentLength)
 
 	target := base + r.URL.Path
 	if r.URL.RawQuery != "" {
@@ -227,7 +227,7 @@ func tryProxyUploadToProviderBaseURL(w http.ResponseWriter, r *http.Request, pro
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	req, err := http.NewRequestWithContext(ctx, r.Method, target, bodyFile)
+	req, err := http.NewRequestWithContext(ctx, r.Method, target, bodyReader)
 	if err != nil {
 		return false, err
 	}
