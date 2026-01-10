@@ -7,7 +7,7 @@ This document tracks **what is missing** between the current implementation in t
 - `rfcs/` (design proposals / deep dives; check header status)
 - `notes/roadmap_milestones_strategic.md` (milestone sequencing)
 - `notes/mainnet_policy_resolution_jan2026.md` (proposal: concrete defaults for remaining econ/repair/deputy policies)
-- `MAINNET_PARITY_ISSUES.md` (codex-ready issue backlog derived from checklist + policy defaults)
+- `AGENTS_MAINNET_PARITY.md` (codex-ready agents punch list derived from checklist + policy defaults)
 
 ## How To Use
 

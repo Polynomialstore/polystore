@@ -1,10 +1,10 @@
-# Prompt: Create GitHub Issues from `MAINNET_PARITY_ISSUES.md`
+# Prompt (Optional): Create GitHub Issues from `AGENTS_MAINNET_PARITY.md`
 
-You are an “oracle” planning agent. Convert the backlog in `MAINNET_PARITY_ISSUES.md` into GitHub issues.
+You are an “oracle” planning agent. Convert the agents punch list in `AGENTS_MAINNET_PARITY.md` into GitHub issues (optional; the canonical execution plan is the agents file).
 
 ## Instructions
 
-1. For each `ISSUE ...` section in `MAINNET_PARITY_ISSUES.md`, generate:
+1. For each `TASK ...` section in `AGENTS_MAINNET_PARITY.md`, generate:
    - **Issue title** (use the header line)
    - **Body** containing:
      - Why
@@ -29,8 +29,7 @@ You are an “oracle” planning agent. Convert the backlog in `MAINNET_PARITY_I
    - Then a JSON array suitable for import tooling (each item: `{title, body, labels, milestone}`)
 
 Source files:
-- `MAINNET_PARITY_ISSUES.md`
+- `AGENTS_MAINNET_PARITY.md`
 - `MAINNET_GAP_TRACKER.md`
 - `MAINNET_ECON_PARITY_CHECKLIST.md`
 - `notes/mainnet_policy_resolution_jan2026.md`
-

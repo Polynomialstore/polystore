@@ -1,21 +1,37 @@
-# Mainnet Parity Execution Backlog (Codex-Ready Issues)
+# Mainnet Parity Execution Backlog (Agents Punch List)
 
-This file translates `MAINNET_ECON_PARITY_CHECKLIST.md` + `notes/mainnet_policy_resolution_jan2026.md` into **atomic, test-gated issues** that a Codex agent can execute end-to-end.
+This file translates `MAINNET_ECON_PARITY_CHECKLIST.md` + `notes/mainnet_policy_resolution_jan2026.md` into **atomic, test-gated tasks** that a Codex agent can execute end-to-end.
 
 How to use:
-1) Pick the next **P0** issue with no unmet dependencies.
-2) Follow the “Codex Prompt” and “DoD/Test Gate”.
-3) Ship as a small PR/commit; keep issues narrowly scoped.
+1) Pick the next **P0** task with no unmet dependencies.
+2) Mark it **in progress** below and add a line to **Progress Log**.
+3) Follow the “Codex Prompt” and “DoD/Test Gate”.
+4) Ship as a small PR/commit; keep tasks narrowly scoped.
+5) Mark it **done** and record the commit hash in the log.
 
 Legend:
 - **P0**: mainnet/testnet blocking
 - **P1**: important but can ship after P0
 
+## Progress Log (append-only)
+
+Use this section to track what’s being worked on and what landed.
+
+- YYYY-MM-DD: `TASK_ID` — status — notes — commit `<hash>`
+
+## Task Board
+
+Mark tasks as you go:
+- [ ] not started
+- [ ] in progress (add your name/date in Progress Log)
+- [ ] blocked (write blocker + link)
+- [ ] done (include commit hash)
+
 ---
 
 ## Stage 0 — Policy Freeze → Params + Genesis Defaults
 
-### ISSUE P0-PARAMS-001 — Expand `Params` to encode finalized policy defaults
+### TASK P0-PARAMS-001 — Expand `Params` to encode finalized policy defaults
 **Area:** `nilchain/` (proto + keeper params)  
 **Why:** Stage 0 unblocker; keeper logic can’t rely on policy until params exist.  
 **Depends on:** none  
@@ -38,13 +54,13 @@ Legend:
 - Devnet genesis defaults match `notes/mainnet_policy_resolution_jan2026.md`.
 
 **Codex Prompt:**
-“Implement ISSUE P0-PARAMS-001: add all missing on-chain Params fields per `notes/mainnet_policy_resolution_jan2026.md`, wire validation/defaults, and update devnet param override script.”
+“Implement TASK P0-PARAMS-001: add all missing on-chain Params fields per `notes/mainnet_policy_resolution_jan2026.md`, wire validation/defaults, and update devnet param override script.”
 
 ---
 
 ## Stage 1 — Storage Lock-in Pricing + Escrow Accounting
 
-### ISSUE P0-ECON-LOCKIN-001 — Enforce pay-at-ingest lock-in pricing on `UpdateDealContent*`
+### TASK P0-ECON-LOCKIN-001 — Enforce pay-at-ingest lock-in pricing on `UpdateDealContent*`
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001 (for stable price params)  
 **Spec/Refs:** `rfcs/rfc-pricing-and-escrow-accounting.md`, `MAINNET_GAP_TRACKER.md` (P0-ECON-001)
@@ -58,12 +74,12 @@ Legend:
 
 **DoD/Test Gate:**
 - Keeper unit tests validate exact debits for multiple deltas and durations.
-- E2E path exists or is extended in ISSUE P0-ECON-E2E-001.
+- E2E path exists or is extended in TASK P0-ECON-E2E-001.
 
 **Codex Prompt:**
 “Implement lock-in storage pricing per RFC on `UpdateDealContent*` with deterministic debits and tests.”
 
-### ISSUE P0-ECON-SPEND-002 — Deterministic spend window reset + elasticity debits
+### TASK P0-ECON-SPEND-002 — Deterministic spend window reset + elasticity debits
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001  
 **Spec/Refs:** `rfcs/rfc-pricing-and-escrow-accounting.md` (elasticity), `MAINNET_GAP_TRACKER.md` (P0-ECON-001)
@@ -81,7 +97,7 @@ Legend:
 
 ## Stage 2 — Retrieval Session Economics (Fees + Settlement)
 
-### ISSUE P0-RETRIEVAL-FEES-001 — Enforce session open burn + variable lock
+### TASK P0-RETRIEVAL-FEES-001 — Enforce session open burn + variable lock
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001  
 **Spec/Refs:** `rfcs/rfc-pricing-and-escrow-accounting.md` §5
@@ -93,7 +109,7 @@ Legend:
 **DoD/Test Gate:**
 - Unit tests confirm base burn and locked fee accounting.
 
-### ISSUE P0-RETRIEVAL-SETTLE-002 — Complete/cancel settlement correctness
+### TASK P0-RETRIEVAL-SETTLE-002 — Complete/cancel settlement correctness
 **Area:** `nilchain/`  
 **Depends on:** P0-RETRIEVAL-FEES-001  
 **Spec/Refs:** RFC §5.2–§5.3
@@ -110,7 +126,7 @@ Legend:
 
 ## Stage 3 — Deterministic Challenges + Quotas + Credits
 
-### ISSUE P0-QUOTAS-001 — Deterministic challenge derivation + quota state machine
+### TASK P0-QUOTAS-001 — Deterministic challenge derivation + quota state machine
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001  
 **Spec/Refs:** `rfcs/rfc-challenge-derivation-and-quotas.md`, `MAINNET_GAP_TRACKER.md` (P0-CHAIN-002)
@@ -126,7 +142,7 @@ Legend:
 - Keeper unit tests prove determinism (same inputs → same challenges).
 - Add adversarial sim harness or extend existing scripts per `MAINNET_GAP_TRACKER.md`.
 
-### ISSUE P1-CREDITS-001 — Credit accounting + phase-in gating
+### TASK P1-CREDITS-001 — Credit accounting + phase-in gating
 **Area:** `nilchain/`  
 **Depends on:** P0-QUOTAS-001, P0-PARAMS-001  
 **Spec/Refs:** `rfcs/rfc-challenge-derivation-and-quotas.md`, `notes/mainnet_policy_resolution_jan2026.md`
@@ -145,7 +161,7 @@ Legend:
 
 ## Stage 4 — HealthState + Eviction Curve
 
-### ISSUE P0-HEALTH-001 — HealthState per (deal, slot/provider) + eviction triggers
+### TASK P0-HEALTH-001 — HealthState per (deal, slot/provider) + eviction triggers
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001, P0-QUOTAS-001  
 **Spec/Refs:** `MAINNET_GAP_TRACKER.md` (CHAIN-103), `retrievability-memo.md`
@@ -164,7 +180,7 @@ Legend:
 
 ## Stage 5 — Mode 2 Repair + Make-Before-Break Replacement
 
-### ISSUE P0-REPAIR-001 — Deterministic replacement selection + churn controls
+### TASK P0-REPAIR-001 — Deterministic replacement selection + churn controls
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001, P0-HEALTH-001  
 **Spec/Refs:** `rfcs/rfc-mode2-onchain-state.md`, `notes/mainnet_policy_resolution_jan2026.md`
@@ -177,7 +193,7 @@ Legend:
 **DoD/Test Gate:**
 - Unit tests show deterministic selection and enforcement of cooldown/caps.
 
-### ISSUE P0-REPAIR-E2E-002 — Multi-SP repair e2e: failure → catch-up → promote
+### TASK P0-REPAIR-E2E-002 — Multi-SP repair e2e: failure → catch-up → promote
 **Area:** `scripts/`, `nil_gateway/`, `nilchain/`  
 **Depends on:** P0-REPAIR-001, existing repair messages  
 **Spec/Refs:** `MAINNET_GAP_TRACKER.md` (P0-CHAIN-001 test gate)
@@ -196,7 +212,7 @@ Legend:
 
 ## Stage 6 — Evidence / Fraud Proofs + Penalty Wiring
 
-### ISSUE P0-EVIDENCE-001 — Evidence taxonomy verification + replay protection
+### TASK P0-EVIDENCE-001 — Evidence taxonomy verification + replay protection
 **Area:** `nilchain/`  
 **Depends on:** P0-PARAMS-001  
 **Spec/Refs:** `MAINNET_GAP_TRACKER.md` (P0-CHAIN-003), `retrievability-memo.md`
@@ -215,7 +231,7 @@ Legend:
 
 ## Stage 7 — Deputy Market + Audit Debt (Proxy Retrieval)
 
-### ISSUE P0-DEPUTY-001 — Proxy retrieval settlement + premium payout
+### TASK P0-DEPUTY-001 — Proxy retrieval settlement + premium payout
 **Area:** `nilchain/`, `nil_gateway/`, `nil_p2p/`  
 **Depends on:** P0-PARAMS-001, retrieval session settlement  
 **Spec/Refs:** `rfcs/rfc-retrieval-validation.md`, `rfcs/rfc-retrieval-security.md`, `notes/mainnet_policy_resolution_jan2026.md`
@@ -236,7 +252,7 @@ Legend:
 
 ## Cross-cutting E2E
 
-### ISSUE P0-ECON-E2E-001 — End-to-end econ accounting regression suite
+### TASK P0-ECON-E2E-001 — End-to-end econ accounting regression suite
 **Area:** `scripts/`  
 **Depends on:** Stage 1–2 issues  
 **Spec/Refs:** `MAINNET_GAP_TRACKER.md` (P0-ECON-001 test gate), `scripts/e2e_lifecycle.sh`
@@ -251,4 +267,3 @@ Legend:
 
 **DoD/Test Gate:**
 - Script is stable in CI and exits non-zero on mismatch.
-
