@@ -1,14 +1,62 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+pub mod api;
+pub mod sidecar;
+
+use api::{GatewayStatusResponse, GatewayUploadResponse};
+use sidecar::{GatewayConfig, SidecarManager};
+use std::sync::Arc;
+use tauri::{AppHandle, State};
+
+#[derive(Clone)]
+struct AppState {
+    sidecar: Arc<SidecarManager>,
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn gateway_start(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    config: GatewayConfig,
+) -> Result<sidecar::GatewayStartResponse, String> {
+    state.sidecar.start(app, config).await
+}
+
+#[tauri::command]
+async fn gateway_stop(state: State<'_, AppState>) -> Result<(), String> {
+    state.sidecar.stop().await
+}
+
+#[tauri::command]
+async fn gateway_status(state: State<'_, AppState>) -> Result<GatewayStatusResponse, String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url).status().await
+}
+
+#[tauri::command]
+async fn deal_upload_file(
+    state: State<'_, AppState>,
+    deal_id: u64,
+    owner: String,
+    file_path: String,
+    local_path: String,
+) -> Result<GatewayUploadResponse, String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url)
+        .upload_file(deal_id, owner, file_path, local_path)
+        .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let sidecar = Arc::new(SidecarManager::new());
     tauri::Builder::default()
+        .manage(AppState { sidecar })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            gateway_start,
+            gateway_stop,
+            gateway_status,
+            deal_upload_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
