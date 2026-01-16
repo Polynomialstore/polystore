@@ -115,6 +115,58 @@ jobs:
         working-directory: nil-website
         run: npm run lint
 
+  # ------------------------------------------------------------------
+  # TAURI GUI (NilGateway GUI)
+  # ------------------------------------------------------------------
+  tauri-gui:
+    name: Tauri GUI Build & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: nil_gateway_gui/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: nil_gateway_gui
+        run: npm ci
+
+      - name: Type Check
+        working-directory: nil_gateway_gui
+        run: npm run lint
+
+      - name: Run Unit Tests
+        working-directory: nil_gateway_gui
+        run: npm test
+
+      - name: Build UI
+        working-directory: nil_gateway_gui
+        run: npm run build
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cargo Format
+        working-directory: nil_gateway_gui/src-tauri
+        run: cargo fmt --check
+
+      - name: Cargo Test
+        working-directory: nil_gateway_gui/src-tauri
+        run: cargo test --verbose
+
+      - name: Cargo Clippy
+        working-directory: nil_gateway_gui/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
   native-wasm-parity:
     name: Native/WASM Parity
     runs-on: ubuntu-latest
