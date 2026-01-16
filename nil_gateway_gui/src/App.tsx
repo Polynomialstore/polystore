@@ -9,6 +9,7 @@ import {
 import {
   createDealEvm,
   fetchFile,
+  gatewayAttach,
   gatewayStart,
   gatewayStatus,
   listFiles,
@@ -56,6 +57,10 @@ export default function App() {
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
   const [gatewayStarting, setGatewayStarting] = useState(false);
+  const [gatewayBaseUrl, setGatewayBaseUrl] = useState(
+    "http://127.0.0.1:8080",
+  );
+  const [gatewayAttachBusy, setGatewayAttachBusy] = useState(false);
   const [createForm, setCreateForm] = useState<CreateDealForm>(defaultCreateForm);
   const [createResult, setCreateResult] = useState<GatewayTxResponse | null>(
     null,
@@ -115,6 +120,26 @@ export default function App() {
   }, [gateway]);
 
   useEffect(() => {
+    let mounted = true;
+    const attach = async () => {
+      try {
+        await gatewayAttach(gatewayBaseUrl);
+        const status = await gatewayStatus();
+        if (mounted) {
+          setGateway(status);
+          setGatewayError(null);
+        }
+      } catch {
+        // Silent on first boot to avoid noisy errors when gateway is offline.
+      }
+    };
+    attach();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (createResult?.deal_id && !uploadDealId) {
       setUploadDealId(createResult.deal_id);
     }
@@ -157,6 +182,22 @@ export default function App() {
       );
     } finally {
       setGatewayStarting(false);
+    }
+  };
+
+  const handleAttachGateway = async () => {
+    setGatewayAttachBusy(true);
+    setGatewayError(null);
+    try {
+      await gatewayAttach(gatewayBaseUrl);
+      const status = await gatewayStatus();
+      setGateway(status);
+    } catch (err) {
+      setGatewayError(
+        err instanceof Error ? err.message : "Failed to attach gateway",
+      );
+    } finally {
+      setGatewayAttachBusy(false);
     }
   };
 
@@ -447,6 +488,21 @@ export default function App() {
               ) : null}
             </div>
             <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  className="w-52 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                  value={gatewayBaseUrl}
+                  onChange={(event) => setGatewayBaseUrl(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+                  onClick={handleAttachGateway}
+                  disabled={gatewayAttachBusy}
+                >
+                  {gatewayAttachBusy ? "Connecting..." : "Connect"}
+                </button>
+              </div>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${gatewayBadgeClass}`}
               >

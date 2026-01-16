@@ -53,3 +53,13 @@ fn sidecar_manager_base_url_can_be_set_for_tests() {
     let url = manager.base_url().expect("base_url");
     assert_eq!(url, "http://127.0.0.1:1234");
 }
+
+#[test]
+fn sidecar_manager_normalizes_base_url() {
+    let manager = SidecarManager::new();
+    manager
+        .set_base_url("127.0.0.1:8080".to_string())
+        .expect("set base url");
+    let url = manager.base_url().expect("base_url");
+    assert_eq!(url, "http://127.0.0.1:8080");
+}

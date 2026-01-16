@@ -40,6 +40,16 @@ impl SidecarManager {
         }
     }
 
+    pub fn set_base_url(&self, base_url: String) -> Result<(), String> {
+        let normalized = normalize_base_url(base_url);
+        let mut guard = self
+            .base_url
+            .lock()
+            .map_err(|_| "sidecar lock poisoned".to_string())?;
+        *guard = Some(normalized);
+        Ok(())
+    }
+
     pub fn base_url(&self) -> Result<String, String> {
         self.base_url
             .lock()
@@ -145,7 +155,7 @@ impl SidecarManager {
 
     pub fn set_base_url_for_tests(&self, base_url: String) {
         if let Ok(mut guard) = self.base_url.lock() {
-            *guard = Some(base_url);
+            *guard = Some(normalize_base_url(base_url));
         }
     }
 }
@@ -158,7 +168,7 @@ fn parse_listening_addr(line: &str) -> Option<String> {
     if let Some(value) = line.strip_prefix("LISTENING_ADDR=") {
         let trimmed = value.trim();
         if !trimmed.is_empty() {
-            return Some(format!("http://{trimmed}"));
+            return Some(normalize_base_url(trimmed.to_string()));
         }
     }
 
@@ -166,9 +176,17 @@ fn parse_listening_addr(line: &str) -> Option<String> {
     if let Some(pos) = line.find(marker) {
         let addr = line[pos + marker.len()..].trim();
         if !addr.is_empty() {
-            return Some(format!("http://{addr}"));
+            return Some(normalize_base_url(addr.to_string()));
         }
     }
 
     None
+}
+
+fn normalize_base_url(value: String) -> String {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        value
+    } else {
+        format!("http://{value}")
+    }
 }

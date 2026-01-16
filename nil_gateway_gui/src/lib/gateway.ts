@@ -82,6 +82,10 @@ export async function gatewayStatus(): Promise<GatewayStatusResponse> {
   return invoke("gateway_status");
 }
 
+export async function gatewayAttach(baseUrl: string): Promise<void> {
+  return invoke("gateway_attach", { baseUrl });
+}
+
 export async function createDealEvm(
   intent: GatewayCreateDealIntent,
   signature: string,

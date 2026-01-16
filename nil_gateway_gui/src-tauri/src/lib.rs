@@ -20,6 +20,25 @@ async fn gateway_start(
     state: State<'_, AppState>,
     config: GatewayConfig,
 ) -> Result<sidecar::GatewayStartResponse, String> {
+    let listen_addr = config
+        .listen_addr
+        .clone()
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    let base_url = if listen_addr.starts_with("http://")
+        || listen_addr.starts_with("https://")
+    {
+        listen_addr.clone()
+    } else {
+        format!("http://{listen_addr}")
+    };
+
+    if state.sidecar.base_url().is_err() {
+        if api::GatewayClient::new(base_url.clone()).status().await.is_ok() {
+            state.sidecar.set_base_url(base_url.clone())?;
+            return Ok(sidecar::GatewayStartResponse { base_url, pid: 0 });
+        }
+    }
+
     state.sidecar.start(app, config).await
 }
 
@@ -30,8 +49,21 @@ async fn gateway_stop(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 async fn gateway_status(state: State<'_, AppState>) -> Result<GatewayStatusResponse, String> {
-    let base_url = state.sidecar.base_url()?;
+    let base_url = match state.sidecar.base_url() {
+        Ok(url) => url,
+        Err(_) => {
+            let default_url = "http://127.0.0.1:8080".to_string();
+            state.sidecar.set_base_url(default_url.clone())?;
+            default_url
+        }
+    };
+
     api::GatewayClient::new(base_url).status().await
+}
+
+#[tauri::command]
+async fn gateway_attach(state: State<'_, AppState>, base_url: String) -> Result<(), String> {
+    state.sidecar.set_base_url(base_url)
 }
 
 #[tauri::command]
@@ -117,6 +149,7 @@ pub fn run() {
             gateway_start,
             gateway_stop,
             gateway_status,
+            gateway_attach,
             deal_upload_file,
             deal_create_evm,
             deal_update_content_evm,
