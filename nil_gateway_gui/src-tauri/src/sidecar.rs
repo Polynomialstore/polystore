@@ -26,6 +26,12 @@ pub struct SidecarManager {
     base_url: Arc<Mutex<Option<String>>>,
 }
 
+impl Default for SidecarManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SidecarManager {
     pub fn new() -> Self {
         Self {
@@ -97,27 +103,27 @@ impl SidecarManager {
             let app_handle = app.clone();
             let base_url_handle = Arc::clone(&self.base_url);
             std::thread::spawn(move || {
-                let reader = BufReader::new(stdout);
-                for line in reader.lines().flatten() {
-                    emit_log(&app_handle, &line);
-                    if let Some(url) = parse_listening_addr(&line) {
-                        if let Ok(mut lock) = base_url_handle.lock() {
-                            *lock = Some(url);
-                        }
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                emit_log(&app_handle, &line);
+                if let Some(url) = parse_listening_addr(&line) {
+                    if let Ok(mut lock) = base_url_handle.lock() {
+                        *lock = Some(url);
                     }
                 }
-            });
-        }
+            }
+        });
+    }
 
         if let Some(stderr) = child.stderr.take() {
             let app_handle = app.clone();
             std::thread::spawn(move || {
-                let reader = BufReader::new(stderr);
-                for line in reader.lines().flatten() {
-                    emit_log(&app_handle, &line);
-                }
-            });
-        }
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                emit_log(&app_handle, &line);
+            }
+        });
+    }
 
         *guard = Some(child);
         Ok(GatewayStartResponse { base_url, pid })
