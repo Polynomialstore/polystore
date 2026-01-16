@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { open as openExternal } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useWallet } from "./hooks/useWallet";
@@ -465,7 +465,7 @@ export default function App() {
 
   const signViaBridge = async (typedData: unknown) => {
     const bridge = await walletBridgeStart(typedData);
-    await openExternal(bridge.url);
+    await openUrl(bridge.url);
     return walletBridgeWait(bridge.request_id);
   };
 
