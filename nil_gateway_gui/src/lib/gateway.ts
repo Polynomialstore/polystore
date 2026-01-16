@@ -45,6 +45,18 @@ export type GatewayTxResponse = {
   deal_id?: string;
 };
 
+export type GatewayUploadResponse = {
+  cid: string;
+  manifest_root: string;
+  size_bytes: number;
+  file_size_bytes: number;
+  allocated_length: number;
+  total_mdus: number;
+  witness_mdus: number;
+  filename: string;
+  upload_id: string;
+};
+
 export async function gatewayStart(): Promise<GatewayStartResponse> {
   return invoke("gateway_start", {
     config: {
@@ -69,4 +81,13 @@ export async function updateDealContentEvm(
   signature: string,
 ): Promise<GatewayTxResponse> {
   return invoke("deal_update_content_evm", { intent, signature });
+}
+
+export async function uploadFile(params: {
+  deal_id: number;
+  owner: string;
+  file_path: string;
+  local_path: string;
+}): Promise<GatewayUploadResponse> {
+  return invoke("deal_upload_file", params);
 }

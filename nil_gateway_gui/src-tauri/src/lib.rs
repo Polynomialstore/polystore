@@ -80,6 +80,7 @@ pub fn run() {
     let sidecar = Arc::new(SidecarManager::new());
     tauri::Builder::default()
         .manage(AppState { sidecar })
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             gateway_start,

@@ -1,13 +1,20 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useWallet } from "./hooks/useWallet";
-import { buildCreateDealTypedData } from "./lib/eip712";
+import {
+  buildCreateDealTypedData,
+  buildUpdateContentTypedData,
+} from "./lib/eip712";
 import {
   createDealEvm,
   gatewayStart,
   gatewayStatus,
+  updateDealContentEvm,
+  uploadFile,
   type GatewayStatusResponse,
   type GatewayTxResponse,
+  type GatewayUploadResponse,
 } from "./lib/gateway";
 
 const navItems = [
@@ -52,6 +59,20 @@ export default function App() {
   );
   const [createError, setCreateError] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
+  const [uploadDealId, setUploadDealId] = useState("");
+  const [uploadOwner, setUploadOwner] = useState("");
+  const [uploadFilePath, setUploadFilePath] = useState("hello.txt");
+  const [localFilePath, setLocalFilePath] = useState<string | null>(null);
+  const [uploadResponse, setUploadResponse] =
+    useState<GatewayUploadResponse | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [commitNonce, setCommitNonce] = useState("0");
+  const [commitBusy, setCommitBusy] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
+  const [commitResult, setCommitResult] = useState<GatewayTxResponse | null>(
+    null,
+  );
 
   const gatewayStatusLabel = gateway
     ? `Listening on ${gateway.listening_addr}`
@@ -81,6 +102,18 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [gateway]);
+
+  useEffect(() => {
+    if (createResult?.deal_id && !uploadDealId) {
+      setUploadDealId(createResult.deal_id);
+    }
+  }, [createResult, uploadDealId]);
+
+  useEffect(() => {
+    if (wallet.address && !uploadOwner) {
+      setUploadOwner(wallet.address);
+    }
+  }, [wallet.address, uploadOwner]);
 
   const handleStartGateway = async () => {
     setGatewayStarting(true);
@@ -137,6 +170,101 @@ export default function App() {
       );
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  const handlePickFile = async () => {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+    });
+    if (typeof selected === "string") {
+      setLocalFilePath(selected);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!gateway) {
+      setUploadError("Start the gateway before uploading.");
+      return;
+    }
+    if (!localFilePath) {
+      setUploadError("Select a local file to upload.");
+      return;
+    }
+    if (!uploadDealId) {
+      setUploadError("Provide a deal ID for the upload.");
+      return;
+    }
+    if (!uploadOwner) {
+      setUploadError("Provide the deal owner address.");
+      return;
+    }
+    setUploadBusy(true);
+    setUploadError(null);
+    setUploadResponse(null);
+    try {
+      const response = await uploadFile({
+        deal_id: Number(uploadDealId),
+        owner: uploadOwner,
+        file_path: uploadFilePath,
+        local_path: localFilePath,
+      });
+      setUploadResponse(response);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!wallet.address) {
+      setCommitError("Connect a wallet before committing content.");
+      return;
+    }
+    if (!uploadResponse) {
+      setCommitError("Upload a file before committing content.");
+      return;
+    }
+    if (!uploadDealId) {
+      setCommitError("Provide a deal ID for the commit.");
+      return;
+    }
+    setCommitBusy(true);
+    setCommitError(null);
+    setCommitResult(null);
+    try {
+      const eip712ChainId = Number(createForm.eip712ChainId);
+      const typedData = buildUpdateContentTypedData(
+        {
+          creator: wallet.address,
+          deal_id: BigInt(uploadDealId),
+          cid: uploadResponse.manifest_root,
+          size: BigInt(uploadResponse.size_bytes),
+          total_mdus: BigInt(uploadResponse.total_mdus),
+          witness_mdus: BigInt(uploadResponse.witness_mdus),
+          nonce: BigInt(commitNonce),
+        },
+        eip712ChainId,
+      );
+      const signature = await wallet.signTypedData(typedData);
+      const intent = {
+        creator_evm: wallet.address,
+        deal_id: Number(uploadDealId),
+        cid: uploadResponse.manifest_root,
+        size_bytes: uploadResponse.size_bytes,
+        total_mdus: uploadResponse.total_mdus,
+        witness_mdus: uploadResponse.witness_mdus,
+        nonce: Number(commitNonce),
+        chain_id: createForm.chainId,
+      };
+      const result = await updateDealContentEvm(intent, signature);
+      setCommitResult(result);
+    } catch (err) {
+      setCommitError(err instanceof Error ? err.message : "Commit failed");
+    } finally {
+      setCommitBusy(false);
     }
   };
 
@@ -393,6 +521,105 @@ export default function App() {
                   Submitted tx: {createResult.tx_hash}
                 </div>
               ) : null}
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Upload & Commit
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-slate-600">
+                  <label className="flex flex-col gap-2">
+                    Deal ID
+                    <input
+                      className={formFieldClass}
+                      value={uploadDealId}
+                      onChange={(event) => setUploadDealId(event.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    Deal owner
+                    <input
+                      className={formFieldClass}
+                      value={uploadOwner}
+                      onChange={(event) => setUploadOwner(event.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    NilFS file path
+                    <input
+                      className={formFieldClass}
+                      value={uploadFilePath}
+                      onChange={(event) =>
+                        setUploadFilePath(event.target.value)
+                      }
+                    />
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    Local file
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                        onClick={handlePickFile}
+                      >
+                        Choose file
+                      </button>
+                      <span className="text-xs text-slate-500">
+                        {localFilePath ?? "No file selected"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 disabled:opacity-60"
+                    onClick={handleUpload}
+                    disabled={uploadBusy || !gateway}
+                  >
+                    {uploadBusy ? "Uploading..." : "Upload file"}
+                  </button>
+                  {uploadError ? (
+                    <span className="text-xs text-rose-500">{uploadError}</span>
+                  ) : null}
+                </div>
+                {uploadResponse ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                    Manifest root: {uploadResponse.manifest_root}
+                  </div>
+                ) : null}
+
+                <div className="mt-6 grid grid-cols-2 gap-4 text-sm text-slate-600">
+                  <label className="flex flex-col gap-2">
+                    Commit nonce
+                    <input
+                      className={formFieldClass}
+                      value={commitNonce}
+                      onChange={(event) => setCommitNonce(event.target.value)}
+                    />
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    Commit
+                    <button
+                      type="button"
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-60"
+                      onClick={handleCommit}
+                      disabled={
+                        commitBusy || wallet.status !== "connected" || !gateway
+                      }
+                    >
+                      {commitBusy ? "Committing..." : "Commit content"}
+                    </button>
+                  </div>
+                </div>
+                {commitError ? (
+                  <p className="mt-3 text-xs text-rose-500">{commitError}</p>
+                ) : null}
+                {commitResult?.tx_hash ? (
+                  <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                    Commit tx: {commitResult.tx_hash}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="surface-card p-6">
