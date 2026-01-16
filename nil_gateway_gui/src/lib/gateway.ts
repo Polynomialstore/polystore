@@ -70,6 +70,11 @@ export type GatewayListFilesResponse = {
   files: GatewayFileEntry[];
 };
 
+export type BridgeStartResponse = {
+  request_id: string;
+  url: string;
+};
+
 export async function gatewayStart(config?: {
   listen_addr?: string;
   env?: Record<string, string>;
@@ -88,6 +93,16 @@ export async function gatewayStatus(): Promise<GatewayStatusResponse> {
 
 export async function gatewayAttach(baseUrl: string): Promise<void> {
   return invoke("gateway_attach", { baseUrl });
+}
+
+export async function walletBridgeStart(
+  typedData: unknown,
+): Promise<BridgeStartResponse> {
+  return invoke("wallet_bridge_start", { typed_data: typedData });
+}
+
+export async function walletBridgeWait(requestId: string): Promise<string> {
+  return invoke("wallet_bridge_wait", { request_id: requestId });
 }
 
 export async function createDealEvm(

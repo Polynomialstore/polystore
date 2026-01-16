@@ -1,4 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { open as openExternal } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useWallet } from "./hooks/useWallet";
@@ -16,6 +17,8 @@ import {
   listFiles,
   updateDealContentEvm,
   uploadFile,
+  walletBridgeStart,
+  walletBridgeWait,
   type GatewayStatusResponse,
   type GatewayTxResponse,
   type GatewayFileEntry,
@@ -63,6 +66,7 @@ export default function App() {
   );
   const [gatewayAttachBusy, setGatewayAttachBusy] = useState(false);
   const [createForm, setCreateForm] = useState<CreateDealForm>(defaultCreateForm);
+  const [creatorAddress, setCreatorAddress] = useState("");
   const [createResult, setCreateResult] = useState<GatewayTxResponse | null>(
     null,
   );
@@ -185,6 +189,18 @@ export default function App() {
   }, [wallet.address, uploadOwner]);
 
   useEffect(() => {
+    if (wallet.address && !creatorAddress) {
+      setCreatorAddress(wallet.address);
+    }
+  }, [wallet.address, creatorAddress]);
+
+  useEffect(() => {
+    if (creatorAddress && !uploadOwner) {
+      setUploadOwner(creatorAddress);
+    }
+  }, [creatorAddress, uploadOwner]);
+
+  useEffect(() => {
     if (uploadResponse?.manifest_root && !listManifestRoot) {
       setListManifestRoot(uploadResponse.manifest_root);
     }
@@ -242,8 +258,8 @@ export default function App() {
   };
 
   const handleCreateDeal = async () => {
-    if (!wallet.address) {
-      setCreateError("Connect a wallet before creating a deal.");
+    if (!creatorAddress) {
+      setCreateError("Provide a creator address before creating a deal.");
       return;
     }
     setCreateBusy(true);
@@ -253,7 +269,7 @@ export default function App() {
       const eip712ChainId = Number(createForm.eip712ChainId);
       const typedData = buildCreateDealTypedData(
         {
-          creator: wallet.address,
+          creator: creatorAddress,
           duration: BigInt(createForm.durationBlocks),
           service_hint: createForm.serviceHint,
           initial_escrow: createForm.initialEscrow,
@@ -262,9 +278,12 @@ export default function App() {
         },
         eip712ChainId,
       );
-      const signature = await wallet.signTypedData(typedData);
+      const signature =
+        wallet.status === "connected"
+          ? await wallet.signTypedData(typedData)
+          : await signViaBridge(typedData);
       const intent = {
-        creator_evm: wallet.address,
+        creator_evm: creatorAddress,
         duration_blocks: Number(createForm.durationBlocks),
         service_hint: createForm.serviceHint,
         initial_escrow: createForm.initialEscrow,
@@ -329,8 +348,8 @@ export default function App() {
   };
 
   const handleCommit = async () => {
-    if (!wallet.address) {
-      setCommitError("Connect a wallet before committing content.");
+    if (!creatorAddress) {
+      setCommitError("Provide a creator address before committing content.");
       return;
     }
     if (!uploadResponse) {
@@ -348,7 +367,7 @@ export default function App() {
       const eip712ChainId = Number(createForm.eip712ChainId);
       const typedData = buildUpdateContentTypedData(
         {
-          creator: wallet.address,
+          creator: creatorAddress,
           deal_id: BigInt(uploadDealId),
           cid: uploadResponse.manifest_root,
           size: BigInt(uploadResponse.size_bytes),
@@ -358,9 +377,12 @@ export default function App() {
         },
         eip712ChainId,
       );
-      const signature = await wallet.signTypedData(typedData);
+      const signature =
+        wallet.status === "connected"
+          ? await wallet.signTypedData(typedData)
+          : await signViaBridge(typedData);
       const intent = {
-        creator_evm: wallet.address,
+        creator_evm: creatorAddress,
         deal_id: Number(uploadDealId),
         cid: uploadResponse.manifest_root,
         size_bytes: uploadResponse.size_bytes,
@@ -440,6 +462,12 @@ export default function App() {
 
   const formFieldClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
+
+  const signViaBridge = async (typedData: unknown) => {
+    const bridge = await walletBridgeStart(typedData);
+    await openExternal(bridge.url);
+    return walletBridgeWait(bridge.request_id);
+  };
 
   const cards = useMemo(
     () => [
@@ -597,9 +625,7 @@ export default function App() {
                   type="button"
                   className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                   onClick={handleCreateDeal}
-                  disabled={
-                    createBusy || wallet.status !== "connected" || !gateway
-                  }
+                  disabled={createBusy || !gateway || !creatorAddress}
                 >
                   {createBusy ? "Creating..." : "Create deal"}
                 </button>
@@ -697,12 +723,15 @@ export default function App() {
                     }
                   />
                 </label>
-                <div className="flex flex-col gap-2">
+                <label className="flex flex-col gap-2">
                   Creator (EVM)
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    {wallet.address ?? "Connect wallet to populate"}
-                  </div>
-                </div>
+                  <input
+                    className={formFieldClass}
+                    value={creatorAddress}
+                    onChange={(event) => setCreatorAddress(event.target.value)}
+                    placeholder="0x..."
+                  />
+                </label>
               </div>
 
               {createError ? (
@@ -793,12 +822,12 @@ export default function App() {
                     Commit
                     <button
                       type="button"
-                      className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-60"
-                      onClick={handleCommit}
-                      disabled={
-                        commitBusy || wallet.status !== "connected" || !gateway
-                      }
-                    >
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-60"
+                    onClick={handleCommit}
+                    disabled={
+                      commitBusy || !gateway || !creatorAddress
+                    }
+                  >
                       {commitBusy ? "Committing..." : "Commit content"}
                     </button>
                   </div>

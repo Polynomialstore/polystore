@@ -1,10 +1,12 @@
 pub mod api;
+pub mod bridge;
 pub mod sidecar;
 
 use api::{
     GatewayListFilesResponse, GatewayStatusResponse, GatewayTxResponse, GatewayUploadResponse,
     SignedIntentRequest,
 };
+use bridge::{BridgeManager, BridgeStartResponse};
 use sidecar::{GatewayConfig, SidecarManager};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -12,6 +14,7 @@ use tauri::{AppHandle, State};
 #[derive(Clone)]
 struct AppState {
     sidecar: Arc<SidecarManager>,
+    bridge: Arc<BridgeManager>,
 }
 
 #[tauri::command]
@@ -64,6 +67,22 @@ async fn gateway_status(state: State<'_, AppState>) -> Result<GatewayStatusRespo
 #[tauri::command]
 async fn gateway_attach(state: State<'_, AppState>, base_url: String) -> Result<(), String> {
     state.sidecar.set_base_url(base_url)
+}
+
+#[tauri::command]
+async fn wallet_bridge_start(
+    state: State<'_, AppState>,
+    typed_data: serde_json::Value,
+) -> Result<BridgeStartResponse, String> {
+    state.bridge.start(typed_data).await
+}
+
+#[tauri::command]
+async fn wallet_bridge_wait(
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<String, String> {
+    state.bridge.wait(request_id).await
 }
 
 #[tauri::command]
@@ -141,8 +160,9 @@ async fn deal_fetch_file(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let sidecar = Arc::new(SidecarManager::new());
+    let bridge = Arc::new(BridgeManager::new());
     tauri::Builder::default()
-        .manage(AppState { sidecar })
+        .manage(AppState { sidecar, bridge })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -150,6 +170,8 @@ pub fn run() {
             gateway_stop,
             gateway_status,
             gateway_attach,
+            wallet_bridge_start,
+            wallet_bridge_wait,
             deal_upload_file,
             deal_create_evm,
             deal_update_content_evm,

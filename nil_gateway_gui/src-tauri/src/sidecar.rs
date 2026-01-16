@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -92,11 +94,11 @@ impl SidecarManager {
 
         if let Ok(resource_dir) = app.path().resource_dir() {
             let nil_cli_path = resource_dir.join("bin").join(binary_filename("nil_cli"));
-            if nil_cli_path.exists() {
+            if is_resource_ready(&nil_cli_path) {
                 cmd.env("NIL_CLI_BIN", &nil_cli_path);
             }
             let trusted_setup_path = resource_dir.join("trusted_setup.txt");
-            if trusted_setup_path.exists() {
+            if is_resource_ready(&trusted_setup_path) {
                 cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
             }
         }
@@ -238,7 +240,7 @@ fn resolve_binary_path(
         ];
         if let Some(found) = candidates
             .iter()
-            .find(|path| path.exists())
+            .find(|path| is_resource_ready(path))
             .map(|path| path.to_path_buf())
         {
             return Ok(found.to_string_lossy().to_string());
@@ -246,4 +248,10 @@ fn resolve_binary_path(
     }
 
     Ok(filename)
+}
+
+fn is_resource_ready(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|meta| meta.len() > 1024)
+        .unwrap_or(false)
 }
