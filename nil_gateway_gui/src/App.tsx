@@ -1,4 +1,5 @@
 import "./App.css";
+import { useWallet } from "./hooks/useWallet";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
@@ -9,6 +10,11 @@ const navItems = [
 ];
 
 export default function App() {
+  const wallet = useWallet();
+  const shortAddress = wallet.address
+    ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`
+    : "Not connected";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-100">
       <div className="mx-auto grid min-h-screen max-w-[1400px] grid-cols-[260px_1fr] gap-6 p-6">
@@ -42,12 +48,17 @@ export default function App() {
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
               Wallet
             </p>
-            <p className="mt-1 text-sm font-medium">Not connected</p>
+            <p className="mt-1 text-sm font-medium">{shortAddress}</p>
+            {wallet.error ? (
+              <p className="mt-2 text-xs text-rose-200">{wallet.error}</p>
+            ) : null}
             <button
               type="button"
-              className="mt-3 w-full rounded-lg bg-cyan-400/20 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/40"
+              className="mt-3 w-full rounded-lg bg-cyan-400/20 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/40 disabled:opacity-60"
+              onClick={wallet.status === "connected" ? wallet.disconnect : wallet.connect}
+              disabled={wallet.status === "connecting"}
             >
-              Connect
+              {wallet.status === "connected" ? "Disconnect" : "Connect"}
             </button>
           </div>
         </aside>
