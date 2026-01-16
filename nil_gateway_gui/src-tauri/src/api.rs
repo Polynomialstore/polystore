@@ -31,6 +31,21 @@ pub struct GatewayUploadResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayFileEntry {
+    pub path: String,
+    pub size_bytes: u64,
+    pub start_offset: u64,
+    pub flags: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayListFilesResponse {
+    pub manifest_root: String,
+    pub total_size_bytes: u64,
+    pub files: Vec<GatewayFileEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayTxResponse {
     pub status: Option<String>,
     pub tx_hash: String,
@@ -112,6 +127,69 @@ impl GatewayClient {
         resp.json::<GatewayUploadResponse>()
             .await
             .map_err(|err| format!("invalid upload payload: {err}"))
+    }
+
+    pub async fn list_files(
+        &self,
+        manifest_root: String,
+        deal_id: u64,
+        owner: String,
+    ) -> Result<GatewayListFilesResponse, String> {
+        let url = format!(
+            "{}/gateway/list-files/{}",
+            self.base_url.trim_end_matches('/'),
+            manifest_root
+        );
+        let resp = self
+            .client
+            .get(url)
+            .query(&[("deal_id", deal_id.to_string()), ("owner", owner)])
+            .send()
+            .await
+            .map_err(|err| format!("list files failed: {err}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("list files failed: {}", resp.status()));
+        }
+        resp.json::<GatewayListFilesResponse>()
+            .await
+            .map_err(|err| format!("invalid list files payload: {err}"))
+    }
+
+    pub async fn fetch_file(
+        &self,
+        manifest_root: String,
+        deal_id: u64,
+        owner: String,
+        file_path: String,
+        output_path: String,
+    ) -> Result<(), String> {
+        let url = format!(
+            "{}/gateway/fetch/{}",
+            self.base_url.trim_end_matches('/'),
+            manifest_root
+        );
+        let resp = self
+            .client
+            .get(url)
+            .query(&[
+                ("deal_id", deal_id.to_string()),
+                ("owner", owner),
+                ("file_path", file_path),
+            ])
+            .send()
+            .await
+            .map_err(|err| format!("fetch failed: {err}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("fetch failed: {}", resp.status()));
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|err| format!("fetch bytes failed: {err}"))?;
+        tokio::fs::write(output_path, bytes)
+            .await
+            .map_err(|err| format!("write file failed: {err}"))?;
+        Ok(())
     }
 
     pub async fn create_deal_from_evm(

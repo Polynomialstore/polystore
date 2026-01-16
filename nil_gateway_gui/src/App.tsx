@@ -1,4 +1,4 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useWallet } from "./hooks/useWallet";
@@ -8,12 +8,15 @@ import {
 } from "./lib/eip712";
 import {
   createDealEvm,
+  fetchFile,
   gatewayStart,
   gatewayStatus,
+  listFiles,
   updateDealContentEvm,
   uploadFile,
   type GatewayStatusResponse,
   type GatewayTxResponse,
+  type GatewayFileEntry,
   type GatewayUploadResponse,
 } from "./lib/gateway";
 
@@ -73,6 +76,14 @@ export default function App() {
   const [commitResult, setCommitResult] = useState<GatewayTxResponse | null>(
     null,
   );
+  const [listManifestRoot, setListManifestRoot] = useState("");
+  const [listDealId, setListDealId] = useState("");
+  const [listOwner, setListOwner] = useState("");
+  const [files, setFiles] = useState<GatewayFileEntry[]>([]);
+  const [listBusy, setListBusy] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [downloadBusy, setDownloadBusy] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const gatewayStatusLabel = gateway
     ? `Listening on ${gateway.listening_addr}`
@@ -114,6 +125,24 @@ export default function App() {
       setUploadOwner(wallet.address);
     }
   }, [wallet.address, uploadOwner]);
+
+  useEffect(() => {
+    if (uploadResponse?.manifest_root && !listManifestRoot) {
+      setListManifestRoot(uploadResponse.manifest_root);
+    }
+  }, [uploadResponse, listManifestRoot]);
+
+  useEffect(() => {
+    if (uploadDealId && !listDealId) {
+      setListDealId(uploadDealId);
+    }
+  }, [uploadDealId, listDealId]);
+
+  useEffect(() => {
+    if (uploadOwner && !listOwner) {
+      setListOwner(uploadOwner);
+    }
+  }, [uploadOwner, listOwner]);
 
   const handleStartGateway = async () => {
     setGatewayStarting(true);
@@ -265,6 +294,66 @@ export default function App() {
       setCommitError(err instanceof Error ? err.message : "Commit failed");
     } finally {
       setCommitBusy(false);
+    }
+  };
+
+  const handleListFiles = async () => {
+    if (!gateway) {
+      setListError("Start the gateway before listing files.");
+      return;
+    }
+    if (!listManifestRoot || !listDealId || !listOwner) {
+      setListError("Provide manifest root, deal ID, and owner.");
+      return;
+    }
+    setListBusy(true);
+    setListError(null);
+    setFiles([]);
+    try {
+      const response = await listFiles({
+        manifest_root: listManifestRoot,
+        deal_id: Number(listDealId),
+        owner: listOwner,
+      });
+      setFiles(response.files ?? []);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : "List files failed");
+    } finally {
+      setListBusy(false);
+    }
+  };
+
+  const handleDownload = async (entry: GatewayFileEntry) => {
+    if (!gateway) {
+      setDownloadError("Start the gateway before downloading.");
+      return;
+    }
+    if (!listManifestRoot || !listDealId || !listOwner) {
+      setDownloadError("Provide manifest root, deal ID, and owner.");
+      return;
+    }
+    const outputPath = await save({
+      defaultPath: entry.path.split("/").pop() ?? "download.bin",
+    });
+    if (!outputPath) {
+      return;
+    }
+    setDownloadBusy(entry.path);
+    setDownloadError(null);
+    try {
+      await fetchFile({
+        manifest_root: listManifestRoot,
+        deal_id: Number(listDealId),
+        owner: listOwner,
+        file_path: entry.path,
+        output_path: outputPath,
+      });
+    } catch (err) {
+      setDownloadError(
+        err instanceof Error ? err.message : "Download failed",
+      );
+    } finally {
+      setDownloadBusy(null);
     }
   };
 
@@ -619,6 +708,88 @@ export default function App() {
                     Commit tx: {commitResult.tx_hash}
                   </div>
                 ) : null}
+              </div>
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Browse & Download
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-slate-600">
+                  <label className="flex flex-col gap-2">
+                    Manifest root
+                    <input
+                      className={formFieldClass}
+                      value={listManifestRoot}
+                      onChange={(event) =>
+                        setListManifestRoot(event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    Deal ID
+                    <input
+                      className={formFieldClass}
+                      value={listDealId}
+                      onChange={(event) => setListDealId(event.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    Owner
+                    <input
+                      className={formFieldClass}
+                      value={listOwner}
+                      onChange={(event) => setListOwner(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 disabled:opacity-60"
+                    onClick={handleListFiles}
+                    disabled={listBusy || !gateway}
+                  >
+                    {listBusy ? "Refreshing..." : "List files"}
+                  </button>
+                  {listError ? (
+                    <span className="text-xs text-rose-500">{listError}</span>
+                  ) : null}
+                  {downloadError ? (
+                    <span className="text-xs text-rose-500">
+                      {downloadError}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white">
+                  <div className="grid grid-cols-[1.4fr_0.6fr_0.4fr] gap-4 border-b border-slate-200 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+                    <span>Path</span>
+                    <span>Size (bytes)</span>
+                    <span>Action</span>
+                  </div>
+                  {files.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-slate-500">
+                      No files listed yet.
+                    </div>
+                  ) : (
+                    files.map((entry) => (
+                      <div
+                        key={entry.path}
+                        className="grid grid-cols-[1.4fr_0.6fr_0.4fr] gap-4 border-b border-slate-100 px-4 py-3 text-sm text-slate-700 last:border-b-0"
+                      >
+                        <span className="truncate">{entry.path}</span>
+                        <span>{entry.size_bytes}</span>
+                        <button
+                          type="button"
+                          className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 disabled:opacity-60"
+                          onClick={() => handleDownload(entry)}
+                          disabled={downloadBusy === entry.path}
+                        >
+                          {downloadBusy === entry.path ? "Saving..." : "Download"}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 

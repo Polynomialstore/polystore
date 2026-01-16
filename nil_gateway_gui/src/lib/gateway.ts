@@ -57,6 +57,19 @@ export type GatewayUploadResponse = {
   upload_id: string;
 };
 
+export type GatewayFileEntry = {
+  path: string;
+  size_bytes: number;
+  start_offset: number;
+  flags: number;
+};
+
+export type GatewayListFilesResponse = {
+  manifest_root: string;
+  total_size_bytes: number;
+  files: GatewayFileEntry[];
+};
+
 export async function gatewayStart(): Promise<GatewayStartResponse> {
   return invoke("gateway_start", {
     config: {
@@ -90,4 +103,22 @@ export async function uploadFile(params: {
   local_path: string;
 }): Promise<GatewayUploadResponse> {
   return invoke("deal_upload_file", params);
+}
+
+export async function listFiles(params: {
+  deal_id: number;
+  owner: string;
+  manifest_root: string;
+}): Promise<GatewayListFilesResponse> {
+  return invoke("deal_list_files", params);
+}
+
+export async function fetchFile(params: {
+  deal_id: number;
+  owner: string;
+  manifest_root: string;
+  file_path: string;
+  output_path: string;
+}): Promise<void> {
+  return invoke("deal_fetch_file", params);
 }

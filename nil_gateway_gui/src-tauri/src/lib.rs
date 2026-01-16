@@ -1,7 +1,10 @@
 pub mod api;
 pub mod sidecar;
 
-use api::{GatewayStatusResponse, GatewayTxResponse, GatewayUploadResponse, SignedIntentRequest};
+use api::{
+    GatewayListFilesResponse, GatewayStatusResponse, GatewayTxResponse, GatewayUploadResponse,
+    SignedIntentRequest,
+};
 use sidecar::{GatewayConfig, SidecarManager};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -75,6 +78,34 @@ async fn deal_update_content_evm(
         .await
 }
 
+#[tauri::command]
+async fn deal_list_files(
+    state: State<'_, AppState>,
+    manifest_root: String,
+    deal_id: u64,
+    owner: String,
+) -> Result<GatewayListFilesResponse, String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url)
+        .list_files(manifest_root, deal_id, owner)
+        .await
+}
+
+#[tauri::command]
+async fn deal_fetch_file(
+    state: State<'_, AppState>,
+    manifest_root: String,
+    deal_id: u64,
+    owner: String,
+    file_path: String,
+    output_path: String,
+) -> Result<(), String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url)
+        .fetch_file(manifest_root, deal_id, owner, file_path, output_path)
+        .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let sidecar = Arc::new(SidecarManager::new());
@@ -88,7 +119,9 @@ pub fn run() {
             gateway_status,
             deal_upload_file,
             deal_create_evm,
-            deal_update_content_evm
+            deal_update_content_evm,
+            deal_list_files,
+            deal_fetch_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
