@@ -2,6 +2,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useWallet } from "./hooks/useWallet";
+import logoDark from "./assets/nilstore-dark.png";
 import {
   buildCreateDealTypedData,
   buildUpdateContentTypedData,
@@ -140,6 +141,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    const bootGateway = async () => {
+      try {
+        const listenAddr = gatewayBaseUrl.replace(/^https?:\/\//, "");
+        await gatewayStart({
+          listen_addr: listenAddr,
+          env: {
+            NIL_LOCAL_IMPORT_ENABLED: "1",
+            NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
+          },
+        });
+        const status = await gatewayStatus();
+        if (mounted) {
+          setGateway(status);
+          setGatewayError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setGatewayError(
+            err instanceof Error ? err.message : "Failed to start gateway",
+          );
+        }
+      }
+    };
+
+    bootGateway();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (createResult?.deal_id && !uploadDealId) {
       setUploadDealId(createResult.deal_id);
     }
@@ -173,7 +206,14 @@ export default function App() {
     setGatewayStarting(true);
     setGatewayError(null);
     try {
-      await gatewayStart();
+      const listenAddr = gatewayBaseUrl.replace(/^https?:\/\//, "");
+      await gatewayStart({
+        listen_addr: listenAddr,
+        env: {
+          NIL_LOCAL_IMPORT_ENABLED: "1",
+          NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
+        },
+      });
       const status = await gatewayStatus();
       setGateway(status);
     } catch (err) {
@@ -430,9 +470,16 @@ export default function App() {
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
               NilStore
             </p>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              NilGateway GUI
-            </h1>
+            <div className="mt-2 flex items-center gap-3">
+              <img
+                src={logoDark}
+                alt="NilStore"
+                className="h-9 w-9 rounded-full border border-slate-200 bg-white/80 p-1"
+              />
+              <h1 className="text-2xl font-semibold text-slate-900">
+                NilGateway GUI
+              </h1>
+            </div>
             <p className="text-sm text-slate-500">
               Monolithic sidecar control panel
             </p>

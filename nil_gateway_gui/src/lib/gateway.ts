@@ -70,10 +70,14 @@ export type GatewayListFilesResponse = {
   files: GatewayFileEntry[];
 };
 
-export async function gatewayStart(): Promise<GatewayStartResponse> {
+export async function gatewayStart(config?: {
+  listen_addr?: string;
+  env?: Record<string, string>;
+}): Promise<GatewayStartResponse> {
   return invoke("gateway_start", {
     config: {
-      listen_addr: "127.0.0.1:8080",
+      listen_addr: config?.listen_addr ?? "127.0.0.1:8080",
+      env: config?.env ?? undefined,
     },
   });
 }
