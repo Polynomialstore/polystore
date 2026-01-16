@@ -1,7 +1,7 @@
 pub mod api;
 pub mod sidecar;
 
-use api::{GatewayStatusResponse, GatewayUploadResponse};
+use api::{GatewayStatusResponse, GatewayTxResponse, GatewayUploadResponse, SignedIntentRequest};
 use sidecar::{GatewayConfig, SidecarManager};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -45,6 +45,36 @@ async fn deal_upload_file(
         .await
 }
 
+#[tauri::command]
+async fn deal_create_evm(
+    state: State<'_, AppState>,
+    intent: serde_json::Value,
+    signature: String,
+) -> Result<GatewayTxResponse, String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url)
+        .create_deal_from_evm(SignedIntentRequest {
+            intent,
+            evm_signature: signature,
+        })
+        .await
+}
+
+#[tauri::command]
+async fn deal_update_content_evm(
+    state: State<'_, AppState>,
+    intent: serde_json::Value,
+    signature: String,
+) -> Result<GatewayTxResponse, String> {
+    let base_url = state.sidecar.base_url()?;
+    api::GatewayClient::new(base_url)
+        .update_deal_content_from_evm(SignedIntentRequest {
+            intent,
+            evm_signature: signature,
+        })
+        .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let sidecar = Arc::new(SidecarManager::new());
@@ -55,7 +85,9 @@ pub fn run() {
             gateway_start,
             gateway_stop,
             gateway_status,
-            deal_upload_file
+            deal_upload_file,
+            deal_create_evm,
+            deal_update_content_evm
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

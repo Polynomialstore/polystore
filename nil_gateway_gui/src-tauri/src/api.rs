@@ -30,6 +30,19 @@ pub struct GatewayUploadResponse {
     pub upload_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayTxResponse {
+    pub status: Option<String>,
+    pub tx_hash: String,
+    pub deal_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedIntentRequest {
+    pub intent: serde_json::Value,
+    pub evm_signature: String,
+}
+
 #[derive(Clone)]
 pub struct GatewayClient {
     base_url: String,
@@ -99,5 +112,42 @@ impl GatewayClient {
         resp.json::<GatewayUploadResponse>()
             .await
             .map_err(|err| format!("invalid upload payload: {err}"))
+    }
+
+    pub async fn create_deal_from_evm(
+        &self,
+        req: SignedIntentRequest,
+    ) -> Result<GatewayTxResponse, String> {
+        self.post_signed_intent("/gateway/create-deal-evm", req)
+            .await
+    }
+
+    pub async fn update_deal_content_from_evm(
+        &self,
+        req: SignedIntentRequest,
+    ) -> Result<GatewayTxResponse, String> {
+        self.post_signed_intent("/gateway/update-deal-content-evm", req)
+            .await
+    }
+
+    async fn post_signed_intent(
+        &self,
+        path: &str,
+        req: SignedIntentRequest,
+    ) -> Result<GatewayTxResponse, String> {
+        let url = format!("{}{}", self.base_url.trim_end_matches('/'), path);
+        let resp = self
+            .client
+            .post(url)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|err| format!("intent request failed: {err}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("intent failed: {}", resp.status()));
+        }
+        resp.json::<GatewayTxResponse>()
+            .await
+            .map_err(|err| format!("invalid intent payload: {err}"))
     }
 }
