@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
 
@@ -75,14 +75,13 @@ impl SidecarManager {
             });
         }
 
-        let listen_addr = config
-            .listen_addr
-            .clone()
-            .unwrap_or_else(|| DEFAULT_LISTEN_ADDR.to_string());
-        let binary = config
-            .binary_path
-            .clone()
-            .unwrap_or_else(|| "nil_gateway".to_string());
+        let (listen_addr, base_url) = normalize_listen_addr(
+            config
+                .listen_addr
+                .clone()
+                .unwrap_or_else(|| DEFAULT_LISTEN_ADDR.to_string()),
+        );
+        let binary = resolve_binary_path(&app, config.binary_path.clone(), "nil_gateway")?;
         let args = config.args.unwrap_or_default();
 
         let mut cmd = Command::new(binary);
@@ -90,6 +89,17 @@ impl SidecarManager {
             .env("NIL_LISTEN_ADDR", &listen_addr)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let nil_cli_path = resource_dir.join("bin").join(binary_filename("nil_cli"));
+            if nil_cli_path.exists() {
+                cmd.env("NIL_CLI_BIN", &nil_cli_path);
+            }
+            let trusted_setup_path = resource_dir.join("trusted_setup.txt");
+            if trusted_setup_path.exists() {
+                cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+            }
+        }
 
         if let Some(env) = config.env {
             for (k, v) in env {
@@ -100,7 +110,6 @@ impl SidecarManager {
         let mut child = cmd.spawn().map_err(|err| format!("spawn failed: {err}"))?;
         let pid = child.id();
 
-        let base_url = format!("http://{listen_addr}");
         {
             let mut guard = self
                 .base_url
@@ -189,4 +198,52 @@ fn normalize_base_url(value: String) -> String {
     } else {
         format!("http://{value}")
     }
+}
+
+fn normalize_listen_addr(value: String) -> (String, String) {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        let addr = value
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .to_string();
+        (addr, value)
+    } else {
+        let base_url = format!("http://{value}");
+        (value, base_url)
+    }
+}
+
+fn binary_filename(name: &str) -> String {
+    if cfg!(target_os = "windows") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
+}
+
+fn resolve_binary_path(
+    app: &AppHandle,
+    explicit: Option<String>,
+    name: &str,
+) -> Result<String, String> {
+    if let Some(path) = explicit {
+        return Ok(path);
+    }
+
+    let filename = binary_filename(name);
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidates = [
+            resource_dir.join("bin").join(&filename),
+            resource_dir.join(&filename),
+        ];
+        if let Some(found) = candidates
+            .iter()
+            .find(|path| path.exists())
+            .map(|path| path.to_path_buf())
+        {
+            return Ok(found.to_string_lossy().to_string());
+        }
+    }
+
+    Ok(filename)
 }
