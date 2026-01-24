@@ -341,7 +341,7 @@ START_MDU_INDEX=$(python3 - "$START_OFFSET" "$WITNESS_MDUS" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 witness = int(sys.argv[2])
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 print(1 + witness + (start_offset // RAW_MDU_CAP))
 PY
 )
@@ -349,7 +349,7 @@ START_BLOB_INDEX=$(python3 - "$START_OFFSET" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 offset_in_mdu = start_offset % RAW_MDU_CAP
@@ -365,7 +365,7 @@ import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 def blob_index(raw_offset):
@@ -552,7 +552,7 @@ START_MDU_INDEX_1=$(python3 - "$START_OFFSET_1" "$WITNESS_MDUS_2" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 witness = int(sys.argv[2])
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 print(1 + witness + (start_offset // RAW_MDU_CAP))
 PY
 )
@@ -560,7 +560,7 @@ START_BLOB_INDEX_1=$(python3 - "$START_OFFSET_1" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 offset_in_mdu = start_offset % RAW_MDU_CAP
@@ -576,7 +576,7 @@ import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 def blob_index(raw_offset):
@@ -624,7 +624,7 @@ START_MDU_INDEX_2=$(python3 - "$START_OFFSET_2" "$WITNESS_MDUS_2" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 witness = int(sys.argv[2])
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 print(1 + witness + (start_offset // RAW_MDU_CAP))
 PY
 )
@@ -632,7 +632,7 @@ START_BLOB_INDEX_2=$(python3 - "$START_OFFSET_2" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 offset_in_mdu = start_offset % RAW_MDU_CAP
@@ -648,7 +648,7 @@ import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
-RAW_MDU_CAP = 8 * 1024 * 1024
+RAW_MDU_CAP = 8126464
 SCALAR_BYTES = 32
 SCALAR_PAYLOAD = 31
 def blob_index(raw_offset):
