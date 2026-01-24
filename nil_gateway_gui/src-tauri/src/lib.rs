@@ -33,15 +33,14 @@ async fn gateway_start(
         format!("http://{listen_addr}")
     };
 
-    if state.sidecar.base_url().is_err() {
-        if api::GatewayClient::new(base_url.clone())
+    if state.sidecar.base_url().is_err()
+        && api::GatewayClient::new(base_url.clone())
             .status()
             .await
             .is_ok()
-        {
-            state.sidecar.set_base_url(base_url.clone())?;
-            return Ok(sidecar::GatewayStartResponse { base_url, pid: 0 });
-        }
+    {
+        state.sidecar.set_base_url(base_url.clone())?;
+        return Ok(sidecar::GatewayStartResponse { base_url, pid: 0 });
     }
 
     state.sidecar.start(app, config).await
