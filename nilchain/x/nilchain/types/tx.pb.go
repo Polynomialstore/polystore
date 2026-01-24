@@ -1038,6 +1038,489 @@ func (m *MsgOpenRetrievalSessionResponse) GetSessionId() []byte {
 	return nil
 }
 
+// AllowlistProof is a keccak merkle inclusion proof.
+// leaf := keccak256(creator_address_bytes20)
+type AllowlistProof struct {
+	LeafIndex  uint32   `protobuf:"varint,1,opt,name=leaf_index,json=leafIndex,proto3" json:"leaf_index,omitempty"`
+	MerklePath [][]byte `protobuf:"bytes,2,rep,name=merkle_path,json=merklePath,proto3" json:"merkle_path,omitempty"`
+}
+
+func (m *AllowlistProof) Reset()         { *m = AllowlistProof{} }
+func (m *AllowlistProof) String() string { return proto.CompactTextString(m) }
+func (*AllowlistProof) ProtoMessage()    {}
+func (*AllowlistProof) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{16}
+}
+func (m *AllowlistProof) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllowlistProof) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AllowlistProof.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AllowlistProof) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllowlistProof.Merge(m, src)
+}
+func (m *AllowlistProof) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllowlistProof) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllowlistProof.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllowlistProof proto.InternalMessageInfo
+
+func (m *AllowlistProof) GetLeafIndex() uint32 {
+	if m != nil {
+		return m.LeafIndex
+	}
+	return 0
+}
+
+func (m *AllowlistProof) GetMerklePath() [][]byte {
+	if m != nil {
+		return m.MerklePath
+	}
+	return nil
+}
+
+// VoucherAuth is a one-time voucher authorizing a sponsored session open.
+// Signature scheme: EIP-712 over the typed fields (see types/eip712.go).
+type VoucherAuth struct {
+	DealId         uint64 `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	ManifestRoot   []byte `protobuf:"bytes,2,opt,name=manifest_root,json=manifestRoot,proto3" json:"manifest_root,omitempty"`
+	Provider       string `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
+	StartMduIndex  uint64 `protobuf:"varint,4,opt,name=start_mdu_index,json=startMduIndex,proto3" json:"start_mdu_index,omitempty"`
+	StartBlobIndex uint32 `protobuf:"varint,5,opt,name=start_blob_index,json=startBlobIndex,proto3" json:"start_blob_index,omitempty"`
+	BlobCount      uint64 `protobuf:"varint,6,opt,name=blob_count,json=blobCount,proto3" json:"blob_count,omitempty"`
+	ExpiresAt      uint64 `protobuf:"varint,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Nonce          uint64 `protobuf:"varint,8,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Redeemer       string `protobuf:"bytes,9,opt,name=redeemer,proto3" json:"redeemer,omitempty"`
+	Signature      []byte `protobuf:"bytes,10,opt,name=signature,proto3" json:"signature,omitempty"`
+}
+
+func (m *VoucherAuth) Reset()         { *m = VoucherAuth{} }
+func (m *VoucherAuth) String() string { return proto.CompactTextString(m) }
+func (*VoucherAuth) ProtoMessage()    {}
+func (*VoucherAuth) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{17}
+}
+func (m *VoucherAuth) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *VoucherAuth) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_VoucherAuth.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *VoucherAuth) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_VoucherAuth.Merge(m, src)
+}
+func (m *VoucherAuth) XXX_Size() int {
+	return m.Size()
+}
+func (m *VoucherAuth) XXX_DiscardUnknown() {
+	xxx_messageInfo_VoucherAuth.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_VoucherAuth proto.InternalMessageInfo
+
+func (m *VoucherAuth) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetManifestRoot() []byte {
+	if m != nil {
+		return m.ManifestRoot
+	}
+	return nil
+}
+
+func (m *VoucherAuth) GetProvider() string {
+	if m != nil {
+		return m.Provider
+	}
+	return ""
+}
+
+func (m *VoucherAuth) GetStartMduIndex() uint64 {
+	if m != nil {
+		return m.StartMduIndex
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetStartBlobIndex() uint32 {
+	if m != nil {
+		return m.StartBlobIndex
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetBlobCount() uint64 {
+	if m != nil {
+		return m.BlobCount
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetExpiresAt() uint64 {
+	if m != nil {
+		return m.ExpiresAt
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetNonce() uint64 {
+	if m != nil {
+		return m.Nonce
+	}
+	return 0
+}
+
+func (m *VoucherAuth) GetRedeemer() string {
+	if m != nil {
+		return m.Redeemer
+	}
+	return ""
+}
+
+func (m *VoucherAuth) GetSignature() []byte {
+	if m != nil {
+		return m.Signature
+	}
+	return nil
+}
+
+// MsgOpenRetrievalSessionSponsored creates a retrieval session funded by the requester.
+type MsgOpenRetrievalSessionSponsored struct {
+	Creator        string `protobuf:"bytes,1,opt,name=creator,proto3" json:"creator,omitempty"`
+	DealId         uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Provider       string `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
+	ManifestRoot   []byte `protobuf:"bytes,4,opt,name=manifest_root,json=manifestRoot,proto3" json:"manifest_root,omitempty"`
+	StartMduIndex  uint64 `protobuf:"varint,5,opt,name=start_mdu_index,json=startMduIndex,proto3" json:"start_mdu_index,omitempty"`
+	StartBlobIndex uint32 `protobuf:"varint,6,opt,name=start_blob_index,json=startBlobIndex,proto3" json:"start_blob_index,omitempty"`
+	BlobCount      uint64 `protobuf:"varint,7,opt,name=blob_count,json=blobCount,proto3" json:"blob_count,omitempty"`
+	Nonce          uint64 `protobuf:"varint,8,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	ExpiresAt      uint64 `protobuf:"varint,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// Optional slippage guard in bond denom units (0 = no max).
+	MaxTotalFee cosmossdk_io_math.Int `protobuf:"bytes,10,opt,name=max_total_fee,json=maxTotalFee,proto3,customtype=cosmossdk.io/math.Int" json:"max_total_fee"`
+	// Types that are valid to be assigned to Auth:
+	//	*MsgOpenRetrievalSessionSponsored_AllowlistProof
+	//	*MsgOpenRetrievalSessionSponsored_Voucher
+	Auth isMsgOpenRetrievalSessionSponsored_Auth `protobuf_oneof:"auth"`
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) Reset()         { *m = MsgOpenRetrievalSessionSponsored{} }
+func (m *MsgOpenRetrievalSessionSponsored) String() string { return proto.CompactTextString(m) }
+func (*MsgOpenRetrievalSessionSponsored) ProtoMessage()    {}
+func (*MsgOpenRetrievalSessionSponsored) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{18}
+}
+func (m *MsgOpenRetrievalSessionSponsored) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MsgOpenRetrievalSessionSponsored) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_MsgOpenRetrievalSessionSponsored.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *MsgOpenRetrievalSessionSponsored) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MsgOpenRetrievalSessionSponsored.Merge(m, src)
+}
+func (m *MsgOpenRetrievalSessionSponsored) XXX_Size() int {
+	return m.Size()
+}
+func (m *MsgOpenRetrievalSessionSponsored) XXX_DiscardUnknown() {
+	xxx_messageInfo_MsgOpenRetrievalSessionSponsored.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MsgOpenRetrievalSessionSponsored proto.InternalMessageInfo
+
+type isMsgOpenRetrievalSessionSponsored_Auth interface {
+	isMsgOpenRetrievalSessionSponsored_Auth()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type MsgOpenRetrievalSessionSponsored_AllowlistProof struct {
+	AllowlistProof *AllowlistProof `protobuf:"bytes,11,opt,name=allowlist_proof,json=allowlistProof,proto3,oneof" json:"allowlist_proof,omitempty"`
+}
+type MsgOpenRetrievalSessionSponsored_Voucher struct {
+	Voucher *VoucherAuth `protobuf:"bytes,12,opt,name=voucher,proto3,oneof" json:"voucher,omitempty"`
+}
+
+func (*MsgOpenRetrievalSessionSponsored_AllowlistProof) isMsgOpenRetrievalSessionSponsored_Auth() {}
+func (*MsgOpenRetrievalSessionSponsored_Voucher) isMsgOpenRetrievalSessionSponsored_Auth()        {}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetAuth() isMsgOpenRetrievalSessionSponsored_Auth {
+	if m != nil {
+		return m.Auth
+	}
+	return nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetCreator() string {
+	if m != nil {
+		return m.Creator
+	}
+	return ""
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetProvider() string {
+	if m != nil {
+		return m.Provider
+	}
+	return ""
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetManifestRoot() []byte {
+	if m != nil {
+		return m.ManifestRoot
+	}
+	return nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetStartMduIndex() uint64 {
+	if m != nil {
+		return m.StartMduIndex
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetStartBlobIndex() uint32 {
+	if m != nil {
+		return m.StartBlobIndex
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetBlobCount() uint64 {
+	if m != nil {
+		return m.BlobCount
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetNonce() uint64 {
+	if m != nil {
+		return m.Nonce
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetExpiresAt() uint64 {
+	if m != nil {
+		return m.ExpiresAt
+	}
+	return 0
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetAllowlistProof() *AllowlistProof {
+	if x, ok := m.GetAuth().(*MsgOpenRetrievalSessionSponsored_AllowlistProof); ok {
+		return x.AllowlistProof
+	}
+	return nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) GetVoucher() *VoucherAuth {
+	if x, ok := m.GetAuth().(*MsgOpenRetrievalSessionSponsored_Voucher); ok {
+		return x.Voucher
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*MsgOpenRetrievalSessionSponsored) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*MsgOpenRetrievalSessionSponsored_AllowlistProof)(nil),
+		(*MsgOpenRetrievalSessionSponsored_Voucher)(nil),
+	}
+}
+
+type MsgOpenRetrievalSessionSponsoredResponse struct {
+	SessionId []byte `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+}
+
+func (m *MsgOpenRetrievalSessionSponsoredResponse) Reset() {
+	*m = MsgOpenRetrievalSessionSponsoredResponse{}
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) String() string { return proto.CompactTextString(m) }
+func (*MsgOpenRetrievalSessionSponsoredResponse) ProtoMessage()    {}
+func (*MsgOpenRetrievalSessionSponsoredResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{19}
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_MsgOpenRetrievalSessionSponsoredResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MsgOpenRetrievalSessionSponsoredResponse.Merge(m, src)
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_MsgOpenRetrievalSessionSponsoredResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MsgOpenRetrievalSessionSponsoredResponse proto.InternalMessageInfo
+
+func (m *MsgOpenRetrievalSessionSponsoredResponse) GetSessionId() []byte {
+	if m != nil {
+		return m.SessionId
+	}
+	return nil
+}
+
+// MsgUpdateDealRetrievalPolicy updates deal retrieval policy parameters.
+type MsgUpdateDealRetrievalPolicy struct {
+	Creator string          `protobuf:"bytes,1,opt,name=creator,proto3" json:"creator,omitempty"`
+	DealId  uint64          `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Policy  RetrievalPolicy `protobuf:"bytes,3,opt,name=policy,proto3" json:"policy"`
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) Reset()         { *m = MsgUpdateDealRetrievalPolicy{} }
+func (m *MsgUpdateDealRetrievalPolicy) String() string { return proto.CompactTextString(m) }
+func (*MsgUpdateDealRetrievalPolicy) ProtoMessage()    {}
+func (*MsgUpdateDealRetrievalPolicy) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{20}
+}
+func (m *MsgUpdateDealRetrievalPolicy) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MsgUpdateDealRetrievalPolicy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_MsgUpdateDealRetrievalPolicy.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *MsgUpdateDealRetrievalPolicy) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MsgUpdateDealRetrievalPolicy.Merge(m, src)
+}
+func (m *MsgUpdateDealRetrievalPolicy) XXX_Size() int {
+	return m.Size()
+}
+func (m *MsgUpdateDealRetrievalPolicy) XXX_DiscardUnknown() {
+	xxx_messageInfo_MsgUpdateDealRetrievalPolicy.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MsgUpdateDealRetrievalPolicy proto.InternalMessageInfo
+
+func (m *MsgUpdateDealRetrievalPolicy) GetCreator() string {
+	if m != nil {
+		return m.Creator
+	}
+	return ""
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) GetPolicy() RetrievalPolicy {
+	if m != nil {
+		return m.Policy
+	}
+	return RetrievalPolicy{}
+}
+
+type MsgUpdateDealRetrievalPolicyResponse struct {
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+}
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) Reset()         { *m = MsgUpdateDealRetrievalPolicyResponse{} }
+func (m *MsgUpdateDealRetrievalPolicyResponse) String() string { return proto.CompactTextString(m) }
+func (*MsgUpdateDealRetrievalPolicyResponse) ProtoMessage()    {}
+func (*MsgUpdateDealRetrievalPolicyResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_48ebc739066bad25, []int{21}
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_MsgUpdateDealRetrievalPolicyResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MsgUpdateDealRetrievalPolicyResponse.Merge(m, src)
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_MsgUpdateDealRetrievalPolicyResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MsgUpdateDealRetrievalPolicyResponse proto.InternalMessageInfo
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) GetSuccess() bool {
+	if m != nil {
+		return m.Success
+	}
+	return false
+}
+
 // MsgConfirmRetrievalSession marks a session as user-confirmed (proof-of-validation).
 type MsgConfirmRetrievalSession struct {
 	Creator   string `protobuf:"bytes,1,opt,name=creator,proto3" json:"creator,omitempty"`
@@ -1048,7 +1531,7 @@ func (m *MsgConfirmRetrievalSession) Reset()         { *m = MsgConfirmRetrievalS
 func (m *MsgConfirmRetrievalSession) String() string { return proto.CompactTextString(m) }
 func (*MsgConfirmRetrievalSession) ProtoMessage()    {}
 func (*MsgConfirmRetrievalSession) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{16}
+	return fileDescriptor_48ebc739066bad25, []int{22}
 }
 func (m *MsgConfirmRetrievalSession) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1099,7 +1582,7 @@ func (m *MsgConfirmRetrievalSessionResponse) Reset()         { *m = MsgConfirmRe
 func (m *MsgConfirmRetrievalSessionResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgConfirmRetrievalSessionResponse) ProtoMessage()    {}
 func (*MsgConfirmRetrievalSessionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{17}
+	return fileDescriptor_48ebc739066bad25, []int{23}
 }
 func (m *MsgConfirmRetrievalSessionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1145,7 +1628,7 @@ func (m *MsgCancelRetrievalSession) Reset()         { *m = MsgCancelRetrievalSes
 func (m *MsgCancelRetrievalSession) String() string { return proto.CompactTextString(m) }
 func (*MsgCancelRetrievalSession) ProtoMessage()    {}
 func (*MsgCancelRetrievalSession) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{18}
+	return fileDescriptor_48ebc739066bad25, []int{24}
 }
 func (m *MsgCancelRetrievalSession) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1196,7 +1679,7 @@ func (m *MsgCancelRetrievalSessionResponse) Reset()         { *m = MsgCancelRetr
 func (m *MsgCancelRetrievalSessionResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgCancelRetrievalSessionResponse) ProtoMessage()    {}
 func (*MsgCancelRetrievalSessionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{19}
+	return fileDescriptor_48ebc739066bad25, []int{25}
 }
 func (m *MsgCancelRetrievalSessionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1243,7 +1726,7 @@ func (m *MsgSubmitRetrievalSessionProof) Reset()         { *m = MsgSubmitRetriev
 func (m *MsgSubmitRetrievalSessionProof) String() string { return proto.CompactTextString(m) }
 func (*MsgSubmitRetrievalSessionProof) ProtoMessage()    {}
 func (*MsgSubmitRetrievalSessionProof) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{20}
+	return fileDescriptor_48ebc739066bad25, []int{26}
 }
 func (m *MsgSubmitRetrievalSessionProof) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1303,7 +1786,7 @@ func (m *MsgSubmitRetrievalSessionProofResponse) Reset() {
 func (m *MsgSubmitRetrievalSessionProofResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgSubmitRetrievalSessionProofResponse) ProtoMessage()    {}
 func (*MsgSubmitRetrievalSessionProofResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{21}
+	return fileDescriptor_48ebc739066bad25, []int{27}
 }
 func (m *MsgSubmitRetrievalSessionProofResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1357,7 +1840,7 @@ func (m *MsgProveLiveness) Reset()         { *m = MsgProveLiveness{} }
 func (m *MsgProveLiveness) String() string { return proto.CompactTextString(m) }
 func (*MsgProveLiveness) ProtoMessage()    {}
 func (*MsgProveLiveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{22}
+	return fileDescriptor_48ebc739066bad25, []int{28}
 }
 func (m *MsgProveLiveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1487,7 +1970,7 @@ func (m *MsgProveLivenessResponse) Reset()         { *m = MsgProveLivenessRespon
 func (m *MsgProveLivenessResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgProveLivenessResponse) ProtoMessage()    {}
 func (*MsgProveLivenessResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{23}
+	return fileDescriptor_48ebc739066bad25, []int{29}
 }
 func (m *MsgProveLivenessResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1547,7 +2030,7 @@ func (m *MsgSignalSaturation) Reset()         { *m = MsgSignalSaturation{} }
 func (m *MsgSignalSaturation) String() string { return proto.CompactTextString(m) }
 func (*MsgSignalSaturation) ProtoMessage()    {}
 func (*MsgSignalSaturation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{24}
+	return fileDescriptor_48ebc739066bad25, []int{30}
 }
 func (m *MsgSignalSaturation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1601,7 +2084,7 @@ func (m *MsgSignalSaturationResponse) Reset()         { *m = MsgSignalSaturation
 func (m *MsgSignalSaturationResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgSignalSaturationResponse) ProtoMessage()    {}
 func (*MsgSignalSaturationResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{25}
+	return fileDescriptor_48ebc739066bad25, []int{31}
 }
 func (m *MsgSignalSaturationResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1663,7 +2146,7 @@ func (m *MsgStartSlotRepair) Reset()         { *m = MsgStartSlotRepair{} }
 func (m *MsgStartSlotRepair) String() string { return proto.CompactTextString(m) }
 func (*MsgStartSlotRepair) ProtoMessage()    {}
 func (*MsgStartSlotRepair) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{26}
+	return fileDescriptor_48ebc739066bad25, []int{32}
 }
 func (m *MsgStartSlotRepair) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1728,7 +2211,7 @@ func (m *MsgStartSlotRepairResponse) Reset()         { *m = MsgStartSlotRepairRe
 func (m *MsgStartSlotRepairResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgStartSlotRepairResponse) ProtoMessage()    {}
 func (*MsgStartSlotRepairResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{27}
+	return fileDescriptor_48ebc739066bad25, []int{33}
 }
 func (m *MsgStartSlotRepairResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1775,7 +2258,7 @@ func (m *MsgCompleteSlotRepair) Reset()         { *m = MsgCompleteSlotRepair{} }
 func (m *MsgCompleteSlotRepair) String() string { return proto.CompactTextString(m) }
 func (*MsgCompleteSlotRepair) ProtoMessage()    {}
 func (*MsgCompleteSlotRepair) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{28}
+	return fileDescriptor_48ebc739066bad25, []int{34}
 }
 func (m *MsgCompleteSlotRepair) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1833,7 +2316,7 @@ func (m *MsgCompleteSlotRepairResponse) Reset()         { *m = MsgCompleteSlotRe
 func (m *MsgCompleteSlotRepairResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgCompleteSlotRepairResponse) ProtoMessage()    {}
 func (*MsgCompleteSlotRepairResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{29}
+	return fileDescriptor_48ebc739066bad25, []int{35}
 }
 func (m *MsgCompleteSlotRepairResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1880,7 +2363,7 @@ func (m *MsgAddCredit) Reset()         { *m = MsgAddCredit{} }
 func (m *MsgAddCredit) String() string { return proto.CompactTextString(m) }
 func (*MsgAddCredit) ProtoMessage()    {}
 func (*MsgAddCredit) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{30}
+	return fileDescriptor_48ebc739066bad25, []int{36}
 }
 func (m *MsgAddCredit) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1932,7 +2415,7 @@ func (m *MsgAddCreditResponse) Reset()         { *m = MsgAddCreditResponse{} }
 func (m *MsgAddCreditResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgAddCreditResponse) ProtoMessage()    {}
 func (*MsgAddCreditResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{31}
+	return fileDescriptor_48ebc739066bad25, []int{37}
 }
 func (m *MsgAddCreditResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1973,7 +2456,7 @@ func (m *MsgExtendDeal) Reset()         { *m = MsgExtendDeal{} }
 func (m *MsgExtendDeal) String() string { return proto.CompactTextString(m) }
 func (*MsgExtendDeal) ProtoMessage()    {}
 func (*MsgExtendDeal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{32}
+	return fileDescriptor_48ebc739066bad25, []int{38}
 }
 func (m *MsgExtendDeal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2032,7 +2515,7 @@ func (m *MsgExtendDealResponse) Reset()         { *m = MsgExtendDealResponse{} }
 func (m *MsgExtendDealResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgExtendDealResponse) ProtoMessage()    {}
 func (*MsgExtendDealResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{33}
+	return fileDescriptor_48ebc739066bad25, []int{39}
 }
 func (m *MsgExtendDealResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2084,7 +2567,7 @@ func (m *MsgWithdrawRewards) Reset()         { *m = MsgWithdrawRewards{} }
 func (m *MsgWithdrawRewards) String() string { return proto.CompactTextString(m) }
 func (*MsgWithdrawRewards) ProtoMessage()    {}
 func (*MsgWithdrawRewards) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{34}
+	return fileDescriptor_48ebc739066bad25, []int{40}
 }
 func (m *MsgWithdrawRewards) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2129,7 +2612,7 @@ func (m *MsgWithdrawRewardsResponse) Reset()         { *m = MsgWithdrawRewardsRe
 func (m *MsgWithdrawRewardsResponse) String() string { return proto.CompactTextString(m) }
 func (*MsgWithdrawRewardsResponse) ProtoMessage()    {}
 func (*MsgWithdrawRewardsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_48ebc739066bad25, []int{35}
+	return fileDescriptor_48ebc739066bad25, []int{41}
 }
 func (m *MsgWithdrawRewardsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2175,6 +2658,12 @@ func init() {
 	proto.RegisterType((*MsgUpdateDealContentFromEvmResponse)(nil), "nilchain.nilchain.v1.MsgUpdateDealContentFromEvmResponse")
 	proto.RegisterType((*MsgOpenRetrievalSession)(nil), "nilchain.nilchain.v1.MsgOpenRetrievalSession")
 	proto.RegisterType((*MsgOpenRetrievalSessionResponse)(nil), "nilchain.nilchain.v1.MsgOpenRetrievalSessionResponse")
+	proto.RegisterType((*AllowlistProof)(nil), "nilchain.nilchain.v1.AllowlistProof")
+	proto.RegisterType((*VoucherAuth)(nil), "nilchain.nilchain.v1.VoucherAuth")
+	proto.RegisterType((*MsgOpenRetrievalSessionSponsored)(nil), "nilchain.nilchain.v1.MsgOpenRetrievalSessionSponsored")
+	proto.RegisterType((*MsgOpenRetrievalSessionSponsoredResponse)(nil), "nilchain.nilchain.v1.MsgOpenRetrievalSessionSponsoredResponse")
+	proto.RegisterType((*MsgUpdateDealRetrievalPolicy)(nil), "nilchain.nilchain.v1.MsgUpdateDealRetrievalPolicy")
+	proto.RegisterType((*MsgUpdateDealRetrievalPolicyResponse)(nil), "nilchain.nilchain.v1.MsgUpdateDealRetrievalPolicyResponse")
 	proto.RegisterType((*MsgConfirmRetrievalSession)(nil), "nilchain.nilchain.v1.MsgConfirmRetrievalSession")
 	proto.RegisterType((*MsgConfirmRetrievalSessionResponse)(nil), "nilchain.nilchain.v1.MsgConfirmRetrievalSessionResponse")
 	proto.RegisterType((*MsgCancelRetrievalSession)(nil), "nilchain.nilchain.v1.MsgCancelRetrievalSession")
@@ -2200,141 +2689,161 @@ func init() {
 func init() { proto.RegisterFile("nilchain/nilchain/v1/tx.proto", fileDescriptor_48ebc739066bad25) }
 
 var fileDescriptor_48ebc739066bad25 = []byte{
-	// 2139 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x59, 0xcd, 0x6f, 0xdb, 0xc8,
-	0x15, 0x37, 0x6d, 0x45, 0xb2, 0x9e, 0xa4, 0xd8, 0x61, 0x9c, 0x8d, 0xac, 0x8d, 0x1d, 0x87, 0x69,
-	0xbd, 0x8e, 0xd3, 0xd8, 0xb1, 0xb3, 0xf9, 0x12, 0xb2, 0xc9, 0x5a, 0x8e, 0xbb, 0x76, 0x5b, 0xa1,
-	0x29, 0x8d, 0x6d, 0x81, 0x2e, 0x50, 0x82, 0x12, 0xc7, 0xf2, 0x60, 0x49, 0x8e, 0xc0, 0x19, 0xc9,
-	0x76, 0xd1, 0x43, 0xbb, 0x40, 0x17, 0x45, 0x4f, 0xdb, 0x7b, 0xaf, 0x05, 0x7a, 0x2a, 0x7c, 0xd8,
-	0xbf, 0xa0, 0x40, 0x8b, 0x45, 0x0f, 0xc5, 0xa2, 0xa7, 0xa2, 0x87, 0x45, 0x9b, 0x1c, 0x02, 0xf4,
-	0x5a, 0xa0, 0x87, 0xf6, 0x52, 0xcc, 0x0c, 0x49, 0x49, 0x34, 0x29, 0xd1, 0x86, 0x9b, 0x8b, 0xa1,
-	0x79, 0xfc, 0xbd, 0x99, 0xf7, 0x3d, 0x6f, 0x9e, 0x61, 0xce, 0xc5, 0x76, 0x73, 0xdf, 0xc4, 0xee,
-	0x6a, 0xf8, 0xa3, 0xbb, 0xb6, 0xca, 0x0e, 0x57, 0xda, 0x1e, 0x61, 0x44, 0x9d, 0x09, 0xa8, 0x2b,
-	0xe1, 0x8f, 0xee, 0x5a, 0xe5, 0x92, 0xe9, 0x60, 0x97, 0xac, 0x8a, 0xbf, 0x12, 0x58, 0xb9, 0xda,
-	0x24, 0xd4, 0x21, 0x74, 0xd5, 0xa1, 0x2d, 0xbe, 0x81, 0x43, 0x5b, 0xfe, 0x87, 0x59, 0xf9, 0xc1,
-	0x10, 0xab, 0x55, 0xb9, 0xf0, 0x3f, 0xcd, 0xb4, 0x48, 0x8b, 0x48, 0x3a, 0xff, 0xe5, 0x53, 0x6f,
-	0xc4, 0x4a, 0xd4, 0x36, 0x3d, 0xd3, 0x09, 0x18, 0x17, 0xe2, 0x85, 0x3e, 0x6a, 0x23, 0x1f, 0xa1,
-	0xfd, 0x5e, 0x81, 0xa9, 0x3a, 0x6d, 0x7d, 0xd8, 0xb6, 0x4c, 0x86, 0x5e, 0x08, 0x5e, 0xf5, 0x01,
-	0xe4, 0xcd, 0x0e, 0xdb, 0x27, 0x1e, 0x66, 0x47, 0x65, 0x65, 0x41, 0x59, 0xca, 0xd7, 0xca, 0x7f,
-	0xf9, 0xfc, 0xce, 0x8c, 0x2f, 0xd3, 0x86, 0x65, 0x79, 0x88, 0xd2, 0x5d, 0xe6, 0x61, 0xb7, 0xa5,
-	0xf7, 0xa0, 0xea, 0x33, 0xc8, 0xca, 0xd3, 0xcb, 0xe3, 0x0b, 0xca, 0x52, 0x61, 0xfd, 0xda, 0x4a,
-	0x9c, 0x51, 0x56, 0xe4, 0x29, 0xb5, 0xfc, 0x17, 0x5f, 0x5d, 0x1f, 0xfb, 0xed, 0xeb, 0xe3, 0x65,
-	0x45, 0xf7, 0xd9, 0xaa, 0x0f, 0x3e, 0x79, 0x7d, 0xbc, 0xdc, 0xdb, 0xf0, 0x97, 0xaf, 0x8f, 0x97,
-	0x6f, 0x86, 0x82, 0x1f, 0xf6, 0x74, 0x88, 0x08, 0xac, 0xcd, 0xc2, 0xd5, 0x08, 0x49, 0x47, 0xb4,
-	0x4d, 0x5c, 0x8a, 0xb4, 0x7f, 0x2a, 0x70, 0xb9, 0x4e, 0x5b, 0x3a, 0x6a, 0x61, 0xca, 0x90, 0xf7,
-	0xc2, 0x23, 0x5d, 0x6c, 0x21, 0x4f, 0x5d, 0x87, 0x5c, 0xd3, 0x43, 0x26, 0x23, 0xde, 0x48, 0x0d,
-	0x03, 0xa0, 0xaa, 0x41, 0xb1, 0x69, 0xb6, 0xcd, 0x06, 0xb6, 0x31, 0xc3, 0x48, 0x6a, 0x99, 0xd7,
-	0x07, 0x68, 0xea, 0x4d, 0x28, 0x31, 0xc2, 0x4c, 0xdb, 0xa0, 0x8c, 0x78, 0x66, 0x0b, 0x95, 0x27,
-	0x16, 0x94, 0xa5, 0x8c, 0x5e, 0x14, 0xc4, 0x5d, 0x49, 0x53, 0xaf, 0x41, 0x1e, 0xb9, 0x56, 0x9b,
-	0x60, 0x97, 0xd1, 0x72, 0x66, 0x61, 0x62, 0x29, 0xaf, 0xf7, 0x08, 0xd5, 0x47, 0xdc, 0x0a, 0xc1,
-	0xa1, 0xdc, 0x06, 0xef, 0x24, 0xd8, 0x20, 0xaa, 0x94, 0xf6, 0x10, 0xde, 0x8e, 0x21, 0x07, 0xb6,
-	0x50, 0xcb, 0x90, 0xa3, 0x9d, 0x66, 0x13, 0x51, 0x2a, 0x74, 0x9e, 0xd4, 0x83, 0xa5, 0xf6, 0x8f,
-	0x71, 0x28, 0xd5, 0x69, 0x6b, 0x93, 0x9f, 0x89, 0x9e, 0x23, 0xd3, 0x3e, 0x93, 0x7d, 0xde, 0x81,
-	0x29, 0xab, 0xe3, 0x99, 0x0c, 0x13, 0xd7, 0x68, 0xd8, 0xa4, 0xf9, 0x31, 0x57, 0x8e, 0x6b, 0x7f,
-	0x31, 0x20, 0xd7, 0x04, 0x55, 0xbd, 0x01, 0x45, 0x8a, 0xbc, 0x2e, 0x6e, 0x22, 0x63, 0x1f, 0xbb,
-	0xac, 0x7c, 0x41, 0x18, 0xb2, 0xe0, 0xd3, 0xb6, 0xb1, 0xcb, 0xd4, 0x1d, 0xb8, 0xe4, 0x98, 0x87,
-	0x86, 0x43, 0x5c, 0xb6, 0x6f, 0x1f, 0x19, 0xb4, 0x8d, 0x5c, 0xab, 0x9c, 0x15, 0x92, 0xcc, 0xf1,
-	0xc0, 0xf9, 0xdb, 0x57, 0xd7, 0xaf, 0x48, 0x69, 0xa8, 0xf5, 0xf1, 0x0a, 0x26, 0xab, 0x8e, 0xc9,
-	0xf6, 0x57, 0x76, 0x5c, 0xa6, 0x4f, 0x39, 0xe6, 0x61, 0x5d, 0xb2, 0xed, 0x72, 0x2e, 0xf5, 0x7b,
-	0x70, 0x05, 0xbb, 0x98, 0x61, 0xd3, 0x36, 0x10, 0x6d, 0x7a, 0xe4, 0xc0, 0x30, 0x1d, 0xd2, 0x71,
-	0x59, 0x39, 0x97, 0x66, 0xbb, 0xcb, 0x3e, 0xef, 0x96, 0x60, 0xdd, 0x10, 0x9c, 0xd5, 0xf5, 0xa8,
-	0x8b, 0x6e, 0x24, 0xb8, 0xa8, 0x67, 0x51, 0xed, 0x08, 0xae, 0x0c, 0x10, 0x42, 0xb7, 0x5c, 0x85,
-	0x9c, 0x85, 0x4c, 0xdb, 0xc0, 0x96, 0x30, 0x75, 0x46, 0xcf, 0xf2, 0xe5, 0x8e, 0xa5, 0x7e, 0x00,
-	0xaa, 0x49, 0x29, 0x6e, 0xb9, 0xc8, 0xe2, 0x55, 0x41, 0x38, 0x93, 0x47, 0xdd, 0xc4, 0x50, 0x77,
-	0x5c, 0x0a, 0x78, 0x02, 0xff, 0x53, 0xed, 0xd3, 0x71, 0x98, 0x09, 0x13, 0x84, 0x9f, 0xbd, 0x49,
-	0x5c, 0x86, 0x5c, 0x76, 0x26, 0x2f, 0xf7, 0x89, 0x3b, 0x3e, 0x20, 0xee, 0x34, 0x4c, 0x34, 0xb1,
-	0x25, 0x02, 0x3e, 0xaf, 0xf3, 0x9f, 0xaa, 0x0a, 0x19, 0x8a, 0x7f, 0x8c, 0xfc, 0x28, 0x10, 0xbf,
-	0xd5, 0x39, 0x00, 0x99, 0x20, 0x8e, 0xd5, 0xa1, 0xc2, 0xf3, 0x19, 0x3d, 0x2f, 0x28, 0x75, 0xab,
-	0x23, 0x42, 0xe3, 0x00, 0x33, 0x17, 0x51, 0x2a, 0x01, 0x59, 0x01, 0x28, 0xf8, 0x34, 0x0e, 0xa9,
-	0x3e, 0x8e, 0x1a, 0x7f, 0x69, 0x68, 0x8d, 0xe8, 0xd3, 0x57, 0x7b, 0x04, 0xd7, 0xe2, 0xe8, 0x29,
-	0x32, 0xe4, 0x4f, 0xe3, 0x70, 0x79, 0xab, 0xeb, 0xf4, 0xdc, 0xb7, 0x23, 0x2d, 0x78, 0x1d, 0x0a,
-	0xbe, 0x24, 0x06, 0xea, 0x3a, 0xd2, 0x8a, 0x3a, 0xf8, 0xa4, 0xad, 0xae, 0x73, 0xae, 0x49, 0xf1,
-	0x1c, 0x2e, 0x0e, 0x46, 0x72, 0xba, 0x8c, 0x28, 0x0d, 0x84, 0x70, 0x7c, 0x6a, 0xe5, 0xce, 0x94,
-	0x5a, 0x33, 0x70, 0xc1, 0x25, 0x6e, 0x13, 0x95, 0x27, 0x85, 0x4a, 0x72, 0xa1, 0xce, 0xc2, 0xa4,
-	0xf0, 0x01, 0x0f, 0x91, 0xbc, 0xd0, 0x22, 0x27, 0xd6, 0x3b, 0xd6, 0xb7, 0x32, 0x93, 0x30, 0x5d,
-	0xd0, 0xfe, 0xad, 0xc0, 0x5b, 0x5b, 0x5d, 0x47, 0xfa, 0xc1, 0xf7, 0x41, 0x5a, 0x7b, 0x9e, 0x22,
-	0xfc, 0xe6, 0x00, 0x78, 0xc8, 0x19, 0x8d, 0x23, 0x86, 0x02, 0xab, 0xe7, 0x39, 0xa5, 0xc6, 0x09,
-	0x3d, 0xe1, 0x2f, 0x24, 0x09, 0x9f, 0x1d, 0x10, 0x3e, 0x12, 0xba, 0xb9, 0x51, 0xa1, 0x3b, 0x79,
-	0x22, 0x74, 0xf9, 0x6d, 0x34, 0x33, 0x50, 0x04, 0xbe, 0xe9, 0x11, 0x87, 0x6b, 0x75, 0x17, 0xb2,
-	0x14, 0xb9, 0x16, 0x1a, 0x9d, 0x87, 0x3e, 0x4e, 0xdd, 0x80, 0x2c, 0x16, 0x26, 0xf3, 0x2f, 0xdb,
-	0x5b, 0xf1, 0x97, 0x6d, 0x4c, 0xcc, 0xea, 0x3e, 0x23, 0xbf, 0xab, 0x50, 0xd7, 0x31, 0x78, 0xb5,
-	0x30, 0x59, 0xc7, 0x93, 0x77, 0x55, 0x51, 0x2f, 0xa2, 0xae, 0xb3, 0x1b, 0xd0, 0xe4, 0x6d, 0xe4,
-	0x1f, 0x3a, 0x2c, 0xd9, 0x4e, 0xe8, 0xa4, 0x3d, 0x14, 0xc9, 0x76, 0x82, 0x3e, 0xb2, 0xee, 0x69,
-	0xff, 0x55, 0xc4, 0x3d, 0x76, 0x22, 0x4d, 0xcf, 0x6e, 0xac, 0xe7, 0x11, 0x63, 0x7d, 0x23, 0xd1,
-	0x58, 0x31, 0x31, 0x79, 0x3a, 0x7b, 0x3d, 0x8b, 0xd8, 0x6b, 0x35, 0x6d, 0x71, 0x0a, 0xcc, 0xf6,
-	0x0c, 0x6e, 0x0e, 0xf9, 0x9c, 0xa2, 0x54, 0xfd, 0x66, 0x42, 0xb4, 0x43, 0xdf, 0x6d, 0x23, 0x57,
-	0x47, 0xcc, 0xc3, 0xa8, 0x6b, 0xda, 0xbb, 0x88, 0x52, 0x4c, 0xdc, 0xf3, 0x2d, 0xf8, 0xef, 0xc2,
-	0x64, 0x70, 0x2d, 0xc9, 0xb4, 0x1b, 0xb2, 0x5b, 0x88, 0xe4, 0x56, 0x74, 0x4c, 0x17, 0xef, 0x21,
-	0xca, 0x0c, 0x8f, 0x10, 0x26, 0x12, 0xb3, 0xa8, 0x17, 0x03, 0xa2, 0x4e, 0x08, 0x53, 0x17, 0x61,
-	0x8a, 0x32, 0xd3, 0x63, 0x3c, 0x93, 0x0c, 0xec, 0x5a, 0xe8, 0xd0, 0xcf, 0xd2, 0x92, 0x20, 0xd7,
-	0xad, 0xce, 0x0e, 0x27, 0xaa, 0x4b, 0x30, 0x2d, 0x71, 0x0d, 0x9b, 0x34, 0x7c, 0x20, 0xcf, 0xda,
-	0x92, 0x7e, 0x51, 0xd0, 0x6b, 0x36, 0x69, 0x48, 0xe4, 0x1c, 0x80, 0xc0, 0x34, 0xc3, 0xab, 0x3f,
-	0xa3, 0xe7, 0x39, 0x65, 0x93, 0x13, 0x12, 0x2a, 0xd9, 0x1c, 0x00, 0x3a, 0x6c, 0x63, 0x0f, 0x51,
-	0xc3, 0x64, 0xa2, 0x96, 0x65, 0xf4, 0xbc, 0x4f, 0xd9, 0x60, 0xd5, 0x27, 0xd1, 0x9b, 0xe8, 0x76,
-	0x82, 0xb3, 0xe3, 0x7c, 0xa1, 0xbd, 0x0f, 0xd7, 0x13, 0x3e, 0x85, 0x4e, 0xe6, 0x15, 0x4c, 0x92,
-	0x82, 0x2c, 0x29, 0xea, 0x79, 0x9f, 0xb2, 0x63, 0x69, 0xc7, 0x0a, 0x54, 0x78, 0x8a, 0x11, 0x77,
-	0x0f, 0x7b, 0xce, 0xb9, 0x38, 0x7b, 0xf0, 0xc4, 0xf1, 0xc8, 0x89, 0x32, 0xba, 0xfb, 0x35, 0x5e,
-	0x49, 0x2a, 0x07, 0xf1, 0x32, 0x69, 0x4f, 0x41, 0x4b, 0xfe, 0x9a, 0x22, 0xb8, 0x7f, 0xa7, 0xc0,
-	0x2c, 0xdf, 0xc0, 0x74, 0x9b, 0xc8, 0x7e, 0x13, 0x1a, 0x3f, 0x8d, 0x6a, 0x7c, 0x27, 0x49, 0xe3,
-	0x58, 0x91, 0xb4, 0xf7, 0xe0, 0x46, 0xe2, 0xc7, 0x14, 0xfa, 0xfe, 0x47, 0x81, 0xf9, 0x3a, 0x6d,
-	0xed, 0x76, 0x1a, 0x0e, 0x66, 0x51, 0xfe, 0x17, 0x1e, 0x21, 0x7b, 0xff, 0x07, 0xa5, 0xd5, 0xf7,
-	0x21, 0xdb, 0xe6, 0x7b, 0xd3, 0xf2, 0xc4, 0xc2, 0xc4, 0x52, 0x61, 0x5d, 0x8b, 0xaf, 0x97, 0x9b,
-	0xfc, 0x87, 0x68, 0x34, 0xc9, 0x5e, 0x2d, 0xc3, 0x7b, 0x07, 0xdd, 0xe7, 0xab, 0x6e, 0x46, 0xcd,
-	0xb6, 0x9e, 0x60, 0xb6, 0x21, 0x9a, 0x69, 0x35, 0x58, 0x1c, 0x8e, 0x48, 0x61, 0xc0, 0x4f, 0x33,
-	0x30, 0x5d, 0xa7, 0x2d, 0xde, 0x0c, 0xa3, 0xef, 0xe0, 0x2e, 0xe2, 0x77, 0xf1, 0xf9, 0x96, 0xc1,
-	0x59, 0x98, 0x44, 0x6d, 0xd2, 0xdc, 0x37, 0xfc, 0xee, 0x23, 0xa3, 0xe7, 0xc4, 0x7a, 0xc7, 0x52,
-	0xbf, 0x0d, 0xc5, 0x0e, 0x45, 0x9e, 0xe1, 0xa1, 0x26, 0xc2, 0x6d, 0x59, 0xea, 0x0a, 0xeb, 0x8b,
-	0xf1, 0xd6, 0x0c, 0x35, 0xd4, 0x25, 0x7a, 0x7b, 0x4c, 0x2f, 0x70, 0x6e, 0x7f, 0xa9, 0x7e, 0x00,
-	0x45, 0x7a, 0x44, 0x19, 0x72, 0x0c, 0x61, 0x63, 0x51, 0x10, 0x53, 0xb9, 0x86, 0x6f, 0x24, 0x39,
-	0x65, 0xc0, 0x7c, 0x04, 0x6a, 0xbf, 0x54, 0x46, 0xc3, 0x64, 0xcd, 0x7d, 0x51, 0x36, 0x0b, 0xeb,
-	0xb7, 0xd3, 0xc9, 0x56, 0xe3, 0x2c, 0xdb, 0x63, 0xfa, 0x74, 0x9f, 0x80, 0x82, 0xa6, 0xea, 0x50,
-	0x0a, 0x22, 0x4b, 0x8a, 0x99, 0x4b, 0xb5, 0x6f, 0xbf, 0x57, 0xb7, 0xc7, 0xf4, 0x22, 0xed, 0x5b,
-	0x57, 0xef, 0x47, 0x83, 0xe9, 0x6b, 0x09, 0xc1, 0x34, 0xe0, 0xe5, 0x5a, 0x11, 0x40, 0x88, 0x60,
-	0xb0, 0xa3, 0x36, 0xd2, 0x1c, 0x28, 0x47, 0x11, 0xa3, 0xc3, 0x87, 0x3f, 0x61, 0x18, 0x46, 0x9e,
-	0x70, 0x79, 0x49, 0x17, 0xbf, 0xf9, 0x0d, 0xe6, 0xa1, 0x03, 0xd3, 0xb3, 0x82, 0x87, 0xa4, 0xec,
-	0x39, 0x8b, 0x92, 0x28, 0x9f, 0x88, 0xda, 0xaf, 0xe5, 0xe0, 0x41, 0x34, 0x06, 0xf6, 0x2e, 0xef,
-	0x0d, 0x44, 0xb3, 0x7f, 0xae, 0xa1, 0x97, 0x7e, 0x54, 0x10, 0x15, 0x43, 0xfb, 0x4c, 0xf6, 0x58,
-	0x51, 0x7a, 0x0a, 0x8b, 0x94, 0x21, 0xe7, 0x20, 0x4a, 0xcd, 0x16, 0xf2, 0x07, 0x20, 0xc1, 0x52,
-	0x7d, 0x0f, 0x4a, 0x2e, 0x3a, 0xe8, 0x7b, 0xaa, 0x4e, 0x8c, 0x78, 0xaa, 0x16, 0x5d, 0x74, 0xd0,
-	0x7b, 0xa5, 0xfe, 0x4b, 0x01, 0x95, 0x8b, 0xc4, 0xef, 0xed, 0x5d, 0x9b, 0x30, 0x1d, 0xb5, 0x4d,
-	0xec, 0x9d, 0x6f, 0xae, 0xf2, 0x17, 0xa9, 0x4d, 0xa4, 0xc7, 0x4a, 0xba, 0xf8, 0xad, 0x6e, 0xc2,
-	0x34, 0x7f, 0xcc, 0x60, 0xb7, 0x15, 0x8a, 0x2e, 0x12, 0x75, 0xd8, 0x49, 0x53, 0x3e, 0x47, 0x20,
-	0x7d, 0xf5, 0x61, 0xd4, 0x13, 0x8b, 0x49, 0x9e, 0x18, 0x54, 0x4f, 0x7b, 0x20, 0xae, 0xf0, 0x08,
-	0x35, 0x45, 0x5d, 0xfb, 0x5c, 0x91, 0xf3, 0x04, 0xe2, 0xb4, 0x6d, 0xc4, 0xd0, 0x1b, 0x34, 0x58,
-	0xb5, 0x1a, 0xd5, 0xf5, 0x56, 0x62, 0x13, 0x10, 0x15, 0x4e, 0x7b, 0x0c, 0x73, 0xb1, 0x1f, 0x52,
-	0x68, 0xfc, 0x07, 0x05, 0x8a, 0x75, 0xda, 0xda, 0xb0, 0xac, 0x4d, 0x0f, 0x59, 0xf8, 0x9c, 0xa7,
-	0x17, 0xf7, 0x21, 0xdb, 0x9f, 0xcd, 0xa3, 0x9e, 0xc2, 0x3e, 0xb8, 0xba, 0x16, 0xb5, 0xc5, 0x42,
-	0x82, 0x2d, 0x42, 0xb1, 0xb5, 0xef, 0x8b, 0x37, 0x60, 0xb8, 0x0e, 0x35, 0x7f, 0x0a, 0x05, 0x9e,
-	0x3e, 0x0d, 0xd3, 0xe6, 0xcd, 0x82, 0xaf, 0xd2, 0x08, 0x31, 0xc0, 0x45, 0x07, 0x35, 0xc9, 0xa0,
-	0xfd, 0x59, 0x11, 0x43, 0xbc, 0xad, 0x43, 0x86, 0x5c, 0xeb, 0xcc, 0x43, 0xbc, 0x44, 0x03, 0x3d,
-	0x81, 0x8a, 0x69, 0x59, 0x98, 0x57, 0x09, 0xd3, 0x36, 0xa2, 0x33, 0x0d, 0x79, 0xf1, 0x95, 0x7b,
-	0x88, 0xe7, 0x03, 0xd3, 0x8d, 0xf4, 0x13, 0xb3, 0x9e, 0xf8, 0xda, 0x87, 0x22, 0xc2, 0x7b, 0x84,
-	0x14, 0xc5, 0x49, 0x93, 0x25, 0x08, 0xb9, 0x96, 0x14, 0xcc, 0xd7, 0x81, 0x1b, 0x76, 0xcb, 0xb5,
-	0x84, 0x2c, 0xda, 0xcf, 0x64, 0x9d, 0xf9, 0x01, 0x66, 0xfb, 0x96, 0x67, 0x1e, 0xe8, 0xa2, 0x6a,
-	0x9f, 0xa9, 0x27, 0x48, 0x9f, 0xf5, 0x91, 0xc3, 0xb4, 0x3d, 0x91, 0xf5, 0x11, 0x6a, 0xa8, 0xdf,
-	0x36, 0x4c, 0xcb, 0xf0, 0x32, 0x0e, 0x7c, 0x84, 0x9b, 0x2e, 0x1c, 0xa6, 0x24, 0x5b, 0xb0, 0xaf,
-	0xbb, 0xfe, 0xc7, 0x29, 0x98, 0xa8, 0xd3, 0x96, 0x6a, 0x41, 0x71, 0x60, 0xc4, 0xff, 0xf5, 0xf8,
-	0xeb, 0x38, 0x32, 0x45, 0xaf, 0xdc, 0x49, 0x05, 0x0b, 0xe5, 0x6e, 0xc3, 0xf4, 0x89, 0x41, 0xfb,
-	0xad, 0xc4, 0x2d, 0xa2, 0xd0, 0xca, 0x5a, 0x6a, 0x68, 0x78, 0xe2, 0x8f, 0x00, 0xfa, 0x86, 0xd6,
-	0x37, 0x13, 0x37, 0xe8, 0x81, 0x2a, 0xb7, 0x53, 0x80, 0xc2, 0xfd, 0x29, 0x5c, 0x3a, 0x39, 0x35,
-	0x5d, 0x1e, 0x61, 0x95, 0x3e, 0x6c, 0x65, 0x3d, 0x3d, 0xb6, 0xff, 0xd0, 0x93, 0x13, 0xa2, 0xe5,
-	0x14, 0x62, 0xfb, 0xd8, 0x21, 0x87, 0x26, 0x4f, 0x63, 0x7e, 0xa1, 0x40, 0x39, 0x71, 0xe2, 0xb2,
-	0x96, 0x5e, 0x8b, 0x40, 0x86, 0xc7, 0xa7, 0x66, 0x09, 0x45, 0xf9, 0x09, 0xcc, 0xc4, 0x0e, 0x2f,
-	0x92, 0xa3, 0x31, 0x0e, 0x5e, 0xb9, 0x7f, 0x2a, 0x78, 0x78, 0xfa, 0xcf, 0x15, 0xb8, 0x9a, 0xf4,
-	0xa2, 0xbe, 0x9b, 0x6c, 0xd8, 0x78, 0x8e, 0xca, 0xa3, 0xd3, 0x72, 0x84, 0x72, 0x7c, 0xa2, 0xc0,
-	0x5b, 0x09, 0xcf, 0xdc, 0xd5, 0xe4, 0x4d, 0x63, 0x19, 0x2a, 0x0f, 0x4f, 0xc9, 0x10, 0x0a, 0xf1,
-	0x2b, 0x05, 0xde, 0x1e, 0xf6, 0xf6, 0x7c, 0x37, 0x71, 0xe3, 0x21, 0x5c, 0x95, 0x27, 0x67, 0xe1,
-	0x0a, 0x65, 0x6a, 0x41, 0x69, 0xf0, 0x35, 0xb7, 0x98, 0xb8, 0xdd, 0x00, 0xae, 0xb2, 0x92, 0x0e,
-	0xd7, 0x5f, 0xce, 0x4e, 0xb4, 0xef, 0xc9, 0xe5, 0x2c, 0x0a, 0x1d, 0x52, 0xce, 0x12, 0xbb, 0x6e,
-	0x07, 0xa6, 0xa2, 0xed, 0xef, 0x52, 0xf2, 0x2e, 0x83, 0xc8, 0xca, 0xdd, 0xb4, 0xc8, 0xf0, 0xb8,
-	0x2e, 0xa8, 0x31, 0xfd, 0xe3, 0x90, 0x02, 0x79, 0x02, 0x5c, 0xb9, 0x77, 0x0a, 0x70, 0x78, 0xee,
-	0x47, 0x90, 0xef, 0x75, 0x71, 0x5a, 0xe2, 0x0e, 0x21, 0xa6, 0xb2, 0x3c, 0x1a, 0xd3, 0x7f, 0x25,
-	0xf4, 0xb5, 0x40, 0xc9, 0x57, 0x42, 0x0f, 0x34, 0xe4, 0x4a, 0x88, 0x69, 0x3e, 0x1c, 0x98, 0x8a,
-	0xb6, 0x0e, 0xc9, 0x3e, 0x8a, 0x20, 0x87, 0xf8, 0x28, 0xa1, 0x17, 0xa8, 0x5c, 0xf8, 0xe9, 0xeb,
-	0xe3, 0x65, 0xa5, 0x76, 0xef, 0x8b, 0x97, 0xf3, 0xca, 0x97, 0x2f, 0xe7, 0x95, 0xbf, 0xbf, 0x9c,
-	0x57, 0x3e, 0x7b, 0x35, 0x3f, 0xf6, 0xe5, 0xab, 0xf9, 0xb1, 0xbf, 0xbe, 0x9a, 0x1f, 0xfb, 0xe1,
-	0x6c, 0x5c, 0xcb, 0x21, 0xfe, 0xc5, 0xdf, 0xc8, 0x8a, 0xff, 0xf1, 0xdf, 0xfb, 0x5f, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x47, 0x37, 0xaa, 0x90, 0xbc, 0x20, 0x00, 0x00,
+	// 2463 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x1a, 0x4d, 0x6f, 0xdb, 0xc8,
+	0xd5, 0xb4, 0x65, 0xc9, 0x7a, 0x92, 0x63, 0x87, 0xeb, 0x6c, 0x64, 0x6d, 0xec, 0x38, 0x4c, 0x9a,
+	0x75, 0x9c, 0xc6, 0x4e, 0x9c, 0x6f, 0x21, 0x5f, 0x96, 0xe3, 0x5d, 0xbb, 0xad, 0xb1, 0x2e, 0xdd,
+	0xdd, 0x02, 0x5d, 0xa0, 0x04, 0x2d, 0x8e, 0xa5, 0x41, 0x48, 0x8e, 0xc0, 0x19, 0xc9, 0x76, 0xd1,
+	0x43, 0xbb, 0x40, 0x17, 0x45, 0x7b, 0xd9, 0xf6, 0xd2, 0x4b, 0xaf, 0x05, 0x7a, 0x2a, 0x7c, 0xd8,
+	0x5f, 0x50, 0xa0, 0xc0, 0xa2, 0x87, 0x62, 0xd1, 0x53, 0xd1, 0xc3, 0xa2, 0x4d, 0x0e, 0x01, 0x7a,
+	0xe8, 0x65, 0x81, 0x1e, 0xba, 0x97, 0x62, 0x66, 0x48, 0x4a, 0xa2, 0x49, 0x89, 0x36, 0x8c, 0x3d,
+	0xf5, 0x22, 0x70, 0x1e, 0xdf, 0x7b, 0xf3, 0xbe, 0xdf, 0x9b, 0xa1, 0x60, 0xc6, 0xc5, 0x76, 0xad,
+	0x61, 0x62, 0x77, 0x29, 0x7c, 0x68, 0xdf, 0x5a, 0x62, 0xfb, 0x8b, 0x4d, 0x8f, 0x30, 0xa2, 0x4e,
+	0x05, 0xd0, 0xc5, 0xf0, 0xa1, 0x7d, 0xab, 0x7c, 0xd6, 0x74, 0xb0, 0x4b, 0x96, 0xc4, 0xaf, 0x44,
+	0x2c, 0x9f, 0xaf, 0x11, 0xea, 0x10, 0xba, 0xe4, 0xd0, 0x3a, 0x67, 0xe0, 0xd0, 0xba, 0xff, 0x62,
+	0x5a, 0xbe, 0x30, 0xc4, 0x6a, 0x49, 0x2e, 0xfc, 0x57, 0x53, 0x75, 0x52, 0x27, 0x12, 0xce, 0x9f,
+	0x7c, 0xe8, 0xa5, 0x58, 0x89, 0x9a, 0xa6, 0x67, 0x3a, 0x01, 0xe1, 0x5c, 0xbc, 0xd0, 0x07, 0x4d,
+	0xe4, 0x63, 0x68, 0x7f, 0x54, 0x60, 0x62, 0x93, 0xd6, 0xdf, 0x6f, 0x5a, 0x26, 0x43, 0x5b, 0x82,
+	0x56, 0xbd, 0x07, 0x79, 0xb3, 0xc5, 0x1a, 0xc4, 0xc3, 0xec, 0xa0, 0xa4, 0xcc, 0x29, 0xf3, 0xf9,
+	0x6a, 0xe9, 0xaf, 0x9f, 0xde, 0x98, 0xf2, 0x65, 0x5a, 0xb1, 0x2c, 0x0f, 0x51, 0xba, 0xcd, 0x3c,
+	0xec, 0xd6, 0xf5, 0x0e, 0xaa, 0xfa, 0x14, 0xb2, 0x72, 0xf7, 0xd2, 0xf0, 0x9c, 0x32, 0x5f, 0x58,
+	0xbe, 0xb0, 0x18, 0x67, 0x94, 0x45, 0xb9, 0x4b, 0x35, 0xff, 0xd9, 0x17, 0x17, 0x87, 0x7e, 0xff,
+	0xfa, 0x70, 0x41, 0xd1, 0x7d, 0xb2, 0xca, 0xbd, 0x8f, 0x5e, 0x1f, 0x2e, 0x74, 0x18, 0xfe, 0xe2,
+	0xf5, 0xe1, 0xc2, 0xe5, 0x50, 0xf0, 0xfd, 0x8e, 0x0e, 0x11, 0x81, 0xb5, 0x69, 0x38, 0x1f, 0x01,
+	0xe9, 0x88, 0x36, 0x89, 0x4b, 0x91, 0xf6, 0x2f, 0x05, 0xde, 0xd8, 0xa4, 0x75, 0x1d, 0xd5, 0x31,
+	0x65, 0xc8, 0xdb, 0xf2, 0x48, 0x1b, 0x5b, 0xc8, 0x53, 0x97, 0x21, 0x57, 0xf3, 0x90, 0xc9, 0x88,
+	0x37, 0x50, 0xc3, 0x00, 0x51, 0xd5, 0xa0, 0x58, 0x33, 0x9b, 0xe6, 0x0e, 0xb6, 0x31, 0xc3, 0x48,
+	0x6a, 0x99, 0xd7, 0x7b, 0x60, 0xea, 0x65, 0x18, 0x67, 0x84, 0x99, 0xb6, 0x41, 0x19, 0xf1, 0xcc,
+	0x3a, 0x2a, 0x8d, 0xcc, 0x29, 0xf3, 0x19, 0xbd, 0x28, 0x80, 0xdb, 0x12, 0xa6, 0x5e, 0x80, 0x3c,
+	0x72, 0xad, 0x26, 0xc1, 0x2e, 0xa3, 0xa5, 0xcc, 0xdc, 0xc8, 0x7c, 0x5e, 0xef, 0x00, 0x2a, 0x0f,
+	0xb8, 0x15, 0x82, 0x4d, 0xb9, 0x0d, 0xde, 0x4e, 0xb0, 0x41, 0x54, 0x29, 0xed, 0x3e, 0xbc, 0x15,
+	0x03, 0x0e, 0x6c, 0xa1, 0x96, 0x20, 0x47, 0x5b, 0xb5, 0x1a, 0xa2, 0x54, 0xe8, 0x3c, 0xa6, 0x07,
+	0x4b, 0xed, 0x9f, 0xc3, 0x30, 0xbe, 0x49, 0xeb, 0xab, 0x7c, 0x4f, 0xf4, 0x1c, 0x99, 0xf6, 0x89,
+	0xec, 0xf3, 0x36, 0x4c, 0x58, 0x2d, 0xcf, 0x64, 0x98, 0xb8, 0xc6, 0x8e, 0x4d, 0x6a, 0x2f, 0xb8,
+	0x72, 0x5c, 0xfb, 0x33, 0x01, 0xb8, 0x2a, 0xa0, 0xea, 0x25, 0x28, 0x52, 0xe4, 0xb5, 0x71, 0x0d,
+	0x19, 0x0d, 0xec, 0xb2, 0xd2, 0xa8, 0x30, 0x64, 0xc1, 0x87, 0xad, 0x63, 0x97, 0xa9, 0x1b, 0x70,
+	0xd6, 0x31, 0xf7, 0x0d, 0x87, 0xb8, 0xac, 0x61, 0x1f, 0x18, 0xb4, 0x89, 0x5c, 0xab, 0x94, 0x15,
+	0x92, 0xcc, 0xf0, 0xc0, 0xf9, 0xfb, 0x17, 0x17, 0xcf, 0x49, 0x69, 0xa8, 0xf5, 0x62, 0x11, 0x93,
+	0x25, 0xc7, 0x64, 0x8d, 0xc5, 0x0d, 0x97, 0xe9, 0x13, 0x8e, 0xb9, 0xbf, 0x29, 0xc9, 0xb6, 0x39,
+	0x95, 0xfa, 0x5d, 0x38, 0x87, 0x5d, 0xcc, 0xb0, 0x69, 0x1b, 0x88, 0xd6, 0x3c, 0xb2, 0x67, 0x98,
+	0x0e, 0x69, 0xb9, 0xac, 0x94, 0x4b, 0xc3, 0xee, 0x0d, 0x9f, 0x76, 0x4d, 0x90, 0xae, 0x08, 0xca,
+	0xca, 0x72, 0xd4, 0x45, 0x97, 0x12, 0x5c, 0xd4, 0xb1, 0xa8, 0x76, 0x00, 0xe7, 0x7a, 0x00, 0xa1,
+	0x5b, 0xce, 0x43, 0xce, 0x42, 0xa6, 0x6d, 0x60, 0x4b, 0x98, 0x3a, 0xa3, 0x67, 0xf9, 0x72, 0xc3,
+	0x52, 0xdf, 0x05, 0xd5, 0xa4, 0x14, 0xd7, 0x5d, 0x64, 0xf1, 0xaa, 0x20, 0x9c, 0xc9, 0xa3, 0x6e,
+	0xa4, 0xaf, 0x3b, 0xce, 0x06, 0x34, 0x81, 0xff, 0xa9, 0xf6, 0xf1, 0x30, 0x4c, 0x85, 0x09, 0xc2,
+	0xf7, 0x5e, 0x25, 0x2e, 0x43, 0x2e, 0x3b, 0x91, 0x97, 0xbb, 0xc4, 0x1d, 0xee, 0x11, 0x77, 0x12,
+	0x46, 0x6a, 0xd8, 0x12, 0x01, 0x9f, 0xd7, 0xf9, 0xa3, 0xaa, 0x42, 0x86, 0xe2, 0x1f, 0x21, 0x3f,
+	0x0a, 0xc4, 0xb3, 0x3a, 0x03, 0x20, 0x13, 0xc4, 0xb1, 0x5a, 0x54, 0x78, 0x3e, 0xa3, 0xe7, 0x05,
+	0x64, 0xd3, 0x6a, 0x89, 0xd0, 0xd8, 0xc3, 0xcc, 0x45, 0x94, 0x4a, 0x84, 0xac, 0x40, 0x28, 0xf8,
+	0x30, 0x8e, 0x52, 0x79, 0x18, 0x35, 0xfe, 0x7c, 0xdf, 0x1a, 0xd1, 0xa5, 0xaf, 0xf6, 0x00, 0x2e,
+	0xc4, 0xc1, 0x53, 0x64, 0xc8, 0x9f, 0x87, 0xe1, 0x8d, 0xb5, 0xb6, 0xd3, 0x71, 0xdf, 0x86, 0xb4,
+	0xe0, 0x45, 0x28, 0xf8, 0x92, 0x18, 0xa8, 0xed, 0x48, 0x2b, 0xea, 0xe0, 0x83, 0xd6, 0xda, 0xce,
+	0xa9, 0x26, 0xc5, 0x73, 0x38, 0xd3, 0x1b, 0xc9, 0xe9, 0x32, 0x62, 0xbc, 0x27, 0x84, 0xe3, 0x53,
+	0x2b, 0x77, 0xa2, 0xd4, 0x9a, 0x82, 0x51, 0x97, 0xb8, 0x35, 0x54, 0x1a, 0x13, 0x2a, 0xc9, 0x85,
+	0x3a, 0x0d, 0x63, 0xc2, 0x07, 0x3c, 0x44, 0xf2, 0x42, 0x8b, 0x9c, 0x58, 0x6f, 0x58, 0xdf, 0xca,
+	0x8c, 0xc1, 0x64, 0x41, 0xfb, 0x8f, 0x02, 0x6f, 0xae, 0xb5, 0x1d, 0xe9, 0x07, 0xdf, 0x07, 0x69,
+	0xed, 0x79, 0x8c, 0xf0, 0x9b, 0x01, 0xe0, 0x21, 0x67, 0xec, 0x1c, 0x30, 0x14, 0x58, 0x3d, 0xcf,
+	0x21, 0x55, 0x0e, 0xe8, 0x08, 0x3f, 0x9a, 0x24, 0x7c, 0xb6, 0x47, 0xf8, 0x48, 0xe8, 0xe6, 0x06,
+	0x85, 0xee, 0xd8, 0x91, 0xd0, 0xe5, 0xdd, 0x68, 0xaa, 0xa7, 0x08, 0xbc, 0xe3, 0x11, 0x87, 0x6b,
+	0x75, 0x13, 0xb2, 0x14, 0xb9, 0x16, 0x1a, 0x9c, 0x87, 0x3e, 0x9e, 0xba, 0x02, 0x59, 0x2c, 0x4c,
+	0xe6, 0x37, 0xdb, 0x6b, 0xf1, 0xcd, 0x36, 0x26, 0x66, 0x75, 0x9f, 0x90, 0xf7, 0x2a, 0xd4, 0x76,
+	0x0c, 0x5e, 0x2d, 0x4c, 0xd6, 0xf2, 0x64, 0xaf, 0x2a, 0xea, 0x45, 0xd4, 0x76, 0xb6, 0x03, 0x98,
+	0xec, 0x46, 0xfe, 0xa6, 0xfd, 0x92, 0xed, 0x88, 0x4e, 0xda, 0x7d, 0x91, 0x6c, 0x47, 0xe0, 0x03,
+	0xeb, 0x9e, 0xf6, 0x95, 0x22, 0xfa, 0xd8, 0x91, 0x34, 0x3d, 0xb9, 0xb1, 0x9e, 0x47, 0x8c, 0xf5,
+	0xcd, 0x44, 0x63, 0xc5, 0xc4, 0xe4, 0xf1, 0xec, 0xf5, 0x34, 0x62, 0xaf, 0xa5, 0xb4, 0xc5, 0x29,
+	0x30, 0xdb, 0x53, 0xb8, 0xdc, 0xe7, 0x75, 0x8a, 0x52, 0xf5, 0xbb, 0x11, 0x31, 0x0e, 0xbd, 0xd7,
+	0x44, 0xae, 0x8e, 0x98, 0x87, 0x51, 0xdb, 0xb4, 0xb7, 0x11, 0xa5, 0x98, 0xb8, 0xa7, 0x5b, 0xf0,
+	0xef, 0xc0, 0x58, 0xd0, 0x96, 0x64, 0xda, 0xf5, 0xe1, 0x16, 0x62, 0x72, 0x2b, 0x3a, 0xa6, 0x8b,
+	0x77, 0x11, 0x65, 0x86, 0x47, 0x08, 0x13, 0x89, 0x59, 0xd4, 0x8b, 0x01, 0x50, 0x27, 0x84, 0xa9,
+	0x57, 0x61, 0x82, 0x32, 0xd3, 0x63, 0x3c, 0x93, 0x0c, 0xec, 0x5a, 0x68, 0xdf, 0xcf, 0xd2, 0x71,
+	0x01, 0xde, 0xb4, 0x5a, 0x1b, 0x1c, 0xa8, 0xce, 0xc3, 0xa4, 0xc4, 0xdb, 0xb1, 0xc9, 0x8e, 0x8f,
+	0xc8, 0xb3, 0x76, 0x5c, 0x3f, 0x23, 0xe0, 0x55, 0x9b, 0xec, 0x48, 0xcc, 0x19, 0x00, 0x81, 0x53,
+	0x0b, 0x5b, 0x7f, 0x46, 0xcf, 0x73, 0xc8, 0x2a, 0x07, 0x24, 0x54, 0xb2, 0x19, 0x00, 0xb4, 0xdf,
+	0xc4, 0x1e, 0xa2, 0x86, 0xc9, 0x44, 0x2d, 0xcb, 0xe8, 0x79, 0x1f, 0xb2, 0xc2, 0x2a, 0x8f, 0xa2,
+	0x9d, 0xe8, 0x7a, 0x82, 0xb3, 0xe3, 0x7c, 0xa1, 0x3d, 0x83, 0x8b, 0x09, 0xaf, 0x42, 0x27, 0xf3,
+	0x0a, 0x26, 0x41, 0x41, 0x96, 0x14, 0xf5, 0xbc, 0x0f, 0xd9, 0xb0, 0xb4, 0x2d, 0x38, 0xb3, 0x62,
+	0xdb, 0x64, 0xcf, 0xc6, 0x94, 0x6d, 0x79, 0x84, 0xec, 0x72, 0x02, 0x1b, 0x99, 0xbb, 0xbe, 0x25,
+	0x14, 0x61, 0x89, 0x3c, 0x87, 0x48, 0x23, 0x5c, 0x84, 0x82, 0x83, 0xbc, 0x17, 0x36, 0x32, 0x9a,
+	0x26, 0x6b, 0x88, 0x51, 0xa2, 0xa8, 0x83, 0x04, 0x6d, 0x99, 0xac, 0xa1, 0x7d, 0x35, 0x0c, 0x85,
+	0x0f, 0x48, 0xab, 0xd6, 0x40, 0xde, 0x4a, 0x8b, 0x35, 0x92, 0x67, 0x93, 0x23, 0x5e, 0x1c, 0x8e,
+	0xf1, 0xe2, 0xc9, 0x02, 0x24, 0xc6, 0xf7, 0x99, 0xb4, 0xbe, 0x1f, 0x4d, 0xe1, 0xfb, 0x6c, 0xd4,
+	0xf7, 0xbd, 0x5e, 0xce, 0x45, 0xbc, 0x9c, 0x10, 0x1a, 0x77, 0x60, 0xcc, 0x43, 0x16, 0x42, 0x0e,
+	0xf2, 0x64, 0x93, 0xeb, 0xa7, 0x5b, 0x80, 0xc9, 0x27, 0xff, 0x4e, 0xf9, 0x00, 0xdf, 0x9f, 0x01,
+	0x40, 0xfb, 0xf5, 0x28, 0xcc, 0x25, 0x84, 0xc4, 0x36, 0x0f, 0x08, 0xe2, 0x21, 0xeb, 0xff, 0x29,
+	0x7c, 0x9a, 0x29, 0xac, 0xae, 0x70, 0x55, 0xf6, 0x0d, 0xd9, 0xd7, 0x77, 0x91, 0x74, 0xca, 0xc0,
+	0x41, 0xa8, 0xe0, 0x98, 0xfb, 0xdf, 0xe3, 0x24, 0xef, 0x20, 0xa4, 0xbe, 0x07, 0x13, 0x66, 0x90,
+	0x85, 0x7c, 0x4e, 0x27, 0xbb, 0xa5, 0x82, 0xe8, 0x32, 0x57, 0xe2, 0xbb, 0x4c, 0x6f, 0xca, 0xae,
+	0x0f, 0xe9, 0x67, 0xcc, 0xde, 0x24, 0x7e, 0x0c, 0xb9, 0xb6, 0xcc, 0xc1, 0x52, 0x51, 0x30, 0xba,
+	0x14, 0xcf, 0xa8, 0x2b, 0x51, 0xd7, 0x87, 0xf4, 0x80, 0xa6, 0xb2, 0x16, 0xad, 0x4a, 0x77, 0x8e,
+	0x51, 0x95, 0xc2, 0x38, 0xab, 0x66, 0x21, 0xc3, 0x4f, 0xe2, 0xda, 0x06, 0xcc, 0x0f, 0xc2, 0x4d,
+	0x5b, 0xaf, 0xbe, 0x54, 0x22, 0xf3, 0x77, 0xc8, 0x71, 0x8b, 0xd8, 0xb8, 0x76, 0x70, 0xba, 0xb1,
+	0xbd, 0x0a, 0xd9, 0xa6, 0x60, 0x2b, 0x22, 0xbb, 0xb0, 0xfc, 0x8d, 0x78, 0x2b, 0x46, 0x64, 0xa8,
+	0x66, 0xb8, 0xeb, 0x75, 0x9f, 0xb4, 0xb2, 0x12, 0x35, 0xe6, 0xcd, 0x81, 0xfd, 0x3c, 0xc2, 0x50,
+	0x7b, 0x06, 0x57, 0xfa, 0xbd, 0x4f, 0xd1, 0xd1, 0x0f, 0x15, 0x28, 0xf3, 0x51, 0x8a, 0xb8, 0xbb,
+	0xd8, 0x73, 0x4e, 0xa5, 0xa9, 0xf7, 0x7a, 0x6a, 0x38, 0xe2, 0x29, 0x39, 0xc5, 0x74, 0xab, 0xbd,
+	0x98, 0x34, 0xf6, 0xc5, 0xcb, 0xa4, 0x3d, 0x01, 0x2d, 0xf9, 0x6d, 0x0a, 0x95, 0xff, 0xa0, 0xc0,
+	0x34, 0x67, 0x60, 0xba, 0x35, 0x64, 0x7f, 0x1d, 0x1a, 0x3f, 0x89, 0x6a, 0x7c, 0x23, 0x49, 0xe3,
+	0x58, 0x91, 0xb4, 0xc7, 0x70, 0x29, 0xf1, 0x65, 0x0a, 0x7d, 0xff, 0xab, 0xc0, 0xec, 0x26, 0xad,
+	0x6f, 0xb7, 0x76, 0x1c, 0xcc, 0xa2, 0xf4, 0xb2, 0x2c, 0x9c, 0xbe, 0xd2, 0xea, 0x33, 0xc8, 0x8a,
+	0x82, 0x45, 0x4b, 0x23, 0x73, 0x23, 0xf3, 0x85, 0x65, 0x2d, 0x3e, 0x45, 0x56, 0xf9, 0x83, 0xb8,
+	0x50, 0x20, 0xbb, 0x61, 0x7e, 0x08, 0xba, 0xca, 0x6a, 0xd4, 0x6c, 0xcb, 0x09, 0x66, 0xeb, 0xa3,
+	0x99, 0x56, 0x85, 0xab, 0xfd, 0x31, 0x52, 0x18, 0xf0, 0xe3, 0x0c, 0x4c, 0x6e, 0xd2, 0xfa, 0x96,
+	0x47, 0xda, 0xe8, 0x3b, 0xb8, 0x8d, 0xf8, 0x99, 0xeb, 0x74, 0xeb, 0xc9, 0x34, 0x8c, 0xa1, 0x26,
+	0xa9, 0x35, 0x0c, 0xff, 0x94, 0x99, 0xd1, 0x73, 0x62, 0xbd, 0x61, 0xa9, 0xdf, 0x86, 0x62, 0x8b,
+	0x22, 0xcf, 0xf0, 0x50, 0x0d, 0xe1, 0xa6, 0xec, 0x87, 0x85, 0xe5, 0xab, 0x03, 0x0a, 0x8e, 0x2e,
+	0xb1, 0xd7, 0x87, 0xf4, 0x02, 0xa7, 0xf6, 0x97, 0xea, 0xbb, 0x50, 0xa4, 0x07, 0x94, 0x21, 0xc7,
+	0x6f, 0x26, 0xa3, 0x82, 0x59, 0x0a, 0xd7, 0x70, 0x46, 0x92, 0x52, 0x06, 0xcc, 0x87, 0xa0, 0x76,
+	0x4b, 0x65, 0xec, 0x98, 0xac, 0xd6, 0x10, 0xbd, 0xb5, 0xb0, 0x7c, 0x3d, 0x9d, 0x6c, 0x55, 0x4e,
+	0xb2, 0x3e, 0xa4, 0x4f, 0x76, 0x09, 0x28, 0x60, 0xaa, 0x0e, 0xe3, 0x41, 0x64, 0x49, 0x31, 0x73,
+	0xa9, 0xf8, 0x76, 0x7b, 0x75, 0x7d, 0x48, 0x2f, 0xd2, 0xae, 0x75, 0xe5, 0x6e, 0x34, 0x98, 0xae,
+	0x24, 0x04, 0x53, 0x8f, 0x97, 0xab, 0x45, 0x00, 0x21, 0x82, 0xc1, 0x0e, 0x9a, 0x48, 0x73, 0xa0,
+	0x14, 0xc5, 0x18, 0x1c, 0x3e, 0xaa, 0x0a, 0x19, 0x86, 0x91, 0x27, 0x5c, 0x3e, 0xae, 0x8b, 0x67,
+	0x3e, 0xe6, 0x78, 0x68, 0xcf, 0xf4, 0xac, 0xe0, 0xc2, 0x50, 0xde, 0x2d, 0x14, 0x25, 0x50, 0x5e,
+	0x05, 0x6a, 0xbf, 0x95, 0x17, 0xcc, 0xe2, 0x00, 0x68, 0x6f, 0xf3, 0x39, 0x4e, 0x5c, 0xea, 0x9c,
+	0x6a, 0xe8, 0xa5, 0xbf, 0x12, 0x8e, 0x8a, 0xa1, 0x7d, 0x22, 0xcf, 0xd2, 0x51, 0x78, 0x0a, 0x8b,
+	0x94, 0x20, 0xe7, 0x20, 0x4a, 0xcd, 0x3a, 0xf2, 0x2f, 0xba, 0x83, 0xa5, 0xfa, 0x18, 0xc6, 0x5d,
+	0xb4, 0xd7, 0x75, 0x25, 0x39, 0x32, 0xe0, 0x4a, 0xb2, 0xe8, 0xa2, 0xbd, 0xce, 0x6d, 0xe4, 0x97,
+	0x0a, 0xa8, 0x5c, 0x24, 0x3e, 0xdc, 0x6d, 0xdb, 0x84, 0xe9, 0xa8, 0x69, 0x62, 0xef, 0x74, 0x73,
+	0x55, 0x85, 0x0c, 0xb5, 0x89, 0xf4, 0xd8, 0xb8, 0x2e, 0x9e, 0xd5, 0x55, 0x98, 0x6c, 0x22, 0xd7,
+	0xc2, 0x6e, 0x3d, 0x14, 0x5d, 0x24, 0x6a, 0xbf, 0x9d, 0x26, 0x7c, 0x8a, 0x40, 0xfa, 0xca, 0xfd,
+	0xa8, 0x27, 0xae, 0x26, 0x79, 0xa2, 0x57, 0x3d, 0xed, 0x9e, 0x68, 0xe1, 0x11, 0x68, 0x8a, 0xba,
+	0xf6, 0xa9, 0x22, 0xef, 0x8d, 0x89, 0xd3, 0xb4, 0x11, 0x43, 0x5f, 0xa3, 0xc1, 0x2a, 0x95, 0xa8,
+	0xae, 0xd7, 0x12, 0x87, 0x80, 0xa8, 0x70, 0xda, 0x43, 0x98, 0x89, 0x7d, 0x91, 0x42, 0xe3, 0x3f,
+	0x29, 0x50, 0xdc, 0xa4, 0xf5, 0x15, 0xcb, 0x5a, 0xf5, 0x90, 0x85, 0x4f, 0xf9, 0x96, 0xfa, 0x2e,
+	0x64, 0xbb, 0xb3, 0x79, 0xd0, 0xa4, 0xef, 0x23, 0x57, 0x6e, 0x45, 0x6d, 0x31, 0x97, 0x60, 0x8b,
+	0x50, 0x6c, 0xed, 0x03, 0x71, 0xd7, 0x17, 0xae, 0x43, 0xcd, 0x9f, 0x40, 0x81, 0xa7, 0xcf, 0x8e,
+	0x69, 0xf3, 0x61, 0xc1, 0x57, 0x69, 0x80, 0x18, 0xe0, 0xa2, 0xbd, 0xaa, 0x24, 0xd0, 0xfe, 0xa2,
+	0x88, 0x8f, 0x35, 0x6b, 0xfb, 0x0c, 0xb9, 0xd6, 0x89, 0x3f, 0xd6, 0x24, 0x1a, 0xe8, 0x11, 0x94,
+	0x4d, 0xcb, 0xc2, 0xbc, 0x4a, 0x98, 0xb6, 0x11, 0xbd, 0xbb, 0x96, 0x8d, 0xaf, 0xd4, 0xc1, 0x78,
+	0xde, 0x73, 0x8b, 0x9d, 0xfe, 0xcb, 0x48, 0x47, 0x7c, 0xed, 0x7d, 0x11, 0xe1, 0x1d, 0x40, 0x8a,
+	0xe2, 0xa4, 0xc9, 0x12, 0x84, 0x5c, 0x4b, 0x0a, 0xe6, 0xeb, 0xc0, 0x0d, 0xbb, 0xe6, 0x5a, 0x42,
+	0x16, 0xed, 0xa7, 0xb2, 0xce, 0x7c, 0x1f, 0xb3, 0x86, 0xe5, 0x99, 0x7b, 0xba, 0xa8, 0xda, 0x27,
+	0x9a, 0x09, 0xd2, 0x67, 0x7d, 0x64, 0x33, 0x6d, 0x57, 0x64, 0x7d, 0x04, 0x1a, 0xea, 0xb7, 0x0e,
+	0x93, 0x32, 0xbc, 0x8c, 0x3d, 0x1f, 0xc3, 0x4d, 0x17, 0x0e, 0x13, 0x92, 0x2c, 0xe0, 0xeb, 0x2e,
+	0xff, 0xfb, 0x2c, 0x8c, 0x6c, 0xd2, 0xba, 0x6a, 0x41, 0xb1, 0xe7, 0x53, 0x6e, 0xc2, 0x99, 0x27,
+	0xf2, 0xb5, 0xb4, 0x7c, 0x23, 0x15, 0x5a, 0x28, 0x77, 0x13, 0x26, 0x8f, 0x7c, 0x50, 0xbd, 0x96,
+	0xc8, 0x22, 0x8a, 0x5a, 0xbe, 0x95, 0x1a, 0x35, 0xdc, 0xf1, 0x87, 0x00, 0x5d, 0x1f, 0x27, 0x2f,
+	0x27, 0x32, 0xe8, 0x20, 0x95, 0xaf, 0xa7, 0x40, 0x0a, 0xf9, 0x53, 0x38, 0x7b, 0xf4, 0xeb, 0xd8,
+	0xc2, 0x00, 0xab, 0x74, 0xe1, 0x96, 0x97, 0xd3, 0xe3, 0x76, 0x6f, 0x7a, 0xf4, 0x4b, 0xc0, 0x42,
+	0x0a, 0xb1, 0x7d, 0xdc, 0x3e, 0x9b, 0x26, 0xdf, 0xba, 0xff, 0x5c, 0x81, 0x52, 0xe2, 0xcd, 0xfa,
+	0xad, 0xf4, 0x5a, 0x04, 0x32, 0x3c, 0x3c, 0x36, 0x49, 0x28, 0xca, 0x8f, 0x61, 0x2a, 0xf6, 0x92,
+	0x3a, 0x39, 0x1a, 0xe3, 0xd0, 0xcb, 0x77, 0x8f, 0x85, 0x1e, 0xee, 0xfe, 0x1b, 0x05, 0x66, 0xfa,
+	0xdf, 0xb4, 0xdd, 0x3b, 0x16, 0xe3, 0x90, 0xae, 0xfc, 0xe4, 0x64, 0x74, 0xa1, 0x64, 0x3f, 0x53,
+	0xe0, 0x7c, 0xd2, 0x59, 0xff, 0x66, 0xb2, 0xcb, 0xe3, 0x29, 0xca, 0x0f, 0x8e, 0x4b, 0x11, 0xca,
+	0xf1, 0x91, 0x02, 0x6f, 0x26, 0x1c, 0xc0, 0x97, 0x92, 0x99, 0xc6, 0x12, 0x94, 0xef, 0x1f, 0x93,
+	0x20, 0x14, 0xe2, 0x57, 0x0a, 0xbc, 0xd5, 0xef, 0x54, 0x7c, 0x27, 0x91, 0x71, 0x1f, 0xaa, 0xf2,
+	0xa3, 0x93, 0x50, 0x85, 0x32, 0xd5, 0x61, 0xbc, 0xf7, 0x9c, 0x79, 0x35, 0x91, 0x5d, 0x0f, 0x5e,
+	0x79, 0x31, 0x1d, 0x5e, 0x77, 0xa1, 0x3d, 0x72, 0xb0, 0x48, 0x2e, 0xb4, 0x51, 0xd4, 0x3e, 0x85,
+	0x36, 0xf1, 0x3c, 0xe0, 0xc0, 0x44, 0x74, 0x30, 0x9f, 0x4f, 0xe6, 0xd2, 0x8b, 0x59, 0xbe, 0x99,
+	0x16, 0x33, 0xdc, 0xae, 0x0d, 0x6a, 0xcc, 0x64, 0xdb, 0xa7, 0x74, 0x1f, 0x41, 0x2e, 0xdf, 0x3e,
+	0x06, 0x72, 0xb8, 0xef, 0x87, 0x90, 0xef, 0xcc, 0x97, 0x5a, 0x22, 0x87, 0x10, 0xa7, 0xbc, 0x30,
+	0x18, 0xa7, 0xbb, 0x59, 0x75, 0x0d, 0x67, 0xc9, 0xcd, 0xaa, 0x83, 0xd4, 0xa7, 0x59, 0xc5, 0x8c,
+	0x45, 0xbf, 0x54, 0x60, 0xba, 0xcf, 0x1d, 0x6a, 0x8a, 0x82, 0x1c, 0xa1, 0x29, 0x57, 0x8e, 0x4f,
+	0xd3, 0x1d, 0x31, 0xd1, 0x11, 0x2b, 0x39, 0x62, 0x22, 0x98, 0x7d, 0x22, 0x26, 0x61, 0x66, 0x2a,
+	0x8f, 0xfe, 0xe4, 0xf5, 0xe1, 0x82, 0x52, 0xbd, 0xfd, 0xd9, 0xcb, 0x59, 0xe5, 0xf3, 0x97, 0xb3,
+	0xca, 0x3f, 0x5e, 0xce, 0x2a, 0x9f, 0xbc, 0x9a, 0x1d, 0xfa, 0xfc, 0xd5, 0xec, 0xd0, 0xdf, 0x5e,
+	0xcd, 0x0e, 0xfd, 0x60, 0x3a, 0x6e, 0x34, 0x13, 0x7f, 0x79, 0xdb, 0xc9, 0x8a, 0xff, 0xbc, 0xdd,
+	0xfe, 0x5f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x1c, 0xa5, 0x71, 0x93, 0xcc, 0x27, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -2366,6 +2875,9 @@ type MsgClient interface {
 	UpdateDealContentFromEvm(ctx context.Context, in *MsgUpdateDealContentFromEvm, opts ...grpc.CallOption) (*MsgUpdateDealContentFromEvmResponse, error)
 	// MsgOpenRetrievalSession opens an on-chain retrieval session for a contiguous blob-range.
 	OpenRetrievalSession(ctx context.Context, in *MsgOpenRetrievalSession, opts ...grpc.CallOption) (*MsgOpenRetrievalSessionResponse, error)
+	// MsgOpenRetrievalSessionSponsored opens a USER retrieval session funded by the requester
+	// (not by the deal escrow). This is used for public/allowlisted/voucher retrievals.
+	OpenRetrievalSessionSponsored(ctx context.Context, in *MsgOpenRetrievalSessionSponsored, opts ...grpc.CallOption) (*MsgOpenRetrievalSessionSponsoredResponse, error)
 	// MsgConfirmRetrievalSession confirms completion of a retrieval session (proof-of-validation).
 	ConfirmRetrievalSession(ctx context.Context, in *MsgConfirmRetrievalSession, opts ...grpc.CallOption) (*MsgConfirmRetrievalSessionResponse, error)
 	// MsgCancelRetrievalSession cancels an expired retrieval session and unlocks fees.
@@ -2384,6 +2896,8 @@ type MsgClient interface {
 	AddCredit(ctx context.Context, in *MsgAddCredit, opts ...grpc.CallOption) (*MsgAddCreditResponse, error)
 	// MsgExtendDeal extends a deal term by paying spot storage price for existing bytes.
 	ExtendDeal(ctx context.Context, in *MsgExtendDeal, opts ...grpc.CallOption) (*MsgExtendDealResponse, error)
+	// MsgUpdateDealRetrievalPolicy updates the on-chain retrieval policy for a deal.
+	UpdateDealRetrievalPolicy(ctx context.Context, in *MsgUpdateDealRetrievalPolicy, opts ...grpc.CallOption) (*MsgUpdateDealRetrievalPolicyResponse, error)
 	// MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
 	WithdrawRewards(ctx context.Context, in *MsgWithdrawRewards, opts ...grpc.CallOption) (*MsgWithdrawRewardsResponse, error)
 }
@@ -2453,6 +2967,15 @@ func (c *msgClient) UpdateDealContentFromEvm(ctx context.Context, in *MsgUpdateD
 func (c *msgClient) OpenRetrievalSession(ctx context.Context, in *MsgOpenRetrievalSession, opts ...grpc.CallOption) (*MsgOpenRetrievalSessionResponse, error) {
 	out := new(MsgOpenRetrievalSessionResponse)
 	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Msg/OpenRetrievalSession", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *msgClient) OpenRetrievalSessionSponsored(ctx context.Context, in *MsgOpenRetrievalSessionSponsored, opts ...grpc.CallOption) (*MsgOpenRetrievalSessionSponsoredResponse, error) {
+	out := new(MsgOpenRetrievalSessionSponsoredResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Msg/OpenRetrievalSessionSponsored", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -2540,6 +3063,15 @@ func (c *msgClient) ExtendDeal(ctx context.Context, in *MsgExtendDeal, opts ...g
 	return out, nil
 }
 
+func (c *msgClient) UpdateDealRetrievalPolicy(ctx context.Context, in *MsgUpdateDealRetrievalPolicy, opts ...grpc.CallOption) (*MsgUpdateDealRetrievalPolicyResponse, error) {
+	out := new(MsgUpdateDealRetrievalPolicyResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Msg/UpdateDealRetrievalPolicy", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *msgClient) WithdrawRewards(ctx context.Context, in *MsgWithdrawRewards, opts ...grpc.CallOption) (*MsgWithdrawRewardsResponse, error) {
 	out := new(MsgWithdrawRewardsResponse)
 	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Msg/WithdrawRewards", in, out, opts...)
@@ -2568,6 +3100,9 @@ type MsgServer interface {
 	UpdateDealContentFromEvm(context.Context, *MsgUpdateDealContentFromEvm) (*MsgUpdateDealContentFromEvmResponse, error)
 	// MsgOpenRetrievalSession opens an on-chain retrieval session for a contiguous blob-range.
 	OpenRetrievalSession(context.Context, *MsgOpenRetrievalSession) (*MsgOpenRetrievalSessionResponse, error)
+	// MsgOpenRetrievalSessionSponsored opens a USER retrieval session funded by the requester
+	// (not by the deal escrow). This is used for public/allowlisted/voucher retrievals.
+	OpenRetrievalSessionSponsored(context.Context, *MsgOpenRetrievalSessionSponsored) (*MsgOpenRetrievalSessionSponsoredResponse, error)
 	// MsgConfirmRetrievalSession confirms completion of a retrieval session (proof-of-validation).
 	ConfirmRetrievalSession(context.Context, *MsgConfirmRetrievalSession) (*MsgConfirmRetrievalSessionResponse, error)
 	// MsgCancelRetrievalSession cancels an expired retrieval session and unlocks fees.
@@ -2586,6 +3121,8 @@ type MsgServer interface {
 	AddCredit(context.Context, *MsgAddCredit) (*MsgAddCreditResponse, error)
 	// MsgExtendDeal extends a deal term by paying spot storage price for existing bytes.
 	ExtendDeal(context.Context, *MsgExtendDeal) (*MsgExtendDealResponse, error)
+	// MsgUpdateDealRetrievalPolicy updates the on-chain retrieval policy for a deal.
+	UpdateDealRetrievalPolicy(context.Context, *MsgUpdateDealRetrievalPolicy) (*MsgUpdateDealRetrievalPolicyResponse, error)
 	// MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
 	WithdrawRewards(context.Context, *MsgWithdrawRewards) (*MsgWithdrawRewardsResponse, error)
 }
@@ -2615,6 +3152,9 @@ func (*UnimplementedMsgServer) UpdateDealContentFromEvm(ctx context.Context, req
 func (*UnimplementedMsgServer) OpenRetrievalSession(ctx context.Context, req *MsgOpenRetrievalSession) (*MsgOpenRetrievalSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OpenRetrievalSession not implemented")
 }
+func (*UnimplementedMsgServer) OpenRetrievalSessionSponsored(ctx context.Context, req *MsgOpenRetrievalSessionSponsored) (*MsgOpenRetrievalSessionSponsoredResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OpenRetrievalSessionSponsored not implemented")
+}
 func (*UnimplementedMsgServer) ConfirmRetrievalSession(ctx context.Context, req *MsgConfirmRetrievalSession) (*MsgConfirmRetrievalSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConfirmRetrievalSession not implemented")
 }
@@ -2641,6 +3181,9 @@ func (*UnimplementedMsgServer) AddCredit(ctx context.Context, req *MsgAddCredit)
 }
 func (*UnimplementedMsgServer) ExtendDeal(ctx context.Context, req *MsgExtendDeal) (*MsgExtendDealResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExtendDeal not implemented")
+}
+func (*UnimplementedMsgServer) UpdateDealRetrievalPolicy(ctx context.Context, req *MsgUpdateDealRetrievalPolicy) (*MsgUpdateDealRetrievalPolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDealRetrievalPolicy not implemented")
 }
 func (*UnimplementedMsgServer) WithdrawRewards(ctx context.Context, req *MsgWithdrawRewards) (*MsgWithdrawRewardsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WithdrawRewards not implemented")
@@ -2772,6 +3315,24 @@ func _Msg_OpenRetrievalSession_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MsgServer).OpenRetrievalSession(ctx, req.(*MsgOpenRetrievalSession))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Msg_OpenRetrievalSessionSponsored_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgOpenRetrievalSessionSponsored)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).OpenRetrievalSessionSponsored(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Msg/OpenRetrievalSessionSponsored",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).OpenRetrievalSessionSponsored(ctx, req.(*MsgOpenRetrievalSessionSponsored))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2938,6 +3499,24 @@ func _Msg_ExtendDeal_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Msg_UpdateDealRetrievalPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgUpdateDealRetrievalPolicy)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).UpdateDealRetrievalPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Msg/UpdateDealRetrievalPolicy",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).UpdateDealRetrievalPolicy(ctx, req.(*MsgUpdateDealRetrievalPolicy))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Msg_WithdrawRewards_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MsgWithdrawRewards)
 	if err := dec(in); err != nil {
@@ -2990,6 +3569,10 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Msg_OpenRetrievalSession_Handler,
 		},
 		{
+			MethodName: "OpenRetrievalSessionSponsored",
+			Handler:    _Msg_OpenRetrievalSessionSponsored_Handler,
+		},
+		{
 			MethodName: "ConfirmRetrievalSession",
 			Handler:    _Msg_ConfirmRetrievalSession_Handler,
 		},
@@ -3024,6 +3607,10 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExtendDeal",
 			Handler:    _Msg_ExtendDeal_Handler,
+		},
+		{
+			MethodName: "UpdateDealRetrievalPolicy",
+			Handler:    _Msg_UpdateDealRetrievalPolicy_Handler,
 		},
 		{
 			MethodName: "WithdrawRewards",
@@ -3772,6 +4359,367 @@ func (m *MsgOpenRetrievalSessionResponse) MarshalToSizedBuffer(dAtA []byte) (int
 		i = encodeVarintTx(dAtA, i, uint64(len(m.SessionId)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *AllowlistProof) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AllowlistProof) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AllowlistProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.MerklePath) > 0 {
+		for iNdEx := len(m.MerklePath) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.MerklePath[iNdEx])
+			copy(dAtA[i:], m.MerklePath[iNdEx])
+			i = encodeVarintTx(dAtA, i, uint64(len(m.MerklePath[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.LeafIndex != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.LeafIndex))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *VoucherAuth) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *VoucherAuth) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VoucherAuth) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Signature) > 0 {
+		i -= len(m.Signature)
+		copy(dAtA[i:], m.Signature)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Signature)))
+		i--
+		dAtA[i] = 0x52
+	}
+	if len(m.Redeemer) > 0 {
+		i -= len(m.Redeemer)
+		copy(dAtA[i:], m.Redeemer)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Redeemer)))
+		i--
+		dAtA[i] = 0x4a
+	}
+	if m.Nonce != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.Nonce))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.ExpiresAt != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.ExpiresAt))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.BlobCount != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.BlobCount))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.StartBlobIndex != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.StartBlobIndex))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.StartMduIndex != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.StartMduIndex))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.ManifestRoot) > 0 {
+		i -= len(m.ManifestRoot)
+		copy(dAtA[i:], m.ManifestRoot)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.ManifestRoot)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.DealId != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Auth != nil {
+		{
+			size := m.Auth.Size()
+			i -= size
+			if _, err := m.Auth.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	{
+		size := m.MaxTotalFee.Size()
+		i -= size
+		if _, err := m.MaxTotalFee.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintTx(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x52
+	if m.ExpiresAt != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.ExpiresAt))
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.Nonce != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.Nonce))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.BlobCount != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.BlobCount))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.StartBlobIndex != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.StartBlobIndex))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.StartMduIndex != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.StartMduIndex))
+		i--
+		dAtA[i] = 0x28
+	}
+	if len(m.ManifestRoot) > 0 {
+		i -= len(m.ManifestRoot)
+		copy(dAtA[i:], m.ManifestRoot)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.ManifestRoot)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.DealId != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Creator) > 0 {
+		i -= len(m.Creator)
+		copy(dAtA[i:], m.Creator)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Creator)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsored_AllowlistProof) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgOpenRetrievalSessionSponsored_AllowlistProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.AllowlistProof != nil {
+		{
+			size, err := m.AllowlistProof.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTx(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x5a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *MsgOpenRetrievalSessionSponsored_Voucher) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgOpenRetrievalSessionSponsored_Voucher) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Voucher != nil {
+		{
+			size, err := m.Voucher.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTx(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x62
+	}
+	return len(dAtA) - i, nil
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgOpenRetrievalSessionSponsoredResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgOpenRetrievalSessionSponsoredResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.SessionId) > 0 {
+		i -= len(m.SessionId)
+		copy(dAtA[i:], m.SessionId)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.SessionId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Policy.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTx(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	if m.DealId != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Creator) > 0 {
+		i -= len(m.Creator)
+		copy(dAtA[i:], m.Creator)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Creator)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Success {
+		i--
+		if m.Success {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -4971,6 +5919,178 @@ func (m *MsgOpenRetrievalSessionResponse) Size() (n int) {
 	l = len(m.SessionId)
 	if l > 0 {
 		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+
+func (m *AllowlistProof) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LeafIndex != 0 {
+		n += 1 + sovTx(uint64(m.LeafIndex))
+	}
+	if len(m.MerklePath) > 0 {
+		for _, b := range m.MerklePath {
+			l = len(b)
+			n += 1 + l + sovTx(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *VoucherAuth) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovTx(uint64(m.DealId))
+	}
+	l = len(m.ManifestRoot)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	if m.StartMduIndex != 0 {
+		n += 1 + sovTx(uint64(m.StartMduIndex))
+	}
+	if m.StartBlobIndex != 0 {
+		n += 1 + sovTx(uint64(m.StartBlobIndex))
+	}
+	if m.BlobCount != 0 {
+		n += 1 + sovTx(uint64(m.BlobCount))
+	}
+	if m.ExpiresAt != 0 {
+		n += 1 + sovTx(uint64(m.ExpiresAt))
+	}
+	if m.Nonce != 0 {
+		n += 1 + sovTx(uint64(m.Nonce))
+	}
+	l = len(m.Redeemer)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = len(m.Signature)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+
+func (m *MsgOpenRetrievalSessionSponsored) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Creator)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	if m.DealId != 0 {
+		n += 1 + sovTx(uint64(m.DealId))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = len(m.ManifestRoot)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	if m.StartMduIndex != 0 {
+		n += 1 + sovTx(uint64(m.StartMduIndex))
+	}
+	if m.StartBlobIndex != 0 {
+		n += 1 + sovTx(uint64(m.StartBlobIndex))
+	}
+	if m.BlobCount != 0 {
+		n += 1 + sovTx(uint64(m.BlobCount))
+	}
+	if m.Nonce != 0 {
+		n += 1 + sovTx(uint64(m.Nonce))
+	}
+	if m.ExpiresAt != 0 {
+		n += 1 + sovTx(uint64(m.ExpiresAt))
+	}
+	l = m.MaxTotalFee.Size()
+	n += 1 + l + sovTx(uint64(l))
+	if m.Auth != nil {
+		n += m.Auth.Size()
+	}
+	return n
+}
+
+func (m *MsgOpenRetrievalSessionSponsored_AllowlistProof) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.AllowlistProof != nil {
+		l = m.AllowlistProof.Size()
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+func (m *MsgOpenRetrievalSessionSponsored_Voucher) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Voucher != nil {
+		l = m.Voucher.Size()
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.SessionId)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+
+func (m *MsgUpdateDealRetrievalPolicy) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Creator)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	if m.DealId != 0 {
+		n += 1 + sovTx(uint64(m.DealId))
+	}
+	l = m.Policy.Size()
+	n += 1 + l + sovTx(uint64(l))
+	return n
+}
+
+func (m *MsgUpdateDealRetrievalPolicyResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Success {
+		n += 2
 	}
 	return n
 }
@@ -7577,6 +8697,1057 @@ func (m *MsgOpenRetrievalSessionResponse) Unmarshal(dAtA []byte) error {
 				m.SessionId = []byte{}
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AllowlistProof) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AllowlistProof: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AllowlistProof: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeafIndex", wireType)
+			}
+			m.LeafIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LeafIndex |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MerklePath", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MerklePath = append(m.MerklePath, make([]byte, postIndex-iNdEx))
+			copy(m.MerklePath[len(m.MerklePath)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *VoucherAuth) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: VoucherAuth: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: VoucherAuth: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ManifestRoot", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ManifestRoot = append(m.ManifestRoot[:0], dAtA[iNdEx:postIndex]...)
+			if m.ManifestRoot == nil {
+				m.ManifestRoot = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartMduIndex", wireType)
+			}
+			m.StartMduIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StartMduIndex |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartBlobIndex", wireType)
+			}
+			m.StartBlobIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StartBlobIndex |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BlobCount", wireType)
+			}
+			m.BlobCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.BlobCount |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExpiresAt", wireType)
+			}
+			m.ExpiresAt = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExpiresAt |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nonce", wireType)
+			}
+			m.Nonce = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Nonce |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Redeemer", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Redeemer = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signature = append(m.Signature[:0], dAtA[iNdEx:postIndex]...)
+			if m.Signature == nil {
+				m.Signature = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgOpenRetrievalSessionSponsored) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgOpenRetrievalSessionSponsored: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgOpenRetrievalSessionSponsored: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Creator", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Creator = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ManifestRoot", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ManifestRoot = append(m.ManifestRoot[:0], dAtA[iNdEx:postIndex]...)
+			if m.ManifestRoot == nil {
+				m.ManifestRoot = []byte{}
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartMduIndex", wireType)
+			}
+			m.StartMduIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StartMduIndex |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartBlobIndex", wireType)
+			}
+			m.StartBlobIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StartBlobIndex |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BlobCount", wireType)
+			}
+			m.BlobCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.BlobCount |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nonce", wireType)
+			}
+			m.Nonce = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Nonce |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExpiresAt", wireType)
+			}
+			m.ExpiresAt = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExpiresAt |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxTotalFee", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MaxTotalFee.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AllowlistProof", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AllowlistProof{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Auth = &MsgOpenRetrievalSessionSponsored_AllowlistProof{v}
+			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Voucher", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &VoucherAuth{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Auth = &MsgOpenRetrievalSessionSponsored_Voucher{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgOpenRetrievalSessionSponsoredResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgOpenRetrievalSessionSponsoredResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgOpenRetrievalSessionSponsoredResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SessionId", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SessionId = append(m.SessionId[:0], dAtA[iNdEx:postIndex]...)
+			if m.SessionId == nil {
+				m.SessionId = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgUpdateDealRetrievalPolicy) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgUpdateDealRetrievalPolicy: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgUpdateDealRetrievalPolicy: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Creator", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Creator = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Policy", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Policy.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgUpdateDealRetrievalPolicyResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgUpdateDealRetrievalPolicyResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgUpdateDealRetrievalPolicyResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Success", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Success = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])

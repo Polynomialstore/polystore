@@ -214,6 +214,9 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		CurrentGen:             0,
 		WitnessMdus:            0,
 		PricingAnchorBlock:     height,
+		RetrievalPolicy: types.RetrievalPolicy{
+			Mode: types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY,
+		},
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
@@ -454,6 +457,9 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		CurrentGen:             0,
 		WitnessMdus:            0,
 		PricingAnchorBlock:     height,
+		RetrievalPolicy: types.RetrievalPolicy{
+			Mode: types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY,
+		},
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
@@ -2078,6 +2084,9 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		UpdatedHeight:  ctx.BlockHeight(),
 		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
 		LockedFee:      variableFee,
+		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER,
+		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW,
+		Payer:          "",
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -2094,6 +2103,430 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	return &types.MsgOpenRetrievalSessionResponse{SessionId: sessionID}, nil
+}
+
+func normalizeRetrievalPolicyMode(mode types.RetrievalPolicyMode) types.RetrievalPolicyMode {
+	switch mode {
+	case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY,
+		types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST,
+		types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_VOUCHER,
+		types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST_OR_VOUCHER,
+		types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC:
+		return mode
+	case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_UNSPECIFIED:
+		return types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY
+	default:
+		// Be conservative on unknown enum values.
+		return types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY
+	}
+}
+
+func (k msgServer) UpdateDealRetrievalPolicy(goCtx context.Context, msg *types.MsgUpdateDealRetrievalPolicy) (*types.MsgUpdateDealRetrievalPolicyResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+	if strings.TrimSpace(msg.Creator) != strings.TrimSpace(deal.Owner) {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner may update retrieval policy")
+	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
+
+	p := msg.Policy
+	p.Mode = normalizeRetrievalPolicyMode(p.Mode)
+
+	allowRoot := p.AllowlistRoot
+	if allowRoot != nil && len(allowRoot) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("allowlist_root must be 32 bytes when set")
+	}
+	// Enforce required root for allowlist modes.
+	if (p.Mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST ||
+		p.Mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST_OR_VOUCHER) && len(allowRoot) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("allowlist_root is required for allowlist modes")
+	}
+	if (p.Mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY ||
+		p.Mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC ||
+		p.Mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_VOUCHER) && len(allowRoot) != 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("allowlist_root must be empty for this mode")
+	}
+
+	if strings.TrimSpace(p.VoucherSigner) != "" {
+		if _, err := sdk.AccAddressFromBech32(strings.TrimSpace(p.VoucherSigner)); err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid voucher_signer")
+		}
+	}
+
+	deal.RetrievalPolicy = p
+	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+	return &types.MsgUpdateDealRetrievalPolicyResponse{Success: true}, nil
+}
+
+func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *types.MsgOpenRetrievalSessionSponsored) (*types.MsgOpenRetrievalSessionSponsoredResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.ManifestRoot) != 48 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	}
+	if msg.BlobCount == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
+	}
+	if msg.MaxTotalFee.IsNil() || msg.MaxTotalFee.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("max_total_fee must be >= 0")
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
+	}
+	height := uint64(ctx.BlockHeight())
+	if height >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
+	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
+	}
+
+	isAssignedProvider := false
+	if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 {
+		for _, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if strings.TrimSpace(slot.Provider) == strings.TrimSpace(msg.Provider) {
+				isAssignedProvider = true
+				break
+			}
+			if strings.TrimSpace(slot.PendingProvider) != "" && strings.TrimSpace(slot.PendingProvider) == strings.TrimSpace(msg.Provider) {
+				isAssignedProvider = true
+				break
+			}
+		}
+	} else {
+		for _, p := range deal.Providers {
+			if p == msg.Provider {
+				isAssignedProvider = true
+				break
+			}
+		}
+	}
+	if !isAssignedProvider {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Provider, msg.DealId)
+	}
+
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+
+	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
+	}
+	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
+	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+	if stripe.mode == 2 {
+		endIndex := uint64(msg.StartBlobIndex) + msg.BlobCount - 1
+		if endIndex >= stripe.leafCount {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds leaf_count")
+		}
+		startSlot, serr := leafSlotIndex(uint64(msg.StartBlobIndex), stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		endSlot, serr := leafSlotIndex(endIndex, stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		if startSlot != endSlot {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range must stay within a single slot in Mode 2")
+		}
+		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
+		if !ok || providerSlot != startSlot {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
+		}
+	}
+	if deal.TotalMdus != 0 {
+		if msg.StartMduIndex >= deal.TotalMdus {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
+		}
+		maxGlobal := deal.TotalMdus * stripe.leafCount
+		if endGlobal > maxGlobal {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
+		}
+	}
+
+	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
+	}
+
+	expiresAt := msg.ExpiresAt
+	if expiresAt == 0 {
+		expiresAt = deal.EndBlock
+	}
+	if expiresAt > deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be <= deal end_block")
+	}
+	if expiresAt < height {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be >= current height")
+	}
+
+	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
+	}
+	providerAddr, err := sdk.AccAddressFromBech32(msg.Provider)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+	}
+
+	// --- Sponsored authorization ---
+	mode := normalizeRetrievalPolicyMode(deal.RetrievalPolicy.Mode)
+	if mode == types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_OWNER_ONLY {
+		// Owner-only deals must use the owner-paid path to avoid ambiguity about settlement semantics.
+		return nil, sdkerrors.ErrUnauthorized.Wrap("sponsored retrieval sessions are not allowed for owner-only deals")
+	}
+	if strings.TrimSpace(msg.Creator) != strings.TrimSpace(deal.Owner) {
+		switch mode {
+		case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC:
+			// ok
+		case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST:
+			ap := msg.GetAllowlistProof()
+			if ap == nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("allowlist proof is required")
+			}
+			if len(deal.RetrievalPolicy.AllowlistRoot) != 32 {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("deal missing allowlist_root")
+			}
+			root := gethCommon.BytesToHash(deal.RetrievalPolicy.AllowlistRoot)
+			leaf := gethCrypto.Keccak256Hash(creatorAddr.Bytes())
+			if !types.VerifyKeccakMerklePath(root, leaf, ap.LeafIndex, ap.MerklePath) {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("invalid allowlist proof")
+			}
+
+		case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_VOUCHER:
+			v := msg.GetVoucher()
+			if v == nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("voucher is required")
+			}
+			if err := k.verifyAndConsumeVoucher(ctx, &deal, msg, v); err != nil {
+				return nil, err
+			}
+
+		case types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_ALLOWLIST_OR_VOUCHER:
+			ap := msg.GetAllowlistProof()
+			v := msg.GetVoucher()
+			ok := false
+			if ap != nil {
+				if len(deal.RetrievalPolicy.AllowlistRoot) != 32 {
+					return nil, sdkerrors.ErrInvalidRequest.Wrap("deal missing allowlist_root")
+				}
+				root := gethCommon.BytesToHash(deal.RetrievalPolicy.AllowlistRoot)
+				leaf := gethCrypto.Keccak256Hash(creatorAddr.Bytes())
+				ok = types.VerifyKeccakMerklePath(root, leaf, ap.LeafIndex, ap.MerklePath)
+			}
+			if !ok && v != nil {
+				if err := k.verifyAndConsumeVoucher(ctx, &deal, msg, v); err == nil {
+					ok = true
+				} else {
+					// Only surface voucher errors if allowlist proof wasn't provided or failed.
+					return nil, err
+				}
+			}
+			if !ok {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("allowlist proof or voucher is required")
+			}
+
+		default:
+			return nil, sdkerrors.ErrUnauthorized.Wrap("unsupported retrieval policy mode")
+		}
+	}
+
+	// --- Fee computation ---
+	params := k.GetParams(ctx)
+	baseFee := params.BaseRetrievalFee
+	variableFee := math.ZeroInt()
+	if params.RetrievalPricePerBlob.IsValid() && params.RetrievalPricePerBlob.Amount.IsPositive() {
+		variableFee = params.RetrievalPricePerBlob.Amount.Mul(math.NewIntFromUint64(msg.BlobCount))
+	}
+	totalFee := variableFee.Add(baseFee.Amount)
+	if msg.MaxTotalFee.IsPositive() && totalFee.GT(msg.MaxTotalFee) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total fee exceeds max_total_fee")
+	}
+
+	if totalFee.IsPositive() {
+		feeCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, totalFee))
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, feeCoins); err != nil {
+			return nil, fmt.Errorf("failed to collect sponsored retrieval fees: %w", err)
+		}
+		if baseFee.Amount.IsPositive() {
+			burnCoins := sdk.NewCoins(baseFee)
+			if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, burnCoins); err != nil {
+				return nil, fmt.Errorf("failed to burn base retrieval fee: %w", err)
+			}
+		}
+	}
+
+	nonceKey := collections.Join(collections.Join(msg.Creator, msg.DealId), msg.Provider)
+	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+	if msg.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
+	}
+
+	sessionID, err := types.HashRetrievalSessionID(
+		creatorAddr.Bytes(),
+		msg.DealId,
+		providerAddr.Bytes(),
+		msg.ManifestRoot,
+		msg.StartMduIndex,
+		msg.StartBlobIndex,
+		msg.BlobCount,
+		msg.Nonce,
+		expiresAt,
+	)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
+	}
+
+	session := types.RetrievalSession{
+		SessionId:      sessionID,
+		DealId:         msg.DealId,
+		Owner:          msg.Creator,
+		Provider:       msg.Provider,
+		ManifestRoot:   msg.ManifestRoot,
+		StartMduIndex:  msg.StartMduIndex,
+		StartBlobIndex: msg.StartBlobIndex,
+		BlobCount:      msg.BlobCount,
+		TotalBytes:     totalBytes,
+		Nonce:          msg.Nonce,
+		ExpiresAt:      expiresAt,
+		OpenedHeight:   ctx.BlockHeight(),
+		UpdatedHeight:  ctx.BlockHeight(),
+		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		LockedFee:      variableFee,
+		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER,
+		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
+		Payer:          msg.Creator,
+	}
+
+	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
+		return nil, fmt.Errorf("failed to store retrieval session: %w", err)
+	}
+	if err := k.RetrievalSessionsByOwner.Set(ctx, collections.Join(msg.Creator, sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by owner: %w", err)
+	}
+	if err := k.RetrievalSessionsByProvider.Set(ctx, collections.Join(msg.Provider, sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by provider: %w", err)
+	}
+	if err := k.RetrievalSessionNonces.Set(ctx, nonceKey, msg.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
+	}
+
+	return &types.MsgOpenRetrievalSessionSponsoredResponse{SessionId: sessionID}, nil
+}
+
+func (k msgServer) verifyAndConsumeVoucher(ctx sdk.Context, deal *types.Deal, open *types.MsgOpenRetrievalSessionSponsored, v *types.VoucherAuth) error {
+	if deal == nil || open == nil || v == nil {
+		return sdkerrors.ErrInvalidRequest.Wrap("invalid voucher request")
+	}
+	if v.DealId != open.DealId {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher deal_id mismatch")
+	}
+	if len(v.ManifestRoot) != 48 || !bytesEqual(v.ManifestRoot, open.ManifestRoot) {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher manifest_root mismatch")
+	}
+	if strings.TrimSpace(v.Provider) != "" && strings.TrimSpace(v.Provider) != strings.TrimSpace(open.Provider) {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher provider mismatch")
+	}
+	if v.StartMduIndex != open.StartMduIndex ||
+		v.StartBlobIndex != open.StartBlobIndex ||
+		v.BlobCount != open.BlobCount {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher range mismatch")
+	}
+
+	effectiveExpiresAt := open.ExpiresAt
+	if effectiveExpiresAt == 0 {
+		effectiveExpiresAt = deal.EndBlock
+	}
+	if v.ExpiresAt != effectiveExpiresAt {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher expires_at mismatch")
+	}
+
+	if strings.TrimSpace(v.Redeemer) != "" && strings.TrimSpace(v.Redeemer) != strings.TrimSpace(open.Creator) {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher redeemer mismatch")
+	}
+	if len(v.Signature) != 65 {
+		return sdkerrors.ErrUnauthorized.Wrap("invalid voucher signature length")
+	}
+
+	h := uint64(ctx.BlockHeight())
+	if v.ExpiresAt < h {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher expired")
+	}
+	if v.ExpiresAt > deal.EndBlock {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher outlives deal term")
+	}
+
+	params := k.GetParams(ctx)
+	if params.VoucherMaxTtlBlocks != 0 {
+		ttl := v.ExpiresAt - h
+		if ttl > params.VoucherMaxTtlBlocks {
+			return sdkerrors.ErrUnauthorized.Wrap("voucher ttl exceeds max")
+		}
+	}
+
+	usedKey := collections.Join(v.DealId, v.Nonce)
+	used, err := k.VoucherUsedNonces.Get(ctx, usedKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	if used {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher nonce replay rejected")
+	}
+
+	signerStr := strings.TrimSpace(deal.RetrievalPolicy.VoucherSigner)
+	if signerStr == "" {
+		signerStr = deal.Owner
+	}
+	signerAcc, err := sdk.AccAddressFromBech32(signerStr)
+	if err != nil {
+		return sdkerrors.ErrInvalidAddress.Wrap("invalid voucher signer")
+	}
+
+	chainID := big.NewInt(0).SetUint64(params.Eip712ChainId)
+	domainSep := types.HashDomainSeparator(chainID)
+	structHash, err := types.HashRetrievalVoucher(v)
+	if err != nil {
+		return sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	digest := types.ComputeEIP712Digest(domainSep, structHash)
+	evmAddr, err := recoverEvmAddressFromDigest(digest, v.Signature)
+	if err != nil {
+		return sdkerrors.ErrUnauthorized.Wrapf("failed to recover voucher signer: %s", err)
+	}
+	if !bytes.Equal(evmAddr.Bytes(), signerAcc.Bytes()) {
+		return sdkerrors.ErrUnauthorized.Wrap("voucher signature does not match signer")
+	}
+
+	if err := k.VoucherUsedNonces.Set(ctx, usedKey, true); err != nil {
+		return fmt.Errorf("failed to store voucher nonce: %w", err)
+	}
+	return nil
 }
 
 func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.MsgConfirmRetrievalSession) (*types.MsgConfirmRetrievalSessionResponse, error) {
@@ -2193,15 +2626,45 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 	}
 
 	if session.LockedFee.IsPositive() {
-		deal, err := k.Deals.Get(ctx, session.DealId)
-		if err != nil {
-			return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
+		funding := session.Funding
+		if funding == types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_UNSPECIFIED {
+			// Backwards-compatible default: older sessions were deal-escrow funded.
+			funding = types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW
 		}
-		deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
-		if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
-			return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
+
+		switch funding {
+		case types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW:
+			// Owner-paid sessions refund back into deal escrow accounting (coins already live in module account).
+			deal, err := k.Deals.Get(ctx, session.DealId)
+			if err != nil {
+				return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
+			}
+			deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
+			if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+				return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
+			}
+			session.LockedFee = math.ZeroInt()
+
+		case types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
+			types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL:
+			// Sponsored/protocol sessions refund back to the recorded payer.
+			payer := strings.TrimSpace(session.Payer)
+			if payer == "" {
+				payer = strings.TrimSpace(session.Owner)
+			}
+			payerAddr, err := sdk.AccAddressFromBech32(payer)
+			if err != nil {
+				return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid payer address")
+			}
+			refund := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, session.LockedFee))
+			if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, payerAddr, refund); err != nil {
+				return nil, fmt.Errorf("failed to refund locked retrieval fees to payer: %w", err)
+			}
+			session.LockedFee = math.ZeroInt()
+
+		default:
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid retrieval session funding")
 		}
-		session.LockedFee = math.ZeroInt()
 	}
 
 	session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED

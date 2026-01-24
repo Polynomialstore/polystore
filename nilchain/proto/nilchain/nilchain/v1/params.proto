@@ -66,4 +66,10 @@ message Params {
   //
   // See `rfcs/rfc-deal-expiry-and-extension.md`.
   uint64 deal_extension_grace_blocks = 18;
+
+  // Maximum TTL for sponsored retrieval vouchers, in blocks.
+  // 0 disables the TTL bound (not recommended).
+  //
+  // See `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`.
+  uint64 voucher_max_ttl_blocks = 19;
 }

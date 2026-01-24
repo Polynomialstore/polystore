@@ -3,6 +3,7 @@ import { useAccount } from 'wagmi'
 import { numberToHex, type Hex } from 'viem'
 
 import { appConfig } from '../config'
+import { ethToNil } from '../lib/address'
 import { normalizeDealId } from '../lib/dealId'
 import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
@@ -11,6 +12,7 @@ import {
   encodeComputeRetrievalSessionIdsData,
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
+  encodeOpenRetrievalSessionsSponsoredData,
 } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import {
@@ -341,9 +343,20 @@ export function useFetch() {
       }
 
       const openTxData = encodeOpenRetrievalSessionsData(openRequests)
+      const callerNil = ethToNil(address)
+      const isDealOwner = callerNil && callerNil === owner
+      const sponsoredOpenRequests = openRequests.map((r) => ({ ...r, maxTotalFee: 0n }))
+      const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(sponsoredOpenRequests)
       const openTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(7_000_000) }],
+        params: [
+          {
+            from: address,
+            to: appConfig.nilstorePrecompile,
+            data: isDealOwner ? openTxData : sponsoredTxData,
+            gas: numberToHex(7_000_000),
+          },
+        ],
       })) as Hex
 
       await waitForTransactionReceipt(openTxHash)

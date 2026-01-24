@@ -43,11 +43,12 @@ type Keeper struct {
 	EvmNonces               collections.Map[string, uint64]
 	DealHeatStates          collections.Map[uint64, types.DealHeatState]
 
-	RetrievalSessions           collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsByOwner    collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider   collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
+	VoucherUsedNonces             collections.Map[collections.Pair[uint64, uint64], bool]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -114,6 +115,13 @@ func NewKeeper(
 			collections.Uint64Value,
 		),
 		RetrievalSessionProofProvider: collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
+		VoucherUsedNonces: collections.NewMap(
+			sb,
+			types.VoucherUsedNonceKey,
+			"voucher_used_nonces",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key),
+			collections.BoolValue,
+		),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(
