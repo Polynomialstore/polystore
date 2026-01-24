@@ -45,6 +45,7 @@ export interface FetchInput {
   fileSizeBytes?: number
   mduSizeBytes?: number
   blobSizeBytes?: number
+  sponsoredAuth?: SponsoredRetrievalAuth
 }
 
 export type FetchPhase =
@@ -72,6 +73,19 @@ export interface FetchResult {
   url: string
   blob: Blob
 }
+
+export interface VoucherAuthInput {
+  provider?: string
+  expiresAt?: number
+  nonce: number
+  redeemer?: string
+  signature: Hex
+}
+
+export type SponsoredRetrievalAuth =
+  | { type: 'none' }
+  | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
+  | { type: 'voucher'; voucher: VoucherAuthInput }
 
 function decodeHttpError(bodyText: string): string {
   const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
@@ -345,7 +359,32 @@ export function useFetch() {
       const openTxData = encodeOpenRetrievalSessionsData(openRequests)
       const callerNil = ethToNil(address)
       const isDealOwner = callerNil && callerNil === owner
-      const sponsoredOpenRequests = openRequests.map((r) => ({ ...r, maxTotalFee: 0n }))
+      const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
+      const authType =
+        sponsoredAuth.type === 'allowlist' ? 1 : sponsoredAuth.type === 'voucher' ? 2 : 0
+      if (authType === 2 && openRequests.length > 1) {
+        throw new Error('voucher auth requires a single provider range')
+      }
+      const allowlistLeafIndex = sponsoredAuth.type === 'allowlist' ? sponsoredAuth.leafIndex : 0
+      const allowlistMerklePath = sponsoredAuth.type === 'allowlist' ? sponsoredAuth.merklePath : []
+      const voucher = sponsoredAuth.type === 'voucher' ? sponsoredAuth.voucher : undefined
+      const voucherNonce = voucher ? BigInt(voucher.nonce) : 0n
+      const voucherExpiresAt = voucher?.expiresAt ? BigInt(voucher.expiresAt) : 0n
+      const voucherRedeemer = voucher?.redeemer ?? ''
+      const voucherProvider = voucher?.provider ?? ''
+      const voucherSignature = voucher?.signature ?? ('0x' as Hex)
+      const sponsoredOpenRequests = openRequests.map((r) => ({
+        ...r,
+        maxTotalFee: 0n,
+        authType,
+        allowlistLeafIndex,
+        allowlistMerklePath,
+        voucherRedeemer,
+        voucherProvider,
+        voucherExpiresAt,
+        voucherNonce,
+        voucherSignature,
+      }))
       const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(sponsoredOpenRequests)
       const openTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',

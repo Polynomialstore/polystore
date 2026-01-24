@@ -147,7 +147,15 @@ const nilstoreABIJSON = `[
         {"name":"blobCount","type":"uint64"},
         {"name":"nonce","type":"uint64"},
         {"name":"expiresAt","type":"uint64"},
-        {"name":"maxTotalFee","type":"uint256"}
+        {"name":"maxTotalFee","type":"uint256"},
+        {"name":"authType","type":"uint8"},
+        {"name":"allowlistLeafIndex","type":"uint32"},
+        {"name":"allowlistMerklePath","type":"bytes32[]"},
+        {"name":"voucherRedeemer","type":"string"},
+        {"name":"voucherProvider","type":"string"},
+        {"name":"voucherExpiresAt","type":"uint64"},
+        {"name":"voucherNonce","type":"uint64"},
+        {"name":"voucherSignature","type":"bytes"}
       ]}
     ],
     "outputs":[{"name":"sessionIds","type":"bytes32[]"}]
@@ -331,15 +339,23 @@ type openSessionOutput struct {
 }
 
 type openSponsoredSessionInput struct {
-	DealId         uint64   `abi:"dealId"`
-	Provider       string   `abi:"provider"`
-	ManifestRoot   []byte   `abi:"manifestRoot"`
-	StartMduIndex  uint64   `abi:"startMduIndex"`
-	StartBlobIndex uint32   `abi:"startBlobIndex"`
-	BlobCount      uint64   `abi:"blobCount"`
-	Nonce          uint64   `abi:"nonce"`
-	ExpiresAt      uint64   `abi:"expiresAt"`
-	MaxTotalFee    *big.Int `abi:"maxTotalFee"`
+	DealId              uint64        `abi:"dealId"`
+	Provider            string        `abi:"provider"`
+	ManifestRoot        []byte        `abi:"manifestRoot"`
+	StartMduIndex       uint64        `abi:"startMduIndex"`
+	StartBlobIndex      uint32        `abi:"startBlobIndex"`
+	BlobCount           uint64        `abi:"blobCount"`
+	Nonce               uint64        `abi:"nonce"`
+	ExpiresAt           uint64        `abi:"expiresAt"`
+	MaxTotalFee         *big.Int      `abi:"maxTotalFee"`
+	AuthType            uint8         `abi:"authType"`
+	AllowlistLeafIndex  uint32        `abi:"allowlistLeafIndex"`
+	AllowlistMerklePath []common.Hash `abi:"allowlistMerklePath"`
+	VoucherRedeemer     string        `abi:"voucherRedeemer"`
+	VoucherProvider     string        `abi:"voucherProvider"`
+	VoucherExpiresAt    uint64        `abi:"voucherExpiresAt"`
+	VoucherNonce        uint64        `abi:"voucherNonce"`
+	VoucherSignature    []byte        `abi:"voucherSignature"`
 }
 
 func (p *Precompile) effectiveSessionExpiresAt(ctx sdk.Context, dealID uint64, expiresAt uint64) (uint64, error) {
@@ -546,7 +562,7 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 			maxFee = math.NewIntFromBigInt(input.MaxTotalFee)
 		}
 
-		_, err = msgServer.OpenRetrievalSessionSponsored(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSessionSponsored{
+		msg := &types.MsgOpenRetrievalSessionSponsored{
 			Creator:        creator,
 			DealId:         input.DealId,
 			Provider:       provider,
@@ -557,7 +573,46 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 			Nonce:          input.Nonce,
 			ExpiresAt:      effectiveExpiresAt,
 			MaxTotalFee:    maxFee,
-		})
+		}
+		switch input.AuthType {
+		case 0:
+			// no auth (public)
+		case 1:
+			path := make([][]byte, 0, len(input.AllowlistMerklePath))
+			for _, h := range input.AllowlistMerklePath {
+				b := h.Bytes()
+				path = append(path, b)
+			}
+			msg.Auth = &types.MsgOpenRetrievalSessionSponsored_AllowlistProof{
+				AllowlistProof: &types.AllowlistProof{
+					LeafIndex:  input.AllowlistLeafIndex,
+					MerklePath: path,
+				},
+			}
+		case 2:
+			voucherExpiresAt := input.VoucherExpiresAt
+			if voucherExpiresAt == 0 {
+				voucherExpiresAt = effectiveExpiresAt
+			}
+			msg.Auth = &types.MsgOpenRetrievalSessionSponsored_Voucher{
+				Voucher: &types.VoucherAuth{
+					DealId:         input.DealId,
+					ManifestRoot:   input.ManifestRoot,
+					Provider:       strings.TrimSpace(input.VoucherProvider),
+					StartMduIndex:  input.StartMduIndex,
+					StartBlobIndex: input.StartBlobIndex,
+					BlobCount:      input.BlobCount,
+					ExpiresAt:      voucherExpiresAt,
+					Nonce:          input.VoucherNonce,
+					Redeemer:       strings.TrimSpace(input.VoucherRedeemer),
+					Signature:      input.VoucherSignature,
+				},
+			}
+		default:
+			return nil, errors.New("openRetrievalSessionsSponsored: invalid authType")
+		}
+
+		_, err = msgServer.OpenRetrievalSessionSponsored(sdk.WrapSDKContext(ctx), msg)
 		if err != nil {
 			return nil, err
 		}

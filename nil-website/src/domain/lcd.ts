@@ -12,6 +12,11 @@ export interface LcdDeal {
   current_replication?: string
   max_monthly_spend?: string
   providers?: string[]
+  retrieval_policy?: {
+    mode?: number
+    allowlist_root?: string
+    voucher_signer?: string
+  }
 }
 
 export interface LcdProvider {
@@ -48,6 +53,15 @@ export function normalizeLcdDeal(input: unknown): LcdDeal | null {
 
   const manifestRootHex = toHexFromBase64OrHex(input['manifest_root'], { expectedBytes: [48] })
   const cid = asString(input['cid']) || manifestRootHex
+  const retrievalPolicy = isRecord(input['retrieval_policy'])
+    ? {
+        mode: Number(input['retrieval_policy']['mode'] ?? 0) || 0,
+        allowlist_root: toHexFromBase64OrHex(input['retrieval_policy']['allowlist_root'], {
+          expectedBytes: [32],
+        }) as string,
+        voucher_signer: asString(input['retrieval_policy']['voucher_signer'] ?? ''),
+      }
+    : undefined
 
   return {
     id: asString(input['id']),
@@ -63,6 +77,7 @@ export function normalizeLcdDeal(input: unknown): LcdDeal | null {
     providers: Array.isArray(input['providers'])
       ? (input['providers'].filter((p) => typeof p === 'string') as string[])
       : [],
+    retrieval_policy: retrievalPolicy,
   }
 }
 
