@@ -24,6 +24,9 @@ var (
 	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
 	KeyDealExtensionGrace    = []byte("DealExtensionGraceBlocks")
 	KeyVoucherMaxTTLBlocks   = []byte("VoucherMaxTTLBlocks")
+	KeyAuditBudgetBps        = []byte("AuditBudgetBps")
+	KeyAuditBudgetCapBps     = []byte("AuditBudgetCapBps")
+	KeyAuditBudgetCarryEpoch = []byte("AuditBudgetCarryoverEpochs")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -60,6 +63,9 @@ func NewParams(
 	evictAfterMissedEpochs uint64,
 	dealExtensionGraceBlocks uint64,
 	voucherMaxTTLBlocks uint64,
+	auditBudgetBps uint64,
+	auditBudgetCapBps uint64,
+	auditBudgetCarryoverEpochs uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -73,15 +79,18 @@ func NewParams(
 		RetrievalBurnBps:      retrievalBurnBps,
 		MonthLenBlocks:        monthLenBlocks,
 
-		EpochLenBlocks:           epochLenBlocks,
-		QuotaBpsPerEpochHot:      quotaBpsPerEpochHot,
-		QuotaBpsPerEpochCold:     quotaBpsPerEpochCold,
-		QuotaMinBlobs:            quotaMinBlobs,
-		QuotaMaxBlobs:            quotaMaxBlobs,
-		CreditCapBps:             creditCapBps,
-		EvictAfterMissedEpochs:   evictAfterMissedEpochs,
-		DealExtensionGraceBlocks: dealExtensionGraceBlocks,
-		VoucherMaxTtlBlocks:      voucherMaxTTLBlocks,
+		EpochLenBlocks:             epochLenBlocks,
+		QuotaBpsPerEpochHot:        quotaBpsPerEpochHot,
+		QuotaBpsPerEpochCold:       quotaBpsPerEpochCold,
+		QuotaMinBlobs:              quotaMinBlobs,
+		QuotaMaxBlobs:              quotaMaxBlobs,
+		CreditCapBps:               creditCapBps,
+		EvictAfterMissedEpochs:     evictAfterMissedEpochs,
+		DealExtensionGraceBlocks:   dealExtensionGraceBlocks,
+		VoucherMaxTtlBlocks:        voucherMaxTTLBlocks,
+		AuditBudgetBps:             auditBudgetBps,
+		AuditBudgetCapBps:          auditBudgetCapBps,
+		AuditBudgetCarryoverEpochs: auditBudgetCarryoverEpochs,
 	}
 }
 
@@ -107,6 +116,9 @@ func DefaultParams() Params {
 		3,    // EvictAfterMissedEpochs
 		1000, // DealExtensionGraceBlocks (default: 1 month)
 		1000, // VoucherMaxTTLBlocks (default: 1 month)
+		25,   // AuditBudgetBps (0.25% of notional rent per epoch)
+		100,  // AuditBudgetCapBps (1% of notional rent per epoch)
+		2,    // AuditBudgetCarryoverEpochs
 	)
 }
 
@@ -133,6 +145,9 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochs, &p.EvictAfterMissedEpochs, validateEvictAfterMissedEpochs),
 		paramtypes.NewParamSetPair(KeyDealExtensionGrace, &p.DealExtensionGraceBlocks, validateDealExtensionGraceBlocks),
 		paramtypes.NewParamSetPair(KeyVoucherMaxTTLBlocks, &p.VoucherMaxTtlBlocks, validateVoucherMaxTTLBlocks),
+		paramtypes.NewParamSetPair(KeyAuditBudgetBps, &p.AuditBudgetBps, validateBps),
+		paramtypes.NewParamSetPair(KeyAuditBudgetCapBps, &p.AuditBudgetCapBps, validateBps),
+		paramtypes.NewParamSetPair(KeyAuditBudgetCarryEpoch, &p.AuditBudgetCarryoverEpochs, validateAuditBudgetCarryoverEpochs),
 	}
 }
 
@@ -198,6 +213,27 @@ func (p Params) Validate() error {
 	if err := validateVoucherMaxTTLBlocks(p.VoucherMaxTtlBlocks); err != nil {
 		return err
 	}
+	if err := validateBps(p.AuditBudgetBps); err != nil {
+		return err
+	}
+	if err := validateBps(p.AuditBudgetCapBps); err != nil {
+		return err
+	}
+	if p.AuditBudgetCapBps != 0 && p.AuditBudgetBps > p.AuditBudgetCapBps {
+		return fmt.Errorf("audit_budget_bps must be <= audit_budget_cap_bps (got %d > %d)", p.AuditBudgetBps, p.AuditBudgetCapBps)
+	}
+	if err := validateAuditBudgetCarryoverEpochs(p.AuditBudgetCarryoverEpochs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAuditBudgetCarryoverEpochs(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	// 0 is allowed (no carryover).
 	return nil
 }
 
@@ -397,6 +433,17 @@ func validateEvictAfterMissedEpochs(i interface{}) error {
 	}
 	if v == 0 {
 		return fmt.Errorf("evict_after_missed_epochs must be non-zero")
+	}
+	return nil
+}
+
+func validateBps(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v > 10000 {
+		return fmt.Errorf("bps must be <= 10000 (got %d)", v)
 	}
 	return nil
 }

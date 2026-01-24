@@ -2,7 +2,9 @@ package keeper_test
 
 import (
 	"context"
+
 	"cosmossdk.io/core/address"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -10,6 +12,10 @@ type MockBankKeeper struct{}
 
 func (m MockBankKeeper) SpendableCoins(ctx context.Context, addr sdk.AccAddress) sdk.Coins {
 	return sdk.NewCoins()
+}
+
+func (m MockBankKeeper) GetBalance(ctx context.Context, addr sdk.AccAddress, denom string) sdk.Coin {
+	return sdk.NewCoin(denom, math.NewInt(0))
 }
 
 func (m MockBankKeeper) MintCoins(ctx context.Context, moduleName string, amt sdk.Coins) error {

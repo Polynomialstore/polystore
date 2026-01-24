@@ -2575,6 +2575,8 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	}
 
 	// --- Protocol auth rules ---
+	consumeAuditTask := false
+	var consumeAuditTaskKey collections.Pair[uint64, uint64]
 	switch msg.Purpose {
 	case types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR:
 		ra := msg.GetRepair()
@@ -2610,7 +2612,8 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		if ref == nil {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("audit_task ref is required")
 		}
-		task, err := k.AuditTasks.Get(ctx, collections.Join(ref.EpochId, ref.TaskId))
+		taskKey := collections.Join(ref.EpochId, ref.TaskId)
+		task, err := k.AuditTasks.Get(ctx, taskKey)
 		if err != nil {
 			if errors.Is(err, collections.ErrNotFound) {
 				return nil, sdkerrors.ErrUnauthorized.Wrap("audit task not found")
@@ -2641,6 +2644,8 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		if taskExpiresAt != expiresAt {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task expires_at mismatch")
 		}
+		consumeAuditTask = true
+		consumeAuditTaskKey = taskKey
 
 	default:
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("unsupported protocol session purpose")
@@ -2736,6 +2741,10 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	}
 	if err := k.RetrievalSessionNonces.Set(ctx, nonceKey, msg.Nonce); err != nil {
 		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
+	}
+	if consumeAuditTask {
+		// Consume tasks on successful open so they cannot be reused with a new nonce.
+		_ = k.AuditTasks.Remove(ctx, consumeAuditTaskKey)
 	}
 
 	return &types.MsgOpenProtocolRetrievalSessionResponse{SessionId: sessionID}, nil

@@ -72,4 +72,15 @@ message Params {
   //
   // See `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`.
   uint64 voucher_max_ttl_blocks = 19;
+
+  // --- Protocol audit budget (minted, deterministic; see RFCs) ---
+  // audit_budget_mint = min(
+  //   ceil(audit_budget_bps / 10_000 * epoch_slot_rent),
+  //   ceil(audit_budget_cap_bps / 10_000 * epoch_slot_rent),
+  // )
+  uint64 audit_budget_bps = 20;
+  uint64 audit_budget_cap_bps = 21;
+  // Maximum number of epochs worth of unused budget that may carry forward.
+  // 0 means "no carryover" (cap to 1 epoch).
+  uint64 audit_budget_carryover_epochs = 22;
 }
