@@ -894,7 +894,7 @@ export function Dashboard() {
         const wrapped = await maybeWrapNilceZstd(buf)
         if (wrapped.wrapped && wrapped.encoding === 'zstd') {
           const view = wrapped.bytes
-          const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)
+          const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer
           uploadFile = new File([buffer], file.name, {
             type: file.type || 'application/octet-stream',
             lastModified: file.lastModified,

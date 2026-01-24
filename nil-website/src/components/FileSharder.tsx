@@ -1224,7 +1224,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
             );
 
-            let rawChunk = new Uint8Array();
+            let rawChunk: Uint8Array = new Uint8Array();
             let encodedMdu: Uint8Array;
             let encodeMs = 0;
 
@@ -1234,7 +1234,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const newIndex = i - existingUserCount;
               const start = newIndex * RawMduCapacity;
               const end = Math.min(start + RawMduCapacity, bytes.length);
-              rawChunk = bytes.subarray(start, end);
+              rawChunk = bytes.subarray(start, end) as Uint8Array;
               const encodeStart = performance.now();
               encodedMdu = encodeToMdu(rawChunk);
               encodeMs = performance.now() - encodeStart;
