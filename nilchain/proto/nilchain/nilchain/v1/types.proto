@@ -105,6 +105,7 @@ message Provider {
   string status = 5; // "Active", "Offline", "Jailed"
   int64 reputation_score = 6; // Uptime/Performance score
   repeated string endpoints = 7; // Provider transport endpoints as Multiaddrs (HTTP now; libp2p future)
+  bool draining = 8; // If true, provider will not receive new assignments (see RFC provider exit/draining).
 }
 
 // VirtualStripe tracks overlay replicas for a deal, used for elasticity.

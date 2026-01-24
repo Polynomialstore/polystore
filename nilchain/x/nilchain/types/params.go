@@ -31,6 +31,9 @@ var (
 	KeyBaseRewardHalvingInt  = []byte("BaseRewardHalvingIntervalBlocks")
 	KeyBaseRewardBpsStart    = []byte("BaseRewardBpsStart")
 	KeyBaseRewardBpsTail     = []byte("BaseRewardBpsTail")
+	KeyMaxDrainBytesPerEpoch = []byte("MaxDrainBytesPerEpoch")
+	KeyMaxRepairingRatioBps  = []byte("MaxRepairingBytesRatioBps")
+	KeyRotationBytesPerEpoch = []byte("RotationBytesPerEpoch")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -74,6 +77,9 @@ func NewParams(
 	baseRewardHalvingIntervalBlocks uint64,
 	baseRewardBpsStart uint64,
 	baseRewardBpsTail uint64,
+	maxDrainBytesPerEpoch uint64,
+	maxRepairingBytesRatioBps uint64,
+	rotationBytesPerEpoch uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -87,22 +93,27 @@ func NewParams(
 		RetrievalBurnBps:      retrievalBurnBps,
 		MonthLenBlocks:        monthLenBlocks,
 
-		EpochLenBlocks:                  epochLenBlocks,
-		QuotaBpsPerEpochHot:             quotaBpsPerEpochHot,
-		QuotaBpsPerEpochCold:            quotaBpsPerEpochCold,
-		QuotaMinBlobs:                   quotaMinBlobs,
-		QuotaMaxBlobs:                   quotaMaxBlobs,
-		CreditCapBps:                    creditCapBps,
-		EvictAfterMissedEpochs:          evictAfterMissedEpochs,
-		DealExtensionGraceBlocks:        dealExtensionGraceBlocks,
-		VoucherMaxTtlBlocks:             voucherMaxTTLBlocks,
-		AuditBudgetBps:                  auditBudgetBps,
-		AuditBudgetCapBps:               auditBudgetCapBps,
-		AuditBudgetCarryoverEpochs:      auditBudgetCarryoverEpochs,
-		EmissionStartHeight:             emissionStartHeight,
+		EpochLenBlocks:             epochLenBlocks,
+		QuotaBpsPerEpochHot:        quotaBpsPerEpochHot,
+		QuotaBpsPerEpochCold:       quotaBpsPerEpochCold,
+		QuotaMinBlobs:              quotaMinBlobs,
+		QuotaMaxBlobs:              quotaMaxBlobs,
+		CreditCapBps:               creditCapBps,
+		EvictAfterMissedEpochs:     evictAfterMissedEpochs,
+		DealExtensionGraceBlocks:   dealExtensionGraceBlocks,
+		VoucherMaxTtlBlocks:        voucherMaxTTLBlocks,
+		AuditBudgetBps:             auditBudgetBps,
+		AuditBudgetCapBps:          auditBudgetCapBps,
+		AuditBudgetCarryoverEpochs: auditBudgetCarryoverEpochs,
+		EmissionStartHeight:        emissionStartHeight,
+
 		BaseRewardHalvingIntervalBlocks: baseRewardHalvingIntervalBlocks,
 		BaseRewardBpsStart:              baseRewardBpsStart,
 		BaseRewardBpsTail:               baseRewardBpsTail,
+
+		MaxDrainBytesPerEpoch:     maxDrainBytesPerEpoch,
+		MaxRepairingBytesRatioBps: maxRepairingBytesRatioBps,
+		RotationBytesPerEpoch:     rotationBytesPerEpoch,
 	}
 }
 
@@ -135,6 +146,9 @@ func DefaultParams() Params {
 		1000000, // BaseRewardHalvingIntervalBlocks
 		425,     // BaseRewardBpsStart
 		25,      // BaseRewardBpsTail
+		0,       // MaxDrainBytesPerEpoch (disabled by default)
+		0,       // MaxRepairingBytesRatioBps (disabled by default)
+		0,       // RotationBytesPerEpoch (disabled by default)
 	)
 }
 
@@ -168,6 +182,9 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyBaseRewardHalvingInt, &p.BaseRewardHalvingIntervalBlocks, validateHalvingInterval),
 		paramtypes.NewParamSetPair(KeyBaseRewardBpsStart, &p.BaseRewardBpsStart, validateBps),
 		paramtypes.NewParamSetPair(KeyBaseRewardBpsTail, &p.BaseRewardBpsTail, validateBps),
+		paramtypes.NewParamSetPair(KeyMaxDrainBytesPerEpoch, &p.MaxDrainBytesPerEpoch, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyMaxRepairingRatioBps, &p.MaxRepairingBytesRatioBps, validateBps),
+		paramtypes.NewParamSetPair(KeyRotationBytesPerEpoch, &p.RotationBytesPerEpoch, validateUint64Any),
 	}
 }
 
@@ -260,6 +277,15 @@ func (p Params) Validate() error {
 	if p.BaseRewardBpsStart < p.BaseRewardBpsTail {
 		return fmt.Errorf("base_reward_bps_start must be >= base_reward_bps_tail (got %d < %d)", p.BaseRewardBpsStart, p.BaseRewardBpsTail)
 	}
+	if err := validateUint64Any(p.MaxDrainBytesPerEpoch); err != nil {
+		return err
+	}
+	if err := validateBps(p.MaxRepairingBytesRatioBps); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.RotationBytesPerEpoch); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -278,6 +304,14 @@ func validateEmissionStartHeight(i interface{}) error {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 	// 0 is allowed (treat as genesis height).
+	return nil
+}
+
+func validateUint64Any(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
 	return nil
 }
 
