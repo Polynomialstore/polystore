@@ -5,6 +5,9 @@ import "cosmossdk.io/collections"
 const (
 	// ModuleName defines the module name
 	ModuleName = "nilchain"
+	// ProtocolBudgetModuleName is a dedicated module account used to fund
+	// protocol retrieval sessions (audit/repair).
+	ProtocolBudgetModuleName = "nilchain_protocol_budget"
 
 	// StoreKey defines the primary module store key
 	StoreKey = ModuleName
@@ -38,6 +41,7 @@ var (
 	RetrievalSessionNonceKey         = collections.NewPrefix("RetrievalSessionNonce/value/")
 	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
 	VoucherUsedNonceKey              = collections.NewPrefix("VoucherUsedNonce/value/")
+	AuditTasksKey                    = collections.NewPrefix("AuditTasks/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

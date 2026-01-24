@@ -2440,6 +2440,307 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	return &types.MsgOpenRetrievalSessionSponsoredResponse{SessionId: sessionID}, nil
 }
 
+func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *types.MsgOpenProtocolRetrievalSession) (*types.MsgOpenProtocolRetrievalSessionResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if len(msg.ManifestRoot) != 48 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	}
+	if msg.BlobCount == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
+	}
+	if msg.MaxTotalFee.IsNil() || msg.MaxTotalFee.IsNegative() {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("max_total_fee must be >= 0")
+	}
+
+	creator := strings.TrimSpace(msg.Creator)
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	}
+	// Protocol sessions are opened by protocol actors (providers) and should not be open to arbitrary accounts.
+	if _, err := k.Providers.Get(ctx, creator); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("creator is not a registered provider")
+		}
+		return nil, err
+	}
+
+	switch msg.Purpose {
+	case types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_AUDIT,
+		types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR:
+		// ok
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("purpose must be PROTOCOL_AUDIT or PROTOCOL_REPAIR")
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
+	}
+	height := uint64(ctx.BlockHeight())
+	if height >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
+	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
+	}
+
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
+	}
+	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
+	}
+	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
+	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+
+	// For protocol sessions, the serving provider must be an ACTIVE slot provider (or the active provider of a repairing slot).
+	isServingProvider := false
+	providerSlot := uint64(0)
+	if stripe.mode == 2 && len(deal.Mode2Slots) > 0 {
+		for _, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if strings.TrimSpace(slot.Provider) == strings.TrimSpace(msg.Provider) {
+				isServingProvider = true
+				providerSlot = uint64(slot.Slot)
+				break
+			}
+		}
+	} else {
+		for i, p := range deal.Providers {
+			if strings.TrimSpace(p) == strings.TrimSpace(msg.Provider) {
+				isServingProvider = true
+				providerSlot = uint64(i)
+				break
+			}
+		}
+	}
+	if !isServingProvider {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("serving provider is not assigned to deal")
+	}
+
+	if stripe.mode == 2 {
+		endIndex := uint64(msg.StartBlobIndex) + msg.BlobCount - 1
+		if endIndex >= stripe.leafCount {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds leaf_count")
+		}
+		startSlot, serr := leafSlotIndex(uint64(msg.StartBlobIndex), stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		endSlot, serr := leafSlotIndex(endIndex, stripe.rows)
+		if serr != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(serr.Error())
+		}
+		if startSlot != endSlot {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range must stay within a single slot in Mode 2")
+		}
+		if providerSlot != startSlot {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
+		}
+	}
+
+	if deal.TotalMdus != 0 {
+		if msg.StartMduIndex >= deal.TotalMdus {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
+		}
+		maxGlobal := deal.TotalMdus * stripe.leafCount
+		if endGlobal > maxGlobal {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
+		}
+	}
+
+	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
+	}
+
+	expiresAt := msg.ExpiresAt
+	if expiresAt == 0 {
+		expiresAt = deal.EndBlock
+	}
+	if expiresAt > deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be <= deal end_block")
+	}
+	if expiresAt < height {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be >= current height")
+	}
+
+	// --- Protocol auth rules ---
+	switch msg.Purpose {
+	case types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR:
+		ra := msg.GetRepair()
+		if ra == nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("repair auth is required")
+		}
+		if deal.RedundancyMode != 2 || deal.Mode2Profile == nil || len(deal.Mode2Slots) == 0 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("repair sessions only supported for Mode 2 deals")
+		}
+		if int(ra.Slot) >= len(deal.Mode2Slots) {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("repair slot out of range")
+		}
+		entry := deal.Mode2Slots[int(ra.Slot)]
+		if entry == nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("repair slot missing")
+		}
+		if entry.Status != types.SlotStatus_SLOT_STATUS_REPAIRING {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("slot is not repairing")
+		}
+		if strings.TrimSpace(entry.PendingProvider) == "" || strings.TrimSpace(entry.PendingProvider) != creator {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("only pending_provider may open repair sessions")
+		}
+		if strings.TrimSpace(entry.Provider) != strings.TrimSpace(msg.Provider) {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("repair sessions must target the active slot provider")
+		}
+		// Ensure auth slot matches the requested blob slot.
+		if stripe.mode == 2 && uint64(ra.Slot) != providerSlot {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("repair slot does not match blob range slot")
+		}
+
+	case types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_AUDIT:
+		ref := msg.GetAuditTask()
+		if ref == nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit_task ref is required")
+		}
+		task, err := k.AuditTasks.Get(ctx, collections.Join(ref.EpochId, ref.TaskId))
+		if err != nil {
+			if errors.Is(err, collections.ErrNotFound) {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("audit task not found")
+			}
+			return nil, err
+		}
+		if task.DealId != msg.DealId {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task deal_id mismatch")
+		}
+		if strings.TrimSpace(task.Assignee) == "" || strings.TrimSpace(task.Assignee) != creator {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task not assigned to creator")
+		}
+		if strings.TrimSpace(task.Provider) != strings.TrimSpace(msg.Provider) {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task provider mismatch")
+		}
+		if len(task.ManifestRoot) != 48 || !bytesEqual(task.ManifestRoot, msg.ManifestRoot) {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task manifest_root mismatch")
+		}
+		if task.StartMduIndex != msg.StartMduIndex ||
+			task.StartBlobIndex != msg.StartBlobIndex ||
+			task.BlobCount != msg.BlobCount {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task range mismatch")
+		}
+		taskExpiresAt := task.ExpiresAt
+		if taskExpiresAt == 0 {
+			taskExpiresAt = deal.EndBlock
+		}
+		if taskExpiresAt != expiresAt {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task expires_at mismatch")
+		}
+
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("unsupported protocol session purpose")
+	}
+
+	ownerAddr, err := sdk.AccAddressFromBech32(creator)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
+	}
+	providerAddr, err := sdk.AccAddressFromBech32(strings.TrimSpace(msg.Provider))
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+	}
+
+	// --- Fee computation + funding from protocol budget module account ---
+	params := k.GetParams(ctx)
+	baseFee := params.BaseRetrievalFee
+	variableFee := math.ZeroInt()
+	if params.RetrievalPricePerBlob.IsValid() && params.RetrievalPricePerBlob.Amount.IsPositive() {
+		variableFee = params.RetrievalPricePerBlob.Amount.Mul(math.NewIntFromUint64(msg.BlobCount))
+	}
+	totalFee := variableFee.Add(baseFee.Amount)
+	if msg.MaxTotalFee.IsPositive() && totalFee.GT(msg.MaxTotalFee) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("total fee exceeds max_total_fee")
+	}
+
+	if totalFee.IsPositive() {
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, totalFee))
+		if err := k.BankKeeper.SendCoinsFromModuleToModule(ctx, types.ProtocolBudgetModuleName, types.ModuleName, coins); err != nil {
+			return nil, fmt.Errorf("failed to fund protocol session fees: %w", err)
+		}
+		if baseFee.Amount.IsPositive() {
+			if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, sdk.NewCoins(baseFee)); err != nil {
+				return nil, fmt.Errorf("failed to burn base retrieval fee: %w", err)
+			}
+		}
+	}
+
+	nonceKey := collections.Join(collections.Join(creator, msg.DealId), strings.TrimSpace(msg.Provider))
+	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+	if msg.Nonce <= lastNonce {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
+	}
+
+	sessionID, err := types.HashRetrievalSessionID(
+		ownerAddr.Bytes(),
+		msg.DealId,
+		providerAddr.Bytes(),
+		msg.ManifestRoot,
+		msg.StartMduIndex,
+		msg.StartBlobIndex,
+		msg.BlobCount,
+		msg.Nonce,
+		expiresAt,
+	)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
+	}
+
+	payerAddr := authtypes.NewModuleAddress(types.ProtocolBudgetModuleName)
+	session := types.RetrievalSession{
+		SessionId:      sessionID,
+		DealId:         msg.DealId,
+		Owner:          creator,
+		Provider:       strings.TrimSpace(msg.Provider),
+		ManifestRoot:   msg.ManifestRoot,
+		StartMduIndex:  msg.StartMduIndex,
+		StartBlobIndex: msg.StartBlobIndex,
+		BlobCount:      msg.BlobCount,
+		TotalBytes:     totalBytes,
+		Nonce:          msg.Nonce,
+		ExpiresAt:      expiresAt,
+		OpenedHeight:   ctx.BlockHeight(),
+		UpdatedHeight:  ctx.BlockHeight(),
+		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		LockedFee:      variableFee,
+		Purpose:        msg.Purpose,
+		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL,
+		Payer:          payerAddr.String(),
+	}
+
+	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
+		return nil, fmt.Errorf("failed to store retrieval session: %w", err)
+	}
+	if err := k.RetrievalSessionsByOwner.Set(ctx, collections.Join(creator, sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by owner: %w", err)
+	}
+	if err := k.RetrievalSessionsByProvider.Set(ctx, collections.Join(strings.TrimSpace(msg.Provider), sessionID), uint64(ctx.BlockHeight())); err != nil {
+		return nil, fmt.Errorf("failed to index retrieval session by provider: %w", err)
+	}
+	if err := k.RetrievalSessionNonces.Set(ctx, nonceKey, msg.Nonce); err != nil {
+		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
+	}
+
+	return &types.MsgOpenProtocolRetrievalSessionResponse{SessionId: sessionID}, nil
+}
+
 func (k msgServer) verifyAndConsumeVoucher(ctx sdk.Context, deal *types.Deal, open *types.MsgOpenRetrievalSessionSponsored, v *types.VoucherAuth) error {
 	if deal == nil || open == nil || v == nil {
 		return sdkerrors.ErrInvalidRequest.Wrap("invalid voucher request")
