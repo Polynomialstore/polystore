@@ -350,5 +350,8 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 		return false, nil
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+	return k.distributeBaseRewardPool(sdkCtx, epochID)
 }
