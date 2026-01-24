@@ -53,6 +53,19 @@ func (b *trackingBankKeeper) SpendableCoins(_ context.Context, addr sdk.AccAddre
 	return sdk.NewCoins()
 }
 
+func (b *trackingBankKeeper) GetBalance(_ context.Context, addr sdk.AccAddress, denom string) sdk.Coin {
+	// In tests we track module balances separately, keyed by module name.
+	for moduleName, coins := range b.moduleBalances {
+		if authtypes.NewModuleAddress(moduleName).String() == addr.String() {
+			return sdk.NewCoin(denom, coins.AmountOf(denom))
+		}
+	}
+	if coins, ok := b.accountBalances[addr.String()]; ok {
+		return sdk.NewCoin(denom, coins.AmountOf(denom))
+	}
+	return sdk.NewCoin(denom, math.NewInt(0))
+}
+
 func (b *trackingBankKeeper) MintCoins(_ context.Context, moduleName string, amt sdk.Coins) error {
 	if !amt.IsValid() {
 		return fmt.Errorf("invalid coins: %s", amt)

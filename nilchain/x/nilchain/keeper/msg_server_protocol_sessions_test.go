@@ -251,4 +251,8 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+
+	// Tasks are one-time: they are consumed on successful session open.
+	_, err = f.keeper.AuditTasks.Get(ctx, collections.Join(epochID, taskID))
+	require.Error(t, err)
 }

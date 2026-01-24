@@ -40,18 +40,27 @@ func (k Keeper) BeginBlock(goCtx context.Context) error {
 	}
 
 	_, err := k.EpochSeeds.Get(goCtx, epochID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, collections.ErrNotFound) {
-		return err
+	if err != nil {
+		if !errors.Is(err, collections.ErrNotFound) {
+			return err
+		}
+
+		seed := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
+		if err := k.EpochSeeds.Set(goCtx, epochID, seed[:]); err != nil {
+			return err
+		}
+		ctx.Logger().Debug("epoch seed set", "epoch_id", epochID, "height", height)
 	}
 
-	seed := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
-	if err := k.EpochSeeds.Set(goCtx, epochID, seed[:]); err != nil {
+	// Epoch start hooks:
+	// - Mint deterministic protocol audit budget (with carryover cap).
+	// - Derive deterministic audit tasks (bounded by what the budget can afford).
+	if _, _, err := k.mintProtocolAuditBudget(ctx); err != nil {
 		return err
 	}
-	ctx.Logger().Debug("epoch seed set", "epoch_id", epochID, "height", height)
+	if err := k.deriveAuditTasks(ctx, epochID); err != nil {
+		return err
+	}
 	return nil
 }
 
