@@ -162,6 +162,10 @@ impl WasmMdu0Builder {
     }
 
     pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {
+        self.append_file_with_flags(path, size, start_offset, 0)
+    }
+
+    pub fn append_file_with_flags(&mut self, path: &str, size: u64, start_offset: u64, flags: u8) -> Result<(), JsValue> {
         let mut path_bytes = [0u8; 40];
         let bytes = path.as_bytes();
         if bytes.len() > 40 {
@@ -171,7 +175,7 @@ impl WasmMdu0Builder {
 
         let rec = FileRecordV1 {
             start_offset,
-            length_and_flags: pack_length_and_flags(size, 0), // Default flags 0 for now
+            length_and_flags: pack_length_and_flags(size, flags),
             timestamp: 0,
             path: path_bytes,
         };

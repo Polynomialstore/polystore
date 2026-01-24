@@ -15,6 +15,7 @@ import {
   encodeOpenRetrievalSessionsSponsoredData,
 } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import { decodeNilceV1 } from '../lib/nilce'
 import {
   resolveProviderEndpoint,
   resolveProviderEndpointByAddress,
@@ -86,6 +87,19 @@ export type SponsoredRetrievalAuth =
   | { type: 'none' }
   | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
   | { type: 'voucher'; voucher: VoucherAuthInput }
+
+function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
+  if (chunks.length === 0) return new Uint8Array(0)
+  if (chunks.length === 1) return chunks[0]
+  const total = chunks.reduce((sum, part) => sum + part.byteLength, 0)
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of chunks) {
+    out.set(part, offset)
+    offset += part.byteLength
+  }
+  return out
+}
 
 function decodeHttpError(bodyText: string): string {
   const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
@@ -169,6 +183,8 @@ export function useFetch() {
         if (wantRangeStart >= wantFileSize) throw new Error('rangeStart beyond EOF')
         effectiveRangeLen = wantFileSize - wantRangeStart
       }
+      const shouldDecodeNilce =
+        wantRangeStart === 0 && wantFileSize > 0 && effectiveRangeLen === wantFileSize
 
       const hasMeta =
         typeof input.fileStartOffset === 'number' &&
@@ -562,7 +578,18 @@ export function useFetch() {
         }
       }
 
-      const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
+      let payload = concatUint8Arrays(parts)
+      if (shouldDecodeNilce) {
+        try {
+          const decoded = await decodeNilceV1(payload)
+          if (decoded.wrapped) {
+            payload = decoded.payload
+          }
+        } catch (err) {
+          console.warn('NilCE decode failed, returning raw bytes', err)
+        }
+      }
+      const blob = new Blob([payload] as BlobPart[], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 

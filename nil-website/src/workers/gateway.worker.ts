@@ -216,8 +216,18 @@ self.onmessage = async (event) => {
             }
             case 'appendFileToMdu0': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
-                const { path, size, startOffset } = payload;
-                mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
+                const { path, size, startOffset, flags } = payload as {
+                    path: string;
+                    size: number;
+                    startOffset: number;
+                    flags?: number;
+                };
+                const flagValue = typeof flags === 'number' ? flags : 0;
+                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
+                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
+                } else {
+                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
+                }
                 result = 'File appended to Mdu0';
                 break;
             }

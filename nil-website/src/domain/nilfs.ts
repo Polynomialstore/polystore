@@ -1,6 +1,8 @@
 export interface NilfsFileEntry {
   path: string
   size_bytes: number
+  logical_size_bytes?: number
+  content_encoding?: string
   start_offset: number
   flags: number
 }

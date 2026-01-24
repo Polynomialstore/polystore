@@ -23,6 +23,7 @@ declare module '/wasm/nil_core.js' {
   export class WasmMdu0Builder {
     constructor(max_user_mdus: bigint)
     append_file(path: string, size: bigint, start_offset: bigint): void
+    append_file_with_flags(path: string, size: bigint, start_offset: bigint, flags: number): void
     bytes(): Uint8Array
     set_root(index: bigint, root: Uint8Array): void
     get_witness_count(): bigint

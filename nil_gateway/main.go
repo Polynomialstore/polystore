@@ -783,6 +783,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		logicalSizeBytes = uint64(info.Size())
 	}
 	contentEncoding := "none"
+	fileFlags := uint8(0)
 	if nilceEnabled {
 		wrapped, err := maybeWrapNilceZstd(ingestCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
 		if err != nil {
@@ -792,7 +793,19 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		if wrapped.Encoding == nilceEncodingZstd && strings.TrimSpace(wrapped.Path) != "" && wrapped.Path != rawPath {
 			ingestPath = wrapped.Path
 			contentEncoding = "zstd"
+			fileFlags |= crypto_ffi.FlagCompressionZstd
 			defer func() { _ = os.Remove(ingestPath) }()
+		}
+	}
+	if contentEncoding == "none" {
+		if hdr, ok, err := detectNilceHeaderFromFile(ingestPath); err == nil && ok {
+			if hdr.Encoding == nilceEncodingZstd {
+				contentEncoding = "zstd"
+				fileFlags |= crypto_ffi.FlagCompressionZstd
+			}
+			if hdr.UncompressedLen > 0 {
+				logicalSizeBytes = hdr.UncompressedLen
+			}
 		}
 	}
 
@@ -852,7 +865,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, fileRecordPath)
+				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, fileRecordPath, fileFlags)
 				if err != nil {
 					if job != nil {
 						job.setError(err.Error())
@@ -886,7 +899,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					witnessMdus = 1
 
 				case os.Getenv("NIL_FAST_INGEST") == "1":
-					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath)
+					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -909,7 +922,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					}
 
 				default:
-					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath)
+					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -934,7 +947,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath)
+				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath, fileFlags)
 				if err != nil {
 					if job != nil {
 						job.setError(err.Error())
@@ -959,7 +972,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, ingestPath, chainCID, maxMdus, fileRecordPath)
+				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, ingestPath, chainCID, maxMdus, fileRecordPath, fileFlags)
 				if err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -998,7 +1011,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		case os.Getenv("NIL_FAST_INGEST") == "1":
 			// Semi-canonical dev path: NilFS slab without Witness MDUs.
-			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath)
+			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -1022,7 +1035,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			// Full canonical ingest (Triple-Proof valid).
-			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath)
+			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -3097,10 +3110,12 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 }
 
 type nilfsFileEntry struct {
-	Path        string `json:"path"`
-	SizeBytes   uint64 `json:"size_bytes"`
-	StartOffset uint64 `json:"start_offset"`
-	Flags       uint8  `json:"flags"`
+	Path             string `json:"path"`
+	SizeBytes        uint64 `json:"size_bytes"`
+	LogicalSizeBytes uint64 `json:"logical_size_bytes,omitempty"`
+	ContentEncoding  string `json:"content_encoding,omitempty"`
+	StartOffset      uint64 `json:"start_offset"`
+	Flags            uint8  `json:"flags"`
 }
 
 type slabSegment struct {
@@ -3121,6 +3136,23 @@ type slabLayoutResponse struct {
 	FileCount      uint32        `json:"file_count"`
 	TotalSizeBytes uint64        `json:"total_size_bytes"`
 	Segments       []slabSegment `json:"segments"`
+}
+
+func readNilceHeaderForNilfsFile(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64) (nilceHeader, bool, error) {
+	if fileLen < nilceHeaderSize {
+		return nilceHeader{}, false, nil
+	}
+	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, fileStartOffset, fileLen, fileStartOffset, nilceHeaderSize)
+	if err != nil {
+		return nilceHeader{}, false, err
+	}
+	defer reader.Close()
+
+	buf := make([]byte, nilceHeaderSize)
+	if _, err := io.ReadFull(reader, buf); err != nil {
+		return nilceHeader{}, false, err
+	}
+	return readNilceV1Header(bytes.NewReader(buf))
 }
 
 // GatewayListFiles returns the NilFS V1 file table for a manifest root.
@@ -3228,6 +3260,12 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	defer b.Free()
 
+	witnessCount, werr := inferWitnessCount(dealDir, b)
+	if werr != nil {
+		log.Printf("GatewayListFiles: failed to infer witness count: %v", werr)
+	}
+	slabStartIdx := uint64(1) + witnessCount
+
 	count := b.GetRecordCount()
 	latest := make(map[string]nilfsFileEntry, count)
 	for i := uint32(0); i < count; i++ {
@@ -3241,12 +3279,21 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
 		length, flags := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		latest[name] = nilfsFileEntry{
+		entry := nilfsFileEntry{
 			Path:        name,
 			SizeBytes:   length,
 			StartOffset: rec.StartOffset,
 			Flags:       flags,
 		}
+		if hdr, ok, err := readNilceHeaderForNilfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
+			if hdr.UncompressedLen > 0 {
+				entry.LogicalSizeBytes = hdr.UncompressedLen
+			}
+			if hdr.Encoding == nilceEncodingZstd {
+				entry.ContentEncoding = "zstd"
+			}
+		}
+		latest[name] = entry
 	}
 
 	files := make([]nilfsFileEntry, 0, len(latest))

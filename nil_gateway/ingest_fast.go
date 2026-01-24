@@ -12,7 +12,7 @@ import (
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.
 // ...
-func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string, fileFlags uint8) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -29,7 +29,7 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 
 	// 2. Initialize Builder (Allocates 8MB buffer in memory)
 	b := crypto_ffi.NewMdu0Builder(maxUserMdus)
-	// Pointer return, check null? Wrapper panics or returns nil? Wrapper returns valid ptr or nil? 
+	// Pointer return, check null? Wrapper panics or returns nil? Wrapper returns valid ptr or nil?
 	// C wrapper returns ptr. Go wrapper returns struct with ptr.
 	// Actually Go wrapper `NewMdu0Builder` returns `*Mdu0Builder` with `ptr`. `ptr` might be nil if allocation failed in C? C code uses Box, unlikely to fail unless OOM.
 
@@ -55,7 +55,7 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	if err := b.AppendFile(baseName, shardOut.FileSize, 0); err != nil {
+	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err
 	}

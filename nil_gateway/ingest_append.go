@@ -20,7 +20,7 @@ import (
 //
 // NOTE: Mode 1 append currently uses naive MDU-boundary packing:
 // each appended file starts at the next 8 MiB User-Data MDU boundary.
-func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot string, maxUserMdus uint64, recordPath string, fileFlags uint8) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -83,7 +83,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	if err := b.AppendFile(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity); err != nil {
+	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)
 	}

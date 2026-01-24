@@ -91,8 +91,8 @@ export const workerClient = {
   },
 
   // Append a file entry to the MDU #0 builder in the worker
-  async appendFileToMdu0(path: string, size: number, startOffset: number): Promise<string> {
-    return sendMessageToWorker('appendFileToMdu0', { path, size, startOffset }) as Promise<string>;
+  async appendFileToMdu0(path: string, size: number, startOffset: number, flags?: number): Promise<string> {
+    return sendMessageToWorker('appendFileToMdu0', { path, size, startOffset, flags }) as Promise<string>;
   },
 
   // Get the complete 8MB MDU #0 bytes from the worker

@@ -70,6 +70,27 @@ func readNilceV1Header(r io.Reader) (h nilceHeader, ok bool, err error) {
 	return nilceHeader{Encoding: enc, UncompressedLen: uncompressedLen}, true, nil
 }
 
+func detectNilceHeaderFromFile(path string) (h nilceHeader, ok bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nilceHeader{}, false, err
+	}
+	defer f.Close()
+
+	buf := make([]byte, nilceHeaderSize)
+	n, err := io.ReadFull(f, buf)
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+			return nilceHeader{}, false, nil
+		}
+		return nilceHeader{}, false, err
+	}
+	if n < nilceHeaderSize {
+		return nilceHeader{}, false, nil
+	}
+	return readNilceV1Header(bytes.NewReader(buf))
+}
+
 type nilceWrapResult struct {
 	Path            string
 	Encoding        nilceEncoding
@@ -95,6 +116,20 @@ func maybeWrapNilceZstd(ctx context.Context, srcPath string, minSavingsBps int, 
 	}
 	if !fi.Mode().IsRegular() {
 		return nilceWrapResult{}, fmt.Errorf("not a regular file")
+	}
+	if hdr, ok, err := detectNilceHeaderFromFile(srcPath); err == nil && ok {
+		encoding := hdr.Encoding
+		uncompressedLen := hdr.UncompressedLen
+		compressedLen := uint64(fi.Size())
+		if compressedLen >= nilceHeaderSize {
+			compressedLen -= nilceHeaderSize
+		}
+		return nilceWrapResult{
+			Path:            srcPath,
+			Encoding:        encoding,
+			UncompressedLen: uncompressedLen,
+			CompressedLen:   compressedLen,
+		}, nil
 	}
 	uncompressedLen := uint64(fi.Size())
 	if uncompressedLen == 0 {
