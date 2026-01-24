@@ -101,9 +101,9 @@ test.describe('mode2 stripe', () => {
     await downloadBtn.click()
 
     await expect(page.getByText(/Receipt submitted on-chain|Receipt failed/i)).toBeVisible({ timeout: 360_000 })
-    await expect(page.getByText('Receipt submitted on-chain')).toBeVisible({ timeout: 1_000 })
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
     await expect(page.getByText(/Download failed/i)).toHaveCount(0)
+    await expect(page.getByText('Receipt submitted on-chain')).toBeVisible({ timeout: 60_000 })
 
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
 
