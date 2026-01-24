@@ -13,6 +13,7 @@ import (
 )
 
 func TestGatewayDebugRawFetch_ByPath_NoManifestBin(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
 	owner := testDealOwner(t)
 

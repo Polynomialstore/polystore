@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,5 +196,135 @@ func TestSpFetchShard_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 missing session, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
+	requireOnchainSessionForTest(t, true)
+	useTempUploadDir(t)
+
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	owner := testDealOwner(t)
+
+	roots := make([][]byte, 2)
+	roots[0] = make([]byte, 32)
+	roots[1] = make([]byte, 32)
+	commitment, _, err := crypto_ffi.ComputeManifestCommitment(roots)
+	if err != nil {
+		t.Fatalf("ComputeManifestCommitment failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
+	if err != nil {
+		t.Fatalf("parseManifestRoot failed: %v", err)
+	}
+
+	filePath := "debug.md"
+	fileContent := []byte("Hello Debug Raw Fetch")
+
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile(filePath, uint64(len(fileContent)), 0)
+	mdu0Data, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(fileContent), 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin failed: %v", err)
+	}
+
+	const dealID = uint64(1)
+	sessionHex := "0x" + strings.Repeat("22", 32)
+	sessionBytes, _ := hex.DecodeString(strings.Repeat("22", 32))
+	sessionB64 := base64.URLEncoding.EncodeToString(sessionBytes)
+
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/cosmos/base/tendermint/v1beta1/blocks/latest"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"block": map[string]any{
+					"header": map[string]any{
+						"height": "10",
+					},
+				},
+			})
+			return
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"id":           "1",
+					"owner":        owner,
+					"cid":          manifestRoot.Canonical,
+					"end_block":    "1000",
+					"service_hint": "",
+				},
+			})
+			return
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/"):
+			sid := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/")
+			if sid != sessionB64 {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"session": map[string]any{
+					"session_id":       base64.URLEncoding.EncodeToString(sessionBytes),
+					"deal_id":          "1",
+					"owner":            owner,
+					"provider":         "nil1testprovider",
+					"manifest_root":    base64.StdEncoding.EncodeToString(manifestRoot.Bytes[:]),
+					"start_mdu_index":  "1",
+					"start_blob_index": "0",
+					"blob_count":       "1",
+					"total_bytes":      "131072",
+					"nonce":            "1",
+					"expires_at":       "100",
+					"opened_height":    "1",
+					"updated_height":   "1",
+					"status":           "RETRIEVAL_SESSION_STATUS_OPEN",
+				},
+			})
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := testRouter()
+	q := url.Values{}
+	q.Set("deal_id", "1")
+	q.Set("owner", owner)
+	q.Set("file_path", filePath)
+	q.Set("range_start", "0")
+	q.Set("range_len", fmt.Sprintf("%d", len(fileContent)))
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/debug/raw-fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 missing session, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/gateway/debug/raw-fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	req2.Header.Set("X-Nil-Session-Id", sessionHex)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 with session, got %d (%s)", w2.Code, w2.Body.String())
+	}
+	if got := w2.Body.String(); got != string(fileContent) {
+		t.Fatalf("content mismatch: want %q got %q", string(fileContent), got)
 	}
 }

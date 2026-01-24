@@ -409,6 +409,12 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 }
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
+	if requireOnchainSession {
+		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+			return
+		}
+	}
 	RouterGatewayFetch(w, r)
 }
 func RouterGatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
