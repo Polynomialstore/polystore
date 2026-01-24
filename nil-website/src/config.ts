@@ -6,7 +6,15 @@ const GATEWAY_DISABLED = import.meta.env.VITE_DISABLE_GATEWAY === '1'
 const P2P_ENABLED = import.meta.env.VITE_P2P_ENABLED === '1'
 const P2P_BOOTSTRAP = import.meta.env.VITE_P2P_BOOTSTRAP || ''
 const P2P_PROTOCOL = import.meta.env.VITE_P2P_PROTOCOL || '/nilstore/http/1.0.0'
-const FAUCET_ENABLED = import.meta.env.VITE_ENABLE_FAUCET === '1'
+const FAUCET_ENABLED = (() => {
+  const raw = import.meta.env.VITE_ENABLE_FAUCET
+  if (typeof raw === 'string') {
+    return raw === '1'
+  }
+  // Default: enable the faucet in dev-server builds; production builds must
+  // explicitly opt-in via VITE_ENABLE_FAUCET=1.
+  return import.meta.env.DEV
+})()
 const COSMOS_CHAIN_ID = import.meta.env.VITE_COSMOS_CHAIN_ID || '31337'
 const BRIDGE_ADDRESS = import.meta.env.VITE_BRIDGE_ADDRESS || '0x0000000000000000000000000000000000000000'
 const NILSTORE_PRECOMPILE =

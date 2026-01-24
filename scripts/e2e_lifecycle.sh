@@ -307,6 +307,7 @@ wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
 
 # 6. Fetch File (Gateway)
 echo "==> Fetching file from Gateway..."
+# On-chain retrieval sessions are mandatory; open a 1+ blob session first (bounded by blob alignment).
 # For gateway fetch, we need deal_id + owner + file_path AND a signed RetrievalRequest.
 REQ_NONCE=1
 REQ_EXPIRES_AT=$(( $(date +%s) + 120 ))
@@ -325,8 +326,74 @@ if [ -z "$REQ_SIG" ]; then
   exit 1
 fi
 
+echo "==> Opening on-chain retrieval session (precompile)..."
+# Resolve file layout from NilFS (start_offset and file length).
+LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
+START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
+FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+
+# Compute the MDU/blob location for the first byte of the file.
+START_MDU_INDEX=$(python3 - "$START_OFFSET" "$WITNESS_MDUS" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+witness = int(sys.argv[2])
+RAW_MDU_CAP = 8 * 1024 * 1024
+print(1 + witness + (start_offset // RAW_MDU_CAP))
+PY
+)
+START_BLOB_INDEX=$(python3 - "$START_OFFSET" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+print((start_offset % RAW_MDU_CAP) // BLOB)
+PY
+)
+SESSION_BLOB_COUNT=$(python3 - "$START_OFFSET" "$FILE_LEN" <<'PY'
+import sys, math
+start_offset = int(sys.argv[1])
+file_len = int(sys.argv[2])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
+need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
+need = max(1, min(64, need))
+print(need)
+PY
+)
+
+# Pick the first assigned provider from the deal state.
+PROVIDER_ADDR=$(echo "$DEAL_JSON" | python3 -c "import sys, json; d=json.load(sys.stdin).get('deal') or {}; provs=d.get('providers') or []; print((provs[0] if provs else ''))")
+if [ -z "$PROVIDER_ADDR" ]; then
+  echo "ERROR: failed to resolve provider for session open"
+  exit 1
+fi
+
+HEIGHT=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
+SESSION_EXPIRES_AT=$((HEIGHT + 20))
+SESSION_NONCE=$(python3 -c "import time; print(time.time_ns())")
+
+SESSION_OPEN_JSON=$(
+  DEAL_ID="$DEAL_ID" \
+  PROVIDER="$PROVIDER_ADDR" \
+  MANIFEST_ROOT="$MANIFEST_ROOT" \
+  START_MDU_INDEX="$START_MDU_INDEX" \
+  START_BLOB_INDEX="$START_BLOB_INDEX" \
+  BLOB_COUNT="$SESSION_BLOB_COUNT" \
+  NONCE="$SESSION_NONCE" \
+  EXPIRES_AT="$SESSION_EXPIRES_AT" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+)
+SESSION_ID=$(echo "$SESSION_OPEN_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
+if [ -z "$SESSION_ID" ]; then
+  echo "ERROR: failed to open retrieval session"
+  echo "$SESSION_OPEN_JSON"
+  exit 1
+fi
+
 FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
 timeout 10s curl -sS -o fetched_README.md "$FETCH_URL" \
+  -H "X-Nil-Session-Id: $SESSION_ID" \
   -H "X-Nil-Req-Sig: $REQ_SIG" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
@@ -449,6 +516,110 @@ echo "    Success: Deal $DEAL_ID updated to CID $CHAIN_CID_2"
 
 # 10. Fetch Both Files by Path from New Slab (verify sizes)
 echo "==> Fetching both files by path from new slab..."
+echo "==> Opening on-chain retrieval session for README (precompile)..."
+LIST_JSON_2=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
+START_OFFSET_1=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
+FILE_LEN_1=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+START_MDU_INDEX_1=$(python3 - "$START_OFFSET_1" "$WITNESS_MDUS_2" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+witness = int(sys.argv[2])
+RAW_MDU_CAP = 8 * 1024 * 1024
+print(1 + witness + (start_offset // RAW_MDU_CAP))
+PY
+)
+START_BLOB_INDEX_1=$(python3 - "$START_OFFSET_1" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+print((start_offset % RAW_MDU_CAP) // BLOB)
+PY
+)
+SESSION_BLOB_COUNT_1=$(python3 - "$START_OFFSET_1" "$FILE_LEN_1" <<'PY'
+import sys, math
+start_offset = int(sys.argv[1])
+file_len = int(sys.argv[2])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
+need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
+need = max(1, min(64, need))
+print(need)
+PY
+)
+HEIGHT_2=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
+SESSION_EXPIRES_AT_1=$((HEIGHT_2 + 20))
+SESSION_NONCE_1=$(python3 -c "import time; print(time.time_ns())")
+SESSION_OPEN_JSON_1=$(
+  DEAL_ID="$DEAL_ID" \
+  PROVIDER="$PROVIDER_ADDR" \
+  MANIFEST_ROOT="$MANIFEST_ROOT_2" \
+  START_MDU_INDEX="$START_MDU_INDEX_1" \
+  START_BLOB_INDEX="$START_BLOB_INDEX_1" \
+  BLOB_COUNT="$SESSION_BLOB_COUNT_1" \
+  NONCE="$SESSION_NONCE_1" \
+  EXPIRES_AT="$SESSION_EXPIRES_AT_1" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+)
+SESSION_ID_1=$(echo "$SESSION_OPEN_JSON_1" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
+if [ -z "$SESSION_ID_1" ]; then
+  echo "ERROR: failed to open session for README"
+  echo "$SESSION_OPEN_JSON_1"
+  exit 1
+fi
+
+echo "==> Opening on-chain retrieval session for ECONOMY (precompile)..."
+START_OFFSET_2=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='ECONOMY.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
+FILE_LEN_2=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='ECONOMY.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+START_MDU_INDEX_2=$(python3 - "$START_OFFSET_2" "$WITNESS_MDUS_2" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+witness = int(sys.argv[2])
+RAW_MDU_CAP = 8 * 1024 * 1024
+print(1 + witness + (start_offset // RAW_MDU_CAP))
+PY
+)
+START_BLOB_INDEX_2=$(python3 - "$START_OFFSET_2" <<'PY'
+import sys
+start_offset = int(sys.argv[1])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+print((start_offset % RAW_MDU_CAP) // BLOB)
+PY
+)
+SESSION_BLOB_COUNT_2=$(python3 - "$START_OFFSET_2" "$FILE_LEN_2" <<'PY'
+import sys, math
+start_offset = int(sys.argv[1])
+file_len = int(sys.argv[2])
+BLOB = 128 * 1024
+RAW_MDU_CAP = 8 * 1024 * 1024
+start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
+need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
+need = max(1, min(64, need))
+print(need)
+PY
+)
+SESSION_EXPIRES_AT_2=$((HEIGHT_2 + 20))
+SESSION_NONCE_2=$(python3 -c "import time; print(time.time_ns())")
+SESSION_OPEN_JSON_2=$(
+  DEAL_ID="$DEAL_ID" \
+  PROVIDER="$PROVIDER_ADDR" \
+  MANIFEST_ROOT="$MANIFEST_ROOT_2" \
+  START_MDU_INDEX="$START_MDU_INDEX_2" \
+  START_BLOB_INDEX="$START_BLOB_INDEX_2" \
+  BLOB_COUNT="$SESSION_BLOB_COUNT_2" \
+  NONCE="$SESSION_NONCE_2" \
+  EXPIRES_AT="$SESSION_EXPIRES_AT_2" \
+  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+)
+SESSION_ID_2=$(echo "$SESSION_OPEN_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
+if [ -z "$SESSION_ID_2" ]; then
+  echo "ERROR: failed to open session for ECONOMY"
+  echo "$SESSION_OPEN_JSON_2"
+  exit 1
+fi
+
 REQ_NONCE_1=2
 REQ_EXPIRES_AT_1=$(( $(date +%s) + 120 ))
 REQ_SIG_JSON_1=$(
@@ -479,6 +650,7 @@ FETCH_URL_1="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner
 FETCH_URL_2="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
 
 timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1" \
+  -H "X-Nil-Session-Id: $SESSION_ID_1" \
   -H "X-Nil-Req-Sig: $REQ_SIG_1" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_1" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_1" \
@@ -486,6 +658,7 @@ timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1" \
   -H "X-Nil-Req-Range-Len: 0"
 
 timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
+  -H "X-Nil-Session-Id: $SESSION_ID_2" \
   -H "X-Nil-Req-Sig: $REQ_SIG_2" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_2" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_2" \
