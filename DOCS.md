@@ -15,6 +15,12 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
     - `rfcs/rfc-mode2-onchain-state.md` (Mode 2 on-chain fields + repairs)
     - `rfcs/rfc-challenge-derivation-and-quotas.md` (synthetic challenges + quota policy)
     - `rfcs/rfc-pricing-and-escrow-accounting.md` (lock-in pricing + fees + caps)
+    - `rfcs/rfc-deal-expiry-and-extension.md` (deal term expiry + renewals)
+    - `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md` (sessions-first data-plane gating + batching)
+    - `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` (restricted/public deals + allowlists + vouchers)
+    - `rfcs/rfc-content-encoding-and-compression.md` (compression-aware pipeline: compress-before-encrypt)
+    - `rfcs/rfc-provider-exit-and-draining.md` (provider exit/draining + repair/GC interactions)
+    - `rfcs/rfc-base-reward-pool-and-emissions.md` (issuance + base reward pool)
     - `rfcs/rfc-retrieval-validation.md` and `rfcs/rfc-retrieval-security.md` (retrieval evidence, deputy/griefing)
     - `rfcs/rfc-heat-and-dynamic-placement.md` (heat/placement instrumentation)
 - `rfcs/archive/`: Historical / research-only materials kept for reference.
@@ -38,6 +44,11 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 - `README.md`: How to run/build/test the repo.
 - `HAPPY_PATH.md`: Local devnet “happy path” runbook.
 - `DEVNET_MULTI_PROVIDER.md`: How to run a multi-provider devnet and join as a remote provider.
+
+## Agent Runbooks
+
+- `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`: Autonomous phase plan for repo anchoring, deal lifecycle, retrieval policies, protocol hooks, and compression.
+- `docs/GAP_REPORT_REPO_ANCHORED.md`: Requirement → implementation gap matrix (repo-anchored).
 
 ## Planning / Tracking
 

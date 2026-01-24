@@ -107,12 +107,46 @@ This document tracks **what is missing** between the current implementation in t
 #### CHAIN-104 — Deletion semantics (deal cancel, expiry enforcement, crypto-erasure UX hooks)
 - **Status:** PARTIAL (DEVNET)
 - **Spec:** `spec.md` §6.3, §8.4.4; Appendix B (6, 8)
+- **RFCs:** `rfcs/rfc-deal-expiry-and-extension.md` (expiry + renewal), `rfcs/rfc-provider-exit-and-draining.md` (drain/GC interaction)
 - **Notes:** “Crypto-erasure” is a client contract; chain still needs consistent cancellation semantics and post-expiry invariants.
+- **DoD:**
+  - Chain rejects `UpdateDealContent*` / `OpenRetrievalSession` / `ProveLiveness` once `current_height >= end_block`.
+  - Retrieval sessions enforce `expires_at <= end_block` (no service beyond paid term).
+  - Implement `MsgExtendDeal` with spot pricing at extension time and `deal_extension_grace_blocks`.
+  - Quotas/challenge derivation exclude expired deals; expired slots do not earn rewards.
+  - Provider/gateway implement GC after `end_block + deal_extension_grace_blocks` and refuse serving expired deals.
+  - Add e2e: expire → renew → read; expire → GC delete.
 
 #### CHAIN-105 — Third-party sponsorship / funding flows (viral debt mitigation)
 - **Status:** PARTIAL (DEVNET)
 - **Spec:** `spec.md` §5.2
 - **Notes:** confirm whether `MsgAddCredit` is sufficient for sponsorship (non-owner funding) and whether UI exposes it.
+
+#### CHAIN-107 — Retrieval access control (restricted/public/allowlist/voucher) + requester-paid session open
+- **Status:** NOT STARTED
+- **Spec/RFCs:** `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`; `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md`
+- **Why:** enables public data, allowlisted reads, “buy to download once” primitives, and prevents public retrieval from draining long-term deal escrow.
+- **Work:**
+  - add `Deal.retrieval_policy` fields (mode + allowlist_root + voucher_signer)
+  - enforce `MsgOpenRetrievalSession` owner-only
+  - add `MsgOpenRetrievalSessionSponsored` (requester-funded; does not touch `Deal.escrow_balance`; refunds to payer on non-completion)
+  - allowlist proof verification
+  - voucher signature verification + one-time nonce tracking
+  - (optional) `QueryPublicDeals` pagination
+
+#### CHAIN-108 — Protocol retrieval hooks (audit/repair/healing) for restricted deals (v1)
+- **Status:** NOT STARTED
+- **Spec/RFCs:** `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`; `rfcs/rfc-retrieval-validation.md`; `rfcs/rfc-mode2-onchain-state.md`
+- **Why:** restricted deals must still allow protocol-driven retrievals for **audit + repair + healing**. This is required for liveness when clients are inactive and for make-before-break repairs.
+- **Work:**
+  - implement `MsgOpenProtocolRetrievalSession` with:
+    - `purpose=PROTOCOL_AUDIT` (authorized only via deterministic `AuditTask` assignments)
+    - `purpose=PROTOCOL_REPAIR` (authorized only if `creator == pending_provider` for a REPAIRING slot)
+  - implement protocol audit budget minting (Option A):
+    - params: `audit_budget_bps`, `audit_budget_cap_bps`, `audit_budget_carryover_epochs`
+    - module account: `protocol_audit_budget` (or equivalent)
+  - ensure protocol session refunds return to protocol budget (not deal escrow)
+  - e2e: restricted deal + repair start → candidate fetches via protocol sessions; reads stay available.
 
 #### CHAIN-106 — EVM module production posture (simulation vs runtime)
 - **Status:** PARTIAL (DEVNET)
@@ -123,8 +157,8 @@ This document tracks **what is missing** between the current implementation in t
 
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
-- **Spec:** `spec.md` Appendix A “Gateway/API note”, §7.2
-- **DoD:** gateway/SP enforce `X‑Nil‑Session‑Id` when sessions required; out-of-session range fetches are rejected; consistent error JSON.
+- **Spec:** `spec.md` Appendix A “Gateway/API note”, §7.2; `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md`
+- **DoD:** gateway/SP enforce `X-Nil-Session-Id` for **all served bytes** (no out-of-session reads); blob alignment + session range subset enforced; batching/segmentation preserved (multiple range requests per session allowed); consistent error JSON.
 
 #### GW-202 — Repair tooling + deterministic reconstruction for Mode 2 slots
 - **Status:** PARTIAL (DEVNET)
@@ -137,6 +171,15 @@ This document tracks **what is missing** between the current implementation in t
 #### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
+
+#### GW-205 — Content encoding / compression in gateway (NilCEv1)
+- **Status:** NOT STARTED
+- **RFC:** `rfcs/rfc-content-encoding-and-compression.md`
+- **Work:** implement compress-before-encrypt wrapper for uploads; ensure download path can decompress after decrypt when gateway holds keys (local mode); maintain header blobs for partial reads.
+
+#### GW-206 — Public metadata fetch tooling (optional)
+- **Status:** NOT STARTED
+- **Notes:** supports the public explorer pattern; can be implemented as a side project first.
 
 ### Web / UX (`nil-website/`)
 
@@ -152,6 +195,28 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Source:** `nil-website/AGENTS.md` §8
 
+#### WEB-304 — Retrieval access controls UI (public/restricted/allowlist/voucher)
+- **Status:** NOT STARTED
+- **Spec/RFCs:** `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`
+- **Work:**
+  - deal creation/edit: select retrieval policy
+  - allowlist manager (build merkle root)
+  - voucher generator (EIP-712 signing flow)
+  - retrieval page: use sponsored session open for non-owner requesters
+
+#### WEB-305 — Compression UX (encode metadata + cost preview)
+- **Status:** NOT STARTED
+- **RFC:** `rfcs/rfc-content-encoding-and-compression.md`
+- **Work:**
+  - upload toggle: “compress before upload” (default ON)
+  - show original vs stored size estimate and cost delta
+  - ensure download path transparently returns original bytes
+
+#### WEB-306 — Public deal explorer (side project / reference implementation)
+- **Status:** NOT STARTED
+- **Doc:** `SIDE_PROJECT_PUBLIC_DATA_EXPLORER.md`
+- **Work:** basic indexer + metadata fetch + simple UI for browsing and paying to retrieve
+
 ### Core crypto / WASM (`nil_core/`)
 
 #### CORE-401 — WebGPU KZG commitments/proofs (client-side velocity)
@@ -161,6 +226,16 @@ This document tracks **what is missing** between the current implementation in t
 #### CORE-402 — Determinism harness (cross-runtime, cross-platform)
 - **Status:** PARTIAL (DEVNET)
 - **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
+
+#### CORE-403 — NilCE content-encoding + compression (compress before encrypt)
+- **Status:** NOT STARTED
+- **RFC:** `rfcs/rfc-content-encoding-and-compression.md`
+- **Why:** reduces user cost, standardizes encoding metadata, and ensures charging is based on stored ciphertext bytes.
+- **Work:**
+  - implement NilCEv1 header (`NILC`) parsing + generation
+  - add zstd level-3 (and NONE) codec support in WASM + gateway
+  - add decompression after decrypt on download path
+  - add zip-bomb defenses and fuzz tests
 
 ### CLI / Automation (`nil_cli/`, `scripts/`)
 

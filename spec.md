@@ -45,6 +45,20 @@ Key fields:
     *   **Mode 2:** ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3).
 *   **Service Hint:** `Hot | Cold` informs placement/elasticity policy (§6.0.2).
 *   **Economics:** `escrow` (combined storage + bandwidth), plus `max_monthly_spend` for user-funded elasticity (§6.1.2).
+*   **Retrieval policy:** `retrieval_policy` governs who may open **user/sponsored** retrieval sessions for this Deal:
+    *   `OwnerOnly` (default): only the deal owner may open user retrieval sessions (`MsgOpenRetrievalSession`).
+    *   `Allowlist`: owner + allowlisted accounts may open retrieval sessions (requester-paid sponsored open).
+    *   `Voucher`: owner + valid voucher redeemers may open retrieval sessions (requester-paid sponsored open).
+    *   `Public`: anyone may open retrieval sessions (requester-paid sponsored open).
+    *   This policy controls *session opening*, not privacy: sensitive data MUST be encrypted for confidentiality.
+    *   **Protocol audit/repair/healing retrievals are always permitted** via protocol retrieval sessions (`MsgOpenProtocolRetrievalSession`) under deterministic authorization rules. Restricted deals are not private.
+    *   Public/third-party retrievals MUST use a requester-funded session open (see §7.2 and `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`).
+
+*   **Term bounds:** `start_block` (creation height) and `end_block` (exclusive expiry height).
+    *   A deal is **ACTIVE** at height `h` iff `h < end_block` and it is not cancelled.
+*   **Renewal anchor:** `pricing_anchor_block` is the block height used as the pricing anchor for storage lock‑in charges on **new bytes**.
+    *   On creation: `pricing_anchor_block = start_block`.
+    *   On renewal (`MsgExtendDeal`): `pricing_anchor_block = current_height`.
 *   **Redundancy Mode:** Mode 1 (FullReplica) or Mode 2 (StripeReplica / RS(K,K+M)) (§6.2, §8).
 
 Constants:
@@ -93,7 +107,9 @@ This section documents accepted architectural risks and required safeguards.
 
 ### 5.2 Viral Debt Risk (Third-Party Sponsorship)
 *   **Risk:** user-funded elasticity creates a hard stop; if escrow is depleted during a viral event, content throttles.
-*   **Assessment:** this is an acceptable economic state (“you get what you pay for”), but the protocol SHOULD support **third-party sponsorship** (e.g., `MsgFundEscrow`) to let communities fund important content.
+*   **Assessment:** this is an acceptable economic state (“you get what you pay for”), but the protocol SHOULD support **third-party sponsorship**:
+    *   direct escrow top-ups (e.g., `MsgAddCredit` / `MsgFundEscrow`), and
+    *   requester-funded retrieval sessions (`MsgOpenRetrievalSessionSponsored`) for public/allowlisted/voucher deals (so sponsors pay for retrievals without draining the owner’s long-term storage escrow).
 
 ### 5.3 Data Gravity & Non-Atomic Migration (Make-Before-Break)
 *   **Risk:** moving data takes time; when a provider is rotated or replaced, there is a gap before the new provider is ready.
@@ -174,10 +190,20 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
     *   *Rationale:* Moving data consumes network resources. Spawning a replica is an "investment" that must be amortized over a minimum service period.
     *   *Cost:* The User's escrow is debited for this minimum period upon spawn.
 
-### 6.3 Deletion (Crypto-Erasure)
-*   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto-Erasure**.
-*   **Process:** To "delete" a file, the Data Owner destroys their copy of the `FMK`. Without this key, the stored ciphertext is statistically indistinguishable from random noise.
-*   **Garbage Collection:** When a Deal is cancelled (`MsgCancelDeal`) or expires, SPs act economically: they delete the data to free up space for paying content.
+### 6.3 Deletion and Deal Expiry (Crypto-Erasure + Garbage Collection)
+
+*   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto‑Erasure** (destroy the `FMK`) plus economic incentives.
+*   **Expiry is real (normative):** Deals have an `end_block` (exclusive). Once `current_height ≥ end_block`, the deal is **expired**:
+    *   `MsgUpdateDealContent*` MUST be rejected.
+    *   `MsgOpenRetrievalSession` MUST be rejected.
+    *   `MsgProveLiveness` MUST be rejected.
+*   **Renewal grace / retention window:** the protocol defines `deal_extension_grace_blocks`.
+    *   A deal MAY be renewed (via `MsgExtendDeal`) until `current_height ≤ end_block + deal_extension_grace_blocks`.
+    *   Providers SHOULD retain deal data until `delete_after = end_block + deal_extension_grace_blocks`.
+    *   After `delete_after`, providers MAY garbage‑collect the deal (delete shards + metadata) to reclaim capacity.
+*   **Provider serving rule (recommended):** providers SHOULD refuse to serve bytes for expired deals (e.g., HTTP `410 Gone`). Because retrieval sessions are required for credit and fees, and sessions are forbidden to outlive `end_block`, serving expired deals is irrational and unsafe.
+
+See: `rfcs/rfc-deal-expiry-and-extension.md` for the normative chain enforcement and pricing rules.
 
 ## § 8 Mode 2: StripeReplica & Erasure Coding (Normative Extension)
 
@@ -315,13 +341,14 @@ NilStore MAY use a content‑addressed *file* manifest at the application layer 
 *   Retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
 *   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
 *   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).
-*   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST (a) require `deal_id` + `owner` for access control and (b) reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`).
-*   Retrieval session enforcement (Gamma‑4): when sessions are enabled, data-plane fetches MUST include `X‑Nil‑Session‑Id`, and the server MUST reject out‑of‑session ranges. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
+*   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST enforce retrieval authorization via on-chain sessions and `Deal.retrieval_policy` (owner-only / allowlist / voucher / public), and MUST reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`). In testnet/mainnet posture, these endpoints MUST require `X‑Nil‑Session-Id` and MUST reject out‑of‑session reads (prefer `403`).
+*   Retrieval session enforcement (Gamma‑4+): data-plane fetches MUST include `X‑Nil‑Session‑Id` for **all served bytes**, and the server MUST reject out‑of‑session reads. Batching is preserved: a response MAY include multiple contiguous blobs as long as requests remain blob-aligned and a subset of the session’s range. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
 *   Non-200 responses MUST be JSON `{ "error": "...", "hint": "..." }` (even if the success path is a byte stream). Missing/invalid `file_path` returns `400` with a remediation hint (call `/gateway/list-files/{manifest_root}` to discover valid paths).
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
   * **Encryption:** All data is encrypted client-side before ingress. Deal commitments (and KZG proofs) bind to the **ciphertext bytes**; decryption is purely a client concern.
+  * **Compression (recommended):** Clients SHOULD compress plaintext before encryption when beneficial, and include a small in-band content-encoding header so retrieval can transparently decompress after decrypt. Pricing applies to the resulting ciphertext bytes (see `rfcs/rfc-content-encoding-and-compression.md`).
   * **Metadata confidentiality (optional):** NilFS metadata (MDU #0 and higher-level manifests) MAY be encrypted the same way as file data. If metadata is encrypted, SPs remain oblivious (they store bytes), while clients decrypt after verifying against `Deal.manifest_root`.
   * **Deletion:** Achieved via key destruction (Crypto-Erasure).
 
@@ -386,21 +413,36 @@ NilStore’s devnet is converging on a **Retrieval Session** control-plane that 
 
 The intended end state is: a provider only gets credit for a retrieval once the chain has evidence of **both** (a) a user-authorized request and (b) a user-confirmed successful completion, plus the provider’s cryptographic proof-of-retrieval.
 
-1.  **Open a Retrieval Session (User, on-chain tx):**
-    *   The user opens a session bound to a specific `(deal_id, provider, manifest_root, blob-range)`:
-        *   `{deal_id, owner, provider, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}`.
+1.  **Open a Retrieval Session (Requester, on-chain tx):**
+    *   A retrieval session is opened by an authorized requester. There are two funding paths:
+        *   **Owner-paid:** `MsgOpenRetrievalSession` (creator == deal owner) debits deal escrow per the frozen accounting contract.
+        *   **Requester-paid (public/third-party):** `MsgOpenRetrievalSessionSponsored` opens a session funded by the requester (not deal escrow) so public/third-party retrievals do not drain the owner’s long-term storage escrow (see `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`).
+        *   **Protocol-paid (audit/repair/healing):** `MsgOpenProtocolRetrievalSession` opens a session funded by the protocol audit/repair budget so the protocol can perform liveness checks and repairs even when clients are inactive (see `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`).
+    *   Authorization is determined by `Deal.retrieval_policy` **for user/sponsored sessions** (conceptual):
+        *   `OwnerOnly`: only the owner may open **user** sessions (`MsgOpenRetrievalSession`).
+        *   `Allowlist`: owner + allowlisted accounts may open (sponsored path).
+        *   `Voucher`: owner + valid voucher redeemers may open (sponsored path).
+        *   `Public`: anyone may open (sponsored path).
+    *   **Protocol sessions** (`MsgOpenProtocolRetrievalSession`) bypass `retrieval_policy` for audit/repair/healing under deterministic authorization rules (see `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`).
+    *   The requester opens a session bound to a specific `(deal_id, provider/slot, manifest_root, blob-range)`:
+        *   `{deal_id, provider_or_slot, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}`.
     *   Invariants:
-        *   Provider MUST be assigned in `Deal.providers[]`.
+        *   Provider MUST be assigned in `Deal.providers[]` (Mode 2: the session MUST bind to a specific `slot → provider` assignment).
         *   `manifest_root` MUST match the current on-chain `Deal.manifest_root` (pin content).
+        *   The deal MUST be ACTIVE at session open (`current_height < Deal.end_block`).
+        *   `expires_at` MUST be `≤ Deal.end_block` (sessions cannot outlive the paid storage term).
         *   **Mode 1:** `start_blob_index < BLOBS_PER_MDU`.
         *   **Mode 2:** `start_blob_index < leaf_count` where `leaf_count = (K+M) * rows`, `rows = 64 / K`.
         *   `blob_count > 0`.
         *   `total_bytes = blob_count * 131072` and MUST be a multiple of 128 KiB (by construction).
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
-2.  **Serve bytes (Provider, off-chain):**
-    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
-    *   Each HTTP `Range` response MUST map to exactly one blob (bounded by blob boundaries); a session is satisfied by fetching the declared contiguous blob range (chunking is a client/gateway concern).
+2.  **Serve bytes (Provider / Gateway / Deputy, off-chain):**
+    *   Serving nodes MUST refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Served ranges MUST be:
+        *   blob-aligned (`BLOB_SIZE` boundaries), and
+        *   a subset of the session’s declared blob-range.
+    *   **Batching is allowed:** one session may be consumed by many range requests, or by larger responses that include multiple contiguous blobs (e.g., MDU-sized reads), as long as the subset/alignment rules are enforced.
 
 3.  **Submit proof-of-retrieval (Provider, on-chain tx):**
     *   The provider submits `ChainedProof` objects for the served blobs referencing `session_id`.
@@ -575,6 +617,9 @@ This specification defines normative *interfaces* and verification rules but int
 7. **Deputy/Proxy Mechanics:** discovery, routing, compensation/delegation (if any), and additional griefing defenses beyond nonce/expiry and rate limits.
 8. **Encryption & Key Management Details:** exact encryption constructions, key derivation/rotation, metadata leakage model, padding strategy, and client recovery UX.
 9. **Transport/Wire Protocol:** concrete fetch/prove message formats, range/chunking rules, retry/backoff, and gateway/SP interoperability requirements.
+
+10. **Base Reward Pool & Emissions:** deterministic minting schedule, distribution rules, and unearned-reward handling. *(See `rfcs/rfc-base-reward-pool-and-emissions.md`.)*
+11. **Provider Exit / Draining / Rotation:** non-punitive exit path, drain scheduler, and churn guardrails. *(See `rfcs/rfc-provider-exit-and-draining.md`.)*
 
 ---
 
