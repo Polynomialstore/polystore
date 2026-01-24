@@ -350,19 +350,39 @@ import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-print((start_offset % RAW_MDU_CAP) // BLOB)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+offset_in_mdu = start_offset % RAW_MDU_CAP
+scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+blob_idx = encoded_pos // BLOB
+print(blob_idx)
 PY
 )
 SESSION_BLOB_COUNT=$(python3 - "$START_OFFSET" "$FILE_LEN" <<'PY'
-import sys, math
+import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
-need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
-need = max(1, min(64, need))
-print(need)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+def blob_index(raw_offset):
+    offset_in_mdu = raw_offset % RAW_MDU_CAP
+    scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+    payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+    encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+    return encoded_pos // BLOB
+start_blob = blob_index(start_offset)
+end_offset = start_offset + max(0, file_len - 1)
+end_blob = blob_index(end_offset)
+count = end_blob - start_blob + 1
+if count < 1:
+    count = 1
+if count > 64:
+    count = 64
+print(count)
 PY
 )
 
@@ -541,19 +561,39 @@ import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-print((start_offset % RAW_MDU_CAP) // BLOB)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+offset_in_mdu = start_offset % RAW_MDU_CAP
+scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+blob_idx = encoded_pos // BLOB
+print(blob_idx)
 PY
 )
 SESSION_BLOB_COUNT_1=$(python3 - "$START_OFFSET_1" "$FILE_LEN_1" <<'PY'
-import sys, math
+import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
-need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
-need = max(1, min(64, need))
-print(need)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+def blob_index(raw_offset):
+    offset_in_mdu = raw_offset % RAW_MDU_CAP
+    scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+    payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+    encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+    return encoded_pos // BLOB
+start_blob = blob_index(start_offset)
+end_offset = start_offset + max(0, file_len - 1)
+end_blob = blob_index(end_offset)
+count = end_blob - start_blob + 1
+if count < 1:
+    count = 1
+if count > 64:
+    count = 64
+print(count)
 PY
 )
 HEIGHT_2=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
@@ -593,19 +633,39 @@ import sys
 start_offset = int(sys.argv[1])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-print((start_offset % RAW_MDU_CAP) // BLOB)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+offset_in_mdu = start_offset % RAW_MDU_CAP
+scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+blob_idx = encoded_pos // BLOB
+print(blob_idx)
 PY
 )
 SESSION_BLOB_COUNT_2=$(python3 - "$START_OFFSET_2" "$FILE_LEN_2" <<'PY'
-import sys, math
+import sys
 start_offset = int(sys.argv[1])
 file_len = int(sys.argv[2])
 BLOB = 128 * 1024
 RAW_MDU_CAP = 8 * 1024 * 1024
-start_in_blob = (start_offset % RAW_MDU_CAP) % BLOB
-need = int(math.ceil((start_in_blob + file_len) / float(BLOB)))
-need = max(1, min(64, need))
-print(need)
+SCALAR_BYTES = 32
+SCALAR_PAYLOAD = 31
+def blob_index(raw_offset):
+    offset_in_mdu = raw_offset % RAW_MDU_CAP
+    scalar_idx = offset_in_mdu // SCALAR_PAYLOAD
+    payload_offset = offset_in_mdu % SCALAR_PAYLOAD
+    encoded_pos = scalar_idx * SCALAR_BYTES + 1 + payload_offset
+    return encoded_pos // BLOB
+start_blob = blob_index(start_offset)
+end_offset = start_offset + max(0, file_len - 1)
+end_blob = blob_index(end_offset)
+count = end_blob - start_blob + 1
+if count < 1:
+    count = 1
+if count > 64:
+    count = 64
+print(count)
 PY
 )
 SESSION_EXPIRES_AT_2=$((HEIGHT_2 + 20))
