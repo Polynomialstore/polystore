@@ -260,14 +260,16 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       setPolicyError('Voucher signer must be a 0x address')
       return
     }
+    const allowlistRootHex = allowlistRoot ? (allowlistRoot as Hex) : undefined
+    const voucherSignerHex = voucherSigner ? (voucherSigner as Hex) : undefined
 
     try {
       await submitPolicyUpdate({
         creator: evmAddress,
         dealId: Number(deal.id),
         mode: policyMode,
-        allowlistRoot: allowlistRoot || undefined,
-        voucherSigner: voucherSigner || undefined,
+        allowlistRoot: allowlistRootHex,
+        voucherSigner: voucherSignerHex,
       })
       setPolicyStatus('Retrieval policy updated')
     } catch (err: unknown) {
