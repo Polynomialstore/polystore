@@ -913,6 +913,11 @@ export function Dashboard() {
   }
 
   const handleRequestFunds = async () => {
+      if (!appConfig.faucetEnabled) {
+        setStatusTone('error')
+        setStatusMsg('Faucet is disabled in this build. Fund your wallet externally to continue.')
+        return
+      }
       try {
           const resp = await requestFunds(address)
           if (nilAddress) {
@@ -935,7 +940,11 @@ export function Dashboard() {
   const handleCreateDeal = async (evmCreator: string) => {
     if (!bankBalances.stake && !bankBalances.atom) {
       setStatusTone('error')
-      setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
+      setStatusMsg(
+        appConfig.faucetEnabled
+          ? 'You must request testnet NIL from the faucet before creating a storage deal.'
+          : 'Your wallet needs funds before creating a storage deal.',
+      )
       return
     }
       try {
@@ -1363,6 +1372,7 @@ export function Dashboard() {
   )
 
   useEffect(() => {
+    if (!appConfig.faucetEnabled) return
     if (faucetTxStatus === 'confirmed' && faucetTx) {
       setStatusTone('success')
       setStatusMsg(`Faucet tx ${faucetTx} confirmed.`)
@@ -2072,15 +2082,21 @@ export function Dashboard() {
                   {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
                 </div>
               </div>
-              <button
-                data-testid="faucet-request"
-                onClick={handleRequestFunds}
-                disabled={!address || faucetLoading}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Coins className="h-4 w-4" />
-                {faucetLoading ? 'Requesting…' : 'Get Testnet NIL'}
-              </button>
+              {appConfig.faucetEnabled ? (
+                <button
+                  data-testid="faucet-request"
+                  onClick={handleRequestFunds}
+                  disabled={!address || faucetLoading}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Coins className="h-4 w-4" />
+                  {faucetLoading ? 'Requesting…' : 'Get Testnet NIL'}
+                </button>
+              ) : (
+                <div className="text-[11px] text-muted-foreground text-right">
+                  Faucet disabled (mainnet parity)
+                </div>
+              )}
             </div>
             <div className="px-6 pb-4">
               <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">

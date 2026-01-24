@@ -52,6 +52,28 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"extendDeal",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},
+      {"name":"additionalDurationBlocks","type":"uint64"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
+    "name":"updateDealRetrievalPolicy",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},
+      {"name":"mode","type":"uint8"},
+      {"name":"allowlistRoot","type":"bytes32"},
+      {"name":"voucherSigner","type":"address"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
     "name":"proveRetrievalBatch",
     "stateMutability":"nonpayable",
     "inputs":[
@@ -181,6 +203,13 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"cancelRetrievalSession",
+    "stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionId","type":"bytes32"}],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
     "name":"confirmRetrievalSessions",
     "stateMutability":"nonpayable",
     "inputs":[{"name":"sessionIds","type":"bytes32[]"}],
@@ -258,6 +287,10 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runCreateDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealContent":
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
+	case "extendDeal":
+		return p.runExtendDeal(ctx, evm, contract, method, input[4:])
+	case "updateDealRetrievalPolicy":
+		return p.runUpdateDealRetrievalPolicy(ctx, evm, contract, method, input[4:])
 	case "proveRetrievalBatch":
 		return p.runProveRetrievalBatch(ctx, evm, contract, method, input[4:])
 	case "openRetrievalSession":
@@ -272,6 +305,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runComputeRetrievalSessionIds(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSession":
 		return p.runConfirmRetrievalSession(ctx, evm, contract, method, input[4:])
+	case "cancelRetrievalSession":
+		return p.runCancelRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSessions":
 		return p.runConfirmRetrievalSessions(ctx, evm, contract, method, input[4:])
 	default:
@@ -720,6 +755,36 @@ func (p *Precompile) runConfirmRetrievalSession(ctx sdk.Context, evm *vm.EVM, co
 	return out, nil
 }
 
+func (p *Precompile) runCancelRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("cancelRetrievalSession: failed to unpack args: %w", err)
+	}
+
+	sessionID, err := asBytes32(args["sessionId"])
+	if err != nil {
+		return nil, errors.New("cancelRetrievalSession: invalid sessionId")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	_, err = msgServer.CancelRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgCancelRetrievalSession{
+		Creator:   creator,
+		SessionId: sessionID[:],
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("cancelRetrievalSession: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
 func (p *Precompile) runConfirmRetrievalSessions(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
 	values, err := method.Inputs.Unpack(data)
 	if err != nil {
@@ -858,6 +923,106 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 	out, err := method.Outputs.Pack(true)
 	if err != nil {
 		return nil, fmt.Errorf("updateDealContent: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runExtendDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("extendDeal: failed to unpack args: %w", err)
+	}
+
+	dealID, err := asUint64(args["dealId"])
+	if err != nil {
+		return nil, errors.New("extendDeal: invalid dealId")
+	}
+	additional, err := asUint64(args["additionalDurationBlocks"])
+	if err != nil || additional == 0 {
+		return nil, errors.New("extendDeal: additionalDurationBlocks must be > 0")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	_, err = msgServer.ExtendDeal(sdk.WrapSDKContext(ctx), &types.MsgExtendDeal{
+		Creator:                  creator,
+		DealId:                   dealID,
+		AdditionalDurationBlocks: additional,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("extendDeal: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func isZeroBytes32(b [32]byte) bool {
+	for _, v := range b {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *Precompile) runUpdateDealRetrievalPolicy(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("updateDealRetrievalPolicy: failed to unpack args: %w", err)
+	}
+
+	dealID, err := asUint64(args["dealId"])
+	if err != nil {
+		return nil, errors.New("updateDealRetrievalPolicy: invalid dealId")
+	}
+	modeU64, err := asUint64(args["mode"])
+	if err != nil || modeU64 > 255 {
+		return nil, errors.New("updateDealRetrievalPolicy: invalid mode")
+	}
+	allowRoot, err := asBytes32(args["allowlistRoot"])
+	if err != nil {
+		return nil, errors.New("updateDealRetrievalPolicy: invalid allowlistRoot")
+	}
+	voucherSigner, ok := args["voucherSigner"].(common.Address)
+	if !ok {
+		return nil, errors.New("updateDealRetrievalPolicy: invalid voucherSigner")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	var rootBytes []byte
+	if !isZeroBytes32(allowRoot) {
+		rootBytes = allowRoot[:]
+	}
+	vs := ""
+	if voucherSigner != (common.Address{}) {
+		vs = sdk.AccAddress(voucherSigner.Bytes()).String()
+	}
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	_, err = msgServer.UpdateDealRetrievalPolicy(sdk.WrapSDKContext(ctx), &types.MsgUpdateDealRetrievalPolicy{
+		Creator: creator,
+		DealId:  dealID,
+		Policy: types.RetrievalPolicy{
+			Mode:          types.RetrievalPolicyMode(modeU64),
+			AllowlistRoot: rootBytes,
+			VoucherSigner: vs,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("updateDealRetrievalPolicy: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }
