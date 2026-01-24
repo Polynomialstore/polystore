@@ -29,3 +29,6 @@ nil_bridge/cache/solidity-files-cache.json
 nil_bridge/cache/test-failures
 nil_bridge/cache/
 nil_bridge/broadcast/
+
+# Import-only staging (not meant to be committed)
+update/
