@@ -28,6 +28,28 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'extendDeal',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'dealId', type: 'uint64' },
+      { name: 'additionalDurationBlocks', type: 'uint64' },
+    ],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'updateDealRetrievalPolicy',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'dealId', type: 'uint64' },
+      { name: 'mode', type: 'uint8' },
+      { name: 'allowlistRoot', type: 'bytes32' },
+      { name: 'voucherSigner', type: 'address' },
+    ],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'proveRetrievalBatch',
     stateMutability: 'nonpayable',
     inputs: [
@@ -187,6 +209,13 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'cancelRetrievalSession',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionId', type: 'bytes32' }],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'confirmRetrievalSessions',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'sessionIds', type: 'bytes32[]' }],
@@ -308,5 +337,34 @@ export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): 
     abi: NILSTORE_PRECOMPILE_ABI,
     functionName: 'confirmRetrievalSessions',
     args: [sessionIds],
+  })
+}
+
+export function encodeExtendDealData(dealId: bigint, additionalDurationBlocks: bigint): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'extendDeal',
+    args: [dealId, additionalDurationBlocks],
+  })
+}
+
+export function encodeUpdateDealRetrievalPolicyData(
+  dealId: bigint,
+  mode: number,
+  allowlistRoot: Hex,
+  voucherSigner: Hex,
+): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'updateDealRetrievalPolicy',
+    args: [dealId, mode, allowlistRoot, voucherSigner],
+  })
+}
+
+export function encodeCancelRetrievalSessionData(sessionId: Hex): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'cancelRetrievalSession',
+    args: [sessionId],
   })
 }
