@@ -304,6 +304,13 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if requireOnchainSession && strings.HasPrefix(r.URL.Path, "/gateway/fetch/") {
+		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+			return
+		}
+	}
+
 	dealID, ok := requireDealIDQuery(w, r)
 	if !ok {
 		return

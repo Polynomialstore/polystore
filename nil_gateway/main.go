@@ -59,6 +59,12 @@ var (
 	// When enabled, clients must provide EIP-712 request headers and the gateway
 	// enforces them before serving byte ranges.
 	requireRetrievalReqSig = envDefault("NIL_REQUIRE_RETRIEVAL_REQ_SIG", "0") == "1"
+	// Testnet/mainnet posture: require an on-chain OPEN retrieval session for any
+	// endpoint that serves Deal bytes. (No session, no bytes.)
+	requireOnchainSession = envDefault("NIL_REQUIRE_ONCHAIN_SESSION", "1") == "1"
+	// Dev-only escape hatch: allow legacy gateway download_session fetches without
+	// an on-chain session id. MUST be disabled by default.
+	unsafeAllowLegacyDownloadSession = envDefault("NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION", "0") == "1"
 
 	execCommandContext = exec.CommandContext
 	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -2152,6 +2158,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		downloadSessionID = onchainSessionID
 	}
 	isDownloadSession := downloadSessionID != ""
+	if requireOnchainSession && !isOnchainSession && (!isDownloadSession || !unsafeAllowLegacyDownloadSession) {
+		writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "open an on-chain retrieval session first")
+		return
+	}
+	if requireOnchainSession && isDownloadSession && !isOnchainSession && !unsafeAllowLegacyDownloadSession {
+		writeJSONError(w, http.StatusBadRequest, "download_session is not supported without X-Nil-Session-Id", "use an on-chain session id")
+		return
+	}
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -2217,7 +2231,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
-	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
+	meta, err := fetchDealMeta(dealID)
 	if err != nil {
 		if errors.Is(err, ErrDealNotFound) {
 			writeJSONError(w, http.StatusNotFound, "deal not found", "")
@@ -2227,7 +2241,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
 		return
 	}
-	if dealOwner == "" || dealOwner != owner {
+	if meta.Owner == "" || meta.Owner != owner {
 		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
 		return
 	}
@@ -2235,12 +2249,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	// 1b) Guard: ensure the caller has an EIP-712 signature authorizing this fetch.
 	// For gateway download sessions, this check is done once in GatewayOpenSession.
 	if requireReqSig {
-		if err := verifyRetrievalRequestSignature(dealOwner, dealID, filePath, signedReqRangeStart, signedReqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
+		if err := verifyRetrievalRequestSignature(meta.Owner, dealID, filePath, signedReqRangeStart, signedReqRangeLen, reqNonce, reqExpiresAt, reqSig); err != nil {
 			writeJSONError(w, http.StatusForbidden, "forbidden: invalid retrieval request signature", err.Error())
 			return
 		}
 	}
-	if strings.TrimSpace(dealCID) == "" {
+	if strings.TrimSpace(meta.ManifestRoot) == "" {
 		writeJSONError(
 			w,
 			http.StatusConflict,
@@ -2249,7 +2263,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	dealRoot, err := parseManifestRoot(dealCID)
+	dealRoot, err := parseManifestRoot(meta.ManifestRoot)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
 		return
@@ -2293,10 +2307,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 
 	var dlSession downloadSession
 	var dlEpochID uint64
+	var onchainSession *types.RetrievalSession
+	var currentHeight uint64
 	if isDownloadSession {
 		if isOnchainSession {
 			// Verify on-chain session state
-			onchainSession, err := fetchRetrievalSession(onchainSessionID)
+			sess, err := fetchRetrievalSession(onchainSessionID)
 			if err != nil {
 				if errors.Is(err, ErrSessionNotFound) {
 					writeJSONError(w, http.StatusNotFound, "retrieval session not found on chain", "")
@@ -2305,6 +2321,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusInternalServerError, "failed to fetch retrieval session", err.Error())
 				return
 			}
+			onchainSession = sess
 
 			// Validation
 			if onchainSession.DealId != dealID {
@@ -2313,6 +2330,10 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			}
 			if onchainSession.Owner != owner {
 				writeJSONError(w, http.StatusForbidden, "session owner mismatch", "")
+				return
+			}
+			if len(onchainSession.ManifestRoot) != 48 || !bytes.Equal(onchainSession.ManifestRoot, dealRoot.Bytes[:]) {
+				writeJSONError(w, http.StatusBadRequest, "session manifest_root mismatch", "session is pinned to a different deal content")
 				return
 			}
 			providerAddr := cachedProviderAddress(r.Context())
@@ -2329,8 +2350,25 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", onchainSession.Status))
 				return
 			}
-			// Note: We don't strictly enforce blob range here in the fetch handler yet,
-			// but the proof submission will fail if we serve/prove outside the opened session.
+
+			h, herr := fetchLatestHeight(r.Context(), lcdBase)
+			if herr != nil {
+				writeJSONError(w, http.StatusInternalServerError, "failed to fetch chain height", herr.Error())
+				return
+			}
+			currentHeight = h
+			if meta.EndBlock != 0 && currentHeight >= meta.EndBlock {
+				writeJSONError(w, http.StatusGone, "deal expired", fmt.Sprintf("end_block=%d", meta.EndBlock))
+				return
+			}
+			if onchainSession.ExpiresAt != 0 && currentHeight > onchainSession.ExpiresAt {
+				writeJSONError(w, http.StatusForbidden, "session expired", "")
+				return
+			}
+			if meta.EndBlock != 0 && onchainSession.ExpiresAt != 0 && onchainSession.ExpiresAt > meta.EndBlock {
+				writeJSONError(w, http.StatusForbidden, "session outlives deal term", "")
+				return
+			}
 		} else {
 			dlSession, err = loadDownloadSession(downloadSessionID)
 			if err != nil {
@@ -2492,7 +2530,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 		absOffset := startOffset + reqRangeStart
 		mduIdx := uint64(1) + witnessCount + (absOffset / RawMduCapacity)
-		if _, metaErr := ensureMode2MduOnDisk(r.Context(), dealID, manifestRoot, mduIdx, dealDir, stripe); metaErr != nil {
+		if _, metaErr := ensureMode2MduOnDisk(r.Context(), dealID, manifestRoot, mduIdx, dealDir, stripe, onchainSessionID); metaErr != nil {
 			writeJSONError(w, http.StatusBadGateway, "failed to reconstruct Mode2 MDU", metaErr.Error())
 			return
 		}
@@ -2558,6 +2596,36 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	if lerr != nil {
 		log.Printf("GatewayFetch: failed to map leaf index: %v", lerr)
 		leafIndex = uint64(blobIndex)
+	}
+
+	if onchainSession != nil {
+		if stripe.leafCount == 0 {
+			writeJSONError(w, http.StatusInternalServerError, "invalid stripe params", "leaf_count is zero")
+			return
+		}
+		if onchainSession.BlobCount == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid session range", "blob_count is zero")
+			return
+		}
+		sessionStart, overflow := addUint64(onchainSession.StartMduIndex*stripe.leafCount, uint64(onchainSession.StartBlobIndex))
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid session range", "start_global overflow")
+			return
+		}
+		sessionEnd := sessionStart + onchainSession.BlobCount - 1
+		if sessionEnd < sessionStart {
+			writeJSONError(w, http.StatusBadRequest, "invalid session range", "end_global overflow")
+			return
+		}
+		reqGlobal, overflow := addUint64(mduIdx*stripe.leafCount, leafIndex)
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid request range", "global index overflow")
+			return
+		}
+		if reqGlobal < sessionStart || reqGlobal > sessionEnd {
+			writeJSONError(w, http.StatusForbidden, "range outside session", "split into multiple sessions or re-open with a larger blob range")
+			return
+		}
 	}
 
 	// Resolve Provider Address for the Header (for Client-Side Signing)
@@ -3918,6 +3986,86 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 	return owner, cid, nil
 }
 
+type dealMeta struct {
+	Owner        string
+	ManifestRoot string // canonical 0x + lowercase hex (48 bytes)
+	EndBlock     uint64
+}
+
+// fetchDealMeta calls the LCD to retrieve the deal owner, manifest_root, and end_block.
+func fetchDealMeta(dealID uint64) (dealMeta, error) {
+	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	resp, err := lcdHTTPClient.Get(url)
+	if err != nil {
+		return dealMeta{}, fmt.Errorf("LCD request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return dealMeta{}, ErrDealNotFound
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return dealMeta{}, fmt.Errorf("LCD returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload struct {
+		Deal map[string]any `json:"deal"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return dealMeta{}, fmt.Errorf("failed to decode LCD response: %w", err)
+	}
+	if payload.Deal == nil {
+		return dealMeta{}, fmt.Errorf("LCD response missing deal field")
+	}
+
+	meta := dealMeta{}
+	if v, ok := payload.Deal["owner"].(string); ok {
+		meta.Owner = v
+	}
+
+	cid := ""
+	if v, ok := payload.Deal["cid"].(string); ok {
+		cid = strings.TrimSpace(v)
+	}
+	if cid == "" {
+		// Newer deal schema exposes manifest_root as base64 or hex.
+		if v, ok := payload.Deal["manifest_root"].(string); ok && strings.TrimSpace(v) != "" {
+			raw := strings.TrimSpace(v)
+			if strings.HasPrefix(raw, "0x") {
+				cid = raw
+			} else if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil && len(decoded) > 0 {
+				cid = "0x" + hex.EncodeToString(decoded)
+			} else {
+				// Fallback: assume already hex without prefix.
+				if _, err := decodeHex(raw); err == nil {
+					cid = "0x" + strings.TrimPrefix(raw, "0x")
+				}
+			}
+		} else if v, ok := payload.Deal["manifest_root_hex"].(string); ok {
+			cid = strings.TrimSpace(v)
+		}
+	}
+	if strings.TrimSpace(cid) != "" {
+		parsed, err := parseManifestRoot(cid)
+		if err != nil {
+			return dealMeta{}, fmt.Errorf("failed to parse deal manifest_root: %w", err)
+		}
+		meta.ManifestRoot = parsed.Canonical
+	}
+
+	for _, key := range []string{"end_block", "endBlock"} {
+		if raw, ok := payload.Deal[key]; ok {
+			if end, err := parseUint64(raw); err == nil {
+				meta.EndBlock = end
+				break
+			}
+		}
+	}
+
+	return meta, nil
+}
+
 // creatorHasSomeBalance checks whether a given bech32 address has any non-zero
 // balance in the bank module (stake or aatom). It is a devnet guard used to
 // ensure users have gone through the faucet flow before deals are created.
@@ -5076,6 +5224,14 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if requireOnchainSession {
+		raw := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
+		if raw == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+			return
+		}
+	}
+
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	mduIndexStr := strings.TrimSpace(q.Get("mdu_index"))
@@ -5093,7 +5249,7 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = strconv.ParseUint(mduIndexStr, 10, 64)
+	mduIndex, err := strconv.ParseUint(mduIndexStr, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid mdu_index", http.StatusBadRequest)
 		return
@@ -5109,6 +5265,111 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "invalid manifest_root", http.StatusBadRequest)
 		return
+	}
+
+	if requireOnchainSession {
+		sessionKey, _, err := parseSessionIDHex(strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")))
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", err.Error())
+			return
+		}
+		sess, err := fetchRetrievalSession(sessionKey)
+		if err != nil {
+			if errors.Is(err, ErrSessionNotFound) {
+				writeJSONError(w, http.StatusNotFound, "retrieval session not found on chain", "")
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch retrieval session", err.Error())
+			return
+		}
+		if sess.DealId != dealID {
+			writeJSONError(w, http.StatusBadRequest, "session deal_id mismatch", "")
+			return
+		}
+		if len(sess.ManifestRoot) != 48 || !bytes.Equal(sess.ManifestRoot, parsed.Bytes[:]) {
+			writeJSONError(w, http.StatusBadRequest, "session manifest_root mismatch", "")
+			return
+		}
+		if sess.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
+			writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", sess.Status))
+			return
+		}
+
+		h, herr := fetchLatestHeight(r.Context(), lcdBase)
+		if herr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch chain height", herr.Error())
+			return
+		}
+		meta, derr := fetchDealMeta(dealID)
+		if derr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch deal", derr.Error())
+			return
+		}
+		if meta.EndBlock != 0 && h >= meta.EndBlock {
+			writeJSONError(w, http.StatusGone, "deal expired", fmt.Sprintf("end_block=%d", meta.EndBlock))
+			return
+		}
+		if sess.ExpiresAt != 0 && h > sess.ExpiresAt {
+			writeJSONError(w, http.StatusForbidden, "session expired", "")
+			return
+		}
+		if meta.EndBlock != 0 && sess.ExpiresAt != 0 && sess.ExpiresAt > meta.EndBlock {
+			writeJSONError(w, http.StatusForbidden, "session outlives deal term", "")
+			return
+		}
+
+		serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
+		if serr != nil {
+			log.Printf("SpFetchShard: failed to fetch service hint: %v", serr)
+			serviceHint = ""
+		}
+		stripe, serr := stripeParamsFromHint(serviceHint)
+		if serr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid deal service hint", serr.Error())
+			return
+		}
+		if stripe.mode != 2 || stripe.rows == 0 || stripe.leafCount == 0 {
+			writeJSONError(w, http.StatusBadRequest, "SpFetchShard only supported for Mode 2 deals", "")
+			return
+		}
+		startLeaf, overflow := mulUint64(slot, stripe.rows)
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid slot mapping", "start_leaf overflow")
+			return
+		}
+		if stripe.rows == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid stripe params", "rows is zero")
+			return
+		}
+		endLeaf := startLeaf + stripe.rows - 1
+		if endLeaf < startLeaf {
+			writeJSONError(w, http.StatusBadRequest, "invalid slot mapping", "end_leaf overflow")
+			return
+		}
+		reqStart, overflow := addUint64(mduIndex*stripe.leafCount, startLeaf)
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid request range", "start_global overflow")
+			return
+		}
+		reqEnd, overflow := addUint64(mduIndex*stripe.leafCount, endLeaf)
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid request range", "end_global overflow")
+			return
+		}
+		sessStart, overflow := addUint64(sess.StartMduIndex*stripe.leafCount, uint64(sess.StartBlobIndex))
+		if overflow {
+			writeJSONError(w, http.StatusBadRequest, "invalid session range", "start_global overflow")
+			return
+		}
+		sessEnd := sessStart + sess.BlobCount - 1
+		if sessEnd < sessStart {
+			writeJSONError(w, http.StatusBadRequest, "invalid session range", "end_global overflow")
+			return
+		}
+		if reqStart < sessStart || reqEnd > sessEnd {
+			writeJSONError(w, http.StatusForbidden, "range outside session", "open a session that covers this shard range")
+			return
+		}
 	}
 	rootDir := dealScopedDir(dealID, parsed)
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)

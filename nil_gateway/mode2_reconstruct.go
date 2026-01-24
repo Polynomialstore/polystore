@@ -33,7 +33,7 @@ var mode2ShardHTTPClient = &http.Client{
 	Timeout: 30 * time.Second,
 }
 
-func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams) (string, error) {
+func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams, sessionID string) (string, error) {
 	path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
@@ -116,7 +116,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 				lastErr = err
 				continue
 			}
-			shardBytes, err = fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot)
+			shardBytes, err = fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot, sessionID)
 			if err != nil {
 				lastErr = err
 				continue
@@ -190,10 +190,13 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	return path, nil
 }
 
-func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, manifestRoot string, mduIndex uint64, slot uint64) ([]byte, error) {
+func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, manifestRoot string, mduIndex uint64, slot uint64, sessionID string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/sp/shard", nil)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(sessionID) != "" {
+		req.Header.Set("X-Nil-Session-Id", sessionID)
 	}
 	q := req.URL.Query()
 	q.Set("deal_id", strconv.FormatUint(dealID, 10))
