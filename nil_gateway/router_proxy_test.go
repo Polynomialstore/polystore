@@ -31,6 +31,7 @@ func mustHTTPMultiaddr(t *testing.T, rawURL string) string {
 }
 
 func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	dealProviderCache = sync.Map{}
 	dealProvidersCache = sync.Map{}
 	providerBaseCache = sync.Map{}
@@ -98,6 +99,7 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 }
 
 func TestRouterGatewayFetch_FailsOverWhenPrimaryUnavailable(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	dealProviderCache = sync.Map{}
 	dealProvidersCache = sync.Map{}
 	providerBaseCache = sync.Map{}

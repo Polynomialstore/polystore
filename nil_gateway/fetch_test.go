@@ -15,6 +15,7 @@ import (
 )
 
 func TestGatewayFetch_ByPath(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
@@ -81,7 +82,10 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 
 	// Mock LCD for owner check
 	const dealID = 1
-	dealStates := map[uint64]struct{ Owner string; CID string }{
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)
