@@ -66,6 +66,13 @@ var (
 	// an on-chain session id. MUST be disabled by default.
 	unsafeAllowLegacyDownloadSession = envDefault("NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION", "0") == "1"
 
+	// Optional NilCE v1 compression layer for uploads (pre-alpha).
+	// When enabled, the gateway may store some files as a NILC header + ZSTD payload
+	// (encoding happens before sharding/commitment generation).
+	nilceEnabled       = envDefault("NIL_NILCE", "0") == "1"
+	nilceMinSavingsBps = envInt("NIL_NILCE_MIN_SAVINGS_BPS", 500)
+	nilceSampleBytes   = envInt("NIL_NILCE_SAMPLE_BYTES", 256<<10)
+
 	execCommandContext = exec.CommandContext
 	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
 )
@@ -769,6 +776,26 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", filename, owner, dealIDStr)
 
+	rawPath := path
+	ingestPath := path
+	logicalSizeBytes := uint64(0)
+	if info, err := os.Stat(rawPath); err == nil {
+		logicalSizeBytes = uint64(info.Size())
+	}
+	contentEncoding := "none"
+	if nilceEnabled {
+		wrapped, err := maybeWrapNilceZstd(ingestCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("nilce wrap failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if wrapped.Encoding == nilceEncodingZstd && strings.TrimSpace(wrapped.Path) != "" && wrapped.Path != rawPath {
+			ingestPath = wrapped.Path
+			contentEncoding = "zstd"
+			defer func() { _ = os.Remove(ingestPath) }()
+		}
+	}
+
 	var cid string
 	var size uint64
 	var fileSize uint64
@@ -825,7 +852,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, fileRecordPath)
+				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, fileRecordPath)
 				if err != nil {
 					if job != nil {
 						job.setError(err.Error())
@@ -849,7 +876,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case os.Getenv("NIL_FAKE_INGEST") == "1":
 					var err error
-					cid, size, allocatedLength, err = fastShardQuick(path)
+					cid, size, allocatedLength, err = fastShardQuick(ingestPath)
 					if err != nil {
 						http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
 						return
@@ -859,7 +886,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					witnessMdus = 1
 
 				case os.Getenv("NIL_FAST_INGEST") == "1":
-					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
+					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -874,7 +901,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					if b != nil {
 						witnessMdus = b.GetWitnessCount()
 					}
-					if info, err := os.Stat(path); err == nil {
+					if info, err := os.Stat(ingestPath); err == nil {
 						fileSize = uint64(info.Size())
 					}
 					if b != nil {
@@ -882,7 +909,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					}
 
 				default:
-					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
+					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -897,7 +924,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					if b != nil {
 						witnessMdus = b.GetWitnessCount()
 					}
-					if info, err := os.Stat(path); err == nil {
+					if info, err := os.Stat(ingestPath); err == nil {
 						fileSize = uint64(info.Size())
 					}
 					if b != nil {
@@ -907,7 +934,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), path, dealID, serviceHint, chainCID, fileRecordPath)
+				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath)
 				if err != nil {
 					if job != nil {
 						job.setError(err.Error())
@@ -932,7 +959,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus, fileRecordPath)
+				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, ingestPath, chainCID, maxMdus, fileRecordPath)
 				if err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -947,7 +974,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				if b != nil {
 					witnessMdus = b.GetWitnessCount()
 				}
-				if info, err := os.Stat(path); err == nil {
+				if info, err := os.Stat(ingestPath); err == nil {
 					fileSize = uint64(info.Size())
 				}
 				if b != nil {
@@ -960,7 +987,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		case os.Getenv("NIL_FAKE_INGEST") == "1":
 			// Very fast dev path: SHA256 padded to 48 bytes.
 			var err error
-			cid, size, allocatedLength, err = fastShardQuick(path)
+			cid, size, allocatedLength, err = fastShardQuick(ingestPath)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
 				return
@@ -971,7 +998,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		case os.Getenv("NIL_FAST_INGEST") == "1":
 			// Semi-canonical dev path: NilFS slab without Witness MDUs.
-			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, path, maxMdus, fileRecordPath)
+			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -986,7 +1013,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			if b != nil {
 				witnessMdus = b.GetWitnessCount()
 			}
-			if info, err := os.Stat(path); err == nil {
+			if info, err := os.Stat(ingestPath); err == nil {
 				fileSize = uint64(info.Size())
 			}
 			if b != nil {
@@ -995,7 +1022,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			// Full canonical ingest (Triple-Proof valid).
-			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, path, maxMdus, fileRecordPath)
+			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -1010,7 +1037,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			if b != nil {
 				witnessMdus = b.GetWitnessCount()
 			}
-			if info, err := os.Stat(path); err == nil {
+			if info, err := os.Stat(ingestPath); err == nil {
 				fileSize = uint64(info.Size())
 			}
 			if b != nil {
@@ -1037,15 +1064,17 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"cid":              cid,
-		"manifest_root":    cid,
-		"size_bytes":       size,
-		"file_size_bytes":  fileSize,
-		"allocated_length": allocatedLength,
-		"total_mdus":       totalMdus,
-		"witness_mdus":     witnessMdus,
-		"filename":         filename,
-		"upload_id":        uploadID,
+		"cid":                cid,
+		"manifest_root":      cid,
+		"size_bytes":         size,
+		"file_size_bytes":    fileSize,
+		"logical_size_bytes": logicalSizeBytes,
+		"content_encoding":   contentEncoding,
+		"allocated_length":   allocatedLength,
+		"total_mdus":         totalMdus,
+		"witness_mdus":       witnessMdus,
+		"filename":           filename,
+		"upload_id":          uploadID,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
