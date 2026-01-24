@@ -113,6 +113,25 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"openRetrievalSessionsSponsored",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"sessions","type":"tuple[]","components":[
+        {"name":"dealId","type":"uint64"},
+        {"name":"provider","type":"string"},
+        {"name":"manifestRoot","type":"bytes"},
+        {"name":"startMduIndex","type":"uint64"},
+        {"name":"startBlobIndex","type":"uint32"},
+        {"name":"blobCount","type":"uint64"},
+        {"name":"nonce","type":"uint64"},
+        {"name":"expiresAt","type":"uint64"},
+        {"name":"maxTotalFee","type":"uint256"}
+      ]}
+    ],
+    "outputs":[{"name":"sessionIds","type":"bytes32[]"}]
+  },
+  {
+    "type":"function",
     "name":"computeRetrievalSessions",
     "stateMutability":"view",
     "inputs":[
@@ -245,6 +264,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runOpenRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "openRetrievalSessions":
 		return p.runOpenRetrievalSessions(ctx, evm, contract, method, input[4:])
+	case "openRetrievalSessionsSponsored":
+		return p.runOpenRetrievalSessionsSponsored(ctx, evm, contract, method, input[4:])
 	case "computeRetrievalSessions":
 		return p.runComputeRetrievalSessions(ctx, evm, contract, method, input[4:])
 	case "computeRetrievalSessionIds":
@@ -272,6 +293,32 @@ type openSessionInput struct {
 type openSessionOutput struct {
 	Provider  string   `abi:"provider"`
 	SessionID [32]byte `abi:"sessionId"`
+}
+
+type openSponsoredSessionInput struct {
+	DealId         uint64   `abi:"dealId"`
+	Provider       string   `abi:"provider"`
+	ManifestRoot   []byte   `abi:"manifestRoot"`
+	StartMduIndex  uint64   `abi:"startMduIndex"`
+	StartBlobIndex uint32   `abi:"startBlobIndex"`
+	BlobCount      uint64   `abi:"blobCount"`
+	Nonce          uint64   `abi:"nonce"`
+	ExpiresAt      uint64   `abi:"expiresAt"`
+	MaxTotalFee    *big.Int `abi:"maxTotalFee"`
+}
+
+func (p *Precompile) effectiveSessionExpiresAt(ctx sdk.Context, dealID uint64, expiresAt uint64) (uint64, error) {
+	if expiresAt != 0 {
+		return expiresAt, nil
+	}
+	deal, err := p.keeper.Deals.Get(ctx, dealID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load deal %d: %w", dealID, err)
+	}
+	if deal.EndBlock == 0 {
+		return 0, errors.New("deal end_block is zero")
+	}
+	return deal.EndBlock, nil
 }
 
 func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
@@ -313,6 +360,10 @@ func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contr
 	if err != nil {
 		return nil, errors.New("openRetrievalSession: invalid expiresAt")
 	}
+	effectiveExpiresAt, err := p.effectiveSessionExpiresAt(ctx, dealID, expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSession: %w", err)
+	}
 
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
@@ -327,7 +378,7 @@ func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contr
 		StartBlobIndex: startBlobIndex,
 		BlobCount:      blobCount,
 		Nonce:          nonce,
-		ExpiresAt:      expiresAt,
+		ExpiresAt:      effectiveExpiresAt,
 	})
 	if err != nil {
 		return nil, err
@@ -379,6 +430,11 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 			return nil, errors.New("openRetrievalSessions: blobCount must be > 0")
 		}
 
+		effectiveExpiresAt, err := p.effectiveSessionExpiresAt(ctx, input.DealId, input.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("openRetrievalSessions: %w", err)
+		}
+
 		res, err := msgServer.OpenRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSession{
 			Creator:        creator,
 			DealId:         input.DealId,
@@ -388,7 +444,7 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 			StartBlobIndex: input.StartBlobIndex,
 			BlobCount:      input.BlobCount,
 			Nonce:          input.Nonce,
-			ExpiresAt:      input.ExpiresAt,
+			ExpiresAt:      effectiveExpiresAt,
 		})
 		if err != nil {
 			return nil, err
@@ -404,6 +460,98 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 	out, err := method.Outputs.Pack(sessionIDs)
 	if err != nil {
 		return nil, fmt.Errorf("openRetrievalSessions: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	values, err := method.Inputs.Unpack(data)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSessionsSponsored: failed to unpack args: %w", err)
+	}
+
+	var sessions []openSponsoredSessionInput
+	if err := method.Inputs.Copy(&sessions, values); err != nil {
+		return nil, fmt.Errorf("openRetrievalSessionsSponsored: failed to decode sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		return nil, errors.New("openRetrievalSessionsSponsored: sessions is empty")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+	ownerBytes := caller.Bytes()
+
+	sessionIDs := make([][32]byte, len(sessions))
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+
+	for i, input := range sessions {
+		provider := strings.TrimSpace(input.Provider)
+		if provider == "" {
+			return nil, errors.New("openRetrievalSessionsSponsored: invalid provider")
+		}
+		providerAddr, err := sdk.AccAddressFromBech32(provider)
+		if err != nil {
+			return nil, errors.New("openRetrievalSessionsSponsored: invalid provider")
+		}
+		if len(input.ManifestRoot) != 48 {
+			return nil, errors.New("openRetrievalSessionsSponsored: manifestRoot must be 48 bytes")
+		}
+		if input.BlobCount == 0 {
+			return nil, errors.New("openRetrievalSessionsSponsored: blobCount must be > 0")
+		}
+
+		effectiveExpiresAt, err := p.effectiveSessionExpiresAt(ctx, input.DealId, input.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("openRetrievalSessionsSponsored: %w", err)
+		}
+
+		maxFee := math.ZeroInt()
+		if input.MaxTotalFee != nil && input.MaxTotalFee.Sign() > 0 {
+			maxFee = math.NewIntFromBigInt(input.MaxTotalFee)
+		}
+
+		_, err = msgServer.OpenRetrievalSessionSponsored(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSessionSponsored{
+			Creator:        creator,
+			DealId:         input.DealId,
+			Provider:       provider,
+			ManifestRoot:   input.ManifestRoot,
+			StartMduIndex:  input.StartMduIndex,
+			StartBlobIndex: input.StartBlobIndex,
+			BlobCount:      input.BlobCount,
+			Nonce:          input.Nonce,
+			ExpiresAt:      effectiveExpiresAt,
+			MaxTotalFee:    maxFee,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		expectedID, err := types.HashRetrievalSessionID(
+			ownerBytes,
+			input.DealId,
+			providerAddr.Bytes(),
+			input.ManifestRoot,
+			input.StartMduIndex,
+			input.StartBlobIndex,
+			input.BlobCount,
+			input.Nonce,
+			effectiveExpiresAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("openRetrievalSessionsSponsored: failed to compute session id: %w", err)
+		}
+		if len(expectedID) != 32 {
+			return nil, errors.New("openRetrievalSessionsSponsored: invalid session id")
+		}
+		copy(sessionIDs[i][:], expectedID)
+
+		p.emitEventRetrievalSessionOpened(evm, input.DealId, caller, provider, sessionIDs[i])
+	}
+
+	out, err := method.Outputs.Pack(sessionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("openRetrievalSessionsSponsored: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }
@@ -442,6 +590,11 @@ func (p *Precompile) runComputeRetrievalSessions(ctx sdk.Context, evm *vm.EVM, c
 			return nil, errors.New("computeRetrievalSessions: blobCount must be > 0")
 		}
 
+		effectiveExpiresAt, err := p.effectiveSessionExpiresAt(ctx, input.DealId, input.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("computeRetrievalSessions: %w", err)
+		}
+
 		sessionID, err := types.HashRetrievalSessionID(
 			ownerBytes,
 			input.DealId,
@@ -451,7 +604,7 @@ func (p *Precompile) runComputeRetrievalSessions(ctx sdk.Context, evm *vm.EVM, c
 			input.StartBlobIndex,
 			input.BlobCount,
 			input.Nonce,
-			input.ExpiresAt,
+			effectiveExpiresAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("computeRetrievalSessions: failed to compute session id: %w", err)
@@ -504,6 +657,11 @@ func (p *Precompile) runComputeRetrievalSessionIds(ctx sdk.Context, evm *vm.EVM,
 			return nil, errors.New("computeRetrievalSessionIds: blobCount must be > 0")
 		}
 
+		effectiveExpiresAt, err := p.effectiveSessionExpiresAt(ctx, input.DealId, input.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("computeRetrievalSessionIds: %w", err)
+		}
+
 		sessionID, err := types.HashRetrievalSessionID(
 			ownerBytes,
 			input.DealId,
@@ -513,7 +671,7 @@ func (p *Precompile) runComputeRetrievalSessionIds(ctx sdk.Context, evm *vm.EVM,
 			input.StartBlobIndex,
 			input.BlobCount,
 			input.Nonce,
-			input.ExpiresAt,
+			effectiveExpiresAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("computeRetrievalSessionIds: failed to compute session id: %w", err)

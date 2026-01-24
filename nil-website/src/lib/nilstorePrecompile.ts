@@ -101,6 +101,29 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'openRetrievalSessionsSponsored',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'sessions',
+        type: 'tuple[]',
+        components: [
+          { name: 'dealId', type: 'uint64' },
+          { name: 'provider', type: 'string' },
+          { name: 'manifestRoot', type: 'bytes' },
+          { name: 'startMduIndex', type: 'uint64' },
+          { name: 'startBlobIndex', type: 'uint32' },
+          { name: 'blobCount', type: 'uint64' },
+          { name: 'nonce', type: 'uint64' },
+          { name: 'expiresAt', type: 'uint64' },
+          { name: 'maxTotalFee', type: 'uint256' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'sessionIds', type: 'bytes32[]' }],
+  },
+  {
+    type: 'function',
     name: 'computeRetrievalSessions',
     stateMutability: 'view',
     inputs: [
@@ -229,6 +252,10 @@ export type RetrievalSessionInput = {
   expiresAt: bigint
 }
 
+export type SponsoredRetrievalSessionInput = RetrievalSessionInput & {
+  maxTotalFee: bigint
+}
+
 export type ComputeRetrievalSessionIdsResult = {
   providers: string[]
   sessionIds: Hex[]
@@ -264,6 +291,14 @@ export function encodeOpenRetrievalSessionsData(sessions: readonly RetrievalSess
   return encodeFunctionData({
     abi: NILSTORE_PRECOMPILE_ABI,
     functionName: 'openRetrievalSessions',
+    args: [sessions],
+  })
+}
+
+export function encodeOpenRetrievalSessionsSponsoredData(sessions: readonly SponsoredRetrievalSessionInput[]): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'openRetrievalSessionsSponsored',
     args: [sessions],
   })
 }
