@@ -27,16 +27,18 @@ async fn gateway_start(
         .listen_addr
         .clone()
         .unwrap_or_else(|| "127.0.0.1:8080".to_string());
-    let base_url = if listen_addr.starts_with("http://")
-        || listen_addr.starts_with("https://")
-    {
+    let base_url = if listen_addr.starts_with("http://") || listen_addr.starts_with("https://") {
         listen_addr.clone()
     } else {
         format!("http://{listen_addr}")
     };
 
     if state.sidecar.base_url().is_err() {
-        if api::GatewayClient::new(base_url.clone()).status().await.is_ok() {
+        if api::GatewayClient::new(base_url.clone())
+            .status()
+            .await
+            .is_ok()
+        {
             state.sidecar.set_base_url(base_url.clone())?;
             return Ok(sidecar::GatewayStartResponse { base_url, pid: 0 });
         }

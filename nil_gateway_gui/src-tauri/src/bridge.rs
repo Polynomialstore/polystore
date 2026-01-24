@@ -7,7 +7,7 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{oneshot, Mutex};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct BridgeStartResponse {
@@ -36,8 +36,8 @@ impl BridgeManager {
     pub async fn start(&self, payload: Value) -> Result<BridgeStartResponse, String> {
         let (sig_tx, sig_rx) = oneshot::channel();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|err| format!("bridge bind failed: {err}"))?;
+        let listener =
+            TcpListener::bind("127.0.0.1:0").map_err(|err| format!("bridge bind failed: {err}"))?;
         let addr = listener
             .local_addr()
             .map_err(|err| format!("bridge addr failed: {err}"))?;
@@ -126,7 +126,9 @@ async fn handle_bridge_request(
                 .unwrap())
         }
         (&Method::POST, "/callback") => {
-            let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap_or_default();
+            let body_bytes = hyper::body::to_bytes(req.into_body())
+                .await
+                .unwrap_or_default();
             let signature = serde_json::from_slice::<Value>(&body_bytes)
                 .ok()
                 .and_then(|val| {
