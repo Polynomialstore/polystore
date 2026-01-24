@@ -62,6 +62,9 @@ service Msg {
   // MsgAddCredit allows a user to top up the escrow balance for a deal.
   rpc AddCredit(MsgAddCredit) returns (MsgAddCreditResponse);
 
+  // MsgExtendDeal extends a deal term by paying spot storage price for existing bytes.
+  rpc ExtendDeal(MsgExtendDeal) returns (MsgExtendDealResponse);
+
   // MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
   rpc WithdrawRewards(MsgWithdrawRewards) returns (MsgWithdrawRewardsResponse);
 }
@@ -350,6 +353,22 @@ message MsgAddCredit {
 // MsgAddCreditResponse defines the response structure for adding credit.
 message MsgAddCreditResponse {
   string new_balance = 1 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
+}
+
+// MsgExtendDeal extends the deal term by a number of blocks, charging spot storage price
+// for the deal's currently committed bytes.
+message MsgExtendDeal {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgExtendDeal";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"]; // deal owner
+  uint64 deal_id = 2;
+  uint64 additional_duration_blocks = 3;
+}
+
+message MsgExtendDealResponse {
+  bool success = 1;
+  uint64 new_end_block = 2;
 }
 
 // MsgWithdrawRewards allows a Storage Provider to withdraw accumulated rewards.

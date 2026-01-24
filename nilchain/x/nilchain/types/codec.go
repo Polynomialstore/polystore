@@ -23,6 +23,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgStartSlotRepair{},
 		&MsgCompleteSlotRepair{},
 		&MsgAddCredit{},
+		&MsgExtendDeal{},
 		&MsgWithdrawRewards{},
 	)
 	msgservice.RegisterMsgServiceDesc(registrar, &_Msg_serviceDesc)
