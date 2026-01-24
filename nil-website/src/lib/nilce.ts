@@ -42,7 +42,12 @@ function writeNilceHeader(encoding: NilceEncoding, uncompressedLen: number): Uin
   return header
 }
 
-function parseNilceHeader(bytes: Uint8Array) {
+function parseNilceHeader(bytes: Uint8Array): {
+  ok: boolean
+  encoding?: NilceEncoding
+  uncompressedLen?: number
+  error?: Error
+} {
   if (bytes.length < NILCE_HEADER_SIZE) return { ok: false }
   if (!NILCE_MAGIC.every((b, i) => bytes[i] === b)) return { ok: false }
   if (bytes[4] !== NILCE_VERSION) return { ok: true, error: new Error('Unsupported NilCE version') }

@@ -986,7 +986,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       const buffer = await file.arrayBuffer()
       console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
-      let bytes = new Uint8Array(buffer)
+      let bytes: Uint8Array = new Uint8Array(buffer)
       let logicalSizeBytes = file.size
       let fileFlags = 0
       let contentEncoding: 'none' | 'zstd' = 'none'
@@ -1016,7 +1016,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         try {
           const wrapped = await maybeWrapNilceZstd(bytes)
           if (wrapped.wrapped && wrapped.encoding === 'zstd') {
-            bytes = wrapped.bytes
+            bytes = wrapped.bytes as Uint8Array
             contentEncoding = 'zstd'
             fileFlags |= NILCE_FLAG_COMPRESSION_ZSTD
             logicalSizeBytes = wrapped.uncompressedLen

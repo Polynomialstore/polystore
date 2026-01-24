@@ -893,7 +893,12 @@ export function Dashboard() {
         const buf = new Uint8Array(await file.arrayBuffer())
         const wrapped = await maybeWrapNilceZstd(buf)
         if (wrapped.wrapped && wrapped.encoding === 'zstd') {
-          uploadFile = new File([wrapped.bytes], file.name, { type: file.type || 'application/octet-stream', lastModified: file.lastModified })
+          const view = wrapped.bytes
+          const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)
+          uploadFile = new File([buffer], file.name, {
+            type: file.type || 'application/octet-stream',
+            lastModified: file.lastModified,
+          })
         }
       }
       const dealForUpload = allDeals.find((d) => d.id === targetDealId) || deals.find((d) => d.id === targetDealId) || null
