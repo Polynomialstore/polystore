@@ -90,6 +90,7 @@ func pickTestAddr(t *testing.T, addrs []multiaddr.Multiaddr) multiaddr.Multiaddr
 }
 
 func TestP2PFetch_EndToEnd(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 
@@ -107,7 +108,10 @@ func TestP2PFetch_EndToEnd(t *testing.T) {
 	manifestRoot := buildTestSlab(t, filePath, fileContent)
 
 	dealID := uint64(1)
-	dealStates := map[uint64]struct{ Owner string; CID string }{
+	dealStates := map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		dealID: {Owner: owner, CID: manifestRoot.Canonical},
 	}
 	srv := dynamicMockDealServer(dealStates)

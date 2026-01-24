@@ -130,6 +130,7 @@ func testRouter() *mux.Router {
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
 	return r
@@ -157,6 +158,7 @@ func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 }
 
 func TestGatewayFetch_MissingParams(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	r := testRouter()
 
 	root := mustTestManifestRoot(t, "missing-params")
@@ -175,6 +177,7 @@ func TestGatewayFetch_MissingParams(t *testing.T) {
 }
 
 func TestGatewayFetch_OwnerMismatch(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	r := testRouter()
 
 	// Stub LCD so fetchDealOwnerAndCID returns a specific owner/cid.
@@ -212,6 +215,7 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 }
 
 func TestGatewayFetch_CIDMismatch(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	r := testRouter()
 
 	// Stub LCD: owner matches, cid does not.
@@ -634,6 +638,7 @@ func hasArg(args []string, target string) bool {
 }
 
 func TestGatewayFetch_DealIDZero(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)

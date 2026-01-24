@@ -18,12 +18,12 @@ import (
 )
 
 type mode2DealState struct {
-	mu         sync.RWMutex
-	owner      string
-	cid        string
+	mu          sync.RWMutex
+	owner       string
+	cid         string
 	serviceHint string
-	providers  []string
-	endpoints  map[string]string // providerAddr -> baseURL
+	providers   []string
+	endpoints   map[string]string // providerAddr -> baseURL
 }
 
 func (s *mode2DealState) getDeal() (owner, cid, hint string, providers []string) {
@@ -137,6 +137,7 @@ func ioReadAllLimit(r *http.Request, limit int64) ([]byte, error) {
 }
 
 func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
 	dealProviderCache = sync.Map{}
 	providerBaseCache = sync.Map{}
 
