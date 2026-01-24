@@ -146,6 +146,68 @@ func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart
 	return reader, mduIdx, mduPath, absOffset, segmentLen, fileLen, nil
 }
 
+// resolveNilfsFileSegmentForFetchDecoded resolves a NilFS file segment by decoding the
+// full user MDU payload via the Rust FFI decoder, then slicing the requested range.
+// This is slower than streaming, but ensures byte-accurate decoding for Mode 2 reads.
+func resolveNilfsFileSegmentForFetchDecoded(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
+	entry, err := loadSlabIndex(dealDir)
+	if err != nil {
+		return nil, 0, "", 0, 0, 0, err
+	}
+
+	info, ok := entry.files[filePath]
+	if !ok {
+		return nil, 0, "", 0, 0, 0, os.ErrNotExist
+	}
+
+	fileLen := info.Length
+	if rangeStart >= fileLen {
+		return nil, 0, "", 0, fileLen, 0, fmt.Errorf("rangeStart beyond EOF")
+	}
+	remaining := fileLen - rangeStart
+	segmentLen := remaining
+	if rangeLen != 0 && rangeLen < segmentLen {
+		segmentLen = rangeLen
+	}
+
+	absOffset := info.StartOffset + rangeStart
+	mduIdx := 1 + entry.witnessCount + (absOffset / RawMduCapacity)
+	mduPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIdx))
+	mduBytes, err := os.ReadFile(mduPath)
+	if err != nil {
+		return nil, 0, "", 0, fileLen, 0, err
+	}
+
+	mduBase := (absOffset / RawMduCapacity) * RawMduCapacity
+	fileAbsEnd := info.StartOffset + info.Length
+	mduPayloadLen := uint64(RawMduCapacity)
+	if fileAbsEnd < mduBase+uint64(RawMduCapacity) {
+		mduPayloadLen = fileAbsEnd - mduBase
+		if mduPayloadLen == 0 {
+			return nil, 0, "", 0, fileLen, 0, fmt.Errorf("file payload length is zero for MDU")
+		}
+	}
+
+	payload, err := crypto_ffi.DecodePayloadFromMdu(mduBytes, mduPayloadLen)
+	if err != nil {
+		return nil, 0, "", 0, fileLen, 0, err
+	}
+
+	offsetInMdu := absOffset % RawMduCapacity
+	if offsetInMdu >= uint64(len(payload)) {
+		return nil, 0, "", 0, fileLen, 0, fmt.Errorf("decoded payload offset out of bounds")
+	}
+	end := offsetInMdu + segmentLen
+	if end > uint64(len(payload)) {
+		end = uint64(len(payload))
+		segmentLen = end - offsetInMdu
+	}
+
+	segment := payload[offsetInMdu:end]
+	reader := io.NopCloser(bytes.NewReader(segment))
+	return reader, mduIdx, mduPath, absOffset, segmentLen, fileLen, nil
+}
+
 var (
 	providerAddrMu          sync.Mutex
 	providerAddrCached      string
