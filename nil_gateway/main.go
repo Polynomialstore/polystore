@@ -2565,7 +2565,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, reqRangeStart, reqRangeLen)
+	var (
+		content      io.ReadCloser
+		mduIdx       uint64
+		mduPath      string
+		absOffset    uint64
+		servedLen    uint64
+		totalFileLen uint64
+	)
+	if stripe.mode == 2 {
+		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolveNilfsFileSegmentForFetchDecoded(
+			dealDir,
+			filePath,
+			reqRangeStart,
+			reqRangeLen,
+		)
+	} else {
+		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolveNilfsFileSegmentForFetch(
+			dealDir,
+			filePath,
+			reqRangeStart,
+			reqRangeLen,
+		)
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
