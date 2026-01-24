@@ -194,6 +194,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 
 	currentReplication := uint64(len(assignedProviders))
+	height := uint64(ctx.BlockHeight())
 
 	deal := types.Deal{
 		Id:                     dealID,
@@ -201,17 +202,18 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		Size_:                  0,   // Empty initially
 		Owner:                  ownerAddrStr,
 		EscrowBalance:          intent.InitialEscrow,
-		StartBlock:             uint64(ctx.BlockHeight()),
-		EndBlock:               uint64(ctx.BlockHeight()) + intent.DurationBlocks,
+		StartBlock:             height,
+		EndBlock:               height + intent.DurationBlocks,
 		Providers:              assignedProviders,
 		RedundancyMode:         redundancyMode,
 		CurrentReplication:     currentReplication,
 		ServiceHint:            serviceHintRaw,
 		MaxMonthlySpend:        intent.MaxMonthlySpend,
-		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
+		SpendWindowStartHeight: height,
 		SpendWindowSpent:       math.NewInt(0),
 		CurrentGen:             0,
 		WitnessMdus:            0,
+		PricingAnchorBlock:     height,
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
@@ -432,6 +434,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}
 
 	currentReplication := uint64(len(assignedProviders))
+	height := uint64(ctx.BlockHeight())
 
 	deal := types.Deal{
 		Id:                     dealID,
@@ -439,17 +442,18 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		Size_:                  0,   // Empty
 		Owner:                  ownerAddrStr,
 		EscrowBalance:          initialEscrowAmount,
-		StartBlock:             uint64(ctx.BlockHeight()),
-		EndBlock:               uint64(ctx.BlockHeight()) + msg.DurationBlocks,
+		StartBlock:             height,
+		EndBlock:               height + msg.DurationBlocks,
 		Providers:              assignedProviders,
 		RedundancyMode:         redundancyMode,
 		CurrentReplication:     currentReplication,
 		ServiceHint:            serviceHintRaw,
 		MaxMonthlySpend:        maxMonthlySpend,
-		SpendWindowStartHeight: uint64(ctx.BlockHeight()),
+		SpendWindowStartHeight: height,
 		SpendWindowSpent:       math.NewInt(0),
 		CurrentGen:             0,
 		WitnessMdus:            0,
+		PricingAnchorBlock:     height,
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
@@ -509,16 +513,28 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
 	}
 
+	height := uint64(ctx.BlockHeight())
+	if height >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
+
 	params := k.GetParams(ctx)
 
 	// --- TERM DEPOSIT (Storage Lock-in) ---
 	if msg.Size_ > deal.Size_ {
 		deltaSize := msg.Size_ - deal.Size_
-		duration := deal.EndBlock - deal.StartBlock
+		anchor := deal.PricingAnchorBlock
+		if anchor == 0 {
+			anchor = deal.StartBlock
+		}
+		if deal.EndBlock < anchor {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid deal term: end_block < pricing_anchor_block")
+		}
+		duration := deal.EndBlock - anchor
 
 		price := params.StoragePrice
 		if price.IsPositive() {
-			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			costDec := price.MulInt(math.NewIntFromUint64(deltaSize)).MulInt(math.NewIntFromUint64(duration))
 			cost := costDec.Ceil().TruncateInt()
 
 			if cost.IsPositive() {
@@ -691,17 +707,29 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
 	}
 
+	height := uint64(ctx.BlockHeight())
+	if height >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", intent.DealId, deal.EndBlock)
+	}
+
 	// --- TERM DEPOSIT (Storage Lock-in) ---
 	// Cost = (NewSize - OldSize) * Duration * Price
 	// Only charge for size increase.
 	if intent.SizeBytes > deal.Size_ {
 		deltaSize := intent.SizeBytes - deal.Size_
-		duration := deal.EndBlock - deal.StartBlock
+		anchor := deal.PricingAnchorBlock
+		if anchor == 0 {
+			anchor = deal.StartBlock
+		}
+		if deal.EndBlock < anchor {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid deal term: end_block < pricing_anchor_block")
+		}
+		duration := deal.EndBlock - anchor
 
 		// price is Dec per byte per block
 		price := params.StoragePrice
 		if price.IsPositive() {
-			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+			costDec := price.MulInt(math.NewIntFromUint64(deltaSize)).MulInt(math.NewIntFromUint64(duration))
 			cost := costDec.Ceil().TruncateInt()
 
 			if cost.IsPositive() {
@@ -786,6 +814,9 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	deal, err := k.Deals.Get(ctx, msg.DealId)
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
+	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
 
 	stripe, err := stripeParamsForDeal(deal)
@@ -1586,6 +1617,9 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", msg.DealId)
 	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
 
 	isAssigned := false
 	for _, p := range deal.Providers {
@@ -1671,6 +1705,9 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
 	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
 
 	amount := msg.Amount
 	if amount.IsNil() || amount.IsNegative() {
@@ -1688,6 +1725,86 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 	}
 
 	return &types.MsgAddCreditResponse{NewBalance: deal.EscrowBalance}, nil
+}
+
+// ExtendDeal extends a deal's end_block by charging spot storage_price for the
+// currently committed bytes. See `rfcs/rfc-deal-expiry-and-extension.md`.
+func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (*types.MsgExtendDealResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+	if msg.AdditionalDurationBlocks == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("additional_duration_blocks must be > 0")
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+	if strings.TrimSpace(msg.Creator) != deal.Owner {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner may extend deal")
+	}
+
+	params := k.GetParams(ctx)
+	h := uint64(ctx.BlockHeight())
+
+	deleteAfter, overflow := addUint64(deal.EndBlock, params.DealExtensionGraceBlocks)
+	if overflow {
+		// Treat overflow as "infinite" grace for purposes of this check.
+		deleteAfter = ^uint64(0)
+	}
+	if h > deleteAfter {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d is past renewal grace window", msg.DealId)
+	}
+
+	base := deal.EndBlock
+	if h > base {
+		base = h
+	}
+	newEnd, overflow := addUint64(base, msg.AdditionalDurationBlocks)
+	if overflow {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("end_block overflow")
+	}
+
+	// Charge spot price for existing bytes over the extension window.
+	cost := math.ZeroInt()
+	price := params.StoragePrice
+	if price.IsPositive() && deal.Size_ > 0 {
+		costDec := price.
+			MulInt(math.NewIntFromUint64(deal.Size_)).
+			MulInt(math.NewIntFromUint64(msg.AdditionalDurationBlocks))
+		cost = costDec.Ceil().TruncateInt()
+	}
+
+	if cost.IsPositive() {
+		ownerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
+		}
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAddr, types.ModuleName, coins); err != nil {
+			return nil, err
+		}
+		deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+	}
+
+	deal.EndBlock = newEnd
+	deal.PricingAnchorBlock = h
+	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		return nil, err
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			"extend_deal",
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+			sdk.NewAttribute("new_end_block", fmt.Sprintf("%d", deal.EndBlock)),
+			sdk.NewAttribute("extension_cost", cost.String()),
+		),
+	)
+
+	return &types.MsgExtendDealResponse{Success: true, NewEndBlock: deal.EndBlock}, nil
 }
 
 // WithdrawRewards allows a Storage Provider to withdraw accumulated rewards.
@@ -1788,6 +1905,10 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	if msg.Creator != deal.Owner {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner may open retrieval sessions")
 	}
+	height := uint64(ctx.BlockHeight())
+	if height >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
 	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
 	}
@@ -1871,6 +1992,19 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
 	}
 
+	expiresAt := msg.ExpiresAt
+	if expiresAt == 0 {
+		// Legacy clients omit expires_at. Cap sessions at the deal term so they
+		// cannot outlive paid storage.
+		expiresAt = deal.EndBlock
+	}
+	if expiresAt > deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be <= deal end_block")
+	}
+	if expiresAt < height {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be >= current height")
+	}
+
 	ownerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
@@ -1922,7 +2056,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		msg.StartBlobIndex,
 		msg.BlobCount,
 		msg.Nonce,
-		msg.ExpiresAt,
+		expiresAt,
 	)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
@@ -1939,7 +2073,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		BlobCount:      msg.BlobCount,
 		TotalBytes:     totalBytes,
 		Nonce:          msg.Nonce,
-		ExpiresAt:      msg.ExpiresAt,
+		ExpiresAt:      expiresAt,
 		OpenedHeight:   ctx.BlockHeight(),
 		UpdatedHeight:  ctx.BlockHeight(),
 		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,

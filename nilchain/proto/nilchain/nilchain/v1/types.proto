@@ -59,6 +59,10 @@ message Deal {
 
   // --- Slab accounting (bounds + policy) ---
   uint64 witness_mdus = 20; // number of witness MDUs committed after MDU #0
+
+  // pricing_anchor_block is used for renewal-safe lock-in pricing on newly added bytes.
+  // See `rfcs/rfc-deal-expiry-and-extension.md`.
+  uint64 pricing_anchor_block = 21;
 }
 
 // DealHeatState tracks aggregate traffic and performance metrics for a deal.

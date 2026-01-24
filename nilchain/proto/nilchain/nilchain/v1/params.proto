@@ -60,4 +60,10 @@ message Params {
 
   // Evict (trigger repair) after this many consecutive missed epochs.
   uint64 evict_after_missed_epochs = 17;
+
+  // Renewal grace window: allow extending an expired deal until
+  // `current_height <= end_block + deal_extension_grace_blocks`.
+  //
+  // See `rfcs/rfc-deal-expiry-and-extension.md`.
+  uint64 deal_extension_grace_blocks = 18;
 }

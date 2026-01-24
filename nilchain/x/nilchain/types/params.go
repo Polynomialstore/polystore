@@ -22,6 +22,7 @@ var (
 	KeyRetrievalPricePerBlob = []byte("RetrievalPricePerBlob")
 	KeyRetrievalBurnBps      = []byte("RetrievalBurnBps")
 	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
+	KeyDealExtensionGrace    = []byte("DealExtensionGraceBlocks")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -56,6 +57,7 @@ func NewParams(
 	quotaMaxBlobs uint64,
 	creditCapBps uint64,
 	evictAfterMissedEpochs uint64,
+	dealExtensionGraceBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -76,6 +78,7 @@ func NewParams(
 		QuotaMaxBlobs:          quotaMaxBlobs,
 		CreditCapBps:           creditCapBps,
 		EvictAfterMissedEpochs: evictAfterMissedEpochs,
+		DealExtensionGraceBlocks: dealExtensionGraceBlocks,
 	}
 }
 
@@ -99,6 +102,7 @@ func DefaultParams() Params {
 		64,   // QuotaMaxBlobs
 		5000, // CreditCapBps (50% of quota via organic retrieval)
 		3,    // EvictAfterMissedEpochs
+		1000, // DealExtensionGraceBlocks (default: 1 month)
 	)
 }
 
@@ -123,6 +127,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyQuotaMaxBlobs, &p.QuotaMaxBlobs, validateQuotaMaxBlobs),
 		paramtypes.NewParamSetPair(KeyCreditCapBps, &p.CreditCapBps, validateCreditCapBps),
 		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochs, &p.EvictAfterMissedEpochs, validateEvictAfterMissedEpochs),
+		paramtypes.NewParamSetPair(KeyDealExtensionGrace, &p.DealExtensionGraceBlocks, validateDealExtensionGraceBlocks),
 	}
 }
 
@@ -182,6 +187,18 @@ func (p Params) Validate() error {
 	if err := validateEvictAfterMissedEpochs(p.EvictAfterMissedEpochs); err != nil {
 		return err
 	}
+	if err := validateDealExtensionGraceBlocks(p.DealExtensionGraceBlocks); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDealExtensionGraceBlocks(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	// Grace blocks may be 0 (strict expiry) or a positive window (recommended).
 	return nil
 }
 
