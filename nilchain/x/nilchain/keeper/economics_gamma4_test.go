@@ -80,6 +80,25 @@ func (b *trackingBankKeeper) SendCoinsFromModuleToAccount(_ context.Context, sen
 	return nil
 }
 
+func (b *trackingBankKeeper) SendCoinsFromModuleToModule(_ context.Context, senderModule string, recipientModule string, amt sdk.Coins) error {
+	if !amt.IsValid() {
+		return fmt.Errorf("invalid coins: %s", amt)
+	}
+	if amt.IsZero() {
+		b.transfers = append(b.transfers, transferRecord{fromModule: senderModule, toModule: recipientModule, amt: amt})
+		return nil
+	}
+	have := b.moduleBalances[senderModule]
+	next, err := safeSubCoins(have, amt)
+	if err != nil {
+		return err
+	}
+	b.moduleBalances[senderModule] = next.Sort()
+	b.moduleBalances[recipientModule] = b.moduleBalances[recipientModule].Add(amt...).Sort()
+	b.transfers = append(b.transfers, transferRecord{fromModule: senderModule, toModule: recipientModule, amt: amt})
+	return nil
+}
+
 func (b *trackingBankKeeper) SendCoinsFromAccountToModule(_ context.Context, senderAddr sdk.AccAddress, recipientModule string, amt sdk.Coins) error {
 	if !amt.IsValid() {
 		return fmt.Errorf("invalid coins: %s", amt)
