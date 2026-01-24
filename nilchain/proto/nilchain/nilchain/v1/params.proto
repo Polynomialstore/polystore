@@ -83,4 +83,10 @@ message Params {
   // Maximum number of epochs worth of unused budget that may carry forward.
   // 0 means "no carryover" (cap to 1 epoch).
   uint64 audit_budget_carryover_epochs = 22;
+
+  // --- Base reward pool emission schedule (see `rfcs/rfc-base-reward-pool-and-emissions.md`) ---
+  uint64 emission_start_height = 23;
+  uint64 base_reward_halving_interval_blocks = 24;
+  uint64 base_reward_bps_start = 25;
+  uint64 base_reward_bps_tail = 26;
 }

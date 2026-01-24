@@ -27,6 +27,10 @@ var (
 	KeyAuditBudgetBps        = []byte("AuditBudgetBps")
 	KeyAuditBudgetCapBps     = []byte("AuditBudgetCapBps")
 	KeyAuditBudgetCarryEpoch = []byte("AuditBudgetCarryoverEpochs")
+	KeyEmissionStartHeight   = []byte("EmissionStartHeight")
+	KeyBaseRewardHalvingInt  = []byte("BaseRewardHalvingIntervalBlocks")
+	KeyBaseRewardBpsStart    = []byte("BaseRewardBpsStart")
+	KeyBaseRewardBpsTail     = []byte("BaseRewardBpsTail")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -66,6 +70,10 @@ func NewParams(
 	auditBudgetBps uint64,
 	auditBudgetCapBps uint64,
 	auditBudgetCarryoverEpochs uint64,
+	emissionStartHeight uint64,
+	baseRewardHalvingIntervalBlocks uint64,
+	baseRewardBpsStart uint64,
+	baseRewardBpsTail uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -79,18 +87,22 @@ func NewParams(
 		RetrievalBurnBps:      retrievalBurnBps,
 		MonthLenBlocks:        monthLenBlocks,
 
-		EpochLenBlocks:             epochLenBlocks,
-		QuotaBpsPerEpochHot:        quotaBpsPerEpochHot,
-		QuotaBpsPerEpochCold:       quotaBpsPerEpochCold,
-		QuotaMinBlobs:              quotaMinBlobs,
-		QuotaMaxBlobs:              quotaMaxBlobs,
-		CreditCapBps:               creditCapBps,
-		EvictAfterMissedEpochs:     evictAfterMissedEpochs,
-		DealExtensionGraceBlocks:   dealExtensionGraceBlocks,
-		VoucherMaxTtlBlocks:        voucherMaxTTLBlocks,
-		AuditBudgetBps:             auditBudgetBps,
-		AuditBudgetCapBps:          auditBudgetCapBps,
-		AuditBudgetCarryoverEpochs: auditBudgetCarryoverEpochs,
+		EpochLenBlocks:                  epochLenBlocks,
+		QuotaBpsPerEpochHot:             quotaBpsPerEpochHot,
+		QuotaBpsPerEpochCold:            quotaBpsPerEpochCold,
+		QuotaMinBlobs:                   quotaMinBlobs,
+		QuotaMaxBlobs:                   quotaMaxBlobs,
+		CreditCapBps:                    creditCapBps,
+		EvictAfterMissedEpochs:          evictAfterMissedEpochs,
+		DealExtensionGraceBlocks:        dealExtensionGraceBlocks,
+		VoucherMaxTtlBlocks:             voucherMaxTTLBlocks,
+		AuditBudgetBps:                  auditBudgetBps,
+		AuditBudgetCapBps:               auditBudgetCapBps,
+		AuditBudgetCarryoverEpochs:      auditBudgetCarryoverEpochs,
+		EmissionStartHeight:             emissionStartHeight,
+		BaseRewardHalvingIntervalBlocks: baseRewardHalvingIntervalBlocks,
+		BaseRewardBpsStart:              baseRewardBpsStart,
+		BaseRewardBpsTail:               baseRewardBpsTail,
 	}
 }
 
@@ -105,20 +117,24 @@ func DefaultParams() Params {
 		10, // MinDurationBlocks
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // BaseRetrievalFee (provisional devnet default)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlob (provisional devnet default)
-		500,  // RetrievalBurnBps (5%)
-		1000, // MonthLenBlocks (devnet-friendly "month")
-		100,  // EpochLenBlocks (devnet-friendly "epoch")
-		100,  // QuotaBpsPerEpochHot (1%)
-		50,   // QuotaBpsPerEpochCold (0.5%)
-		1,    // QuotaMinBlobs
-		64,   // QuotaMaxBlobs
-		5000, // CreditCapBps (50% of quota via organic retrieval)
-		3,    // EvictAfterMissedEpochs
-		1000, // DealExtensionGraceBlocks (default: 1 month)
-		1000, // VoucherMaxTTLBlocks (default: 1 month)
-		25,   // AuditBudgetBps (0.25% of notional rent per epoch)
-		100,  // AuditBudgetCapBps (1% of notional rent per epoch)
-		2,    // AuditBudgetCarryoverEpochs
+		500,     // RetrievalBurnBps (5%)
+		1000,    // MonthLenBlocks (devnet-friendly "month")
+		100,     // EpochLenBlocks (devnet-friendly "epoch")
+		100,     // QuotaBpsPerEpochHot (1%)
+		50,      // QuotaBpsPerEpochCold (0.5%)
+		1,       // QuotaMinBlobs
+		64,      // QuotaMaxBlobs
+		5000,    // CreditCapBps (50% of quota via organic retrieval)
+		3,       // EvictAfterMissedEpochs
+		1000,    // DealExtensionGraceBlocks (default: 1 month)
+		1000,    // VoucherMaxTTLBlocks (default: 1 month)
+		25,      // AuditBudgetBps (0.25% of notional rent per epoch)
+		100,     // AuditBudgetCapBps (1% of notional rent per epoch)
+		2,       // AuditBudgetCarryoverEpochs
+		1,       // EmissionStartHeight
+		1000000, // BaseRewardHalvingIntervalBlocks
+		425,     // BaseRewardBpsStart
+		25,      // BaseRewardBpsTail
 	)
 }
 
@@ -148,6 +164,10 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyAuditBudgetBps, &p.AuditBudgetBps, validateBps),
 		paramtypes.NewParamSetPair(KeyAuditBudgetCapBps, &p.AuditBudgetCapBps, validateBps),
 		paramtypes.NewParamSetPair(KeyAuditBudgetCarryEpoch, &p.AuditBudgetCarryoverEpochs, validateAuditBudgetCarryoverEpochs),
+		paramtypes.NewParamSetPair(KeyEmissionStartHeight, &p.EmissionStartHeight, validateEmissionStartHeight),
+		paramtypes.NewParamSetPair(KeyBaseRewardHalvingInt, &p.BaseRewardHalvingIntervalBlocks, validateHalvingInterval),
+		paramtypes.NewParamSetPair(KeyBaseRewardBpsStart, &p.BaseRewardBpsStart, validateBps),
+		paramtypes.NewParamSetPair(KeyBaseRewardBpsTail, &p.BaseRewardBpsTail, validateBps),
 	}
 }
 
@@ -225,6 +245,21 @@ func (p Params) Validate() error {
 	if err := validateAuditBudgetCarryoverEpochs(p.AuditBudgetCarryoverEpochs); err != nil {
 		return err
 	}
+	if err := validateEmissionStartHeight(p.EmissionStartHeight); err != nil {
+		return err
+	}
+	if err := validateHalvingInterval(p.BaseRewardHalvingIntervalBlocks); err != nil {
+		return err
+	}
+	if err := validateBps(p.BaseRewardBpsStart); err != nil {
+		return err
+	}
+	if err := validateBps(p.BaseRewardBpsTail); err != nil {
+		return err
+	}
+	if p.BaseRewardBpsStart < p.BaseRewardBpsTail {
+		return fmt.Errorf("base_reward_bps_start must be >= base_reward_bps_tail (got %d < %d)", p.BaseRewardBpsStart, p.BaseRewardBpsTail)
+	}
 	return nil
 }
 
@@ -234,6 +269,15 @@ func validateAuditBudgetCarryoverEpochs(i interface{}) error {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 	// 0 is allowed (no carryover).
+	return nil
+}
+
+func validateEmissionStartHeight(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	// 0 is allowed (treat as genesis height).
 	return nil
 }
 
