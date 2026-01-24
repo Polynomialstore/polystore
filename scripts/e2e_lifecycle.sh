@@ -307,6 +307,16 @@ wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
 
 # 6. Fetch File (Gateway)
 echo "==> Fetching file from Gateway..."
+echo "==> Opening on-chain retrieval session (precompile)..."
+# Resolve file layout from NilFS (start_offset and file length).
+LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
+START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
+FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
+if [ "$FILE_LEN" -le 0 ]; then
+  echo "ERROR: failed to resolve file length for README.md"
+  exit 1
+fi
+
 # On-chain retrieval sessions are mandatory; open a 1+ blob session first (bounded by blob alignment).
 # For gateway fetch, we need deal_id + owner + file_path AND a signed RetrievalRequest.
 REQ_NONCE=1
@@ -316,7 +326,7 @@ REQ_SIG_JSON=$(
   DEAL_ID="$DEAL_ID" \
   FILE_PATH="README.md" \
   RANGE_START="0" \
-  RANGE_LEN="0" \
+  RANGE_LEN="$FILE_LEN" \
   EXPIRES_AT="$REQ_EXPIRES_AT" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
 )
@@ -325,12 +335,6 @@ if [ -z "$REQ_SIG" ]; then
   echo "ERROR: failed to sign retrieval request"
   exit 1
 fi
-
-echo "==> Opening on-chain retrieval session (precompile)..."
-# Resolve file layout from NilFS (start_offset and file length).
-LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
-START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
-FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 
 # Compute the MDU/blob location for the first byte of the file.
 START_MDU_INDEX=$(python3 - "$START_OFFSET" "$WITNESS_MDUS" <<'PY'
@@ -392,13 +396,17 @@ if [ -z "$SESSION_ID" ]; then
 fi
 
 FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
+FETCH_RANGE_START=0
+FETCH_RANGE_LEN="$FILE_LEN"
+FETCH_RANGE_END=$((FETCH_RANGE_START + FETCH_RANGE_LEN - 1))
 timeout 10s curl -sS -o fetched_README.md "$FETCH_URL" \
   -H "X-Nil-Session-Id: $SESSION_ID" \
   -H "X-Nil-Req-Sig: $REQ_SIG" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
-  -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: 0"
+  -H "X-Nil-Req-Range-Start: $FETCH_RANGE_START" \
+  -H "X-Nil-Req-Range-Len: $FETCH_RANGE_LEN" \
+  -H "Range: bytes=$FETCH_RANGE_START-$FETCH_RANGE_END"
 
 # Compare
 if cmp -s "$ROOT_DIR/README.md" fetched_README.md; then
@@ -627,7 +635,7 @@ REQ_SIG_JSON_1=$(
   DEAL_ID="$DEAL_ID" \
   FILE_PATH="README.md" \
   RANGE_START="0" \
-  RANGE_LEN="0" \
+  RANGE_LEN="$FILE_LEN_1" \
   EXPIRES_AT="$REQ_EXPIRES_AT_1" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
 )
@@ -640,7 +648,7 @@ REQ_SIG_JSON_2=$(
   DEAL_ID="$DEAL_ID" \
   FILE_PATH="ECONOMY.md" \
   RANGE_START="0" \
-  RANGE_LEN="0" \
+  RANGE_LEN="$FILE_LEN_2" \
   EXPIRES_AT="$REQ_EXPIRES_AT_2" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
 )
@@ -655,7 +663,8 @@ timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_1" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_1" \
   -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: 0"
+  -H "X-Nil-Req-Range-Len: $FILE_LEN_1" \
+  -H "Range: bytes=0-$((FILE_LEN_1 - 1))"
 
 timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
   -H "X-Nil-Session-Id: $SESSION_ID_2" \
@@ -663,7 +672,8 @@ timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_2" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_2" \
   -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: 0"
+  -H "X-Nil-Req-Range-Len: $FILE_LEN_2" \
+  -H "Range: bytes=0-$((FILE_LEN_2 - 1))"
 
 ORIG1_SIZE=$(wc -c < "$ROOT_DIR/README.md" | tr -d ' ')
 ORIG2_SIZE=$(wc -c < "$ROOT_DIR/ECONOMY.md" | tr -d ' ')
