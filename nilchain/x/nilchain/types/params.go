@@ -23,6 +23,7 @@ var (
 	KeyRetrievalBurnBps      = []byte("RetrievalBurnBps")
 	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
 	KeyDealExtensionGrace    = []byte("DealExtensionGraceBlocks")
+	KeyVoucherMaxTTLBlocks   = []byte("VoucherMaxTTLBlocks")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -58,6 +59,7 @@ func NewParams(
 	creditCapBps uint64,
 	evictAfterMissedEpochs uint64,
 	dealExtensionGraceBlocks uint64,
+	voucherMaxTTLBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -71,14 +73,15 @@ func NewParams(
 		RetrievalBurnBps:      retrievalBurnBps,
 		MonthLenBlocks:        monthLenBlocks,
 
-		EpochLenBlocks:         epochLenBlocks,
-		QuotaBpsPerEpochHot:    quotaBpsPerEpochHot,
-		QuotaBpsPerEpochCold:   quotaBpsPerEpochCold,
-		QuotaMinBlobs:          quotaMinBlobs,
-		QuotaMaxBlobs:          quotaMaxBlobs,
-		CreditCapBps:           creditCapBps,
-		EvictAfterMissedEpochs: evictAfterMissedEpochs,
+		EpochLenBlocks:           epochLenBlocks,
+		QuotaBpsPerEpochHot:      quotaBpsPerEpochHot,
+		QuotaBpsPerEpochCold:     quotaBpsPerEpochCold,
+		QuotaMinBlobs:            quotaMinBlobs,
+		QuotaMaxBlobs:            quotaMaxBlobs,
+		CreditCapBps:             creditCapBps,
+		EvictAfterMissedEpochs:   evictAfterMissedEpochs,
 		DealExtensionGraceBlocks: dealExtensionGraceBlocks,
+		VoucherMaxTtlBlocks:      voucherMaxTTLBlocks,
 	}
 }
 
@@ -103,6 +106,7 @@ func DefaultParams() Params {
 		5000, // CreditCapBps (50% of quota via organic retrieval)
 		3,    // EvictAfterMissedEpochs
 		1000, // DealExtensionGraceBlocks (default: 1 month)
+		1000, // VoucherMaxTTLBlocks (default: 1 month)
 	)
 }
 
@@ -128,6 +132,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyCreditCapBps, &p.CreditCapBps, validateCreditCapBps),
 		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochs, &p.EvictAfterMissedEpochs, validateEvictAfterMissedEpochs),
 		paramtypes.NewParamSetPair(KeyDealExtensionGrace, &p.DealExtensionGraceBlocks, validateDealExtensionGraceBlocks),
+		paramtypes.NewParamSetPair(KeyVoucherMaxTTLBlocks, &p.VoucherMaxTtlBlocks, validateVoucherMaxTTLBlocks),
 	}
 }
 
@@ -190,6 +195,9 @@ func (p Params) Validate() error {
 	if err := validateDealExtensionGraceBlocks(p.DealExtensionGraceBlocks); err != nil {
 		return err
 	}
+	if err := validateVoucherMaxTTLBlocks(p.VoucherMaxTtlBlocks); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -199,6 +207,15 @@ func validateDealExtensionGraceBlocks(i interface{}) error {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 	// Grace blocks may be 0 (strict expiry) or a positive window (recommended).
+	return nil
+}
+
+func validateVoucherMaxTTLBlocks(i interface{}) error {
+	_, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	// 0 disables TTL enforcement (not recommended).
 	return nil
 }
 

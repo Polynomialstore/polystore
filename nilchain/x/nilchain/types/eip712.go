@@ -2,8 +2,11 @@ package types
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/big"
+	"strings"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -55,6 +58,11 @@ var (
 	// ensure only the Deal Owner can initiate a fetch for a specific file path
 	// and byte-range.
 	RetrievalRequestTypeHash = crypto.Keccak256([]byte("RetrievalRequest(uint64 deal_id,string file_path,uint64 range_start,uint64 range_len,uint64 nonce,uint64 expires_at)"))
+
+	// keccak256("RetrievalVoucher(uint64 deal_id,bytes manifest_root,string provider,uint64 start_mdu_index,uint32 start_blob_index,uint64 blob_count,uint64 expires_at,uint64 nonce,address redeemer)")
+	//
+	// Voucher authorization for sponsored session opens.
+	RetrievalVoucherTypeHash = crypto.Keccak256([]byte("RetrievalVoucher(uint64 deal_id,bytes manifest_root,string provider,uint64 start_mdu_index,uint32 start_blob_index,uint64 blob_count,uint64 expires_at,uint64 nonce,address redeemer)"))
 )
 
 // HashDomainSeparator computes the domain separator for a specific chain ID.
@@ -238,6 +246,50 @@ func HashDownloadSessionReceipt(receipt *DownloadSessionReceipt) (common.Hash, e
 		pad32(receipt.ChunkLeafRoot),
 		math.PaddedBigBytes(nonce, 32),
 		math.PaddedBigBytes(exp, 32),
+	), nil
+}
+
+// HashRetrievalVoucher computes the EIP-712 struct hash for a sponsored retrieval voucher.
+// Note: manifest_root is a dynamic bytes field and is hashed as keccak256(manifest_root) per EIP-712.
+func HashRetrievalVoucher(v *VoucherAuth) (common.Hash, error) {
+	if v == nil {
+		return common.Hash{}, nil
+	}
+	if len(v.ManifestRoot) != 48 {
+		return common.Hash{}, fmt.Errorf("manifest_root must be 48 bytes")
+	}
+
+	provider := strings.TrimSpace(v.Provider)
+
+	redeemerAddr := common.Address{}
+	if strings.TrimSpace(v.Redeemer) != "" {
+		acc, err := sdk.AccAddressFromBech32(strings.TrimSpace(v.Redeemer))
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("invalid redeemer address")
+		}
+		redeemerAddr = common.BytesToAddress(acc.Bytes())
+	}
+
+	deal := new(big.Int).SetUint64(v.DealId)
+	startMdu := new(big.Int).SetUint64(v.StartMduIndex)
+	startBlob := new(big.Int).SetUint64(uint64(v.StartBlobIndex))
+	blobCount := new(big.Int).SetUint64(v.BlobCount)
+	exp := new(big.Int).SetUint64(v.ExpiresAt)
+	nonce := new(big.Int).SetUint64(v.Nonce)
+
+	manifestHash := crypto.Keccak256Hash(v.ManifestRoot)
+
+	return crypto.Keccak256Hash(
+		RetrievalVoucherTypeHash,
+		math.PaddedBigBytes(deal, 32),
+		pad32(manifestHash.Bytes()),
+		keccak256String(provider),
+		math.PaddedBigBytes(startMdu, 32),
+		math.PaddedBigBytes(startBlob, 32),
+		math.PaddedBigBytes(blobCount, 32),
+		math.PaddedBigBytes(exp, 32),
+		math.PaddedBigBytes(nonce, 32),
+		pad32(redeemerAddr.Bytes()),
 	), nil
 }
 
