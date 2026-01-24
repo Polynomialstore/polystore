@@ -20,6 +20,9 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
 	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
+	}
 	if deal.Owner != msg.Creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner can start slot repair")
 	}
@@ -87,6 +90,9 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	deal, err := k.Deals.Get(ctx, msg.DealId)
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+	if uint64(ctx.BlockHeight()) >= deal.EndBlock {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
 	if deal.RedundancyMode != 2 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair is only supported for Mode 2 deals")

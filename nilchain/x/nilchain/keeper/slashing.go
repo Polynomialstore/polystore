@@ -29,7 +29,8 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	height := uint64(sdkCtx.BlockHeight())
 
 	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
-		if height < deal.StartBlock || height > deal.EndBlock {
+		// end_block is exclusive: once height >= end_block, the deal is expired.
+		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
 		}
 		in, ok := slabInputs(deal)
