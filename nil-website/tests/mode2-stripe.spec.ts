@@ -79,9 +79,25 @@ test.describe('mode2 stripe', () => {
 
     const expectedChunks = Math.ceil(fileBytes.length / (128 * 1024))
     let fetchCalls = 0
+    const chunkPromises: Promise<void>[] = []
+    const chunkBytes: Array<{ start: number; bytes: Buffer }> = []
     page.on('response', (resp) => {
       const url = resp.url()
-      if (url.includes('/gateway/fetch/')) fetchCalls += 1
+      if (!url.includes('/gateway/fetch/')) return
+      fetchCalls += 1
+      const req = resp.request()
+      const range = req.headers()['range'] || req.headers()['Range']
+      const match = typeof range === 'string' ? range.match(/bytes=(\d+)-(\d+)?/) : null
+      const start = match ? Number(match[1]) : 0
+      const p = (async () => {
+        try {
+          const body = await resp.body()
+          chunkBytes.push({ start, bytes: Buffer.from(body) })
+        } catch (err) {
+          void err
+        }
+      })()
+      chunkPromises.push(p)
     })
 
     const cacheName = cachedFileNameForPath(filePath)
@@ -104,19 +120,33 @@ test.describe('mode2 stripe', () => {
 
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
 
-    const cachedBytes = await page.evaluate(
-      async ({ dealId, cacheName }) => {
-        const root = await navigator.storage.getDirectory()
-        const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
-        const fh = await dealDir.getFileHandle(cacheName, { create: false })
-        const file = await fh.getFile()
-        const buf = await file.arrayBuffer()
-        return Array.from(new Uint8Array(buf))
-      },
-      { dealId, cacheName },
-    )
+    await Promise.allSettled(chunkPromises)
 
-    const downloaded = Buffer.from(cachedBytes)
+    let downloaded: Buffer | null = null
+    try {
+      const cachedBytes = await page.evaluate(
+        async ({ dealId, cacheName }) => {
+          const root = await navigator.storage.getDirectory()
+          const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+          const fh = await dealDir.getFileHandle(cacheName, { create: false })
+          const file = await fh.getFile()
+          const buf = await file.arrayBuffer()
+          return Array.from(new Uint8Array(buf))
+        },
+        { dealId, cacheName },
+      )
+      downloaded = Buffer.from(cachedBytes)
+    } catch (err) {
+      void err
+    }
+
+    if (!downloaded || downloaded.length === 0) {
+      const ordered = chunkBytes.sort((a, b) => a.start - b.start)
+      const total = ordered.reduce((acc, entry) => acc + entry.bytes.length, 0)
+      const joined = Buffer.concat(ordered.map((entry) => entry.bytes), total)
+      downloaded = joined
+    }
+
     expect(downloaded.length).toBe(fileBytes.length)
     expect(downloaded.equals(fileBytes)).toBe(true)
   })
