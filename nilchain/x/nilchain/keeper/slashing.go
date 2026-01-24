@@ -353,5 +353,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return k.distributeBaseRewardPool(sdkCtx, epochID)
+	if err := k.distributeBaseRewardPool(sdkCtx, epochID); err != nil {
+		return err
+	}
+	// Run controlled churn after rewards are distributed so a draining provider
+	// is still paid for the epoch they served.
+	return k.scheduleDrainingRepairs(sdkCtx, epochID)
 }

@@ -235,6 +235,9 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if provider.Status != "Active" {
 			continue
 		}
+		if provider.Draining {
+			continue
+		}
 
 		// Apply service hint filter
 		if serviceHint == "Hot" && (provider.Capabilities == "General" || provider.Capabilities == "Edge") {

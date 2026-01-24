@@ -89,4 +89,15 @@ message Params {
   uint64 base_reward_halving_interval_blocks = 24;
   uint64 base_reward_bps_start = 25;
   uint64 base_reward_bps_tail = 26;
+
+  // --- Provider draining / controlled churn (see `rfcs/rfc-provider-exit-and-draining.md`) ---
+  // Maximum bytes per epoch that may be moved into REPAIRING due to voluntary drain.
+  // 0 disables the drain scheduler.
+  uint64 max_drain_bytes_per_epoch = 27;
+  // Global cap on REPAIRING bytes as a share of ACTIVE bytes (basis points).
+  // 0 disables this cap.
+  uint64 max_repairing_bytes_ratio_bps = 28;
+  // Optional "chaos monkey" rotation budget (bytes per epoch).
+  // 0 disables routine rotation.
+  uint64 rotation_bytes_per_epoch = 29;
 }

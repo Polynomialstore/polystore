@@ -59,6 +59,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 		if strings.TrimSpace(provider.Status) != "Active" {
 			return false, nil
 		}
+		if provider.Draining {
+			return false, nil
+		}
 		if !providerMatchesServiceHint(provider, deal.ServiceHint) {
 			return false, nil
 		}
@@ -78,6 +81,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	if len(candidates) == 0 {
 		if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
 			if strings.TrimSpace(provider.Status) != "Active" {
+				return false, nil
+			}
+			if provider.Draining {
 				return false, nil
 			}
 			if !providerMatchesServiceHint(provider, deal.ServiceHint) {

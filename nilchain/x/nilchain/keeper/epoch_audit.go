@@ -200,6 +200,9 @@ func (k Keeper) deriveAuditTasks(ctx sdk.Context, epochID uint64) error {
 		if strings.TrimSpace(p.Status) != "Active" {
 			return false, nil
 		}
+		if p.Draining {
+			return false, nil
+		}
 		assigneePool = append(assigneePool, strings.TrimSpace(p.Address))
 		return false, nil
 	}); err != nil {
