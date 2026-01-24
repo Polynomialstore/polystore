@@ -35,6 +35,10 @@ export NIL_DISABLE_EVM_MEMPOOL
 # Auto-fund the default demo EVM account by calling the faucet once on startup.
 NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-1}"
 NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
+# Start the faucet service (dev-only convenience). Set to 0 for "mainnet parity" runs.
+NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
+# Start the web UI (optional). Set to 0 for headless stacks / CI.
+NIL_START_WEB="${NIL_START_WEB:-1}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -605,6 +609,10 @@ start_bridge() {
 }
 
 start_web() {
+  if [ "${NIL_START_WEB}" != "1" ]; then
+    echo "Skipping web UI (NIL_START_WEB=0)"
+    return
+  fi
   banner "Starting web (Vite dev server)"
   (
     cd "$ROOT_DIR/nil-website"
@@ -662,8 +670,12 @@ start_all() {
   init_chain
   start_chain
   register_demo_provider
-  start_faucet
-  auto_faucet_request
+  if [ "${NIL_START_FAUCET}" = "1" ]; then
+    start_faucet
+    auto_faucet_request
+  else
+    echo "Skipping faucet (NIL_START_FAUCET=0)"
+  fi
   start_sp_gateway
   start_user_gateway
   start_bridge
