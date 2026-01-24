@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useAccount } from 'wagmi'
 import { appConfig } from '../config'
 import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
-import { useFetch } from '../hooks/useFetch'
+import { useFetch, type SponsoredRetrievalAuth } from '../hooks/useFetch'
+import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
+import type { Hex } from 'viem'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
@@ -101,6 +104,27 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       isMode2: serviceHint.mode === 'mode2' && Boolean(serviceHint.rsK && serviceHint.rsM),
     }
   }, [serviceHint.mode, serviceHint.rsK, serviceHint.rsM])
+  const { address } = useAccount()
+  const { submitPolicyUpdate, loading: policyUpdating, lastTx: policyTx } = useUpdateDealRetrievalPolicy()
+  const [policyMode, setPolicyMode] = useState<RetrievalPolicyMode>(() => {
+    const raw = Number(deal.retrieval_policy?.mode ?? 1)
+    return (raw >= 1 && raw <= 5 ? raw : 1) as RetrievalPolicyMode
+  })
+  const [policyAllowlistRoot, setPolicyAllowlistRoot] = useState<string>(() => {
+    return String(deal.retrieval_policy?.allowlist_root || '')
+  })
+  const [policyVoucherSigner, setPolicyVoucherSigner] = useState<string>(() => {
+    return String(deal.retrieval_policy?.voucher_signer || '')
+  })
+  const [policyError, setPolicyError] = useState<string | null>(null)
+  const [policyStatus, setPolicyStatus] = useState<string | null>(null)
+  const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
+  const [authType, setAuthType] = useState<'none' | 'allowlist' | 'voucher'>('none')
+  const [allowlistProofInput, setAllowlistProofInput] = useState<string>('')
+  const [voucherInput, setVoucherInput] = useState<string>('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authStatus, setAuthStatus] = useState<string | null>(null)
+  const authStorageKey = useMemo(() => `nilstore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
@@ -118,6 +142,55 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
+
+  useEffect(() => {
+    const raw = Number(deal.retrieval_policy?.mode ?? 1)
+    setPolicyMode((raw >= 1 && raw <= 5 ? raw : 1) as RetrievalPolicyMode)
+    setPolicyAllowlistRoot(String(deal.retrieval_policy?.allowlist_root || ''))
+    setPolicyVoucherSigner(String(deal.retrieval_policy?.voucher_signer || ''))
+    setPolicyError(null)
+    setPolicyStatus(null)
+  }, [deal.id, deal.retrieval_policy?.mode, deal.retrieval_policy?.allowlist_root, deal.retrieval_policy?.voucher_signer])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setAuthError(null)
+    setAuthStatus(null)
+    const raw = window.localStorage.getItem(authStorageKey)
+    if (!raw) {
+      setSponsoredAuth({ type: 'none' })
+      setAuthType('none')
+      setAllowlistProofInput('')
+      setVoucherInput('')
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw) as SponsoredRetrievalAuth
+      if (parsed?.type === 'allowlist') {
+        setSponsoredAuth(parsed)
+        setAuthType('allowlist')
+        setAllowlistProofInput(JSON.stringify({ leafIndex: parsed.leafIndex, merklePath: parsed.merklePath }, null, 2))
+        setVoucherInput('')
+        return
+      }
+      if (parsed?.type === 'voucher') {
+        setSponsoredAuth(parsed)
+        setAuthType('voucher')
+        setVoucherInput(JSON.stringify(parsed.voucher, null, 2))
+        setAllowlistProofInput('')
+        return
+      }
+      setSponsoredAuth({ type: 'none' })
+      setAuthType('none')
+      setAllowlistProofInput('')
+      setVoucherInput('')
+    } catch {
+      setSponsoredAuth({ type: 'none' })
+      setAuthType('none')
+      setAllowlistProofInput('')
+      setVoucherInput('')
+    }
+  }, [authStorageKey])
   const [mduKzg, setMduKzg] = useState<MduKzgData | null>(null)
   const [loadingMduKzg, setLoadingMduKzg] = useState(false)
   const [mduKzgError, setMduKzgError] = useState<string | null>(null)
@@ -139,6 +212,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
+  const isDealOwner = Boolean(nilAddress && deal.owner === nilAddress)
   const lastRouteLabel = useMemo(() => {
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
@@ -167,6 +241,115 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     }
     return appConfig.spBase
   }, [primaryProvider, providersByAddr])
+
+  const handlePolicyUpdate = useCallback(async () => {
+    setPolicyError(null)
+    setPolicyStatus(null)
+    const evmAddress = String(address || '')
+    if (!evmAddress.startsWith('0x')) {
+      setPolicyError('Connect MetaMask to update retrieval policy')
+      return
+    }
+    const allowlistRoot = policyAllowlistRoot.trim()
+    if (allowlistRoot && !/^0x[0-9a-fA-F]{64}$/.test(allowlistRoot)) {
+      setPolicyError('Allowlist root must be 0x + 32 bytes')
+      return
+    }
+    const voucherSigner = policyVoucherSigner.trim()
+    if (voucherSigner && !/^0x[0-9a-fA-F]{40}$/.test(voucherSigner)) {
+      setPolicyError('Voucher signer must be a 0x address')
+      return
+    }
+
+    try {
+      await submitPolicyUpdate({
+        creator: evmAddress,
+        dealId: Number(deal.id),
+        mode: policyMode,
+        allowlistRoot: allowlistRoot || undefined,
+        voucherSigner: voucherSigner || undefined,
+      })
+      setPolicyStatus('Retrieval policy updated')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setPolicyError(msg)
+    }
+  }, [address, deal.id, policyAllowlistRoot, policyMode, policyVoucherSigner, submitPolicyUpdate])
+
+  const applySponsoredAuth = useCallback(() => {
+    setAuthError(null)
+    setAuthStatus(null)
+    try {
+      if (authType === 'none') {
+        const next: SponsoredRetrievalAuth = { type: 'none' }
+        setSponsoredAuth(next)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
+        }
+        setAuthStatus('Cleared sponsored auth')
+        return
+      }
+      if (authType === 'allowlist') {
+        const raw = allowlistProofInput.trim() || '{}'
+        const parsed = JSON.parse(raw) as { leafIndex?: number; leaf_index?: number; merklePath?: string[]; merkle_path?: string[] }
+        const leafIndex = Number(parsed.leafIndex ?? parsed.leaf_index)
+        const merklePathRaw = parsed.merklePath ?? parsed.merkle_path
+        if (!Number.isFinite(leafIndex) || leafIndex < 0) {
+          throw new Error('allowlist leafIndex is required')
+        }
+        if (!Array.isArray(merklePathRaw) || merklePathRaw.length === 0) {
+          throw new Error('allowlist merklePath is required')
+        }
+        const merklePath = merklePathRaw.map((v) => String(v).trim()).filter(Boolean) as Hex[]
+        const next: SponsoredRetrievalAuth = { type: 'allowlist', leafIndex, merklePath }
+        setSponsoredAuth(next)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
+        }
+        setAuthStatus('Allowlist proof saved for sponsored sessions')
+        return
+      }
+      if (authType === 'voucher') {
+        const raw = voucherInput.trim() || '{}'
+        const parsed = JSON.parse(raw) as {
+          provider?: string
+          redeemer?: string
+          expiresAt?: number
+          expires_at?: number
+          nonce?: number
+          signature?: string
+        }
+        const nonce = Number(parsed.nonce)
+        const signature = String(parsed.signature || '').trim()
+        if (!Number.isFinite(nonce) || nonce <= 0) {
+          throw new Error('voucher nonce is required')
+        }
+        if (!/^0x[0-9a-fA-F]+$/.test(signature)) {
+          throw new Error('voucher signature must be 0x hex')
+        }
+        const expiresAt = Number(parsed.expiresAt ?? parsed.expires_at ?? 0) || 0
+        const next: SponsoredRetrievalAuth = {
+          type: 'voucher',
+          voucher: {
+            provider: String(parsed.provider || '').trim() || undefined,
+            redeemer: String(parsed.redeemer || '').trim() || undefined,
+            expiresAt: expiresAt || undefined,
+            nonce,
+            signature: signature as Hex,
+          },
+        }
+        setSponsoredAuth(next)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
+        }
+        setAuthStatus('Voucher saved for sponsored sessions')
+        return
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setAuthError(msg)
+    }
+  }, [allowlistProofInput, authStorageKey, authType, voucherInput])
 
   const resolveProviderP2pTarget = useCallback(() => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -839,6 +1022,155 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                           </div>
                         </details>
 
+                        <details className="rounded-xl border border-border bg-secondary/40 p-3 text-[11px]">
+                          <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                            Retrieval Access
+                          </summary>
+                          <div className="mt-3 space-y-3">
+                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-2">
+                              <div className="text-[10px] text-muted-foreground uppercase font-semibold">Current Policy</div>
+                              <div className="text-[11px] text-foreground">
+                                {(deal.retrieval_policy?.mode ?? 1) === 1 && 'Owner only'}
+                                {(deal.retrieval_policy?.mode ?? 1) === 2 && 'Allowlist'}
+                                {(deal.retrieval_policy?.mode ?? 1) === 3 && 'Voucher'}
+                                {(deal.retrieval_policy?.mode ?? 1) === 4 && 'Allowlist or voucher'}
+                                {(deal.retrieval_policy?.mode ?? 1) === 5 && 'Public'}
+                              </div>
+                              {deal.retrieval_policy?.allowlist_root ? (
+                                <div className="text-[10px] text-muted-foreground font-mono break-all">
+                                  allowlist_root: {deal.retrieval_policy.allowlist_root}
+                                </div>
+                              ) : null}
+                              {deal.retrieval_policy?.voucher_signer ? (
+                                <div className="text-[10px] text-muted-foreground font-mono break-all">
+                                  voucher_signer: {deal.retrieval_policy.voucher_signer}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            {isDealOwner && (
+                              <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                                <div className="text-[10px] text-muted-foreground uppercase font-semibold">
+                                  Update Policy (owner)
+                                </div>
+                                <div className="grid sm:grid-cols-2 gap-2">
+                                  <label className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-muted-foreground uppercase">Mode</span>
+                                    <select
+                                      value={policyMode}
+                                      onChange={(e) => setPolicyMode(Number(e.target.value) as RetrievalPolicyMode)}
+                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px]"
+                                    >
+                                      <option value={1}>Owner only</option>
+                                      <option value={2}>Allowlist</option>
+                                      <option value={3}>Voucher</option>
+                                      <option value={4}>Allowlist or voucher</option>
+                                      <option value={5}>Public</option>
+                                    </select>
+                                  </label>
+                                  {(policyMode === 2 || policyMode === 4) && (
+                                    <label className="flex flex-col gap-1">
+                                      <span className="text-[10px] text-muted-foreground uppercase">Allowlist Root</span>
+                                      <input
+                                        value={policyAllowlistRoot}
+                                        onChange={(e) => setPolicyAllowlistRoot(e.target.value)}
+                                        placeholder="0x... (32 bytes)"
+                                        className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                      />
+                                    </label>
+                                  )}
+                                  {(policyMode === 3 || policyMode === 4) && (
+                                    <label className="flex flex-col gap-1">
+                                      <span className="text-[10px] text-muted-foreground uppercase">Voucher Signer</span>
+                                      <input
+                                        value={policyVoucherSigner}
+                                        onChange={(e) => setPolicyVoucherSigner(e.target.value)}
+                                        placeholder="0x... (EVM address)"
+                                        className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                                {policyError ? (
+                                  <div className="text-[10px] text-red-500 dark:text-red-400">{policyError}</div>
+                                ) : null}
+                                {policyStatus ? (
+                                  <div className="text-[10px] text-emerald-500 dark:text-emerald-400">{policyStatus}</div>
+                                ) : null}
+                                {policyTx ? (
+                                  <div className="text-[10px] text-muted-foreground font-mono break-all">
+                                    tx: {policyTx}
+                                  </div>
+                                ) : null}
+                                <button
+                                  onClick={handlePolicyUpdate}
+                                  disabled={policyUpdating}
+                                  className="inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
+                                >
+                                  {policyUpdating ? 'Updating…' : 'Update policy'}
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                              <div className="text-[10px] text-muted-foreground uppercase font-semibold">
+                                Sponsored Auth (non-owner)
+                              </div>
+                              <label className="flex flex-col gap-1">
+                                <span className="text-[10px] text-muted-foreground uppercase">Auth Type</span>
+                                <select
+                                  value={authType}
+                                  onChange={(e) => setAuthType(e.target.value as 'none' | 'allowlist' | 'voucher')}
+                                  className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px]"
+                                >
+                                  <option value="none">None (public)</option>
+                                  <option value="allowlist">Allowlist proof</option>
+                                  <option value="voucher">Voucher</option>
+                                </select>
+                              </label>
+                              {authType === 'allowlist' && (
+                                <label className="flex flex-col gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase">Allowlist Proof (JSON)</span>
+                                  <textarea
+                                    value={allowlistProofInput}
+                                    onChange={(e) => setAllowlistProofInput(e.target.value)}
+                                    placeholder='{"leafIndex":0,"merklePath":["0x...","0x..."]}'
+                                    rows={4}
+                                    className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                  />
+                                </label>
+                              )}
+                              {authType === 'voucher' && (
+                                <label className="flex flex-col gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase">Voucher (JSON)</span>
+                                  <textarea
+                                    value={voucherInput}
+                                    onChange={(e) => setVoucherInput(e.target.value)}
+                                    placeholder='{"nonce":1,"expiresAt":12345,"signature":"0x...","provider":"","redeemer":""}'
+                                    rows={4}
+                                    className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono"
+                                  />
+                                </label>
+                              )}
+                              {authError ? (
+                                <div className="text-[10px] text-red-500 dark:text-red-400">{authError}</div>
+                              ) : null}
+                              {authStatus ? (
+                                <div className="text-[10px] text-emerald-500 dark:text-emerald-400">{authStatus}</div>
+                              ) : null}
+                              <div className="text-[10px] text-muted-foreground">
+                                Voucher auth supports a single provider range per download.
+                              </div>
+                              <button
+                                onClick={applySponsoredAuth}
+                                className="inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
+                              >
+                                Save sponsored auth
+                              </button>
+                            </div>
+                          </div>
+                        </details>
+
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
@@ -989,6 +1321,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               fileSizeBytes: f.size_bytes,
                                               mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
                                               blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                              sponsoredAuth,
                                             })
                                             if (!result) throw new Error('download failed')
                                             const bytes = new Uint8Array(await result.blob.arrayBuffer())
@@ -1111,6 +1444,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               fileSizeBytes: f.size_bytes,
                                               mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
                                               blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                              sponsoredAuth,
                                             })
                                             if (!result) throw new Error('download failed')
                                             const bytes = new Uint8Array(await result.blob.arrayBuffer())

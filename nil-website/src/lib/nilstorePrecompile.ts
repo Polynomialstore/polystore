@@ -139,6 +139,14 @@ export const NILSTORE_PRECOMPILE_ABI = [
           { name: 'nonce', type: 'uint64' },
           { name: 'expiresAt', type: 'uint64' },
           { name: 'maxTotalFee', type: 'uint256' },
+          { name: 'authType', type: 'uint8' },
+          { name: 'allowlistLeafIndex', type: 'uint32' },
+          { name: 'allowlistMerklePath', type: 'bytes32[]' },
+          { name: 'voucherRedeemer', type: 'string' },
+          { name: 'voucherProvider', type: 'string' },
+          { name: 'voucherExpiresAt', type: 'uint64' },
+          { name: 'voucherNonce', type: 'uint64' },
+          { name: 'voucherSignature', type: 'bytes' },
         ],
       },
     ],
@@ -283,6 +291,14 @@ export type RetrievalSessionInput = {
 
 export type SponsoredRetrievalSessionInput = RetrievalSessionInput & {
   maxTotalFee: bigint
+  authType: number
+  allowlistLeafIndex: number
+  allowlistMerklePath: Hex[]
+  voucherRedeemer: string
+  voucherProvider: string
+  voucherExpiresAt: bigint
+  voucherNonce: bigint
+  voucherSignature: Hex
 }
 
 export type ComputeRetrievalSessionIdsResult = {
