@@ -329,8 +329,8 @@ fi
 echo "==> Opening on-chain retrieval session (precompile)..."
 # Resolve file layout from NilFS (start_offset and file length).
 LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
-START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
-FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
+FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 
 # Compute the MDU/blob location for the first byte of the file.
 START_MDU_INDEX=$(python3 - "$START_OFFSET" "$WITNESS_MDUS" <<'PY'
@@ -518,8 +518,8 @@ echo "    Success: Deal $DEAL_ID updated to CID $CHAIN_CID_2"
 echo "==> Fetching both files by path from new slab..."
 echo "==> Opening on-chain retrieval session for README (precompile)..."
 LIST_JSON_2=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
-START_OFFSET_1=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
-FILE_LEN_1=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='README.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+START_OFFSET_1=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
+FILE_LEN_1=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 START_MDU_INDEX_1=$(python3 - "$START_OFFSET_1" "$WITNESS_MDUS_2" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
@@ -570,8 +570,8 @@ if [ -z "$SESSION_ID_1" ]; then
 fi
 
 echo "==> Opening on-chain retrieval session for ECONOMY (precompile)..."
-START_OFFSET_2=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='ECONOMY.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('start_offset') or f.get('startOffset') or 0));\n    break")
-FILE_LEN_2=$(echo "$LIST_JSON_2" | python3 -c "import sys, json; j=json.load(sys.stdin); files=j.get('files') or []; p='ECONOMY.md';\nfor f in files:\n  if f.get('path')==p:\n    print(int(f.get('size_bytes') or f.get('sizeBytes') or 0));\n    break")
+START_OFFSET_2=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='ECONOMY.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
+FILE_LEN_2=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='ECONOMY.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 START_MDU_INDEX_2=$(python3 - "$START_OFFSET_2" "$WITNESS_MDUS_2" <<'PY'
 import sys
 start_offset = int(sys.argv[1])
