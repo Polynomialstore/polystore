@@ -49,10 +49,14 @@ export async function fetchStatus(expectedChainId: number): Promise<StatusSummar
     summary.evm = 'error'
   }
 
-  try {
-    const res = await fetch(`${appConfig.apiBase}/health`)
-    summary.faucet = res.ok ? 'ok' : 'warn'
-  } catch (e) {
+  if (appConfig.faucetEnabled) {
+    try {
+      const res = await fetch(`${appConfig.apiBase}/health`)
+      summary.faucet = res.ok ? 'ok' : 'warn'
+    } catch (e) {
+      summary.faucet = 'warn'
+    }
+  } else {
     summary.faucet = 'warn'
   }
 

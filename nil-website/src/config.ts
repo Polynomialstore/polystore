@@ -11,9 +11,8 @@ const FAUCET_ENABLED = (() => {
   if (typeof raw === 'string') {
     return raw === '1'
   }
-  // Default: enable the faucet in dev-server builds; production builds must
-  // explicitly opt-in via VITE_ENABLE_FAUCET=1.
-  return import.meta.env.DEV
+  // Default: disabled. Enable explicitly via VITE_ENABLE_FAUCET=1 for dev/test.
+  return false
 })()
 const COSMOS_CHAIN_ID = import.meta.env.VITE_COSMOS_CHAIN_ID || '31337'
 const BRIDGE_ADDRESS = import.meta.env.VITE_BRIDGE_ADDRESS || '0x0000000000000000000000000000000000000000'

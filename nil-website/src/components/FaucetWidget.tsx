@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useConnect } from 'wagmi'
 import { injectedConnector } from '../lib/web3Config'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
+import { appConfig } from '../config'
 
 export function FaucetWidget({ className = "" }: { className?: string }) {
   const { address, isConnected } = useAccount()
@@ -14,6 +15,10 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
   const [unlocking, setUnlocking] = useState(false)
   const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
   const isLocked = isConnected && unlockState === 'locked'
+
+  if (!appConfig.faucetEnabled) {
+    return null
+  }
 
   const handleUnlock = async () => {
     setUnlocking(true)

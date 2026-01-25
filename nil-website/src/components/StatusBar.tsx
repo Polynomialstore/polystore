@@ -73,7 +73,7 @@ export function StatusBar() {
     <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">
       <Badge label={`LCD`} status={summary.lcd} />
       <Badge label={`EVM`} status={summary.evm} />
-      <Badge label={`Faucet`} status={summary.faucet} />
+      {appConfig.faucetEnabled && <Badge label={`Faucet`} status={summary.faucet} />}
       <Badge label={`Chain ID`} status={summary.chainIdMatch} />
       {walletBadge}
       {height && <span className="opacity-75">Height: {height}</span>}
