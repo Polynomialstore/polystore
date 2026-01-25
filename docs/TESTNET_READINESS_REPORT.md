@@ -81,5 +81,4 @@ go test ./...
 
 ## What remains / known gaps
 
-- Mode1 does not yet have explicit make-before-break churn state (drain scheduler is Mode2-only).
-- `Params.rotation_bytes_per_epoch` is plumbed but routine rotation is not yet implemented (currently disabled by default).
+- Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
