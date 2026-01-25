@@ -358,5 +358,8 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	}
 	// Run controlled churn after rewards are distributed so a draining provider
 	// is still paid for the epoch they served.
-	return k.scheduleDrainingRepairs(sdkCtx, epochID)
+	if err := k.scheduleDrainingRepairs(sdkCtx, epochID); err != nil {
+		return err
+	}
+	return k.scheduleRoutineRotations(sdkCtx, epochID)
 }
