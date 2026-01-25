@@ -71,8 +71,12 @@ export const TestnetDocs = () => {
               </div>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
-              <h3 className="font-bold text-lg text-foreground">2. Run Faucet</h3>
-              <p className="text-sm text-muted-foreground mb-2">To use the website's "Get Funds" button, you must run the local faucet API.</p>
+              <h3 className="font-bold text-lg text-foreground">2. Run Faucet (Optional)</h3>
+              <p className="text-sm text-muted-foreground mb-2">
+                The faucet is a dev-only helper. It is disabled by default in the UI; enable it explicitly with
+                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
+                when running the web UI.
+              </p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># In a new terminal window</p>
                 <p>$ ./scripts/run_local_stack.sh start</p>
@@ -94,17 +98,19 @@ export const TestnetDocs = () => {
 
         {/* Web Flow */}
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Faucet + Deal)</h2>
+          <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Deal)</h2>
           <p className="text-muted-foreground">
-            With the faucet running, the Dashboard lets you connect MetaMask, request funds (0x or nil1 address), and create deals directly from the browser. All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile; the faucet only dispenses test funds.
+            All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile.
+            If you want the "Get Testnet NIL" button, run the faucet and enable it in the UI with
+            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>.
           </p>
           <p className="text-sm text-muted-foreground">
             The browser client can shard and commit using WASM + OPFS. The local gateway is optional routing/cache infrastructure, and Mode 2 deals require client-side RS encoding with direct uploads to assigned providers.
           </p>
           <div className="bg-secondary/10 rounded-xl p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
-            <p>$ # in nil_faucet/</p>
+            <p>$ # (optional) in nil_faucet/</p>
             <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
-            <p># Open http://localhost:5173/#/dashboard and click "Get Testnet NIL" then "Submit Deal"</p>
+            <p># Open http://localhost:5173/#/dashboard and click "Submit Deal"</p>
           </div>
         </section>
 

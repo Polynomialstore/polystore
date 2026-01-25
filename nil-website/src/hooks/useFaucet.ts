@@ -10,6 +10,9 @@ export function useFaucet() {
 
   async function requestFunds(address: string | undefined) {
     if (!address) return
+    if (!appConfig.faucetEnabled) {
+      throw new Error('Faucet disabled')
+    }
 
     setLoading(true)
     setLastTx(null)

@@ -505,6 +505,7 @@ start_sp_gateway() {
     # SP Mode (default), Listen on 8082, Uploads to uploads_sp
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
       NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
+    NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
     NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-0}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
@@ -540,6 +541,7 @@ start_user_gateway() {
     # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
+    NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
     NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-0}" NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
@@ -620,6 +622,7 @@ start_web() {
     VITE_BRIDGE_ADDRESS="${BRIDGE_ADDRESS:-${VITE_BRIDGE_ADDRESS:-}}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
+    VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-${NIL_START_FAUCET:-0}}" \
     VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! > "$PID_DIR/website.pid"

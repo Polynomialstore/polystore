@@ -411,6 +411,10 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 }
 
 func S3PutObject(w http.ResponseWriter, r *http.Request) {
+	if !txRelayEnabled {
+		writeS3Error(w, http.StatusForbidden, "AccessDenied", "tx relay disabled (set NIL_ENABLE_TX_RELAY=1 for dev)")
+		return
+	}
 	vars := mux.Vars(r)
 	dealID, err := s3BucketToDealID(vars["bucket"])
 	if err != nil {

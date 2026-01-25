@@ -28,7 +28,7 @@ jobs:
       - name: Start Dev Server
         working-directory: nil-website
         run: |
-          npm run dev -- --host 0.0.0.0 --port 5173 &
+          VITE_ENABLE_FAUCET=1 npm run dev -- --host 0.0.0.0 --port 5173 &
           npx wait-on http://localhost:5173
 
       - name: Run Repro Test

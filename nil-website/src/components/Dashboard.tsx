@@ -1026,7 +1026,11 @@ export function Dashboard() {
   const handleCreateDealClick = async () => {
     if (!bankBalances.stake && !bankBalances.atom) {
       setStatusTone('error')
-      setStatusMsg('You must request testnet NIL from the faucet before creating a storage deal.')
+      setStatusMsg(
+        appConfig.faucetEnabled
+          ? 'You must request testnet NIL from the faucet before creating a storage deal.'
+          : 'Your wallet needs funds before creating a storage deal.',
+      )
       return
     }
 

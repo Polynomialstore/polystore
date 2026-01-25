@@ -65,6 +65,11 @@ var (
 	// Dev-only escape hatch: allow legacy gateway download_session fetches without
 	// an on-chain session id. MUST be disabled by default.
 	unsafeAllowLegacyDownloadSession = envDefault("NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION", "0") == "1"
+	// Dev-only: allow the gateway to submit on-chain txs on behalf of users.
+	// Wallet-first posture expects this to be disabled by default.
+	txRelayEnabled = envDefault("NIL_ENABLE_TX_RELAY", "0") == "1"
+	// Optional: auto-fund creators via faucet when relaying EVM-signed intents.
+	autoFaucetEnabled = envDefault("NIL_AUTO_FAUCET_EVM", envDefault("NIL_AUTO_FAUCET", "0")) == "1"
 
 	// Optional NilCE v1 compression layer for uploads (pre-alpha).
 	// When enabled, the gateway may store some files as a NILC header + ZSTD payload
@@ -112,6 +117,14 @@ func runCommand(ctx context.Context, name string, args []string, dir string) ([]
 		cmd.Dir = dir
 	}
 	return cmd.CombinedOutput()
+}
+
+func requireTxRelay(w http.ResponseWriter) bool {
+	if !txRelayEnabled {
+		http.Error(w, "tx relay disabled (set NIL_ENABLE_TX_RELAY=1 for dev)", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 // Simple txhash extractor, shared with faucet-style flows.
@@ -1149,6 +1162,9 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if !requireTxRelay(w) {
+		return
+	}
 
 	var req createDealRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1237,6 +1253,9 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if !requireTxRelay(w) {
+		return
+	}
 
 	var req updateDealContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1310,6 +1329,9 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if !requireTxRelay(w) {
+		return
+	}
 
 	var req createDealFromEvmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1339,7 +1361,12 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		if ok, berr := creatorHasSomeBalance(creatorNil); berr != nil {
 			log.Printf("GatewayCreateDealFromEvm: balance check failed for %s: %v", creatorNil, berr)
 		} else if !ok {
-			fundAddressOnce(creatorNil)
+			if autoFaucetEnabled {
+				fundAddressOnce(creatorNil)
+			} else {
+				http.Error(w, "creator has no on-chain balance; faucet disabled", http.StatusBadRequest)
+				return
+			}
 		}
 	}
 
@@ -1513,6 +1540,9 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !requireTxRelay(w) {
 		return
 	}
 
