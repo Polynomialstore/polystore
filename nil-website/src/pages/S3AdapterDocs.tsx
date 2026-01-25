@@ -64,7 +64,9 @@ export const S3AdapterDocs = () => {
                 <div>aws --endpoint-url http://localhost:8080 s3 cp s3://deal-0/my_photo.jpg ./my_photo.jpg</div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Note: S3 upload currently requires a devnet deal that can be committed by the local gateway (faucet-authorized).
+                Devnet note: S3 uploads can auto-commit through the gateway relay when
+                <span className="font-mono"> NIL_ENABLE_TX_RELAY=1</span> (and optional faucet funding) are enabled.
+                In mainnet-parity mode, the gateway does not sign transactions; users must commit with a wallet.
               </p>
             </div>
 

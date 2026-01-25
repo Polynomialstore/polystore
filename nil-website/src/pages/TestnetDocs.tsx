@@ -101,7 +101,7 @@ export const TestnetDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Deal)</h2>
           <p className="text-muted-foreground">
             All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile.
-            If you want the "Get Testnet NIL" button, run the faucet and enable it in the UI with
+            The faucet is dev-only: if you want the "Get Testnet NIL" button, run the faucet and enable it in the UI with
             <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>.
           </p>
           <p className="text-sm text-muted-foreground">
@@ -145,7 +145,7 @@ export const TestnetDocs = () => {
             </div>
             <div className="mt-6 pt-4 border-t border-indigo-500/20">
                 <p className="text-sm text-gray-400 mb-2">
-                    <strong>Tip:</strong> Click "Connect Wallet" in the top-right corner of this site to auto-add this network to MetaMask. The UI now drives faucet and storage-deal submission end-to-end.
+                    <strong>Tip:</strong> Click "Connect Wallet" in the top-right corner of this site to auto-add this network to MetaMask. The UI drives wallet-signed transactions; relay/faucet are optional dev helpers.
                 </p>
             </div>
           </div>
@@ -176,12 +176,12 @@ export const TestnetDocs = () => {
                     2. Request Funds
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                    Click below to receive 10 NIL testnet tokens directly to your connected wallet (EVM or Cosmos).
+                    If enabled, the faucet will send testnet tokens to your connected wallet (EVM or Cosmos).
                 </p>
                 <div className="p-4 bg-secondary/10 rounded-xl border border-border/50 flex flex-col items-center justify-center gap-2">
                     <FaucetWidget />
                     <p className="text-xs text-muted-foreground mt-2 text-center">
-                        Works with both 0x... and nil1... addresses.
+                        Works with both 0x... and nil1... addresses when the faucet is enabled.
                     </p>
                 </div>
             </div>
