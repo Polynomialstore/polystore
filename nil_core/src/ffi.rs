@@ -953,6 +953,17 @@ pub extern "C" fn nil_mdu0_append_file(
     size: u64,
     start_offset: u64,
 ) -> c_int {
+    nil_mdu0_append_file_with_flags(ptr, path_ptr, size, start_offset, 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nil_mdu0_append_file_with_flags(
+    ptr: *mut Mdu0Builder,
+    path_ptr: *const c_char,
+    size: u64,
+    start_offset: u64,
+    flags: u8,
+) -> c_int {
     if ptr.is_null() || path_ptr.is_null() {
         return -1;
     }
@@ -973,7 +984,7 @@ pub extern "C" fn nil_mdu0_append_file(
 
     let rec = FileRecordV1 {
         start_offset,
-        length_and_flags: pack_length_and_flags(size, 0),
+        length_and_flags: pack_length_and_flags(size, flags),
         timestamp: 0,
         path: path_bytes,
     };

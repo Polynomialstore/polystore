@@ -483,7 +483,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 
 	var res *mode2IngestResult
 	if strings.TrimSpace(chainCID) == "" {
-		res, err = mode2IngestAndUploadNewDeal(ingestCtx, tmpPath, dealID, serviceHint, filePath)
+		res, err = mode2IngestAndUploadNewDeal(ingestCtx, tmpPath, dealID, serviceHint, filePath, 0)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				writeS3Error(w, http.StatusRequestTimeout, "RequestTimeout", err.Error())
@@ -493,7 +493,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		res, err = mode2IngestAndUploadAppendToDeal(ingestCtx, tmpPath, dealID, serviceHint, chainCID, filePath)
+		res, err = mode2IngestAndUploadAppendToDeal(ingestCtx, tmpPath, dealID, serviceHint, chainCID, filePath, 0)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				writeS3Error(w, http.StatusRequestTimeout, "RequestTimeout", err.Error())

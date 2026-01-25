@@ -115,6 +115,7 @@ int nil_verify_chained_proof(
 	Mdu0BuilderPtr nil_mdu0_builder_load_with_commitments(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
 	int nil_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
 	int nil_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
+	int nil_mdu0_append_file_with_flags(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset, unsigned char flags);
 	int nil_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
 	int nil_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
 unsigned long long nil_mdu0_get_witness_count(Mdu0BuilderPtr ptr);
@@ -140,6 +141,16 @@ import (
 )
 
 const MDU_PAYLOAD_BYTES = 8126464
+
+const (
+	FlagEncrypted         uint8 = 0x80
+	FlagHidden            uint8 = 0x40
+	FlagCompressionMask   uint8 = 0x0F
+	FlagCompressionNone   uint8 = 0x00
+	FlagCompressionGzip   uint8 = 0x01
+	FlagCompressionZstd   uint8 = 0x02
+	FlagCompressionBrotli uint8 = 0x03
+)
 
 // --- Layout FFI Wrappers ---
 
@@ -222,9 +233,13 @@ func (b *Mdu0Builder) Bytes() ([]byte, error) {
 }
 
 func (b *Mdu0Builder) AppendFile(path string, size uint64, startOffset uint64) error {
+	return b.AppendFileWithFlags(path, size, startOffset, 0)
+}
+
+func (b *Mdu0Builder) AppendFileWithFlags(path string, size uint64, startOffset uint64, flags uint8) error {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	res := C.nil_mdu0_append_file(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset))
+	res := C.nil_mdu0_append_file_with_flags(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset), C.uchar(flags))
 	if res != 0 {
 		return fmt.Errorf("append failed: %d", res)
 	}

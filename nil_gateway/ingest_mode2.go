@@ -75,7 +75,7 @@ func mode2EnsureCompleteMarker(dir string) {
 	}
 }
 
-func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, string, error) {
+func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -286,7 +286,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 
 	// Append the file record (naive single-file mapping at offset 0 for now).
-	if err := builder.AppendFile(fileRecordPath, fileSize, 0); err != nil {
+	if err := builder.AppendFileWithFlags(fileRecordPath, fileSize, 0, fileFlags); err != nil {
 		return nil, "", err
 	}
 	sizeBytes := totalSizeBytesFromMdu0(builder)
@@ -552,6 +552,7 @@ func mode2BuildArtifactsAppend(
 	hint string,
 	existingManifestRoot string,
 	fileRecordPath string,
+	fileFlags uint8,
 ) (*mode2IngestResult, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -719,7 +720,7 @@ func mode2BuildArtifactsAppend(
 	}
 
 	newFileOffset := oldUserMdus * RawMduCapacity
-	if err := builder.AppendFile(fileRecordPath, newFileSize, newFileOffset); err != nil {
+	if err := builder.AppendFileWithFlags(fileRecordPath, newFileSize, newFileOffset, fileFlags); err != nil {
 		return nil, "", fmt.Errorf("append file record failed: %w", err)
 	}
 	sizeBytes := totalSizeBytesFromMdu0(builder)
@@ -1188,8 +1189,8 @@ func mode2UploadArtifactsToProviders(
 	return eg.Wait()
 }
 
-func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string) (*mode2IngestResult, error) {
-	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath)
+func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
+	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath, fileFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -1199,8 +1200,8 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 	return res, nil
 }
 
-func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, dealID uint64, hint string, existingManifestRoot string, fileRecordPath string) (*mode2IngestResult, error) {
-	res, finalDir, err := mode2BuildArtifactsAppend(ctx, filePath, dealID, hint, existingManifestRoot, fileRecordPath)
+func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, dealID uint64, hint string, existingManifestRoot string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
+	res, finalDir, err := mode2BuildArtifactsAppend(ctx, filePath, dealID, hint, existingManifestRoot, fileRecordPath, fileFlags)
 	if err != nil {
 		return nil, err
 	}

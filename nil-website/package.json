@@ -40,6 +40,7 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.5.1",
+    "zstd-codec": "^0.1.2",
     "tailwind-merge": "^3.4.0",
     "uint8arraylist": "^2.4.6",
     "uint8arrays": "^5.1.0",

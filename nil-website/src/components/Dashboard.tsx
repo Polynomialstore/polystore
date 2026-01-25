@@ -15,6 +15,7 @@ import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
+import { maybeWrapNilceZstd } from '../lib/nilce'
 import { injectedConnector } from '../lib/web3Config'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
@@ -42,6 +43,8 @@ type StagedUpload = {
   cid: string
   sizeBytes: number
   fileSizeBytes: number
+  logicalSizeBytes?: number
+  contentEncoding?: string
   allocatedLength?: number
   totalMdus?: number
   witnessMdus?: number
@@ -79,6 +82,7 @@ export function Dashboard() {
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [compressUploads, setCompressUploads] = useState(true)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { refetch: refetchEvm } = useBalance({
     address,
@@ -882,19 +886,36 @@ export function Dashboard() {
       return
     }
     try {
+      let uploadFile = file
+      if (compressUploads) {
+        setStatusTone('neutral')
+        setStatusMsg('Compressing file (NilCE)...')
+        const buf = new Uint8Array(await file.arrayBuffer())
+        const wrapped = await maybeWrapNilceZstd(buf)
+        if (wrapped.wrapped && wrapped.encoding === 'zstd') {
+          const view = wrapped.bytes
+          const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer
+          uploadFile = new File([buffer], file.name, {
+            type: file.type || 'application/octet-stream',
+            lastModified: file.lastModified,
+          })
+        }
+      }
       const dealForUpload = allDeals.find((d) => d.id === targetDealId) || deals.find((d) => d.id === targetDealId) || null
       const opts: { dealId?: string; directBase?: string } = {
         dealId: targetDealId,
         directBase: resolveProviderBase(dealForUpload),
       }
 
-      const result = await upload(file, address, opts)
+      const result = await upload(uploadFile, address, opts)
       const totalMdus = result.totalMdus ?? result.allocatedLength
       const witnessMdus = result.witnessMdus
       setStagedUpload({
         cid: result.cid,
         sizeBytes: result.sizeBytes,
         fileSizeBytes: result.fileSizeBytes,
+        logicalSizeBytes: result.logicalSizeBytes ?? file.size,
+        contentEncoding: result.contentEncoding,
         allocatedLength: result.allocatedLength,
         totalMdus,
         witnessMdus,
@@ -1472,6 +1493,15 @@ export function Dashboard() {
                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary disabled:opacity-50"
                 />
               </label>
+              <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={compressUploads}
+                  onChange={(e) => setCompressUploads(e.target.checked)}
+                  className="h-3 w-3 rounded border-border text-primary focus:ring-primary/40"
+                />
+                Compress before upload (NilCE, recommended)
+              </label>
               {stagedUpload && (
                 <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
                   <div>
@@ -1483,6 +1513,17 @@ export function Dashboard() {
                       {stagedUpload.cid}
                     </span>
                   </div>
+                  {stagedUpload.logicalSizeBytes && stagedUpload.logicalSizeBytes !== stagedUpload.sizeBytes && (
+                    <div>
+                      Logical size:{' '}
+                      <span className="font-mono text-foreground">{stagedUpload.logicalSizeBytes}</span>
+                      {stagedUpload.contentEncoding ? (
+                        <span className="ml-2 text-[10px] uppercase text-muted-foreground">
+                          {stagedUpload.contentEncoding}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               )}
               {targetDealId && contentManifestRoot && (
@@ -1796,6 +1837,15 @@ export function Dashboard() {
                                   className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
                               />
                           </label>
+                          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={compressUploads}
+                              onChange={(e) => setCompressUploads(e.target.checked)}
+                              className="h-3 w-3 rounded border-border text-primary focus:ring-primary/40"
+                            />
+                            Compress before upload (NilCE, recommended)
+                          </label>
                           <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Manifest Root</span>
@@ -1820,6 +1870,18 @@ export function Dashboard() {
                             <div className="text-xs text-muted-foreground">
                               Last upload: <span className="font-semibold text-foreground">{stagedUpload.filename}</span> • File size:{' '}
                               <span className="font-mono text-foreground">{stagedUpload.fileSizeBytes}</span>
+                              {stagedUpload.logicalSizeBytes && stagedUpload.logicalSizeBytes !== stagedUpload.sizeBytes ? (
+                                <>
+                                  {' '}
+                                  • Logical size: <span className="font-mono text-foreground">{stagedUpload.logicalSizeBytes}</span>
+                                </>
+                              ) : null}
+                              {stagedUpload.contentEncoding ? (
+                                <>
+                                  {' '}
+                                  • Encoding: <span className="font-mono text-foreground">{stagedUpload.contentEncoding}</span>
+                                </>
+                              ) : null}
                               {stagedUpload.allocatedLength !== undefined && (
                                 <>
                                   {' '}

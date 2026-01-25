@@ -14,6 +14,7 @@ import { lcdFetchDeal } from '../api/lcdClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
+import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
 
 interface ShardItem {
   id: number;
@@ -97,6 +98,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
+  const [compressUploads, setCompressUploads] = useState(false)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -984,7 +986,57 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       const buffer = await file.arrayBuffer()
       console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
-      const bytes = new Uint8Array(buffer)
+      let bytes: Uint8Array = new Uint8Array(buffer)
+      let logicalSizeBytes = file.size
+      let fileFlags = 0
+      let contentEncoding: 'none' | 'zstd' = 'none'
+
+      const header = peekNilceHeader(bytes)
+      const hasNilceHeader = header.ok && !header.error
+      if (header.ok) {
+        if (header.error) {
+          addLog(`> NilCE header error: ${header.error.message}`)
+        } else {
+          if (header.uncompressedLen) {
+            logicalSizeBytes = header.uncompressedLen
+          }
+          if (header.encoding && header.encoding !== 'none') {
+            contentEncoding = header.encoding
+            if (header.encoding === 'zstd') {
+              fileFlags |= NILCE_FLAG_COMPRESSION_ZSTD
+            }
+            addLog(`> NilCE: detected existing ${header.encoding} header (${formatBytes(logicalSizeBytes)} logical)`)
+          } else if (header.encoding === 'none') {
+            addLog(`> NilCE: detected existing header (${formatBytes(logicalSizeBytes)} logical)`)
+          }
+        }
+      }
+
+      if (compressUploads && contentEncoding === 'none' && !hasNilceHeader) {
+        try {
+          const wrapped = await maybeWrapNilceZstd(bytes)
+          if (wrapped.wrapped && wrapped.encoding === 'zstd') {
+            bytes = wrapped.bytes as Uint8Array
+            contentEncoding = 'zstd'
+            fileFlags |= NILCE_FLAG_COMPRESSION_ZSTD
+            logicalSizeBytes = wrapped.uncompressedLen
+            addLog(
+              `> NilCE: compressed ${formatBytes(wrapped.uncompressedLen)} -> ${formatBytes(wrapped.bytes.length)}`,
+            )
+          }
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e)
+          addLog(`> NilCE compression failed; proceeding without compression (${msg})`)
+        }
+      }
+
+      lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: logicalSizeBytes }
+      if (bytes.length !== file.size) {
+        setShardProgress((p) => ({
+          ...p,
+          fileBytesTotal: bytes.length,
+        }))
+      }
       let baseMdu0Bytes: Uint8Array | null = null;
       let existingUserMdus: { index: number; data: Uint8Array }[] = [];
       let existingUserCount = 0;
@@ -1172,7 +1224,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
             );
 
-            let rawChunk = new Uint8Array();
+            let rawChunk: Uint8Array = new Uint8Array();
             let encodedMdu: Uint8Array;
             let encodeMs = 0;
 
@@ -1182,7 +1234,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const newIndex = i - existingUserCount;
               const start = newIndex * RawMduCapacity;
               const end = Math.min(start + RawMduCapacity, bytes.length);
-              rawChunk = bytes.subarray(start, end);
+              rawChunk = bytes.subarray(start, end) as Uint8Array;
               const encodeStart = performance.now();
               encodedMdu = encodeToMdu(rawChunk);
               encodeMs = performance.now() - encodeStart;
@@ -1434,7 +1486,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (recordPath !== file.name) {
           addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
-        await workerClient.appendFileToMdu0(recordPath, file.size, fileStartOffset);
+        await workerClient.appendFileToMdu0(recordPath, bytes.length, fileStartOffset, fileFlags);
 
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
@@ -1580,14 +1632,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         });
 
         const elapsedMs = performance.now() - startTs;
-        const mib = file.size / (1024 * 1024);
+        const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
         const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
         const speedStr = `${avgMibPerSec.toFixed(2)} MiB/s (file avg)`;
+        const sizeLabel =
+          contentEncoding === 'none'
+            ? formatBytes(logicalSizeBytes)
+            : `${formatBytes(logicalSizeBytes)} (stored ${formatBytes(bytes.length)})`
         addLog(
-          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${formatBytes(
-            file.size,
-          )}. Speed: ${speedStr}.`,
+          `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${sizeLabel}. Speed: ${speedStr}.`,
         );
 
     } catch (e: unknown) {
@@ -1606,7 +1660,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, resetUpload, stripeParams]);
+  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -1734,6 +1788,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   Choose file
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={compressUploads}
+                    disabled={processing || activeUploading}
+                    onChange={(e) => setCompressUploads(e.target.checked)}
+                  />
+                  <span>Compress locally (NilCE zstd) before sharding</span>
+                </label>
+                {gatewayMode2Enabled && gatewayReachable ? (
+                  <span>Gateway Mode 2 handles compression independently.</span>
+                ) : null}
               </div>
             </div>
           )}

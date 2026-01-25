@@ -11,6 +11,8 @@ export interface UploadResult {
   cid: string
   sizeBytes: number
   fileSizeBytes: number
+  logicalSizeBytes?: number
+  contentEncoding?: string
   allocatedLength?: number
   totalMdus?: number
   witnessMdus?: number
@@ -47,6 +49,8 @@ export async function gatewayUpload(
 
   const sizeBytesRaw = obj['size_bytes'] ?? obj['sizeBytes'] ?? 0
   const fileSizeRaw = obj['file_size_bytes'] ?? obj['fileSizeBytes'] ?? sizeBytesRaw
+  const logicalSizeRaw = obj['logical_size_bytes'] ?? obj['logicalSizeBytes']
+  const encodingRaw = obj['content_encoding'] ?? obj['contentEncoding']
   const allocatedRaw = obj['allocated_length']
   const totalMdusRaw = obj['total_mdus'] ?? obj['totalMdus']
   const witnessMdusRaw = obj['witness_mdus'] ?? obj['witnessMdus']
@@ -55,6 +59,8 @@ export async function gatewayUpload(
     cid: String(obj['cid'] ?? obj['manifest_root'] ?? ''),
     sizeBytes: Number(sizeBytesRaw) || 0,
     fileSizeBytes: Number(fileSizeRaw) || 0,
+    logicalSizeBytes: logicalSizeRaw !== undefined ? Number(logicalSizeRaw) : undefined,
+    contentEncoding: encodingRaw ? String(encodingRaw) : undefined,
     allocatedLength: allocatedRaw !== undefined ? Number(allocatedRaw) : undefined,
     totalMdus: totalMdusRaw !== undefined ? Number(totalMdusRaw) : undefined,
     witnessMdus: witnessMdusRaw !== undefined ? Number(witnessMdusRaw) : undefined,

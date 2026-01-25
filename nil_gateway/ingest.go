@@ -14,7 +14,7 @@ import (
 const RawMduCapacity = 8126464
 
 // IngestNewDeal creates a new Deal Slab.
-func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
+func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, recordPath string, fileFlags uint8) (*crypto_ffi.Mdu0Builder, string, uint64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -149,7 +149,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	if len(baseName) > 40 {
 		baseName = baseName[:40]
 	}
-	if err := b.AppendFile(baseName, shardOut.FileSize, 0); err != nil {
+	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err
 	}
@@ -160,7 +160,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 		b.Free()
 		return nil, "", 0, err
 	}
-	
+
 	tmp0, _ := os.CreateTemp(uploadDir, "mdu0-*.bin")
 	tmp0.Write(mdu0Bytes)
 	tmp0Name := tmp0.Name()
