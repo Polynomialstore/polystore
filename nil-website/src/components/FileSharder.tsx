@@ -98,7 +98,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
-  const [compressUploads, setCompressUploads] = useState(true)
+  const [compressUploads, setCompressUploads] = useState(false)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
