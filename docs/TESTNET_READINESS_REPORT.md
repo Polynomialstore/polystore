@@ -1,6 +1,6 @@
 # NilStore Testnet Readiness Report
 
-Date: 2026-01-24
+Date: 2026-01-25
 
 This report is the Phase 8 deliverable from `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
@@ -20,10 +20,10 @@ Stop everything started by the script:
 
 ### Mainnet parity profile (wallet-first, no faucet)
 
-Run the same local stack but without the dev faucet (and without auto-funding):
+Run the same local stack but without the dev faucet, auto-funding, or tx relay:
 
 ```bash
-NIL_START_FAUCET=0 NIL_AUTO_FAUCET_EVM=0 ./scripts/run_local_stack.sh start
+NIL_START_FAUCET=0 NIL_AUTO_FAUCET_EVM=0 NIL_ENABLE_TX_RELAY=0 ./scripts/run_local_stack.sh start
 ```
 
 Notes:
@@ -83,4 +83,3 @@ go test ./...
 
 - Mode1 does not yet have explicit make-before-break churn state (drain scheduler is Mode2-only).
 - `Params.rotation_bytes_per_epoch` is plumbed but routine rotation is not yet implemented (currently disabled by default).
-
