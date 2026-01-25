@@ -66,7 +66,6 @@ Legend:
 
 | Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
 |---|---:|---|---|---|---|
-| Base reward pool mint/distribution | PARTIAL | Rewards are tracked/minted in withdraw flow (`nilchain/x/nilchain/keeper/msg_server.go` `WithdrawRewards`) | RFC-defined base pool + deterministic issuance schedule not implemented | Implement per `rfcs/rfc-base-reward-pool-and-emissions.md` | chain unit tests + epoch simulation |
-| Provider draining / exit | NOT STARTED | No draining flags/types in chain state | Needed for controlled churn | Add provider state + scheduler per RFC | multi-SP e2e (to be added) |
-| Quotas/credits exclude expired deals + exclude REPAIRING for rewards | PARTIAL | Quotas exist (`unified_liveness.go`), repair concepts exist | Missing explicit exclusion for expired term (and other invariants) | Add term checks in quota derivation and reward eligibility | chain unit tests |
-
+| Base reward pool mint/distribution | COMPLETE | `nilchain/x/nilchain/keeper/base_rewards.go` (epoch rent → mint → per-provider distribution) | — | — | `nilchain/x/nilchain/keeper/base_rewards_test.go` |
+| Provider draining / exit | COMPLETE | `nilchain/x/nilchain/keeper/draining.go`, `nilchain/x/nilchain/keeper/msg_provider_draining.go` | — | — | `nilchain/x/nilchain/keeper/draining_test.go` |
+| Quotas/credits exclude expired deals + exclude REPAIRING for rewards | COMPLETE | Expiry checks in `slashing.go`/`base_rewards.go`; REPAIRING excluded in `slashing.go` and reward weights | — | — | `nilchain/x/nilchain/keeper/slashing_repair_test.go` |
