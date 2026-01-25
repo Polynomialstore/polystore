@@ -95,6 +95,8 @@ NilStore supports two redundancy modes conceptually:
 
 Clients may run fully in-browser using WASM and OPFS for local slab storage, or use the Go gateway/S3 adapter and CLI. The gateway is optional routing + caching infrastructure and never signs on behalf of the user; all on-chain actions require a wallet signature.
 
+*Devnet note:* a faucet-backed relay can be enabled for demos (sponsoring gas while preserving MetaMask authorization), but it is disabled by default in the mainnet-parity posture.
+
 ### Step 1: Ingestion & Placement
 1.  **Deal Creation:** User submits `MsgCreateDeal(Hint: "Hot", MaxSpend: 100 NIL)` which creates a thin-provisioned container.
 1.  **Commit Content:** After upload, the user commits the returned `manifest_root` via `MsgUpdateDealContent` (the Deal is empty until this commit).
