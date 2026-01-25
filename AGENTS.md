@@ -849,11 +849,11 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - Improve website overall: audit accessible pages, remove/replace/add necessary pages.
 
 **P2 (Lower):**
-- Mode 2 RS parity.
-- Require regular proofs from SPs.
-- Formalize block rewards.
-- Formalize strikes against SPs who don't give proofs.
-- Strengthen retrieval process against deviations from happy path (including "deputy" system).
+- [x] Mode 2 RS parity (native↔WASM parity fixtures + CI job).
+- Require regular proofs from SPs (partially addressed via missed-epoch slashing/repairs).
+- [x] Formalize block rewards (base reward pool + distribution).
+- Formalize strikes against SPs who don't give proofs (partial: missed-epoch counters exist).
+- Strengthen retrieval process against deviations from happy path (including "deputy" system) (partial).
 
 **P10 (Lowest):**
 - Revisit retrieval credits later (explicitly out‑of‑scope for Gamma‑4).
