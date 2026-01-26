@@ -283,8 +283,12 @@ ensure_nil_cli() {
 }
 
 ensure_nil_gateway() {
+  # Rebuild when sources changed; the stack script reuses a single binary path
+  # under _artifacts/, so a simple "exists" check can lead to stale behavior.
   if [ -x "$GATEWAY_BIN" ]; then
-    return 0
+    if ! find "$ROOT_DIR/nil_gateway" -name '*.go' -newer "$GATEWAY_BIN" -print -quit | grep -q .; then
+      return 0
+    fi
   fi
   banner "Building nil_gateway (via $GO_BIN)"
   (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
@@ -294,12 +298,23 @@ register_demo_provider() {
   banner "Registering demo storage provider (faucet)"
   # Use the faucet key as a General-capability provider with a large capacity.
   # We retry a few times to avoid races with node startup.
+  local extra_endpoints_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA:-}"
+  IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
+  local endpoint_args=()
+  endpoint_args+=("--endpoint" "/ip4/127.0.0.1/tcp/8082/http")
+  for ep in "${extra_endpoints[@]}"; do
+    ep="$(echo "$ep" | xargs)"
+    if [ -n "$ep" ]; then
+      endpoint_args+=("--endpoint" "$ep")
+    fi
+  done
+
   local attempts=10
   local i
   for i in $(seq 1 "$attempts"); do
     "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
       --from faucet \
-      --endpoint "/ip4/127.0.0.1/tcp/8082/http" \
+      "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
       --yes \
       --home "$CHAIN_HOME" \
@@ -506,7 +521,12 @@ start_sp_gateway() {
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
       NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
     NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-    NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-0}" \
+    NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-1}" \
+    NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}" \
+    NIL_P2P_IDENTITY_PATH="${NIL_P2P_IDENTITY_PATH_SP:-}" \
+    NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64_SP:-}" \
+    NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
+    NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
@@ -542,7 +562,12 @@ start_user_gateway() {
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
     NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-    NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-0}" NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-}" \
+    NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
+    NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}" \
+    NIL_P2P_IDENTITY_PATH="${NIL_P2P_IDENTITY_PATH:-}" \
+    NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64:-}" \
+    NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS:-}" \
+    NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS:-}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \

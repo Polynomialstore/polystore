@@ -1,6 +1,8 @@
 import { createLibp2p } from 'libp2p'
 import type { Libp2p } from 'libp2p'
 import { webSockets } from '@libp2p/websockets'
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
+import { identify } from '@libp2p/identify'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { mplex } from '@libp2p/mplex'
@@ -39,9 +41,14 @@ async function getLibp2pNode(): Promise<Libp2p> {
   if (!nodePromise) {
     nodePromise = (async () => {
       const node = await createLibp2p({
-        transports: [webSockets()],
+        // Support direct WS/WSS multiaddrs and circuit-relay v2 dial addrs
+        // (<relay>/p2p-circuit/p2p/<destPeerId>).
+        transports: [webSockets(), circuitRelayTransport()],
         connectionEncrypters: [noise()],
         streamMuxers: [yamux(), mplex()],
+        services: {
+          identify: identify(),
+        },
         connectionGater: {
           denyDialMultiaddr: async () => false,
         },
@@ -134,7 +141,13 @@ export async function libp2pFetchRange(
   signal?: AbortSignal,
 ): Promise<Libp2pFetchResult> {
   const node = await getLibp2pNode()
-  const stream = await abortable(signal, node.dialProtocol(multiaddr(addr), P2P_PROTOCOL))
+  // Connections established via circuit relay are marked as "limited" by libp2p.
+  // We still need to open our fetch protocol stream on them.
+  const runOnLimitedConnection = addr.includes('/p2p-circuit')
+  const stream = await abortable(
+    signal,
+    node.dialProtocol(multiaddr(addr), P2P_PROTOCOL, { runOnLimitedConnection }),
+  )
 
   const payload: Record<string, unknown> = {
     manifest_root: req.manifestRoot,

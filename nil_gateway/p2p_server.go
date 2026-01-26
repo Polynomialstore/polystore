@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -12,13 +13,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	libp2p "github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	circuitv2client "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	ws "github.com/libp2p/go-libp2p/p2p/transport/websocket"
 	"github.com/multiformats/go-multiaddr"
 
@@ -59,7 +64,8 @@ type p2pFetchResponse struct {
 }
 
 type p2pServer struct {
-	host host.Host
+	host          host.Host
+	announceAddrs []string
 }
 
 var (
@@ -100,10 +106,18 @@ func startLibp2pServer(ctx context.Context, listenAddrs []string) (*p2pServer, e
 	if len(listenAddrs) == 0 {
 		return nil, errors.New("no libp2p listen addrs provided")
 	}
-	h, err := libp2p.New(
+	opts := []libp2p.Option{
 		libp2p.ListenAddrStrings(listenAddrs...),
 		libp2p.Transport(ws.New),
-	)
+		// Allow dialing/accepting circuit-relay addresses when configured.
+		libp2p.EnableRelay(),
+	}
+	if priv, err := loadP2PIdentityFromEnv(); err != nil {
+		return nil, err
+	} else if priv != nil {
+		opts = append(opts, libp2p.Identity(priv))
+	}
+	h, err := libp2p.New(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +127,8 @@ func startLibp2pServer(ctx context.Context, listenAddrs []string) (*p2pServer, e
 }
 
 func startLibp2pServerFromEnv(ctx context.Context) (*p2pServer, error) {
-	if envDefault("NIL_P2P_ENABLED", "0") != "1" {
+	// Default: enabled (dev/test posture). Disable explicitly via NIL_P2P_ENABLED=0.
+	if envDefault("NIL_P2P_ENABLED", "1") != "1" {
 		return nil, nil
 	}
 	raw := envDefault("NIL_P2P_LISTEN_ADDRS", p2pDefaultListenRaw)
@@ -121,7 +136,26 @@ func startLibp2pServerFromEnv(ctx context.Context) (*p2pServer, error) {
 	if len(addrs) == 0 {
 		return nil, fmt.Errorf("NIL_P2P_LISTEN_ADDRS is empty")
 	}
-	return startLibp2pServer(ctx, addrs)
+	server, err := startLibp2pServer(ctx, addrs)
+	if err != nil {
+		return nil, err
+	}
+
+	announce := parseCommaList(envDefault("NIL_P2P_ANNOUNCE_ADDRS", ""))
+	if len(announce) == 0 {
+		relayDial, err := reserveRelayAddrs(ctx, server.host, parseCommaList(envDefault("NIL_P2P_RELAY_ADDRS", "")))
+		if err != nil {
+			log.Printf("p2p relay reservation failed: %v", err)
+		}
+		if len(relayDial) > 0 {
+			announce = relayDial
+		}
+	}
+	if len(announce) == 0 {
+		announce = p2pAnnounceAddrs(server.host)
+	}
+	server.announceAddrs = announce
+	return server, nil
 }
 
 func parseCommaList(raw string) []string {
@@ -146,6 +180,85 @@ func p2pAnnounceAddrs(h host.Host) []string {
 		out = append(out, withPeer.String())
 	}
 	return out
+}
+
+func loadP2PIdentityFromEnv() (crypto.PrivKey, error) {
+	if raw := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_B64", "")); raw != "" {
+		decoded, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			return nil, fmt.Errorf("decode NIL_P2P_IDENTITY_B64: %w", err)
+		}
+		priv, err := crypto.UnmarshalPrivateKey(decoded)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_B64: %w", err)
+		}
+		return priv, nil
+	}
+	if path := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_PATH", "")); path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read NIL_P2P_IDENTITY_PATH: %w", err)
+		}
+		raw := strings.TrimSpace(string(data))
+		if raw == "" {
+			return nil, fmt.Errorf("NIL_P2P_IDENTITY_PATH is empty")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(raw)
+		if err == nil {
+			data = decoded
+		}
+		priv, err := crypto.UnmarshalPrivateKey(data)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_PATH: %w", err)
+		}
+		return priv, nil
+	}
+	return nil, nil
+}
+
+func reserveRelayAddrs(ctx context.Context, h host.Host, relayAddrs []string) ([]string, error) {
+	if h == nil || len(relayAddrs) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(relayAddrs))
+	var firstErr error
+	for _, raw := range relayAddrs {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		ma, err := multiaddr.NewMultiaddr(raw)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("invalid relay addr %q: %w", raw, err)
+			}
+			continue
+		}
+		info, err := peer.AddrInfoFromP2pAddr(ma)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("invalid relay peer addr %q: %w", raw, err)
+			}
+			continue
+		}
+		if err := h.Connect(ctx, *info); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("connect relay %q: %w", raw, err)
+			}
+			continue
+		}
+		_, err = circuitv2client.Reserve(ctx, h, *info)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("reserve relay %q: %w", raw, err)
+			}
+			continue
+		}
+		// Dial address for clients: <relay>/p2p-circuit/p2p/<providerPeerId>.
+		dial := ma.Encapsulate(multiaddr.StringCast(fmt.Sprintf("/p2p-circuit/p2p/%s", h.ID().String())))
+		out = append(out, dial.String())
+	}
+	return out, firstErr
 }
 
 func (s *p2pServer) handleFetchStream(stream network.Stream) {

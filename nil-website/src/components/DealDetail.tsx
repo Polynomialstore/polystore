@@ -220,7 +220,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const lastAttemptSummary = useMemo(() => {
     if (!lastTrace?.attempts?.length) return ''
     return lastTrace.attempts
-      .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}`)
+      .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}:${attempt.endpoint}`)
       .join(',')
   }, [lastTrace])
   const lastFailureSummary = useMemo(() => {
