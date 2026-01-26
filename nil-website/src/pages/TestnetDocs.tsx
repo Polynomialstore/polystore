@@ -230,22 +230,74 @@ export const TestnetDocs = () => {
             <Terminal className="w-6 h-6 text-purple-500" /> Run a Provider Node
           </h2>
           <p className="text-muted-foreground">
-            To participate as a Storage Provider (Miner), you must register on-chain and keep your node online.
+            To participate as a Storage Provider (SP), run <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway</code> in provider mode and register at least one public endpoint on-chain.
           </p>
-          
-          <div className="bg-card p-6 rounded-xl border border-border space-y-6 font-mono text-sm">
-            <div>
-                <p className="text-muted-foreground"># 1. Initialize Node</p>
-                <p>$ ./bin/nilchaind init my-node --chain-id nilchain</p>
+
+          <div className="bg-card p-6 rounded-xl border border-border space-y-6 text-sm">
+            <div className="space-y-2">
+              <h3 className="font-bold text-foreground">Endpoint Types</h3>
+              <p className="text-muted-foreground">
+                For testnet onboarding, keep it simple:
+              </p>
+              <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+                <li><strong>direct</strong> (recommended): SP has an open port on a public IP / port-forward; expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> via a reverse proxy.</li>
+                <li><strong>cloudflare-tunnel</strong> (fallback): SP is behind NAT; expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> via Cloudflare Tunnel (no router changes).</li>
+                <li><strong>webrtc</strong> (future): NAT traversal optimization; not testnet-blocking.</li>
+              </ul>
+              <p className="text-muted-foreground">
+                The chain stores endpoints as multiaddrs. Use <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway --print-endpoints</code> to generate the exact <code className="px-1 py-0.5 rounded bg-secondary/60">--endpoint</code> value to register.
+              </p>
             </div>
-            <div>
-                <p className="text-muted-foreground"># 2. Register Identity</p>
-                <p>$ ./bin/nilchaind tx nilchain register-provider General 1000000000 \</p>
-                <p>&nbsp;&nbsp;--from my-wallet --chain-id nilchain --yes</p>
+
+            <div className="space-y-2">
+              <h3 className="font-bold text-foreground">1) Run the SP Gateway</h3>
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p className="text-green-400"># Run provider-mode gateway on the SP machine</p>
+                <p>$ cd nil_gateway</p>
+                <p>$ NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .</p>
+              </div>
             </div>
-            <div>
-                <p className="text-muted-foreground"># 3. Start Node</p>
-                <p>$ ./bin/nilchaind start</p>
+
+            <div className="space-y-2">
+              <h3 className="font-bold text-foreground">2A) direct (reverse proxy on 443)</h3>
+              <p className="text-muted-foreground">
+                If the SP has an open inbound port, terminate TLS on 443 and proxy to <code className="px-1 py-0.5 rounded bg-secondary/60">localhost:8082</code>. Example with Caddy:
+              </p>
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p>$ caddy reverse-proxy --from sp.example.com --to localhost:8082</p>
+                <p className="text-green-400"># Print the multiaddr to register</p>
+                <p>$ NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \\</p>
+                <p>&nbsp;&nbsp;go run . --print-endpoints</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-bold text-foreground">2B) cloudflare-tunnel (no open ports)</h3>
+              <p className="text-muted-foreground">
+                If the SP cannot open inbound ports, use Cloudflare Tunnel to expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> (bytes will transit Cloudflare).
+              </p>
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p className="text-green-400"># One-time setup (Cloudflare account + DNS)</p>
+                <p>$ cloudflared tunnel login</p>
+                <p>$ cloudflared tunnel create nilstore-sp</p>
+                <p>$ cloudflared tunnel route dns nilstore-sp sp.example.com</p>
+                <p className="text-green-400"># Run the tunnel (ingress to the local gateway)</p>
+                <p>$ cloudflared tunnel run nilstore-sp</p>
+                <p className="text-green-400"># Print the multiaddr to register</p>
+                <p>$ NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-bold text-foreground">3) Register Provider Endpoint On-Chain</h3>
+              <p className="text-muted-foreground">
+                Copy the printed <code className="px-1 py-0.5 rounded bg-secondary/60">--endpoint</code> line(s) and register the provider:
+              </p>
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+                <p>$ nilchaind tx nilchain register-provider General 1099511627776 \\</p>
+                <p>&nbsp;&nbsp;--from &lt;your-key&gt; --chain-id {appConfig.cosmosChainId} --yes \\</p>
+                <p>&nbsp;&nbsp;--endpoint &quot;/dns4/sp.example.com/tcp/443/https&quot;</p>
+              </div>
             </div>
           </div>
         </section>
