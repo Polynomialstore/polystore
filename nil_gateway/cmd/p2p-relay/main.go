@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -36,29 +35,24 @@ type output struct {
 
 func main() {
 	var (
-		listenRaw      = flag.String("listen", defaultListen, "comma-separated libp2p listen multiaddrs")
-		identityPath   = flag.String("identity", "", "path to libp2p private key (protobuf bytes, base64 or raw)")
-		genIdentity    = flag.String("gen-identity", "", "generate a new identity key at this path (0600) and print peer id")
-		printPeerID    = flag.Bool("print-peer-id", false, "print peer id for the provided identity and exit")
-		onlyPeerIDMode = flag.Bool("peerid-only", false, "alias for --print-peer-id")
+		listenRaw    = flag.String("listen", defaultListen, "comma-separated libp2p listen multiaddrs")
+		identityPath = flag.String("identity", "", "path to libp2p private key (protobuf bytes, base64 or raw)")
+		genIdentity  = flag.String("gen-identity", "", "generate a new identity key at this path (0600)")
+		printPeerID  = flag.Bool("print-peer-id", false, "print peer id for the loaded/generated identity and exit")
 	)
 	flag.Parse()
-
-	if *onlyPeerIDMode {
-		*printPeerID = true
-	}
 
 	priv, err := loadOrCreateIdentity(*identityPath, *genIdentity)
 	if err != nil {
 		log.Fatalf("identity: %v", err)
 	}
-	pid, err := peer.IDFromPrivateKey(priv)
-	if err != nil {
-		log.Fatalf("peer id: %v", err)
-	}
 
 	if *printPeerID {
-		fmt.Println(pid.String())
+		pid, err := peerIDFromPriv(priv)
+		if err != nil {
+			log.Fatalf("peer id: %v", err)
+		}
+		fmt.Println(pid)
 		return
 	}
 
@@ -77,17 +71,15 @@ func main() {
 	}
 	defer func() { _ = h.Close() }()
 
-	// Start circuit-relay v2 service.
 	_, err = relayv2.New(h)
 	if err != nil {
 		log.Fatalf("relayv2: %v", err)
 	}
 
-	announce := withPeerID(h)
 	enc := json.NewEncoder(os.Stdout)
 	_ = enc.Encode(&output{
 		PeerID:      h.ID().String(),
-		Announce:    announce,
+		Announce:    withPeerID(h),
 		ListenAddrs: listenAddrs,
 		Mode:        "relay",
 	})
@@ -115,6 +107,14 @@ func withPeerID(h host.Host) []string {
 		out = append(out, addr.Encapsulate(multiaddr.StringCast("/p2p/"+h.ID().String())).String())
 	}
 	return out
+}
+
+func peerIDFromPriv(priv crypto.PrivKey) (string, error) {
+	pid, err := peer.IDFromPrivateKey(priv)
+	if err != nil {
+		return "", err
+	}
+	return pid.String(), nil
 }
 
 func loadOrCreateIdentity(identityPath, genIdentityPath string) (crypto.PrivKey, error) {
@@ -145,11 +145,11 @@ func loadOrCreateIdentity(identityPath, genIdentityPath string) (crypto.PrivKey,
 	if err != nil {
 		return nil, err
 	}
-	data = []byte(strings.TrimSpace(string(data)))
-	if len(data) == 0 {
+	raw := strings.TrimSpace(string(data))
+	if raw == "" {
 		return nil, errors.New("identity file is empty")
 	}
-	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	decoded, err := base64.StdEncoding.DecodeString(raw)
 	if err == nil {
 		data = decoded
 	}
@@ -158,10 +158,4 @@ func loadOrCreateIdentity(identityPath, genIdentityPath string) (crypto.PrivKey,
 		return nil, fmt.Errorf("unmarshal private key: %w", err)
 	}
 	return priv, nil
-}
-
-func init() {
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	// Avoid panics due to timeouts on slow CI machines.
-	time.Local = time.UTC
 }
