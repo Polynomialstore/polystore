@@ -35,6 +35,9 @@ GO_BIN="${GO_BIN:-$(command -v go)}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
+# Each nil_gateway instance runs an optional libp2p server. When enabled by
+# default, we must ensure unique listen ports for multi-provider stacks.
+P2P_PORT_BASE="${P2P_PORT_BASE:-9200}"
 
 START_WEB="${START_WEB:-1}"
 
@@ -420,12 +423,15 @@ start_provider() {
   local i="$1"
   local key="provider$i"
   local port="$((PROVIDER_PORT_BASE + i - 1))"
+  local p2p_port="$((P2P_PORT_BASE + i))"
   local dir="$LOG_DIR/providers/$key"
   mkdir -p "$dir"
   (
     cd "$ROOT_DIR/nil_gateway"
     nohup env \
       NIL_LISTEN_ADDR=":$port" \
+      NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
+      NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
       NIL_UPLOAD_DIR="$dir" \
@@ -443,10 +449,13 @@ start_provider() {
 
 start_router() {
   banner "Starting gateway router (nil_gateway)"
+  local p2p_port="$P2P_PORT_BASE"
   (
     cd "$ROOT_DIR/nil_gateway"
     nohup env \
       NIL_GATEWAY_ROUTER="1" \
+      NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
+      NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
@@ -493,10 +502,11 @@ stop_all() {
   done
 
   # Best-effort kill by port in case go run spawned children.
-  local ports=(26657 26656 1317 "$EVM_RPC_PORT" 8080 8081 5173)
+  local ports=(26657 26656 1317 "$EVM_RPC_PORT" 8080 8081 5173 "$P2P_PORT_BASE")
   if [ "$PROVIDER_COUNT" -gt 0 ]; then
     for i in $(seq 1 "$PROVIDER_COUNT"); do
       ports+=("$((PROVIDER_PORT_BASE + i - 1))")
+      ports+=("$((P2P_PORT_BASE + i))")
     done
   fi
   for port in "${ports[@]}"; do
