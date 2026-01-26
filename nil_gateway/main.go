@@ -349,6 +349,10 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func main() {
+	if maybePrintProviderEndpoints(os.Args[1:]) {
+		return
+	}
+
 	routerMode := isGatewayRouterMode()
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 

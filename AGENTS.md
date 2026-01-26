@@ -560,6 +560,12 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] No retry policy or error classification to trigger fallback.
 - [x] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
 
+**Provider Endpoint Types (Testnet Onboarding):**
+- [x] First-class endpoint types documented for SP onboarding: `direct`, `cloudflare-tunnel` (with `webrtc` reserved for future).
+- [x] Add `nil_gateway --print-endpoints` helper for copy/pasteable `--endpoint` multiaddrs to register on-chain.
+- [ ] NAT traversal / hole punching for the native gateway (QUIC/UDP + coordination service + fallback to direct/tunnel).
+- [ ] WebRTC transport for browser/native clients (signaling + STUN; optional TURN fallback for worst-case networks).
+
 #### 11.3.A Delta Sprint Checklist: Gateway Fallback (Routing + Retry + UX)
 
 **Goal:** Make the web client resilient when the local gateway is missing/flaky, while keeping MetaMask signing in the browser.

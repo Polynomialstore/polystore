@@ -1,0 +1,156 @@
+# Provider Endpoint Types (Testnet)
+
+NilStore providers (SPs) must register at least one reachable **endpoint multiaddr** on-chain via `register-provider`.
+
+This doc defines the two supported endpoint "types" for testnet onboarding:
+
+- `direct` (recommended): provider has an open inbound port (public IP or port-forward).
+- `cloudflare-tunnel` (fallback): provider cannot open inbound ports; expose HTTPS via Cloudflare Tunnel.
+
+Future (not testnet-blocking):
+
+- `webrtc`: NAT traversal optimization for browser/native clients.
+- `hole-punch`: NAT traversal for native clients (QUIC/UDP).
+
+## What Gets Registered On-Chain
+
+The chain stores endpoints as strings, expected to be **multiaddrs**, e.g.:
+
+- `/ip4/1.2.3.4/tcp/8091/http`
+- `/dns4/sp.example.com/tcp/443/https`
+
+The gateway router understands `/http` and `/https` and converts them to `http(s)://host:port`.
+
+## Helper: Print Endpoint Multiaddrs
+
+From `nil_gateway/`, you can generate the exact `--endpoint` values:
+
+```bash
+go run . --print-endpoints
+```
+
+Useful flags:
+
+- `--json` or `--format=json` to emit machine-readable output
+- `--include-p2p` to also print optional libp2p endpoints (not required for the `direct`/`cloudflare-tunnel` testnet posture)
+
+Environment variables used by the helper:
+
+- `NIL_PUBLIC_HTTP_MULTIADDR` (highest precedence): explicit multiaddr to print
+- `NIL_CLOUDFLARE_TUNNEL_HOSTNAME`: if set, prints `/dns4/<host>/tcp/443/https` and labels as `cloudflare-tunnel`
+- `NIL_PUBLIC_HTTP_HOST` / `NIL_PUBLIC_HTTP_PORT` / `NIL_PUBLIC_HTTP_SCHEME`: used for `direct` derivation (falls back to `NIL_LISTEN_ADDR`)
+
+## Type: direct (recommended)
+
+Goal: make the provider reachable at `https://sp.example.com` and register:
+
+- `/dns4/sp.example.com/tcp/443/https`
+
+One straightforward approach is to run the provider gateway locally on `:8082` and use a reverse proxy on `:443`:
+
+```bash
+# Provider machine
+cd nil_gateway
+NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
+```
+
+Example TLS reverse proxy (Caddy):
+
+```bash
+# Provider machine, requires DNS + inbound 443
+caddy reverse-proxy --from sp.example.com --to localhost:8082
+```
+
+Now print the endpoint to register:
+
+```bash
+cd nil_gateway
+NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \
+  go run . --print-endpoints
+```
+
+Register it on-chain:
+
+```bash
+nilchaind tx nilchain register-provider General 1099511627776 \
+  --from <your-key> \
+  --chain-id <chain-id> \
+  --yes \
+  --endpoint "/dns4/sp.example.com/tcp/443/https"
+```
+
+## Type: cloudflare-tunnel (fallback)
+
+Goal: expose the provider at `https://sp.example.com` without opening inbound ports.
+
+This routes traffic through Cloudflare, but is simple and works behind NAT.
+
+### Minimal tunnel setup
+
+1) Run the provider gateway locally (same as direct):
+
+```bash
+cd nil_gateway
+NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
+```
+
+2) Create a tunnel and map DNS:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create nilstore-sp
+cloudflared tunnel route dns nilstore-sp sp.example.com
+```
+
+3) Configure ingress (example `~/.cloudflared/config.yml`):
+
+```yaml
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: /Users/you/.cloudflared/<YOUR_TUNNEL_ID>.json
+ingress:
+  - hostname: sp.example.com
+    service: http://localhost:8082
+  - service: http_status:404
+```
+
+4) Run the tunnel:
+
+```bash
+cloudflared tunnel run nilstore-sp
+```
+
+5) Print the multiaddr to register:
+
+```bash
+cd nil_gateway
+NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
+```
+
+6) Register the endpoint on-chain:
+
+```bash
+nilchaind tx nilchain register-provider General 1099511627776 \
+  --from <your-key> \
+  --chain-id <chain-id> \
+  --yes \
+  --endpoint "/dns4/sp.example.com/tcp/443/https"
+```
+
+## Future Work (Not Testnet-Blocking)
+
+### WebRTC (browser-friendly NAT traversal)
+
+Medium-to-large lift. Typically needs:
+
+- signaling channel (offer/answer + ICE candidates)
+- STUN configuration (cheap, required in most NAT scenarios)
+- optional TURN for worst-case networks (expensive; relays bytes)
+- provider-side transport support (WebRTC data channel / compatible libp2p transport)
+
+### Hole punching (native gateway)
+
+Since we have native clients, we can attempt:
+
+- direct QUIC/UDP + hole punching (with a coordination service)
+- fallback to `direct` or `cloudflare-tunnel` endpoints when it fails
+
