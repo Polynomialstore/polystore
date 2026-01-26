@@ -30,5 +30,8 @@ nil_bridge/cache/test-failures
 nil_bridge/cache/
 nil_bridge/broadcast/
 
+# Local tooling cache (e.g. e2e scripts)
+.cache/
+
 # Import-only staging (not meant to be committed)
 update/
