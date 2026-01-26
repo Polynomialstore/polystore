@@ -446,7 +446,7 @@ func main() {
 		log.Fatalf("failed to start libp2p server: %v", err)
 	}
 	if p2pServer != nil {
-		addrs := p2pAnnounceAddrs(p2pServer.host)
+		addrs := p2pServer.announceAddrs
 		setP2PAnnounceAddrs(addrs)
 		log.Printf("LibP2P listening on %s", strings.Join(addrs, ", "))
 	}
