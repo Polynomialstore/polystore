@@ -73,6 +73,8 @@ Concretely, the mainnet Mode 1 design adds:
     * **Mode 1:** upload via gateway/CLI or browser; any assigned Provider can accept the full MDU stream.
     * **Mode 2:** the client performs RS(K, K+M) encoding per SP‑MDU (WASM/CLI) and uploads per‑slot shards directly to assigned Providers.
 3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root` (gateway optional, user signs via wallet).
+
+*Devnet note:* a faucet-backed relay can be enabled for demos, but it is disabled by default in the mainnet-parity posture.
 4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In **StripeReplica (Mode 2)**, the Chain assigns an ordered slot list of size `N = K+M`, replicating metadata to all slots while striping user data per slot.
 
 ### Step 2: The Loop

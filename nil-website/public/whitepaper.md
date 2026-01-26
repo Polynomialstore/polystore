@@ -101,6 +101,8 @@ NilStore supports two redundancy modes conceptually:
     *   In **StripeReplica (Mode 2)**, the chain assigns an ordered slot list of size `N = K+M` (e.g., 8+4). Metadata MDUs are replicated to all slots, while user data MDUs are striped per slot.
 3.  **Upload:** User uploads data.
 
+*Devnet note:* A gateway relay/faucet can sponsor gas for demos, but it is disabled by default in mainnet-parity mode. Production flows are wallet-signed; the gateway is optional.
+
 ### Step 2: The Liveness Loop
 *   **Scenario 1 (Viral):** Users swarm the file via retrieval sessions. SPs signal saturation. Chain checks `MaxSpend`.
     *   In **Mode 1**, the chain increases `Deal.CurrentReplication` and assigns additional Providers to store full replicas.

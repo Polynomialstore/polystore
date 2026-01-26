@@ -148,7 +148,7 @@ type ServiceStatus = 'ok' | 'warn' | 'error';
 interface StatusSummary {
   lcd: ServiceStatus;      // Cosmos REST API
   evm: ServiceStatus;      // EVM JSON-RPC
-  faucet: ServiceStatus;   // Token Faucet
+  faucet: ServiceStatus;   // Token Faucet (dev-only; hidden when disabled)
   chainIdMatch: ServiceStatus; // Web3 Wallet vs App Config
   height?: number;         // Current block height
   networkName?: string;    // Chain ID from node

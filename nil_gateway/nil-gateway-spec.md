@@ -201,6 +201,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` 
 1.  **The "Faucet Relayer":**
     *   The gateway can relay user‑signed intents (e.g., `create-deal-from-evm`, `update-deal-content-evm`) and submit provider proofs using a local key.
     *   This acts as a "Meta-Transaction" layer, sponsoring gas for web users while keeping user authorization in MetaMask.
+    *   **Dev-only:** this path is disabled by default. Enable with `NIL_ENABLE_TX_RELAY=1`; optional auto-funding uses `NIL_AUTO_FAUCET_EVM=1` (or `NIL_AUTO_FAUCET=1`).
 
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk NilFS slabs to build `ChainedProof` objects for the requested blob range.
@@ -208,7 +209,8 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` 
     *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**
-    *   The Gateway currently acts as the *sole* Storage Provider for the devnet web interface. It does not distribute data to other nodes; it merely simulates the lifecycle of a storage deal backed by its local filesystem.
+    *   The Gateway can act as a Storage Provider for local devnet flows, but it is **not** required to be the sole provider.
+    *   When configured with multiple providers, the gateway uploads Mode 2 shards to the assigned slots and can reconstruct missing shards on fetch.
 
 ## 5. Future Roadmap
 
