@@ -3,7 +3,14 @@ const LCD_BASE = import.meta.env.VITE_LCD_BASE || 'http://localhost:1317'
 const GATEWAY_BASE = import.meta.env.VITE_GATEWAY_BASE || 'http://localhost:8080'
 const SP_BASE = import.meta.env.VITE_SP_BASE || 'http://localhost:8082'
 const GATEWAY_DISABLED = import.meta.env.VITE_DISABLE_GATEWAY === '1'
-const P2P_ENABLED = import.meta.env.VITE_P2P_ENABLED === '1'
+const P2P_ENABLED = (() => {
+  const raw = import.meta.env.VITE_P2P_ENABLED
+  if (typeof raw === 'string') {
+    return raw === '1'
+  }
+  // Default: enabled (dev/test posture). Disable explicitly via VITE_P2P_ENABLED=0.
+  return true
+})()
 const P2P_BOOTSTRAP = import.meta.env.VITE_P2P_BOOTSTRAP || ''
 const P2P_PROTOCOL = import.meta.env.VITE_P2P_PROTOCOL || '/nilstore/http/1.0.0'
 const FAUCET_ENABLED = (() => {

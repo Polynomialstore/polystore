@@ -1,6 +1,7 @@
 import { createLibp2p } from 'libp2p'
 import type { Libp2p } from 'libp2p'
 import { webSockets } from '@libp2p/websockets'
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { mplex } from '@libp2p/mplex'
@@ -39,7 +40,9 @@ async function getLibp2pNode(): Promise<Libp2p> {
   if (!nodePromise) {
     nodePromise = (async () => {
       const node = await createLibp2p({
-        transports: [webSockets()],
+        // Support direct WS/WSS multiaddrs and circuit-relay v2 dial addrs
+        // (<relay>/p2p-circuit/p2p/<destPeerId>).
+        transports: [webSockets(), circuitRelayTransport()],
         connectionEncrypters: [noise()],
         streamMuxers: [yamux(), mplex()],
         connectionGater: {

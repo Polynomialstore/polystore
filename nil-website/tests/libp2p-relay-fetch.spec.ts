@@ -1,0 +1,127 @@
+import { test, expect } from '@playwright/test'
+
+const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
+const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
+
+test.describe('libp2p fetch (relay)', () => {
+  test.skip(!hasLocalStack, 'requires local stack with libp2p relay enabled')
+
+  test('download uses libp2p relay transport', async ({ page }) => {
+    test.setTimeout(600_000)
+
+    const filePath = 'libp2p-relay.txt'
+    const fileBytes = Buffer.alloc(64 * 1024, 'R')
+
+    page.on('pageerror', (err) => {
+      console.error('[pageerror]', err.message)
+    })
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        console.error('[console:error]', msg.text())
+      }
+    })
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem('nil_transport_preference', 'prefer_p2p')
+    })
+
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+
+    const waitForWalletControls = async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await page.waitForSelector('body', { state: 'attached' })
+        const hasConnect = await page.getByTestId('connect-wallet').count().catch(() => 0)
+        const hasAddress = await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').count()
+        if (hasConnect > 0 || hasAddress > 0) return
+        await page.waitForTimeout(1000)
+        await page.reload({ waitUntil: 'networkidle' })
+      }
+      throw new Error('wallet controls not found')
+    }
+
+    await waitForWalletControls()
+    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
+    if (!(await walletAddress.isVisible().catch(() => false))) {
+      await page.getByTestId('connect-wallet').first().click()
+      await expect(walletAddress).toBeVisible({ timeout: 60_000 })
+    }
+
+    const advancedToggle = page.getByTestId('workspace-advanced-toggle')
+    await expect(advancedToggle).toBeVisible({ timeout: 60_000 })
+
+    const transportSelect = page.getByLabel('Preference')
+    if (!(await transportSelect.isVisible().catch(() => false))) {
+      await advancedToggle.click()
+    }
+    await expect(transportSelect).toBeVisible({ timeout: 60_000 })
+    await expect(transportSelect.locator('option[value="prefer_p2p"]')).toHaveCount(1)
+    await transportSelect.selectOption('prefer_p2p')
+
+    await page.getByTestId('faucet-request').click()
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+
+    const redundancySelect = page.getByTestId('alloc-redundancy-mode')
+    if (!(await redundancySelect.isVisible().catch(() => false))) {
+      await page.getByTestId('workspace-advanced-toggle').click()
+      await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    }
+    await redundancySelect.selectOption('mode1')
+    await page.getByTestId('alloc-submit').click()
+    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+
+    await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
+    const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
+    expect(dealId).not.toBe('')
+
+    const fileInput = page.getByTestId('content-file-input')
+    if (!(await fileInput.isVisible().catch(() => false))) {
+      const mode1Toggle = page.getByTestId('tab-content')
+      if (await mode1Toggle.isVisible().catch(() => false)) {
+        await mode1Toggle.click()
+      }
+    }
+    await expect(fileInput).toBeVisible({ timeout: 60_000 })
+    await expect(fileInput).toBeEnabled({ timeout: 120_000 })
+    await fileInput.setInputFiles({
+      name: filePath,
+      mimeType: 'text/plain',
+      buffer: fileBytes,
+    })
+
+    await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
+    await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
+
+    const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    await expect(dealRow).toBeVisible({ timeout: 180_000 })
+    await dealRow.click()
+
+    const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
+    await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
+    await downloadBtn.click()
+    const download = await downloadPromise
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    if (stream) {
+      for await (const chunk of stream) {
+        chunks.push(Buffer.from(chunk as Uint8Array))
+      }
+    }
+    const downloaded = Buffer.concat(chunks)
+    expect(downloaded.length).toBe(fileBytes.length)
+    expect(downloaded.equals(fileBytes)).toBe(true)
+
+    const routeLabel = page.getByTestId('transport-route')
+    await expect(routeLabel).toBeVisible({ timeout: 60_000 })
+    await expect(routeLabel).toHaveText(/Route: libp2p/i)
+
+    const attempts = (await routeLabel.getAttribute('data-transport-attempts')) || ''
+    expect(attempts).toContain('p2p-circuit')
+
+    await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
+  })
+})
