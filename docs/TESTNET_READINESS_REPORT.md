@@ -38,6 +38,10 @@ Runs a full lifecycle test (stack start -> create deal -> upload -> commit -> fe
 ./scripts/e2e_lifecycle.sh
 ```
 
+## Manual devnet runbook
+
+For a choreography that mirrors the automated suites but is executed manually (create/upload/commit/fetch, multi-SP proofs, deputy repair, economic checks), follow `docs/manual-devnet-runbook.md`. Keep it in sync with the scripts listed above so the steps remain accurate as the system evolves.
+
 ## Verification checklist (gates)
 
 All items below are expected to be verifiable via the unit tests and/or the e2e scripts.
