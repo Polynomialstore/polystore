@@ -99,7 +99,7 @@ func CmdCreateDeal() *cobra.Command {
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},
 	}
-	cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General:owner=<nilAddress>:replicas=<N>)")
+	cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General[:owner=<nilAddress>][:rs=K+M]). replicas-only hints are deprecated; omit rs= to auto-select Mode 2.")
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
 }

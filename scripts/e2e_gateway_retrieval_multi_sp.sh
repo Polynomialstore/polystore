@@ -17,6 +17,29 @@ banner() { printf '\n>>> %s\n' "$*"; }
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
+current_epoch() {
+  local epoch_len height
+
+  epoch_len=$($NILCHAIND query nilchain params --home "$CHAIN_HOME" --output json | jq -r '.params.epoch_len_blocks // "0"')
+  if [ -z "$epoch_len" ] || [ "$epoch_len" = "null" ]; then
+    epoch_len="0"
+  fi
+
+  # Prefer CometBFT RPC directly (faster than nilchaind status).
+  height=$(curl -s "http://127.0.0.1:26657/status" | jq -r '.result.sync_info.latest_block_height // "1"')
+  if [ -z "$height" ] || [ "$height" = "null" ]; then
+    height="1"
+  fi
+
+  if [ "$epoch_len" -le 0 ]; then
+    echo "1"
+    return 0
+  fi
+
+  # epoch_id is 1-indexed: epoch=(height-1)/epoch_len + 1
+  echo $(( (height - 1) / epoch_len + 1 ))
+}
+
 # 1. Setup
 banner "Generating Test Data"
 dd if=/dev/urandom of="$TMP_DIR/payload.bin" bs=1024 count=1024 2>/dev/null # 1MB
@@ -28,7 +51,10 @@ echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
 banner "Creating Deal"
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+# Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1).
+# The gateway /gateway/prove-retrieval endpoint reconstructs the full MDU from per-slot shards on the router
+# and submits the proof "as" the assigned provider.
+CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
@@ -76,7 +102,10 @@ sleep 6
 # 6. Resolve Assigned Provider
 banner "Resolving Assigned Provider"
 DEAL_INFO=$($NILCHAIND query nilchain get-deal --id "$DEAL_ID" --output json)
-ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r '.deal.providers[0]')
+ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r --arg owner "$OWNER_ADDR" '.deal.providers[] | select(. != $owner) | . ' | head -n1)
+if [ -z "$ASSIGNED_ADDR" ] || [ "$ASSIGNED_ADDR" == "null" ]; then
+  ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r '.deal.providers[0]')
+fi
 echo "Assigned Provider: $ASSIGNED_ADDR"
 
 if [ "$ASSIGNED_ADDR" == "$OWNER_ADDR" ]; then
@@ -93,17 +122,19 @@ PORT=$(echo "$ENDPOINT" | awk -F/ '{print $5}')
 echo "Provider Port: $PORT"
 
 # 7. Prove Retrieval (The Regression Test)
-banner "Proving Retrieval (via Provider :$PORT)"
-# This call triggers 'submitRetrievalProofNew' on the provider.
-# BEFORE FIX: It would sign with the Provider's key -> Fail "unauthorized" on chain.
-# AFTER FIX: It should look up Owner's key in shared keyring -> Sign with Owner key -> Success.
+banner "Proving Retrieval (via Router, submitting as assigned provider)"
+EPOCH_ID="$(current_epoch)"
+echo "Current Epoch: $EPOCH_ID"
+# This call triggers 'submitRetrievalProofNew' on the router gateway, which reconstructs the Mode 2 MDU and
+# submits the proof using the assigned provider key (shared keyring in local devnet).
 PROVE_RESP=$(curl -s -X POST -H "Content-Type: application/json" -d '{
     "deal_id": '$DEAL_ID',
     "manifest_root": "'$CID'",
     "file_path": "payload.bin",
     "owner": "'$OWNER_ADDR'",
-    "epoch_id": 1
-}' "http://localhost:$PORT/gateway/prove-retrieval")
+    "provider": "'$ASSIGNED_ADDR'",
+    "epoch_id": '$EPOCH_ID'
+}' "$GATEWAY_ROUTER/gateway/prove-retrieval")
 
 echo "Prove Response: $PROVE_RESP"
 

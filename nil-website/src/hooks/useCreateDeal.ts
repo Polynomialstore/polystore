@@ -10,7 +10,6 @@ export interface CreateDealInput {
   duration: number
   initialEscrow: string
   maxMonthlySpend: string
-  replication?: number
   serviceHint?: string
 }
 
@@ -24,10 +23,9 @@ export function useCreateDeal() {
     try {
       const evmAddress = String(input.creator || '')
       if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
-      const replicas = Number.isFinite(input.replication) && (input.replication ?? 0) > 0 ? input.replication : 1
       const serviceHint = input.serviceHint && input.serviceHint.trim().length > 0
         ? input.serviceHint.trim()
-        : buildServiceHint('General', { replicas })
+        : buildServiceHint('General', {})
 
       const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {

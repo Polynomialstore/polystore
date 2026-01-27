@@ -228,8 +228,7 @@ export function Dashboard() {
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
-  const [replication, setReplication] = useState('1')
-  const [redundancyMode, setRedundancyMode] = useState<'mode1' | 'mode2'>('mode2')
+  const [placementProfile, setPlacementProfile] = useState<'auto' | 'custom'>('auto')
   const [rsK, setRsK] = useState('8')
   const [rsM, setRsM] = useState('4')
 
@@ -392,7 +391,7 @@ export function Dashboard() {
     () => parseServiceHint(targetDeal?.service_hint),
     [targetDeal?.service_hint],
   )
-  const isTargetDealMode2 = targetDealService.mode === 'mode2'
+  const isTargetDealMode2 = targetDealService.mode === 'mode2' || targetDealService.mode === 'auto'
   const hasSelectedDeal = Boolean(targetDealId)
 
   useEffect(() => {
@@ -400,12 +399,6 @@ export function Dashboard() {
       setShowAdvanced(true)
     }
   }, [hasSelectedDeal, isTargetDealMode2])
-
-  useEffect(() => {
-    if (!showAdvanced && redundancyMode !== 'mode2') {
-      setRedundancyMode('mode2')
-    }
-  }, [redundancyMode, showAdvanced])
 
   useEffect(() => {
     if (targetDealId) return
@@ -416,7 +409,7 @@ export function Dashboard() {
     setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
   const mode2Config = useMemo(() => {
-    if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
+    if (placementProfile !== 'custom') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
     const m = Number(rsM)
     if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
@@ -430,7 +423,7 @@ export function Dashboard() {
       return { slots, error: `Need ${slots} providers (K+M); only ${providerCount} available.` }
     }
     return { slots, error: null }
-  }, [providerCount, redundancyMode, rsK, rsM])
+  }, [placementProfile, providerCount, rsK, rsM])
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -970,17 +963,21 @@ export function Dashboard() {
     }
       try {
         let serviceHint = ''
-        if (redundancyMode === 'mode2') {
+        // Default: auto-select Mode 2 RS profile on-chain.
+        serviceHint = buildServiceHint('General', {})
+
+        // Optional: explicit RS profile.
+        if (placementProfile === 'custom') {
           const k = Number(rsK)
           const m = Number(rsM)
           if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
             setStatusTone('error')
-            setStatusMsg('Mode 2 requires numeric K and M values.')
+            setStatusMsg('Custom Mode 2 profile requires numeric K and M values.')
             return
           }
           if (64 % k !== 0) {
             setStatusTone('error')
-            setStatusMsg('Mode 2 requires K to divide 64.')
+            setStatusMsg('Custom Mode 2 profile requires K to divide 64.')
             return
           }
           const slots = k + m
@@ -991,21 +988,16 @@ export function Dashboard() {
           }
           if (slots > providerCount) {
             setStatusTone('error')
-            setStatusMsg(`Mode 2 requires ${slots} providers (K+M), but only ${providerCount} are available.`)
+            setStatusMsg(`Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`)
             return
           }
-          const n = k + m
-          serviceHint = buildServiceHint('General', { replicas: n, rsK: k, rsM: m })
-        } else {
-          const replicas = Number(replication)
-          serviceHint = buildServiceHint('General', { replicas })
+          serviceHint = buildServiceHint('General', { rsK: k, rsM: m })
         }
         const res = await submitDeal({
           creator: evmCreator,
           duration: Number(duration),
           initialEscrow,
           maxMonthlySpend,
-          replication: Number(replication),
           serviceHint,
         })
         setStatusTone('success')
@@ -1015,7 +1007,7 @@ export function Dashboard() {
           await fetchBalances(nilAddress)
           // Auto-switch to content tab and pre-fill deal ID
           setTargetDealId(String(res.deal_id))
-          setActiveTab(redundancyMode === 'mode2' ? 'mdu' : 'content')
+          setActiveTab('mdu')
         }
       } catch (e) {
         setStatusTone('error')
@@ -2320,52 +2312,32 @@ export function Dashboard() {
               {!showAdvanced ? (
                 <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
                   <div>
-                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (Striped RS, recommended){' '}
-                    <span className="font-mono text-foreground">K={rsK}</span>{' '}
-                    <span className="font-mono text-foreground">M={rsM}</span>
+                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (auto RS selection, recommended)
                     <span className="ml-2 text-[11px] text-muted-foreground">
-                      Turn on Advanced to use Mode 1 or tune redundancy.
+                      Turn on Advanced to pin a custom RS profile.
                     </span>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Slots required:{' '}
-                    <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
-                    {' '}• Providers available:{' '}
+                    Providers available:{' '}
                     <span className="font-mono text-foreground">{providerCount || '—'}</span>
-                    {mode2Config.error && (
-                      <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
-                    )}
                   </div>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Redundancy mode</span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Placement profile</span>
                     <select
-                      value={redundancyMode}
-                      onChange={(e) => setRedundancyMode((e.target.value as 'mode1' | 'mode2') || 'mode2')}
-                      data-testid="alloc-redundancy-mode"
+                      value={placementProfile}
+                      onChange={(e) => setPlacementProfile((e.target.value as 'auto' | 'custom') || 'auto')}
+                      data-testid="alloc-placement-profile"
                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                     >
-                      <option value="mode2">Mode 2 (Striped RS, recommended)</option>
-                      <option value="mode1">Mode 1 (Replication, legacy)</option>
+                      <option value="auto">Mode 2 (Auto, recommended)</option>
+                      <option value="custom">Mode 2 (Custom RS)</option>
                     </select>
                   </label>
 
-                  {redundancyMode === 'mode1' ? (
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Replication</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={12}
-                        defaultValue={replication ?? ''}
-                        onChange={(e) => setReplication(e.target.value ?? '')}
-                        data-testid="alloc-replication"
-                        className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-                      />
-                    </label>
-                  ) : (
+                  {placementProfile === 'custom' && (
                     <div className="grid grid-cols-2 gap-3">
                       <label className="space-y-1">
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
@@ -2394,7 +2366,7 @@ export function Dashboard() {
                     </div>
                   )}
 
-                  {redundancyMode === 'mode2' && (
+                  {placementProfile === 'custom' && (
                     <div className="text-[11px] text-muted-foreground">
                       Slots required:{' '}
                       <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
@@ -2418,7 +2390,7 @@ export function Dashboard() {
                 </div>
                 <button
                   onClick={isWrongNetwork ? handleSwitchNetwork : handleCreateDealClick}
-                  disabled={dealLoading || (redundancyMode === 'mode2' && Boolean(mode2Config.error))}
+                  disabled={dealLoading || (placementProfile === 'custom' && Boolean(mode2Config.error))}
                   data-testid="alloc-submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                 >

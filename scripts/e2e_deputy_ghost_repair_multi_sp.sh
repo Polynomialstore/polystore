@@ -219,7 +219,7 @@ if [ -z "$FAUCET_ADDR" ]; then
 fi
 echo "==> Using deal owner: $FAUCET_ADDR"
 
-SERVICE_HINT="General:replicas=${PROVIDER_COUNT}:rs=8+4"
+SERVICE_HINT="General:rs=8+4"
 
 echo "==> Creating Mode 2 deal..."
 CREATE_RES_RAW="$("$NILCHAIND_BIN" tx nilchain create-deal 200 1000000 500000 \

@@ -43,7 +43,7 @@ test.describe('gateway flow', () => {
 
     await page.getByTestId('workspace-advanced-toggle').click()
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
+    await page.getByTestId('alloc-placement-profile').selectOption('auto')
     await page.getByTestId('alloc-submit').click()
 
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })

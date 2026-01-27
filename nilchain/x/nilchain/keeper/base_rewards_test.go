@@ -18,8 +18,8 @@ func TestBaseRewardPool_DistributesBySlotBytesWhenCompliant(t *testing.T) {
 	f := initFixtureWithBankKeeper(t, bank)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
-	// Register enough providers for replicas=2.
-	for i := 0; i < 4; i++ {
+	// Register minimal providers for Mode 2 (rs=2+1).
+	for i := 0; i < 3; i++ {
 		addrBz := make([]byte, 20)
 		copy(addrBz, []byte(fmt.Sprintf("provider_reward_%02d", i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
@@ -52,12 +52,12 @@ func TestBaseRewardPool_DistributesBySlotBytesWhenCompliant(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx2, &types.MsgCreateDeal{
 		Creator:             user,
 		DurationBlocks:      200,
-		ServiceHint:         "General:replicas=2",
+		ServiceHint:         "General:rs=2+1",
 		MaxMonthlySpend:     math.NewInt(0),
 		InitialEscrowAmount: math.NewInt(0),
 	})
 	require.NoError(t, err)
-	require.Len(t, resDeal.AssignedProviders, 2)
+	require.Len(t, resDeal.AssignedProviders, 3)
 
 	_, err = msgServer.UpdateDealContent(ctx2, &types.MsgUpdateDealContent{
 		Creator:     user,
@@ -71,9 +71,15 @@ func TestBaseRewardPool_DistributesBySlotBytesWhenCompliant(t *testing.T) {
 
 	// Make both providers quota-compliant for epoch 1.
 	epochID := uint64(1)
-	for _, provider := range resDeal.AssignedProviders {
-		key := collections.Join(collections.Join(resDeal.DealId, provider), epochID)
-		require.NoError(t, f.keeper.Mode1EpochCredits.Set(ctx2, key, 1))
+	deal, err := f.keeper.Deals.Get(ctx2, resDeal.DealId)
+	require.NoError(t, err)
+	require.NotEmpty(t, deal.Mode2Slots)
+	for _, slot := range deal.Mode2Slots {
+		if slot == nil {
+			continue
+		}
+		key := collections.Join(collections.Join(resDeal.DealId, slot.Slot), epochID)
+		require.NoError(t, f.keeper.Mode2EpochCredits.Set(ctx2, key, 100))
 	}
 
 	// Epoch 1 ends at height 10 when epoch_len_blocks == 10.
@@ -83,6 +89,6 @@ func TestBaseRewardPool_DistributesBySlotBytesWhenCompliant(t *testing.T) {
 	for _, provider := range resDeal.AssignedProviders {
 		addr, err := sdk.AccAddressFromBech32(provider)
 		require.NoError(t, err)
-		require.Equal(t, "84stake", bank.accountBalances[addr.String()].String())
+		require.Equal(t, "42stake", bank.accountBalances[addr.String()].String())
 	}
 }

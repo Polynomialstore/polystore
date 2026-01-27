@@ -61,12 +61,12 @@ test.describe('libp2p fetch (relay)', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    const redundancySelect = page.getByTestId('alloc-redundancy-mode')
-    if (!(await redundancySelect.isVisible().catch(() => false))) {
+    const placementSelect = page.getByTestId('alloc-placement-profile')
+    if (!(await placementSelect.isVisible().catch(() => false))) {
       await page.getByTestId('workspace-advanced-toggle').click()
-      await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+      await expect(placementSelect).toBeVisible({ timeout: 10_000 })
     }
-    await redundancySelect.selectOption('mode1')
+    await placementSelect.selectOption('auto')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
 
@@ -75,23 +75,35 @@ test.describe('libp2p fetch (relay)', () => {
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
 
-    const fileInput = page.getByTestId('content-file-input')
-    if (!(await fileInput.isVisible().catch(() => false))) {
-      const mode1Toggle = page.getByTestId('tab-content')
-      if (await mode1Toggle.isVisible().catch(() => false)) {
-        await mode1Toggle.click()
+    // Mode 2 upload uses the FileSharder (gateway fast path, otherwise in-browser sharding).
+    const mode2FileInput = page.getByTestId('mdu-file-input')
+    if ((await mode2FileInput.count().catch(() => 0)) === 0) {
+      const toggle = page.getByTestId('tab-content')
+      if (await toggle.isVisible().catch(() => false)) {
+        await toggle.click()
       }
     }
-    await expect(fileInput).toBeVisible({ timeout: 60_000 })
-    await expect(fileInput).toBeEnabled({ timeout: 120_000 })
-    await fileInput.setInputFiles({
+    await expect(mode2FileInput).toHaveCount(1, { timeout: 120_000 })
+    await mode2FileInput.setInputFiles({
       name: filePath,
       mimeType: 'text/plain',
       buffer: fileBytes,
     })
 
-    await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
-    await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
+    // If the gateway Mode 2 path is unavailable, the UI will fall back to in-browser
+    // sharding which requires an explicit upload step.
+    const uploadBtn = page.getByTestId('mdu-upload')
+    if (await uploadBtn.isVisible().catch(() => false)) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 180_000 })
+      await uploadBtn.click()
+    }
+
+    const commitBtn = page.getByTestId('mdu-commit')
+    await expect(commitBtn).toBeVisible({ timeout: 180_000 })
+    await expect(commitBtn).toBeEnabled({ timeout: 180_000 })
+    await commitBtn.click()
+
+    await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
 
     const dealRow = page.getByTestId(`deal-row-${dealId}`)

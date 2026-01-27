@@ -80,19 +80,24 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	// Commit Content (valid ManifestRoot) so chained proof verification can succeed.
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	k := uint64(dealAfterCreate.Mode2Profile.K)
+	m := uint64(dealAfterCreate.Mode2Profile.M)
+
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, k, m)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+	require.NoError(t, err)
+
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
 	require.NoError(t, err)
 
-	chunkIdx := uint32(0)
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
+	const leafIndex = uint64(0)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
+	require.Equal(t, root, root2)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
@@ -111,7 +116,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 		ManifestOpening: manifestProof,
 		BlobCommitment:  commitment,
 		MerklePath:      merklePath,
-		BlobIndex:       chunkIdx,
+		BlobIndex:       uint32(leafIndex),
 		ZValue:          z,
 		YValue:          y,
 		KzgOpeningProof: kzgProof,
@@ -216,19 +221,24 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	// Commit Content (valid ManifestRoot) so chained proof verification can succeed.
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	k := uint64(dealAfterCreate.Mode2Profile.K)
+	m := uint64(dealAfterCreate.Mode2Profile.M)
+
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, k, m)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+	require.NoError(t, err)
+
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
 	require.NoError(t, err)
 
-	chunkIdx := uint32(0)
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
+	const leafIndex = uint64(0)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
+	require.Equal(t, root, root2)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
@@ -247,7 +257,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 		ManifestOpening: manifestProof,
 		BlobCommitment:  commitment,
 		MerklePath:      merklePath,
-		BlobIndex:       chunkIdx,
+		BlobIndex:       uint32(leafIndex),
 		ZValue:          z,
 		YValue:          y,
 		KzgOpeningProof: kzgProof,

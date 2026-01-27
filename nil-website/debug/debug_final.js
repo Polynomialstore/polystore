@@ -8,7 +8,7 @@ function hexToBytes(hex) {
 const message = {
   creator: '0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2',
   duration: 100n,
-  service_hint: 'General:replicas=1:debug_digest=0x8ec1fcdfca9757aca8dd033ffa8a90a6a349fb0cc576d7075acc14849b622dd6',
+  service_hint: 'General:debug_digest=0x8ec1fcdfca9757aca8dd033ffa8a90a6a349fb0cc576d7075acc14849b622dd6',
   initial_escrow: '1000000',
   max_monthly_spend: '5000000',
   nonce: 15n,

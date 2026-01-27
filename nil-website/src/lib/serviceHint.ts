@@ -1,21 +1,24 @@
 export interface ServiceHintInfo {
   base: string
+  owner?: string
+  // Deprecated: Mode 1 (replicas-only) hints are soft-locked and should not be emitted.
   replicas?: number
   rsK?: number
   rsM?: number
-  mode: 'mode1' | 'mode2'
+  // 'auto' means "Mode 2, profile auto-selected by the chain".
+  mode: 'auto' | 'mode2'
 }
 
 export function parseServiceHint(raw?: string | null): ServiceHintInfo {
   const trimmed = String(raw || '').trim()
   if (!trimmed) {
-    return { base: '', mode: 'mode1' }
+    return { base: 'General', mode: 'auto' }
   }
 
   const [baseRaw, ...extras] = trimmed.split(':')
   const info: ServiceHintInfo = {
     base: baseRaw.trim(),
-    mode: 'mode1',
+    mode: 'auto',
   }
 
   for (const token of extras) {
@@ -23,6 +26,10 @@ export function parseServiceHint(raw?: string | null): ServiceHintInfo {
     const key = (keyRaw || '').trim().toLowerCase()
     const val = (valRaw || '').trim()
     if (!key || !val) continue
+    if (key === 'owner') {
+      info.owner = val
+      continue
+    }
     if (key === 'replicas') {
       const n = Number(val)
       if (Number.isFinite(n) && n > 0) info.replicas = n
@@ -43,11 +50,11 @@ export function parseServiceHint(raw?: string | null): ServiceHintInfo {
   return info
 }
 
-export function buildServiceHint(base: string, opts: { replicas?: number; rsK?: number; rsM?: number }): string {
+export function buildServiceHint(base: string, opts: { owner?: string; rsK?: number; rsM?: number }): string {
   const hintBase = base.trim() || 'General'
   const extras: string[] = []
-  if (opts.replicas && opts.replicas > 0) {
-    extras.push(`replicas=${Math.round(opts.replicas)}`)
+  if (opts.owner && opts.owner.trim()) {
+    extras.push(`owner=${opts.owner.trim()}`)
   }
   if (opts.rsK && opts.rsM) {
     extras.push(`rs=${Math.round(opts.rsK)}+${Math.round(opts.rsM)}`)

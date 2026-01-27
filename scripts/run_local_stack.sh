@@ -243,7 +243,15 @@ auto_faucet_request() {
 }
 
 wait_for_ports_clear() {
-  local ports=(26657 26656 1317 8545 8080 8081 8082 5173)
+  local ports=(26657 26656 1317 8545 8080 8081 5173)
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+  local idx
+  for idx in $(seq 0 $((provider_count - 1))); do
+    ports+=( $((8082 + idx)) )
+  done
   local attempts=20
   local delay=0.5
   local port
@@ -295,23 +303,84 @@ ensure_nil_gateway() {
 }
 
 register_demo_provider() {
-  banner "Registering demo storage provider (faucet)"
-  # Use the faucet key as a General-capability provider with a large capacity.
+  # Local stacks (and CI) default to 3 providers so Mode 2 auto-placement can
+  # select a repair-capable profile (minMode2Slots=3).
+  banner "Registering demo storage providers"
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+  local provider_funding_amount="${NIL_PROVIDER_FUNDING_AMOUNT:-$NIL_AMOUNT}"
+
+  # Use the faucet key as a General-capability provider with a large capacity,
+  # plus (provider_count-1) additional providers.
   # We retry a few times to avoid races with node startup.
   local extra_endpoints_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA:-}"
-  IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
-  local endpoint_args=()
-  endpoint_args+=("--endpoint" "/ip4/127.0.0.1/tcp/8082/http")
-  for ep in "${extra_endpoints[@]}"; do
-    ep="$(echo "$ep" | xargs)"
-    if [ -n "$ep" ]; then
-      endpoint_args+=("--endpoint" "$ep")
+  local extra_endpoints_map_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA_MAP:-}"
+  local -a extra_endpoints=()
+  if [ -n "$extra_endpoints_raw" ]; then
+    IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
+  fi
+
+  # Avoid racing nilchaind startup: wait for RPC to come up before attempting txs.
+  if command -v curl >/dev/null 2>&1; then
+    local rpc_ready=0
+    local rpc_tries=30
+    local rpc_try
+    for rpc_try in $(seq 1 "$rpc_tries"); do
+      if curl -sSf --max-time 1 "http://127.0.0.1:26657/status" >/dev/null 2>&1; then
+        rpc_ready=1
+        break
+      fi
+      sleep 1
+    done
+    if [ "$rpc_ready" != "1" ]; then
+      echo "Warning: RPC not responding; provider registration may be flaky."
     fi
-  done
+  fi
 
   local attempts=10
   local i
   for i in $(seq 1 "$attempts"); do
+    local -a endpoint_args=()
+    endpoint_args+=("--endpoint" "/ip4/127.0.0.1/tcp/8082/http")
+    if [ "${#extra_endpoints[@]}" -gt 0 ]; then
+      for ep in "${extra_endpoints[@]}"; do
+        ep="$(echo "$ep" | xargs)"
+        if [ -n "$ep" ]; then
+          endpoint_args+=("--endpoint" "$ep")
+        fi
+      done
+    fi
+    if [ -n "$extra_endpoints_map_raw" ]; then
+      local -a map_entries=()
+      IFS=',' read -r -a map_entries <<<"$extra_endpoints_map_raw"
+      local ent
+      for ent in "${map_entries[@]}"; do
+        ent="$(echo "$ent" | xargs)"
+        [ -z "$ent" ] && continue
+        local map_key="${ent%%=*}"
+        local map_val="${ent#*=}"
+        if [ "$map_val" = "$ent" ]; then
+          continue
+        fi
+        map_key="$(echo "$map_key" | xargs)"
+        map_val="$(echo "$map_val" | xargs)"
+        if [ "$map_key" != "faucet" ]; then
+          continue
+        fi
+        local -a key_eps=()
+        IFS=';' read -r -a key_eps <<<"$map_val"
+        local key_ep
+        for key_ep in "${key_eps[@]}"; do
+          key_ep="$(echo "$key_ep" | xargs)"
+          if [ -n "$key_ep" ]; then
+            endpoint_args+=("--endpoint" "$key_ep")
+          fi
+        done
+      done
+    fi
+
     "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
       --from faucet \
       "${endpoint_args[@]}" \
@@ -321,13 +390,87 @@ register_demo_provider() {
       --keyring-backend test \
       --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
 
-    # Check if a provider now exists.
-    if "$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -q "address:"; then
-      echo "Demo provider registered successfully."
+    # Register additional provider identities for Mode 2 stripes.
+    # provider1..provider{provider_count-1}
+    if [ "$provider_count" -gt 1 ]; then
+      local idx
+      for idx in $(seq 1 $((provider_count - 1))); do
+        local key_name="provider${idx}"
+        if ! "$NILCHAIND_BIN" keys show "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
+          "$NILCHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
+        fi
+        local addr
+        addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
+        if [ -n "$addr" ]; then
+          local port=$((8082 + idx))
+          local -a endpoint_args_child=()
+          endpoint_args_child+=("--endpoint" "/ip4/127.0.0.1/tcp/${port}/http")
+          if [ "${#extra_endpoints[@]}" -gt 0 ]; then
+            for ep in "${extra_endpoints[@]}"; do
+              ep="$(echo "$ep" | xargs)"
+              if [ -n "$ep" ]; then
+                endpoint_args_child+=("--endpoint" "$ep")
+              fi
+            done
+          fi
+          if [ -n "$extra_endpoints_map_raw" ]; then
+            local -a map_entries_child=()
+            IFS=',' read -r -a map_entries_child <<<"$extra_endpoints_map_raw"
+            local ent_child
+            for ent_child in "${map_entries_child[@]}"; do
+              ent_child="$(echo "$ent_child" | xargs)"
+              [ -z "$ent_child" ] && continue
+              local map_key_child="${ent_child%%=*}"
+              local map_val_child="${ent_child#*=}"
+              if [ "$map_val_child" = "$ent_child" ]; then
+                continue
+              fi
+              map_key_child="$(echo "$map_key_child" | xargs)"
+              map_val_child="$(echo "$map_val_child" | xargs)"
+              if [ "$map_key_child" != "$key_name" ]; then
+                continue
+              fi
+              local -a key_eps_child=()
+              IFS=';' read -r -a key_eps_child <<<"$map_val_child"
+              local key_ep_child
+              for key_ep_child in "${key_eps_child[@]}"; do
+                key_ep_child="$(echo "$key_ep_child" | xargs)"
+                if [ -n "$key_ep_child" ]; then
+                  endpoint_args_child+=("--endpoint" "$key_ep_child")
+                fi
+              done
+            done
+          fi
+
+          # Fund provider so it can pay fees in the configured gas denom (aatom).
+          "$NILCHAIND_BIN" tx bank send faucet "$addr" "$provider_funding_amount" \
+            --chain-id "$CHAIN_ID" \
+            --yes \
+            --home "$CHAIN_HOME" \
+            --keyring-backend test \
+            --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
+
+          "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+            --from "$key_name" \
+            "${endpoint_args_child[@]}" \
+            --chain-id "$CHAIN_ID" \
+            --yes \
+            --home "$CHAIN_HOME" \
+            --keyring-backend test \
+            --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+
+    # Check if we have enough providers for Mode 2 placement.
+    local count
+    count=$("$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    if [ "$count" -ge "$provider_count" ]; then
+      echo "Demo providers registered successfully ($count provider(s))."
       return 0
     fi
 
-    echo "Demo provider not yet registered (attempt $i/$attempts); retrying in 4s..."
+    echo "Demo providers not yet registered ($count/$provider_count) (attempt $i/$attempts); retrying in 4s..."
     sleep 4
   done
 
@@ -512,35 +655,71 @@ start_faucet() {
 }
 
 start_sp_gateway() {
-  banner "Starting SP gateway service (Port 8082)"
+  banner "Starting SP gateway service(s) (ports starting at 8082)"
   ensure_nil_cli
   ensure_nil_gateway
-  (
-    cd "$ROOT_DIR/nil_gateway"
-    # SP Mode (default), Listen on 8082, Uploads to uploads_sp
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
-      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
-    NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-    NIL_P2P_ENABLED="${NIL_P2P_ENABLED_SP:-1}" \
-    NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}" \
-    NIL_P2P_IDENTITY_PATH="${NIL_P2P_IDENTITY_PATH_SP:-}" \
-    NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64_SP:-}" \
-    NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
-    NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
-    NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
-      NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
-      "$GATEWAY_BIN" \
-      >"$LOG_DIR/gateway_sp.log" 2>&1 &
-    echo $! > "$PID_DIR/gateway_sp.pid"
-  )
-  sleep 0.5
-  if ! kill -0 "$(cat "$PID_DIR/gateway_sp.pid")" 2>/dev/null; then
-    echo "SP gateway failed to start; check $LOG_DIR/gateway_sp.log"
-    tail -n 20 "$LOG_DIR/gateway_sp.log" || true
-    exit 1
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
   fi
-  echo "SP gateway pid $(cat "$PID_DIR/gateway_sp.pid"), logs: $LOG_DIR/gateway_sp.log"
+
+  local p2p_enabled="${NIL_P2P_ENABLED_SP:-1}"
+  local p2p_base_port="${NIL_P2P_LISTEN_PORT_BASE_SP:-9102}"
+  local p2p_identity_dir="${NIL_P2P_IDENTITY_DIR_SP:-}"
+
+  local idx
+  for idx in $(seq 0 $((provider_count - 1))); do
+    local key_name="faucet"
+    local pid_name="gateway_sp"
+    local log_name="gateway_sp.log"
+    if [ "$idx" -gt 0 ]; then
+      key_name="provider${idx}"
+      pid_name="gateway_sp_${key_name}"
+      log_name="gateway_sp_${key_name}.log"
+    fi
+
+    local port=$((8082 + idx))
+    local p2p_listen_addrs="${NIL_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}"
+    local p2p_identity_path="${NIL_P2P_IDENTITY_PATH_SP:-}"
+    if [ "$provider_count" -gt 1 ]; then
+      p2p_listen_addrs="/ip4/127.0.0.1/tcp/$((p2p_base_port + idx))/ws"
+      if [ -n "$p2p_identity_dir" ]; then
+        p2p_identity_path="$p2p_identity_dir/${key_name}.key"
+      elif [ "$idx" -gt 0 ]; then
+        # Avoid reusing faucet identity for other providers unless explicitly configured.
+        p2p_identity_path=""
+      fi
+    fi
+
+    (
+      cd "$ROOT_DIR/nil_gateway"
+      # SP Mode (default). Each instance listens on its own port but can share the upload dir.
+      nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
+        NIL_SESSION_DB_PATH="$LOG_DIR/sessions_sp_${key_name}.db" \
+        NIL_PROVIDER_KEY="$key_name" \
+        NIL_LISTEN_ADDR=":${port}" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
+      NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
+      NIL_P2P_ENABLED="$p2p_enabled" \
+      NIL_P2P_LISTEN_ADDRS="$p2p_listen_addrs" \
+      NIL_P2P_IDENTITY_PATH="$p2p_identity_path" \
+      NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64_SP:-}" \
+      NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
+      NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
+      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+        NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+        NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
+        "$GATEWAY_BIN" \
+        >"$LOG_DIR/$log_name" 2>&1 &
+      echo $! > "$PID_DIR/$pid_name.pid"
+    )
+    sleep 0.5
+    if ! kill -0 "$(cat "$PID_DIR/$pid_name.pid")" 2>/dev/null; then
+      echo "SP gateway ($key_name) failed to start; check $LOG_DIR/$log_name"
+      tail -n 40 "$LOG_DIR/$log_name" || true
+      exit 1
+    fi
+    echo "SP gateway ($key_name) pid $(cat "$PID_DIR/$pid_name.pid"), port $port, logs: $LOG_DIR/$log_name"
+  done
 }
 
 start_user_gateway() {
@@ -672,9 +851,43 @@ restart_gateway() {
       rm -f "$pid_file"
     fi
   done
+
+  for pid_file in "$PID_DIR"/gateway_sp_*.pid; do
+    if [ -f "$pid_file" ]; then
+      pid=$(cat "$pid_file" 2>/dev/null || true)
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 0.5
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -9 "$pid" 2>/dev/null || true
+        fi
+        echo "Stopped $(basename "$pid_file") (pid $pid)"
+      fi
+      rm -f "$pid_file"
+    fi
+  done
   
   # Ensure ports are free
-  for port in 8080 8082; do
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+
+  for port in 8080; do
+    gw_pids=$(lsof -ti :$port 2>/dev/null || true)
+    if [ -n "$gw_pids" ]; then
+      kill $gw_pids 2>/dev/null || true
+      sleep 0.5
+      gw_pids2=$(lsof -ti :$port 2>/dev/null || true)
+      if [ -n "$gw_pids2" ]; then
+        kill -9 $gw_pids2 2>/dev/null || true
+      fi
+    fi
+  done
+
+  local idx
+  for idx in $(seq 0 $((provider_count - 1))); do
+    port=$((8082 + idx))
     gw_pids=$(lsof -ti :$port 2>/dev/null || true)
     if [ -n "$gw_pids" ]; then
       kill $gw_pids 2>/dev/null || true
@@ -714,7 +927,7 @@ RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31337)
 Faucet:      http://localhost:8081/faucet
-SP Gateway:  http://localhost:8082 (Uploads to $LOG_DIR/uploads_sp)
+SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
 Web UI:      http://localhost:5173/#/dashboard
 Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
@@ -736,12 +949,48 @@ stop_all() {
       rm -f "$pid_file"
     fi
   done
-  for port in 26657 26656 1317 8545 8080 8081 8082 5173; do
+
+  # Stop additional SP gateway instances (gateway_sp_providerN).
+  for pid_file in "$PID_DIR"/gateway_sp_*.pid; do
+    if [ -f "$pid_file" ]; then
+      pid=$(cat "$pid_file" 2>/dev/null || true)
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        echo "Stopped $(basename "$pid_file") (pid $pid)"
+      fi
+      rm -f "$pid_file"
+    fi
+  done
+
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+
+  for port in 26657 26656 1317 8545 8080 8081 5173; do
     pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
       sleep 0.5
       # If still alive, force kill.
+      pids2=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$pids2" ]; then
+        kill -9 $pids2 2>/dev/null || true
+        echo "Force killed processes on port $port ($pids2)"
+      else
+        echo "Cleared processes on port $port ($pids)"
+      fi
+    fi
+  done
+
+  # Clear SP gateway ports.
+  local idx
+  for idx in $(seq 0 $((provider_count - 1))); do
+    port=$((8082 + idx))
+    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      kill $pids 2>/dev/null || true
+      sleep 0.5
       pids2=$(lsof -ti :"$port" 2>/dev/null || true)
       if [ -n "$pids2" ]; then
         kill -9 $pids2 2>/dev/null || true

@@ -37,16 +37,20 @@ func TestSponsoredOpen_Public_DoesNotTouchDealEscrow(t *testing.T) {
 	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
 	require.NoError(t, f.keeper.Params.Set(ctx, p))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_public_v1_"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	// Register minimal providers for Mode 2 (rs=2+1).
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_public_v1_"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_public_v1____"))
@@ -55,7 +59,7 @@ func TestSponsoredOpen_Public_DoesNotTouchDealEscrow(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      100,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -122,16 +126,19 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
 	require.NoError(t, f.keeper.Params.Set(ctx5, p))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_refund_v1"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx5, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_refund_v1"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx5, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_refund_v1___"))
@@ -140,7 +147,7 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx5, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      100,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -214,16 +221,19 @@ func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 	p.VoucherMaxTtlBlocks = 1000
 	require.NoError(t, f.keeper.Params.Set(ctx, p))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_voucher_v1"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_voucher_v1"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerPriv, err := gethCrypto.GenerateKey()
 	require.NoError(t, err)
@@ -233,7 +243,7 @@ func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      100,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})

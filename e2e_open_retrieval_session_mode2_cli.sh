@@ -189,7 +189,7 @@ for idx in "${!PROVIDER_NAMES[@]}"; do
 done
 sleep 2
 
-SERVICE_HINT="General:replicas=${REPLICA_COUNT}:rs=${RS_K}+${RS_M}"
+SERVICE_HINT="General:rs=${RS_K}+${RS_M}"
 
 banner "Creating Mode 2 deal"
 CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "$SERVICE_HINT" \

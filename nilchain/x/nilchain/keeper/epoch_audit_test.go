@@ -54,7 +54,7 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx2, &types.MsgCreateDeal{
 		Creator:             user,
 		DurationBlocks:      200,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		MaxMonthlySpend:     math.NewInt(0),
 		InitialEscrowAmount: math.NewInt(0),
 	})
@@ -76,8 +76,8 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 
 	// Expected notional rent:
 	// storage_price * slot_bytes * epoch_len
-	// = 1e-6 * (8MiB) * 10 = 83.88608, ceil => 84.
-	require.Equal(t, "84stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	// = 1e-6 * (3 * 4MiB) * 10 = 125.82912, ceil => 126.
+	require.Equal(t, "126stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
 
 	epochID := uint64(2)
 	taskCount := 0
@@ -87,6 +87,6 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 		}
 		return false, nil
 	}))
-	// Budget=84, cost/task=2 => 42 tasks (bounded by auditTasksMaxPerEpoch=64).
-	require.Equal(t, 42, taskCount)
+	// Budget=126, cost/task=2 => 63 tasks (bounded by auditTasksMaxPerEpoch=64).
+	require.Equal(t, 63, taskCount)
 }

@@ -155,27 +155,40 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
 	serviceHintBase := parsedHint.Base
-	serviceHintRaw := parsedHint.Raw
-	requestedReplicas := uint64(types.DealBaseReplication)
-	redundancyMode := uint32(1)
+	requestedReplicas := uint64(0)
+	redundancyMode := uint32(2)
+	rsK := uint64(0)
+	rsM := uint64(0)
 
 	if parsedHint.HasRS {
 		rsN := parsedHint.RSK + parsedHint.RSM
 		if parsedHint.HasReplicas && parsedHint.Replicas != rsN {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("service_hint replicas must equal rs K+M")
 		}
+		rsK = parsedHint.RSK
+		rsM = parsedHint.RSM
 		requestedReplicas = rsN
-		redundancyMode = 2
 	} else if parsedHint.HasReplicas {
-		requestedReplicas = parsedHint.Replicas
-		if requestedReplicas > uint64(types.DealBaseReplication) {
-			requestedReplicas = uint64(types.DealBaseReplication)
+		// Mode 1 (replicas-only) deals are deprecated; require Mode 2.
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Mode 1 (replicas-only) is deprecated; specify rs=K+M or omit service_hint to auto-select Mode 2")
+	} else {
+		// No explicit RS profile: auto-select a balanced Mode 2 profile based on eligible providers.
+		eligible, err := k.eligibleProviderCountForBaseHint(ctx, serviceHintBase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list eligible providers: %w", err)
 		}
+		rsK, rsM, err = autoSelectMode2Profile(eligible)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+		requestedReplicas = rsK + rsM
 	}
 
 	if serviceHintBase != "Hot" && serviceHintBase != "Cold" && serviceHintBase != "General" && serviceHintBase != "" {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHintBase)
 	}
+	serviceHintBase = normalizeServiceHintBase(serviceHintBase)
+	serviceHintRaw := types.BuildServiceHint(serviceHintBase, "", rsK, rsM)
 
 	dealID, err := k.DealCount.Next(ctx)
 	if err != nil {
@@ -186,6 +199,9 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
+	}
+	if uint64(len(assignedProviders)) != requestedReplicas {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("insufficient eligible providers for Mode 2 (need %d, got %d)", requestedReplicas, len(assignedProviders))
 	}
 
 	escrowCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, intent.InitialEscrow))
@@ -220,8 +236,8 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
-			K: uint32(parsedHint.RSK),
-			M: uint32(parsedHint.RSM),
+			K: uint32(rsK),
+			M: uint32(rsM),
 		}
 
 		slots := make([]*types.DealSlot, 0, len(assignedProviders))
@@ -376,23 +392,27 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	// Decode any overrides embedded in the service hint.
 	// Format used by the web gateway:
-	//   "<Hint>[:owner=<nilAddress>][:replicas=<N>][:rs=K+M]"
+	//   "<Hint>[:owner=<nilAddress>][:rs=K+M]"
+	// Note: Mode 1 (replicas-only) hints are deprecated; omit rs= to auto-select a balanced Mode 2 profile.
 	rawHint := strings.TrimSpace(msg.ServiceHint)
 	parsedHint, err := types.ParseServiceHint(rawHint)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
 	serviceHintBase := parsedHint.Base
-	serviceHintRaw := parsedHint.Raw
 	ownerAddrStr := msg.Creator
-	requestedReplicas := uint64(types.DealBaseReplication)
-	redundancyMode := uint32(1)
+	ownerHint := ""
+	requestedReplicas := uint64(0)
+	redundancyMode := uint32(2)
+	rsK := uint64(0)
+	rsM := uint64(0)
 
 	if parsedHint.Owner != "" {
 		if _, err := sdk.AccAddressFromBech32(parsedHint.Owner); err != nil {
 			return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid owner address in service hint: %s", parsedHint.Owner)
 		}
 		ownerAddrStr = parsedHint.Owner
+		ownerHint = parsedHint.Owner
 	}
 
 	if parsedHint.HasRS {
@@ -400,26 +420,40 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		if parsedHint.HasReplicas && parsedHint.Replicas != rsN {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("service_hint replicas must equal rs K+M")
 		}
+		rsK = parsedHint.RSK
+		rsM = parsedHint.RSM
 		requestedReplicas = rsN
-		redundancyMode = 2
 	} else if parsedHint.HasReplicas {
-		requestedReplicas = parsedHint.Replicas
-		if requestedReplicas > uint64(types.DealBaseReplication) {
-			requestedReplicas = uint64(types.DealBaseReplication)
+		// Mode 1 (replicas-only) deals are deprecated; require Mode 2.
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("Mode 1 (replicas-only) is deprecated; specify rs=K+M or omit service_hint to auto-select Mode 2")
+	} else {
+		eligible, err := k.eligibleProviderCountForBaseHint(ctx, serviceHintBase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list eligible providers: %w", err)
 		}
+		rsK, rsM, err = autoSelectMode2Profile(eligible)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+		requestedReplicas = rsK + rsM
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
+	if serviceHintBase != "Hot" && serviceHintBase != "Cold" && serviceHintBase != "General" && serviceHintBase != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHintBase)
+	}
+	serviceHintBase = normalizeServiceHintBase(serviceHintBase)
+	serviceHintRaw := types.BuildServiceHint(serviceHintBase, ownerHint, rsK, rsM)
 	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
+	if uint64(len(assignedProviders)) != requestedReplicas {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("insufficient eligible providers for Mode 2 (need %d, got %d)", requestedReplicas, len(assignedProviders))
+	}
 
 	if msg.DurationBlocks == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Deal duration cannot be zero")
-	}
-	if serviceHintBase != "Hot" && serviceHintBase != "Cold" && serviceHintBase != "General" && serviceHintBase != "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", serviceHintBase)
 	}
 
 	initialEscrowAmount := msg.InitialEscrowAmount
@@ -463,8 +497,8 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}
 	if redundancyMode == 2 {
 		deal.Mode2Profile = &types.StripeReplicaProfile{
-			K: uint32(parsedHint.RSK),
-			M: uint32(parsedHint.RSM),
+			K: uint32(rsK),
+			M: uint32(rsM),
 		}
 
 		slots := make([]*types.DealSlot, 0, len(assignedProviders))

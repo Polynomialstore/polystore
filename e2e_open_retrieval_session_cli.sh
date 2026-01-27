@@ -116,12 +116,19 @@ rm -rf "$HOME_DIR"
 
 banner "Creating accounts"
 run_yes "$BINARY" keys add alice --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
-run_yes "$BINARY" keys add provider1 --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
 
 ALICE_ADDR=$("$BINARY" keys show alice -a --home "$HOME_DIR" --keyring-backend test | tail -n 1)
-PROVIDER_ADDR=$("$BINARY" keys show provider1 -a --home "$HOME_DIR" --keyring-backend test | tail -n 1)
 "$BINARY" genesis add-genesis-account "$ALICE_ADDR" 100000000000token,200000000stake --home "$HOME_DIR"
-"$BINARY" genesis add-genesis-account "$PROVIDER_ADDR" 1000000000token,200000000stake --home "$HOME_DIR"
+
+# Mode 2 is the default; register enough providers for auto-placement.
+PROVIDER_NAMES=(provider1 provider2 provider3)
+PROVIDER_ADDRS=()
+for name in "${PROVIDER_NAMES[@]}"; do
+  run_yes "$BINARY" keys add "$name" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
+  addr=$("$BINARY" keys show "$name" -a --home "$HOME_DIR" --keyring-backend test | tail -n 1)
+  PROVIDER_ADDRS+=("$addr")
+  "$BINARY" genesis add-genesis-account "$addr" 1000000000token,200000000stake --home "$HOME_DIR"
+done
 
 run_yes "$BINARY" genesis gentx alice 100000000stake --chain-id "$CHAIN_ID" --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1
 "$BINARY" genesis collect-gentxs --home "$HOME_DIR" >/dev/null 2>&1
@@ -165,11 +172,16 @@ wait_for_height 1 60 1 || { echo "Chain failed to start"; exit 1; }
 wait_for_lcd 40 1 || { echo "LCD failed to start"; exit 1; }
 
 banner "Registering provider"
-run_yes "$BINARY" tx nilchain register-provider General 1000000000 \
-  --from provider1 \
-  --endpoint "/ip4/127.0.0.1/tcp/8082/http" \
-  --chain-id "$CHAIN_ID" \
-  --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+for idx in "${!PROVIDER_NAMES[@]}"; do
+  name="${PROVIDER_NAMES[$idx]}"
+  port=$((8082 + idx))
+  run_yes "$BINARY" tx nilchain register-provider General 1000000000 \
+    --from "$name" \
+    --endpoint "/ip4/127.0.0.1/tcp/${port}/http" \
+    --chain-id "$CHAIN_ID" \
+    --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+  sleep 0.2
+done
 sleep 2
 
 banner "Creating deal"
@@ -204,6 +216,15 @@ PY
 )
 
 banner "Opening retrieval session (CLI)"
+# Slot-aware Mode 2: use the provider assigned to slot 0 for blob 0.
+DEAL_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+PROVIDER_ADDR=$(echo "$DEAL_JSON" | jq -r '.deal.mode2_slots[0].provider // .deal.providers[0] // empty')
+if [ -z "$PROVIDER_ADDR" ] || [ "$PROVIDER_ADDR" = "null" ]; then
+  echo "Failed to resolve assigned provider for deal"
+  echo "$DEAL_JSON"
+  exit 1
+fi
+
 run_yes "$BINARY" tx nilchain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \

@@ -170,10 +170,16 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 NilStore supports two redundancy modes at the policy level:
 
-*   **Mode 1 – FullReplica (Alpha):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`.
-*   **Mode 2 – StripeReplica (Implemented):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
+*   **Mode 1 – FullReplica (Legacy / Deprecated):** Each `Deal` is replicated in full across `CurrentReplication` providers. This mode cannot self-heal (no parity), and **new Mode 1 deals are disallowed**.
+    *   **Soft lock:** the chain rejects `service_hint` strings that specify `replicas=N` without an `rs=K+M` profile.
+    *   Existing historical Mode 1 deals may remain supported for a transition period.
+*   **Mode 2 – StripeReplica (Implemented / Canonical):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
 
-**Profile selection (current implementation):** the RS profile is encoded in `service_hint` as `rs=K+M` (for example, `General:replicas=12,rs=8+4`). If `rs=` is present, the chain treats the deal as **Mode 2** and assigns `N = K+M` ordered providers as slots.
+**Profile selection (current implementation):**
+
+* If `service_hint` includes `rs=K+M` (for example, `General:rs=8+4`), the chain treats the deal as **Mode 2** and assigns `N = K+M` ordered providers as slots.
+* If `service_hint` omits `rs=`, the chain auto-selects a balanced Mode 2 profile based on the eligible provider set and stores the canonical `rs=K+M` back into `Deal.service_hint` on-chain.
+* `replicas=` is deprecated and should not be used.
 
 To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
 
@@ -629,8 +635,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 
 ### C.1 Guiding constraints
 
-* **Mode 2 available (devnet):** RS(K, K+M) striping is supported when `service_hint` includes `rs=K+M`. Repair/rebalancing remain deferred.
-* **Mode 1 replication remains minimal:** Mode 1 is still treated as a single-provider deal unless `replicas=` is specified.
+* **Mode 2 only (devnet):** new deals use StripeReplica (RS(K, K+M)). Repair/rebalancing remain deferred.
 * **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in the session proof (or from an explicit deputy, once specified).
 * **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
 
@@ -642,8 +647,8 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | On-chain provider endpoint discovery | MUST | `Provider.endpoints[]` as Multiaddr strings |
 | HTTP transport | MUST | e.g. `/dns4/sp1.example.com/tcp/8080/http` |
 | libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
-| Mode 1 replication (`providers[]` length > 1) | NO | Devnet Alpha uses `replicas=1` in `ServiceHint` |
-| Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` |
+| Mode 1 replication (`providers[]` length > 1) | NO | Mode 1 is deprecated; new deals must be Mode 2 |
+| Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` or omits `rs=` for auto-selection |
 | Gateway role | OPTIONAL | routing + cache helper; direct‑to‑provider is first‑class and preferred for Mode 2 |
 | Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
 | Upload/ingest | MUST | per‑slot upload to assigned providers; Mode 2 encoding is client‑side (WASM/CLI); gateway mirroring optional |
@@ -658,7 +663,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 ### C.3 Definition of Done (Devnet Alpha)
 
 Given 3–5 providers with advertised HTTP Multiaddrs:
-1. Create a deal with `replicas=1`.
+1. Create a deal with `service_hint=General` (auto Mode 2), or pin a small profile like `General:rs=2+1` for a 3-provider devnet.
 2. Upload content to the assigned provider and commit `Deal.manifest_root`.
 3. Fetch a multi-chunk range through the gateway/router from that provider.
 4. Submit a bundled session proof (or batched proofs) and observe `MsgSubmitRetrievalSessionProof` succeed on-chain.

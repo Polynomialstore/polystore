@@ -78,7 +78,7 @@ func TestMode2ArtifactsV1_FixtureHashes(t *testing.T) {
 	}
 
 	const dealID = uint64(7)
-	serviceHint := "General:replicas=12:rs=8+4"
+	serviceHint := "General:rs=8+4"
 
 	res, finalDir, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin", 0)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestMode2BuildArtifacts_IdempotentWhenFinalDirExists(t *testing.T) {
 	}
 
 	const dealID = uint64(7)
-	serviceHint := "General:replicas=12:rs=8+4"
+	serviceHint := "General:rs=8+4"
 
 	first, finalDir1, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin", 0)
 	if err != nil {

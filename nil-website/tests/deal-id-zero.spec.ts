@@ -213,8 +213,8 @@ test('repro bug: download from commit content widget', async ({
                     escrow: '1000',
                     end_block: '1000',
                     start_block: '1',
-                    service_hint: 'General:replicas=1',
-                    current_replication: '1',
+                    service_hint: 'General:rs=2+1',
+                    current_replication: '3',
                     max_monthly_spend: '100',
                     providers: []
                 }
@@ -371,13 +371,13 @@ test('repro bug: download from commit content widget', async ({
 
   console.log('Creating deal...')
   const advancedToggle = page.getByTestId('workspace-advanced-toggle')
-  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
-  if (!(await redundancySelect.isVisible().catch(() => false))) {
+  const placementSelect = page.getByTestId('alloc-placement-profile')
+  if (!(await placementSelect.isVisible().catch(() => false))) {
     await advancedToggle.click()
-    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    await expect(placementSelect).toBeVisible({ timeout: 10_000 })
   }
 
-  await redundancySelect.selectOption('mode1')
+  await placementSelect.selectOption('auto')
   await page.getByTestId('alloc-submit').click()
   
   // Check for any visible error message

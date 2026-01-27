@@ -81,7 +81,7 @@ interface FileActivity {
 
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
-  const isMode2 = serviceHint.mode === 'mode2'
+  const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(String(deal.cid || '').trim())
   const dealStatusLabel = hasCommittedContent ? 'Active' : 'Empty'
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
@@ -90,7 +90,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     : '0 B'
   const redundancyLabel = isMode2 && serviceHint.rsK && serviceHint.rsM
     ? `Mode 2 RS(${serviceHint.rsK},${serviceHint.rsM})`
-    : `Mode 1 x${serviceHint.replicas ?? '—'}`
+    : 'Mode 2 (Auto)'
   const stripeLayout = useMemo(() => {
     const k = serviceHint.rsK ?? 8
     const m = serviceHint.rsM ?? 4
@@ -101,9 +101,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       m,
       slots,
       rows,
-      isMode2: serviceHint.mode === 'mode2' && Boolean(serviceHint.rsK && serviceHint.rsM),
+      isMode2: isMode2 && Boolean(serviceHint.rsK && serviceHint.rsM),
     }
-  }, [serviceHint.mode, serviceHint.rsK, serviceHint.rsM])
+  }, [isMode2, serviceHint.rsK, serviceHint.rsM])
   const { address } = useAccount()
   const { submitPolicyUpdate, loading: policyUpdating, lastTx: policyTx } = useUpdateDealRetrievalPolicy()
   const [policyMode, setPolicyMode] = useState<RetrievalPolicyMode>(() => {

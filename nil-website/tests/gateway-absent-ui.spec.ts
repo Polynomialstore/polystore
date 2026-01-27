@@ -44,33 +44,50 @@ test.describe('gateway absent', () => {
   const stakeBalance = page.getByTestId('cosmos-stake-balance')
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
-  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
-  if (!(await redundancySelect.isVisible().catch(() => false))) {
+  const placementSelect = page.getByTestId('alloc-placement-profile')
+  if (!(await placementSelect.isVisible().catch(() => false))) {
     await page.getByTestId('workspace-advanced-toggle').click()
-    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    await expect(placementSelect).toBeVisible({ timeout: 10_000 })
   }
-  await redundancySelect.selectOption('mode1')
+  await placementSelect.selectOption('auto')
   await page.getByTestId('alloc-submit').click()
 
   await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 120_000 })
+  const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
+  const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
+  expect(dealId).not.toBe('')
 
-  const fileInput = page.getByTestId('content-file-input')
-  if (!(await fileInput.isVisible().catch(() => false))) {
-    const mode1Toggle = page.getByTestId('tab-content')
-    if (await mode1Toggle.isVisible().catch(() => false)) {
-      await mode1Toggle.click()
+  // Mode 2 upload uses the FileSharder (WASM sharding + direct SP fallback).
+  // The input is hidden; interact with it directly via test id.
+  const mode2FileInput = page.getByTestId('mdu-file-input')
+  if ((await mode2FileInput.count().catch(() => 0)) === 0) {
+    const toggle = page.getByTestId('tab-content')
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click()
     }
   }
-  await expect(fileInput).toBeVisible({ timeout: 120_000 })
-  await expect(fileInput).toBeEnabled({ timeout: 120_000 })
-  await fileInput.setInputFiles({
+  await expect(mode2FileInput).toHaveCount(1, { timeout: 120_000 })
+  await mode2FileInput.setInputFiles({
     name: 'gateway-absent.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('gateway-absent-upload'),
   })
 
-  await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 120_000 })
+  const uploadBtn = page.getByTestId('mdu-upload')
+  await expect(uploadBtn).toBeVisible({ timeout: 180_000 })
+  await expect(uploadBtn).toBeEnabled({ timeout: 180_000 })
+  await uploadBtn.click()
 
-  await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
+  const commitBtn = page.getByTestId('mdu-commit')
+  await expect(commitBtn).toBeVisible({ timeout: 180_000 })
+  await expect(commitBtn).toBeEnabled({ timeout: 180_000 })
+  await commitBtn.click()
+
+  await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
+  await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
+
+  const routeLabel = page.getByTestId('transport-route')
+  await expect(routeLabel).toBeVisible({ timeout: 120_000 })
+  await expect(routeLabel).toHaveText(/Route: direct sp/i, { timeout: 120_000 })
   })
 })

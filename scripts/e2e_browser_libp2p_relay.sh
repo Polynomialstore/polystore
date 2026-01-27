@@ -15,7 +15,7 @@ WORK_DIR="${WORK_DIR:-$ROOT_DIR/.cache/e2e-libp2p-relay}"
 mkdir -p "$WORK_DIR"
 
 RELAY_IDENTITY="$WORK_DIR/relay.key"
-SP_IDENTITY="$WORK_DIR/sp.key"
+SP_IDENTITY_DIR="$WORK_DIR/sp-identities"
 RELAY_LOG="$WORK_DIR/relay.log"
 RELAY_PID_FILE="$WORK_DIR/relay.pid"
 
@@ -92,7 +92,22 @@ PY
 banner() { echo "==> $*"; }
 
 banner "Generating deterministic p2p identities"
-SP_PEER_ID=$(cd "$ROOT_DIR/nil_gateway" && go run ./cmd/p2p-relay --gen-identity "$SP_IDENTITY" --print-peer-id)
+mkdir -p "$SP_IDENTITY_DIR"
+PROVIDER_KEYS=("faucet" "provider1" "provider2")
+EXTRA_MAP=""
+for key in "${PROVIDER_KEYS[@]}"; do
+  identity_path="$SP_IDENTITY_DIR/${key}.key"
+  peer_id=$(cd "$ROOT_DIR/nil_gateway" && go run ./cmd/p2p-relay --gen-identity "$identity_path" --print-peer-id)
+  if [ -z "$peer_id" ]; then
+    echo "ERROR: failed to generate peer id for $key" >&2
+    exit 1
+  fi
+  if [ -n "$EXTRA_MAP" ]; then
+    EXTRA_MAP+=","
+  fi
+  EXTRA_MAP+="${key}="
+  EXTRA_MAP+="$peer_id"
+done
 
 banner "Starting local relay"
 : >"$RELAY_LOG"
@@ -105,13 +120,24 @@ if [ -z "$RELAY_PEER_ID" ]; then
 fi
 
 RELAY_BASE="/ip4/127.0.0.1/tcp/9101/ws/p2p/$RELAY_PEER_ID"
-RELAY_DIAL="$RELAY_BASE/p2p-circuit/p2p/$SP_PEER_ID"
+NIL_PROVIDER_ENDPOINTS_EXTRA_MAP=""
+IFS=',' read -r -a map_entries <<<"$EXTRA_MAP"
+for entry in "${map_entries[@]}"; do
+  key="${entry%%=*}"
+  peer="${entry#*=}"
+  dial="$RELAY_BASE/p2p-circuit/p2p/$peer"
+  if [ -n "$NIL_PROVIDER_ENDPOINTS_EXTRA_MAP" ]; then
+    NIL_PROVIDER_ENDPOINTS_EXTRA_MAP+=","
+  fi
+  NIL_PROVIDER_ENDPOINTS_EXTRA_MAP+="${key}=${dial}"
+done
 
 export VITE_E2E=1
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export E2E_LOCAL_STACK=1
+export NIL_LOCAL_PROVIDER_COUNT=3
 
 # Ensure the browser libp2p client is enabled and uses the same protocol id.
 export VITE_P2P_ENABLED=1
@@ -119,10 +145,11 @@ export VITE_P2P_PROTOCOL="/nilstore/fetch/1.0.0"
 
 # Force provider relay path: provider reserves on relay, and chain endpoints include only the relay dial addr.
 export NIL_P2P_ENABLED_SP=1
-export NIL_P2P_LISTEN_ADDRS_SP="${NIL_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}"
-export NIL_P2P_IDENTITY_PATH_SP="$SP_IDENTITY"
+export NIL_P2P_LISTEN_PORT_BASE_SP="${NIL_P2P_LISTEN_PORT_BASE_SP:-9102}"
+export NIL_P2P_IDENTITY_DIR_SP="$SP_IDENTITY_DIR"
 export NIL_P2P_RELAY_ADDRS_SP="$RELAY_BASE"
-export NIL_PROVIDER_ENDPOINTS_EXTRA="$RELAY_DIAL"
+export NIL_PROVIDER_ENDPOINTS_EXTRA_MAP
+unset NIL_PROVIDER_ENDPOINTS_EXTRA
 
 # Avoid starting p2p on the user gateway to ensure the test hits provider endpoints.
 export NIL_P2P_ENABLED=0

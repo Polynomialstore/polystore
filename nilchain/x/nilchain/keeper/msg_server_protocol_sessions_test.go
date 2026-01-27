@@ -165,7 +165,7 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             user,
 		DurationBlocks:      100,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		MaxMonthlySpend:     math.NewInt(0),
 		InitialEscrowAmount: math.NewInt(0),
 	})

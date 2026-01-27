@@ -248,12 +248,12 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
-  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
-  if (!(await redundancySelect.isVisible().catch(() => false))) {
+  const placementSelect = page.getByTestId('alloc-placement-profile')
+  if (!(await placementSelect.isVisible().catch(() => false))) {
     await page.getByTestId('workspace-advanced-toggle').click()
-    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    await expect(placementSelect).toBeVisible({ timeout: 10_000 })
   }
-  await redundancySelect.selectOption('mode1')
+  await placementSelect.selectOption('auto')
   await page.getByTestId('alloc-submit').click()
 
   const fileInput = page.getByTestId('content-file-input')

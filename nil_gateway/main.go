@@ -1150,6 +1150,7 @@ type proveRetrievalRequest struct {
 	Cid          string  `json:"cid,omitempty"`
 	FilePath     string  `json:"file_path,omitempty"`
 	Owner        string  `json:"owner,omitempty"`
+	Provider     string  `json:"provider,omitempty"` // optional; if set, submit proof as this provider
 	Epoch        uint64  `json:"epoch_id,omitempty"`
 }
 
@@ -1761,8 +1762,10 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 }
 
 // GatewayProveRetrieval constructs a RetrievalReceipt for a stored file and
-// submits it as a MsgProveLiveness on-chain. This is a devnet Mode 1 helper:
-// the gateway plays both "user" and "provider" using the faucet key.
+// submits it as a MsgSubmitRetrievalProof on-chain.
+//
+// This is a devnet helper endpoint. For Mode 2 deals (RS striping), the gateway
+// reconstructs the full 8 MiB MDU from per-slot shard files before calling nil-cli.
 func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -1810,6 +1813,19 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	epoch := req.Epoch
 	if epoch == 0 {
 		epoch = 1
+	}
+
+	// Best-effort fetch service hint to support Mode 2 reconstruction.
+	stripe := stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
+	if serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID); serr == nil && strings.TrimSpace(serviceHint) != "" {
+		parsed, perr := stripeParamsFromHint(serviceHint)
+		if perr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "invalid deal service_hint", perr.Error())
+			return
+		}
+		stripe = parsed
+	} else if serr != nil {
+		log.Printf("GatewayProveRetrieval: failed to fetch deal service_hint for %d: %v", dealID, serr)
 	}
 
 	dealOwner, dealCID, err := fetchDealOwnerAndCID(dealID)
@@ -1880,6 +1896,17 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mode 2 stores per-slot shards (`mdu_<idx>_slot_<slot>.bin`), so reconstruct a full MDU
+	// for proof generation when needed.
+	if stripe.mode == 2 {
+		reconPath, rerr := ensureMode2MduOnDisk(r.Context(), dealID, manifestRoot, mduIdx, dealDir, stripe, "")
+		if rerr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to reconstruct Mode 2 MDU", rerr.Error())
+			return
+		}
+		mduPath = reconPath
+	}
+
 	manifestPath := filepath.Join(dealDir, "manifest.bin")
 	if _, err := os.Stat(manifestPath); err != nil {
 		if os.IsNotExist(err) {
@@ -1895,10 +1922,26 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath, dealOwner)
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	if strings.TrimSpace(req.Provider) != "" {
+		name, err := resolveKeyNameForAddress(r.Context(), req.Provider)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid provider", err.Error())
+			return
+		}
+		providerKeyName = name
+	}
+
+	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath, providerKeyName, dealOwner)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", "check nilchaind logs")
+		// Surface the underlying chain/CLI error in the HTTP response so CI/E2E
+		// failures are diagnosable without digging through nilchaind logs.
+		hint := err.Error()
+		if len(hint) > 1024 {
+			hint = hint[:1024] + "..."
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", hint)
 		return
 	}
 

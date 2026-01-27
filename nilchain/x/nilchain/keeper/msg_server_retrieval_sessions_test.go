@@ -57,19 +57,26 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	// Build a Mode 2 proof for leafIndex=0 within the committed manifest.
+	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	k := uint64(dealAfterCreate.Mode2Profile.K)
+	m := uint64(dealAfterCreate.Mode2Profile.M)
+
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, k, m)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+	require.NoError(t, err)
+
+	// Commit a minimal (but valid) manifest: include root at index 0 so proofs can target mdu_index=0.
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
 	require.NoError(t, err)
 
-	chunkIdx := uint32(0)
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
+	const leafIndex = uint64(0)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
+	require.Equal(t, root, root2)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
@@ -110,7 +117,7 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 		ManifestOpening: manifestProof,
 		BlobCommitment:  commitment,
 		MerklePath:      merklePath,
-		BlobIndex:       chunkIdx,
+		BlobIndex:       uint32(leafIndex),
 		ZValue:          z,
 		YValue:          y,
 		KzgOpeningProof: kzgProof,
@@ -123,8 +130,11 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	creditsKey := collections.Join(collections.Join(resDeal.DealId, assignedProvider), uint64(1))
-	credits, err := f.keeper.Mode1EpochCredits.Get(sdk.UnwrapSDKContext(f.ctx), creditsKey)
+	// Retrieval proofs count as Mode2 liveness credits for the serving slot.
+	rows := uint64(64) / k
+	slot := uint32(uint64(proof.BlobIndex) / rows)
+	creditsKey := collections.Join(collections.Join(resDeal.DealId, slot), uint64(1))
+	credits, err := f.keeper.Mode2EpochCredits.Get(sdk.UnwrapSDKContext(f.ctx), creditsKey)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), credits)
 

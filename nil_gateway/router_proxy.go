@@ -24,7 +24,10 @@ var routerHTTPClient = &http.Client{
 		}).DialContext,
 		TLSHandshakeTimeout:   4 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		// Some provider requests (especially /gateway/upload which may ingest + upload
+		// Mode 2 stripes) can take longer than a few seconds before responding.
+		// Keep this generous so local-stack/E2E doesn't flake on slow machines/CI.
+		ResponseHeaderTimeout: 2 * time.Minute,
 		IdleConnTimeout:       90 * time.Second,
 		MaxIdleConns:          128,
 	},

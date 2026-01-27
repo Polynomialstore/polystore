@@ -28,6 +28,15 @@ export EVM_PRIVKEY EVM_CHAIN_ID CHAIN_ID VERIFYING_CONTRACT
 if ! command -v curl >/dev/null 2>&1; then echo "ERROR: curl required" >&2; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "ERROR: python3 required" >&2; exit 1; fi
 
+# Ensure fetches fail loudly on non-2xx responses, otherwise curl may write a JSON
+# error body to disk and later `cmp` will look like "corruption".
+CURL_FAIL_ARGS=()
+if curl --help all 2>/dev/null | grep -q -- '--fail-with-body'; then
+  CURL_FAIL_ARGS+=(--fail-with-body)
+else
+  CURL_FAIL_ARGS+=(--fail)
+fi
+
 # --- Helper Functions ---
 
 wait_for_http() {
@@ -393,6 +402,41 @@ if [ -z "$PROVIDER_ADDR" ]; then
   exit 1
 fi
 
+# For direct-to-provider runs (NIL_DISABLE_GATEWAY=1), fetch must go to the
+# provider that owns the relevant slot. Resolve its HTTP endpoint from chain.
+FETCH_GATEWAY_BASE="$GATEWAY_BASE"
+if [ "${NIL_DISABLE_GATEWAY:-0}" = "1" ]; then
+  PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/providers/$PROVIDER_ADDR" || echo "{}")"
+  FETCH_GATEWAY_BASE="$(echo "$PROVIDER_JSON" | python3 -c '
+import json, re, sys
+obj = json.load(sys.stdin)
+provider = obj.get("provider") or {}
+endpoints = provider.get("endpoints") or []
+http_ma = ""
+for ep in endpoints:
+  if isinstance(ep, str) and "/http" in ep:
+    http_ma = ep
+    break
+if not http_ma:
+  raise SystemExit(0)
+for pat in (
+  r"^/ip4/([^/]+)/tcp/(\d+)/http$",
+  r"^/dns4/([^/]+)/tcp/(\d+)/http$",
+  r"^/dns/([^/]+)/tcp/(\d+)/http$",
+):
+  m = re.match(pat, http_ma)
+  if m:
+    host, port = m.group(1), m.group(2)
+    print(f"http://{host}:{port}")
+    raise SystemExit(0)
+' )"
+  if [ -z "$FETCH_GATEWAY_BASE" ]; then
+    echo "ERROR: failed to resolve provider HTTP endpoint for $PROVIDER_ADDR" >&2
+    echo "$PROVIDER_JSON" >&2
+    exit 1
+  fi
+fi
+
 HEIGHT=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
 SESSION_EXPIRES_AT=$((HEIGHT + 20))
 SESSION_NONCE=$(python3 -c "import time; print(time.time_ns())")
@@ -415,18 +459,26 @@ if [ -z "$SESSION_ID" ]; then
   exit 1
 fi
 
-FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
+FETCH_URL="$FETCH_GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
 FETCH_RANGE_START=0
 FETCH_RANGE_LEN="$FILE_LEN"
 FETCH_RANGE_END=$((FETCH_RANGE_START + FETCH_RANGE_LEN - 1))
-timeout 10s curl -sS -o fetched_README.md "$FETCH_URL" \
+if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.md "$FETCH_URL" \
   -H "X-Nil-Session-Id: $SESSION_ID" \
   -H "X-Nil-Req-Sig: $REQ_SIG" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
   -H "X-Nil-Req-Range-Start: $FETCH_RANGE_START" \
   -H "X-Nil-Req-Range-Len: $FETCH_RANGE_LEN" \
-  -H "Range: bytes=$FETCH_RANGE_START-$FETCH_RANGE_END"
+  -H "Range: bytes=$FETCH_RANGE_START-$FETCH_RANGE_END"; then
+  echo "ERROR: Fetch request failed (non-2xx) for README.md" >&2
+  if [ -s fetched_README.md ]; then
+    echo "Response (first 1KB):" >&2
+    head -c 1024 fetched_README.md >&2 || true
+    echo "" >&2
+  fi
+  exit 1
+fi
 
 # Compare
 if cmp -s "$ROOT_DIR/README.md" fetched_README.md; then
@@ -714,26 +766,42 @@ REQ_SIG_JSON_2=$(
 )
 REQ_SIG_2=$(echo "$REQ_SIG_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 
-FETCH_URL_1="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
-FETCH_URL_2="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
+FETCH_URL_1="$FETCH_GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
+FETCH_URL_2="$FETCH_GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
 
-timeout 10s curl -sS -o fetched_README.bin "$FETCH_URL_1" \
+if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.bin "$FETCH_URL_1" \
   -H "X-Nil-Session-Id: $SESSION_ID_1" \
   -H "X-Nil-Req-Sig: $REQ_SIG_1" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_1" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_1" \
   -H "X-Nil-Req-Range-Start: 0" \
   -H "X-Nil-Req-Range-Len: $FILE_LEN_1" \
-  -H "Range: bytes=0-$((FILE_LEN_1 - 1))"
+  -H "Range: bytes=0-$((FILE_LEN_1 - 1))"; then
+  echo "ERROR: Fetch request failed (non-2xx) for README.md (multi-file)" >&2
+  if [ -s fetched_README.bin ]; then
+    echo "Response (first 1KB):" >&2
+    head -c 1024 fetched_README.bin >&2 || true
+    echo "" >&2
+  fi
+  exit 1
+fi
 
-timeout 10s curl -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
+if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
   -H "X-Nil-Session-Id: $SESSION_ID_2" \
   -H "X-Nil-Req-Sig: $REQ_SIG_2" \
   -H "X-Nil-Req-Nonce: $REQ_NONCE_2" \
   -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_2" \
   -H "X-Nil-Req-Range-Start: 0" \
   -H "X-Nil-Req-Range-Len: $FILE_LEN_2" \
-  -H "Range: bytes=0-$((FILE_LEN_2 - 1))"
+  -H "Range: bytes=0-$((FILE_LEN_2 - 1))"; then
+  echo "ERROR: Fetch request failed (non-2xx) for ECONOMY.md (multi-file)" >&2
+  if [ -s fetched_ECONOMY.bin ]; then
+    echo "Response (first 1KB):" >&2
+    head -c 1024 fetched_ECONOMY.bin >&2 || true
+    echo "" >&2
+  fi
+  exit 1
+fi
 
 ORIG1_SIZE=$(wc -c < "$ROOT_DIR/README.md" | tr -d ' ')
 ORIG2_SIZE=$(wc -c < "$ROOT_DIR/ECONOMY.md" | tr -d ' ')

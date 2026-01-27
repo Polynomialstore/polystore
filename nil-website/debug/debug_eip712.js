@@ -26,7 +26,7 @@ const types = {
 const message = {
   creator: '0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2',
   duration: 100n,
-  service_hint: 'General:replicas=1',
+  service_hint: 'General',
   initial_escrow: '1000000',
   max_monthly_spend: '5000000',
   nonce: 13n, // Updated from log

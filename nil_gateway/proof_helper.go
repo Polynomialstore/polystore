@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"nilchain/x/crypto_ffi"
@@ -22,7 +23,9 @@ import (
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
 // mduIndex is the index in the Deal Slab (0=Manifest, 1..W=Witness, W+1..=Data).
 // mduPath must point to the encoded 8 MiB MDU bytes stored on disk.
-func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, ownerAddr string) (string, error) {
+//
+// providerKeyName is the local keyring name used to submit the proof (MsgSubmitRetrievalProof).
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, providerKeyName string, ownerAddr string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -32,7 +35,9 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	if abs, err := filepath.Abs(manifestPath); err == nil {
 		manifestPath = abs
 	}
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	if strings.TrimSpace(providerKeyName) == "" {
+		providerKeyName = envDefault("NIL_PROVIDER_KEY", "faucet")
+	}
 	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
 		return "", fmt.Errorf("resolveKeyAddress failed: %w", err)
@@ -69,6 +74,13 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	signer := ownerAddr
 	if signer == "" {
 		signer = providerKeyName
+	} else {
+		// e2e passes a bech32 address; nilchaind expects a local key name for --from.
+		name, err := resolveKeyNameForAddress(ctx, signer)
+		if err != nil {
+			return "", fmt.Errorf("resolveKeyNameForAddress failed: %w", err)
+		}
+		signer = name
 	}
 
 	signOut, err := execNilchaind(

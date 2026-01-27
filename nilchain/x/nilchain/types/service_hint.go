@@ -24,6 +24,27 @@ type RSParams struct {
 	LeafCount uint64
 }
 
+// BuildServiceHint constructs a canonical service_hint string.
+//
+// Note: Mode 1 (replicas-only) is deprecated; callers should prefer Mode 2 via rs=K+M.
+func BuildServiceHint(base string, owner string, rsK, rsM uint64) string {
+	hintBase := strings.TrimSpace(base)
+	if hintBase == "" {
+		hintBase = "General"
+	}
+	tokens := make([]string, 0, 2)
+	if strings.TrimSpace(owner) != "" {
+		tokens = append(tokens, fmt.Sprintf("owner=%s", strings.TrimSpace(owner)))
+	}
+	if rsK > 0 && rsM > 0 {
+		tokens = append(tokens, fmt.Sprintf("rs=%d+%d", rsK, rsM))
+	}
+	if len(tokens) == 0 {
+		return hintBase
+	}
+	return hintBase + ":" + strings.Join(tokens, ":")
+}
+
 func ParseServiceHint(raw string) (ServiceHintInfo, error) {
 	raw = strings.TrimSpace(raw)
 	info := ServiceHintInfo{Raw: raw}

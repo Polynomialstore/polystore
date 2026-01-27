@@ -80,6 +80,56 @@ func mustDeriveMode1Challenge(
 	return metaMdus + mduOrdinal, uint32(blob)
 }
 
+func mustDeriveMode2Challenge(
+	t *testing.T,
+	chainID string,
+	epochID uint64,
+	headerHash []byte,
+	dealID uint64,
+	currentGen uint64,
+	slot uint64,
+	ordinal uint64,
+	totalMdus uint64,
+	witnessMdus uint64,
+	k uint64,
+	m uint64,
+) (mduIndex uint64, leafIndex uint32) {
+	t.Helper()
+
+	require.True(t, k > 0 && m > 0, "invalid rs params")
+	require.Equal(t, uint64(0), 64%k, "k must divide 64")
+	rows := uint64(64) / k
+	require.True(t, slot < k+m, "slot out of range")
+
+	metaMdus := uint64(1)
+	if witnessMdus > 0 {
+		metaMdus += witnessMdus
+	}
+	require.Greater(t, totalMdus, metaMdus, "total_mdus must be > 1+witness_mdus")
+	userMdus := totalMdus - metaMdus
+
+	buf := make([]byte, 0, len("nilstore/epoch/v1")+len(chainID)+8+len(headerHash))
+	buf = append(buf, []byte("nilstore/epoch/v1")...)
+	buf = append(buf, []byte(chainID)...)
+	buf = binary.BigEndian.AppendUint64(buf, epochID)
+	buf = append(buf, headerHash...)
+	epochSeed := sha256.Sum256(buf)
+
+	chal := make([]byte, 0, len("nilstore/chal/v1")+32+8*4)
+	chal = append(chal, []byte("nilstore/chal/v1")...)
+	chal = append(chal, epochSeed[:]...)
+	chal = binary.BigEndian.AppendUint64(chal, dealID)
+	chal = binary.BigEndian.AppendUint64(chal, currentGen)
+	chal = binary.BigEndian.AppendUint64(chal, slot)
+	chal = binary.BigEndian.AppendUint64(chal, ordinal)
+	sum := sha256.Sum256(chal)
+
+	mduOrdinal := binary.BigEndian.Uint64(sum[0:8]) % userMdus
+	row := binary.BigEndian.Uint64(sum[8:16]) % rows
+
+	return metaMdus + mduOrdinal, uint32(slot*rows + row)
+}
+
 // dummyManifestCid is a syntactically valid 48-byte hex string used by tests that
 // do not exercise KZG verification.
 const dummyManifestCid = "0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"
@@ -392,7 +442,11 @@ func TestCreateDeal_UserOwnedViaHint(t *testing.T) {
 	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
 	require.NoError(t, err)
 	require.Equal(t, user, deal.Owner, "deal owner should be overridden via service hint")
-	require.Equal(t, fmt.Sprintf("General:owner=%s", user), deal.ServiceHint, "service hint should preserve overrides")
+	parsedHint, err := types.ParseServiceHint(deal.ServiceHint)
+	require.NoError(t, err)
+	require.Equal(t, "General", parsedHint.Base)
+	require.Equal(t, user, parsedHint.Owner, "service hint should preserve owner override")
+	require.True(t, parsedHint.HasRS, "service hint should include an explicit rs profile after auto-selection")
 }
 
 // TestCreateDeal_ReplicationViaHint verifies that the requested replication
@@ -418,11 +472,11 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 	userBz := []byte("user_repl___________")
 	user, _ := f.addressCodec.BytesToString(userBz)
 
-	// Request 3 replicas via the hint.
+	// Request a specific Mode 2 profile via the hint.
 	msg := &types.MsgCreateDeal{
 		Creator:             user,
 		DurationBlocks:      100,
-		ServiceHint:         "General:replicas=3",
+		ServiceHint:         "General:rs=2+1",
 		MaxMonthlySpend:     math.NewInt(500000),
 		InitialEscrowAmount: math.NewInt(1000000),
 	}
@@ -434,14 +488,15 @@ func TestCreateDeal_ReplicationViaHint(t *testing.T) {
 	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), deal.CurrentReplication)
-	require.Equal(t, "General:replicas=3", deal.ServiceHint)
+	require.NotNil(t, deal.Mode2Profile)
+	require.Equal(t, uint32(2), deal.Mode2Profile.K)
+	require.Equal(t, uint32(1), deal.Mode2Profile.M)
+	require.Equal(t, "General:rs=2+1", deal.ServiceHint)
 }
 
-// TestCreateDeal_BootstrapReplication verifies that on small devnets where the
-// active provider set is smaller than DealBaseReplication, we still create a
-// deal and cap replication at the number of available providers (bootstrap
-// mode) instead of failing placement.
-func TestCreateDeal_BootstrapReplication(t *testing.T) {
+// TestCreateDeal_InsufficientProvidersFails verifies that in Mode 2 we require a
+// minimum active provider set (soft-lock deprecating Mode 1).
+func TestCreateDeal_InsufficientProvidersFails(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
@@ -456,7 +511,7 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Create a Deal; placement should succeed with a single assigned provider.
+	// Create a Deal; placement should fail with <3 eligible providers (Mode 2 minimum).
 	userBz := []byte("user_bootstrap______")
 	user, _ := f.addressCodec.BytesToString(userBz)
 
@@ -468,14 +523,9 @@ func TestCreateDeal_BootstrapReplication(t *testing.T) {
 		InitialEscrowAmount: math.NewInt(1000000),
 	}
 
-	res, err := msgServer.CreateDeal(f.ctx, msg)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), uint64(len(res.AssignedProviders)))
-
-	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), deal.CurrentReplication)
-	require.Equal(t, 1, len(deal.Providers))
+	_, err = msgServer.CreateDeal(f.ctx, msg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not enough eligible providers for Mode 2")
 }
 
 func TestProveLiveness_Invalid(t *testing.T) {
@@ -607,11 +657,16 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	err = crypto_ffi.Init("../../../trusted_setup.txt")
 	require.NoError(t, err)
 
-	// Calculate Merkle Root
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	// Mode 2: witness commitments define the MDU root for Hop2.
+	dealAfterCreate, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	rsK := uint64(dealAfterCreate.Mode2Profile.K)
+	rsM := uint64(dealAfterCreate.Mode2Profile.M)
 
-	providerBytes, err := f.addressCodec.StringToBytes(assignedProvider)
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, rsK, rsM)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
 	const totalMdus = uint64(3)
@@ -642,54 +697,63 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
 
-	mduIndex, chunkIdx := mustDeriveMode1Challenge(
+	// Derive the mode2 leaf challenge for the provider's slot.
+	var slot uint64
+	found := false
+	for _, entry := range deal.Mode2Slots {
+		if entry != nil && entry.Provider == assignedProvider {
+			slot = uint64(entry.Slot)
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "assigned provider must have a mode2 slot")
+
+	mduIndex, chunkIdx := mustDeriveMode2Challenge(
 		t,
 		sdkCtx.ChainID(),
 		1,
 		sdkCtx.HeaderHash(),
 		resDeal.DealId,
 		deal.CurrentGen,
-		providerBytes,
+		slot,
 		0,
 		totalMdus,
 		witnessMdus,
+		rsK,
+		rsM,
 	)
 
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
 	require.NoError(t, err)
 
-	// Compute Proof for the epoch's synthetic challenge.
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
+	leafCount := (rsK + rsM) * (64 / rsK)
+	require.True(t, uint64(chunkIdx) < leafCount)
 
-	// Sanity: Hop2+Hop3 should verify in isolation.
-	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, 64, z, y, kzgProof)
-	require.NoError(t, err)
-	require.True(t, ok)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, uint64(chunkIdx), uint64(chunkIdx))
+	require.Equal(t, root, root2)
 
 	// Sanity: full chained proof should verify before submitting.
 	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
-	ok, err = crypto_ffi.VerifyChainedProof(
+	flattenedMerkle := make([]byte, 0, len(merklePath)*32)
+	for _, node := range merklePath {
+		flattenedMerkle = append(flattenedMerkle, node...)
+	}
+	ok, err := crypto_ffi.VerifyChainedProof(
 		manifestCommitment,
 		mduIndex,
 		manifestProof,
 		root,
 		commitment,
 		uint64(chunkIdx),
-		64,
-		merkleProof,
+		leafCount,
+		flattenedMerkle,
 		z,
 		y,
 		kzgProof,
 	)
 	require.NoError(t, err)
 	require.True(t, ok)
-
-	// Unflatten Merkle Proof
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
 
 	// 5. Submit Proof
 	proofMsg := &types.MsgProveLiveness{
@@ -774,19 +838,24 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	// Build a valid 1-MDU manifest so ProveLiveness reaches the signature checks.
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	dealAfterCreate, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	rsK := uint64(dealAfterCreate.Mode2Profile.K)
+	rsM := uint64(dealAfterCreate.Mode2Profile.M)
+
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, rsK, rsM)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+	require.NoError(t, err)
+
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
 	require.NoError(t, err)
 
-	chunkIdx := uint32(0)
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
+	const leafIndex = uint64(0)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, leafIndex, 0)
+	require.Equal(t, root, root2)
 
 	// Commit Content
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
@@ -816,7 +885,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 			ManifestOpening: manifestProof,
 			BlobCommitment:  commitment,
 			MerklePath:      merklePath,
-			BlobIndex:       chunkIdx,
+			BlobIndex:       uint32(leafIndex),
 			ZValue:          z,
 			YValue:          y,
 			KzgOpeningProof: kzgProof,
@@ -909,10 +978,15 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
-	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
+	dealAfterCreate, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	rsK := uint64(dealAfterCreate.Mode2Profile.K)
+	rsM := uint64(dealAfterCreate.Mode2Profile.M)
 
-	providerBytes, err := f.addressCodec.StringToBytes(assignedProvider)
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, rsK, rsM)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
 	const totalMdus = uint64(3)
@@ -940,51 +1014,62 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 
 	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	mduIndex, chunkIdx := mustDeriveMode1Challenge(
+
+	var slot uint64
+	found := false
+	for _, entry := range deal.Mode2Slots {
+		if entry != nil && entry.Provider == assignedProvider {
+			slot = uint64(entry.Slot)
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "assigned provider must have a mode2 slot")
+
+	mduIndex, chunkIdx := mustDeriveMode2Challenge(
 		t,
 		sdkCtx.ChainID(),
 		1,
 		sdkCtx.HeaderHash(),
 		resDeal.DealId,
 		deal.CurrentGen,
-		providerBytes,
+		slot,
 		0,
 		totalMdus,
 		witnessMdus,
+		rsK,
+		rsM,
 	)
 	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
 	require.NoError(t, err)
 
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
-	require.NoError(t, err)
+	leafCount := (rsK + rsM) * (64 / rsK)
+	require.True(t, uint64(chunkIdx) < leafCount)
 
-	// Sanity: Hop2+Hop3 should verify in isolation.
-	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, 64, z, y, kzgProof)
-	require.NoError(t, err)
-	require.True(t, ok)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, uint64(chunkIdx), uint64(chunkIdx))
+	require.Equal(t, root, root2)
 
 	// Sanity: full chained proof should verify before submitting.
 	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
-	ok, err = crypto_ffi.VerifyChainedProof(
+	flattenedMerkle := make([]byte, 0, len(merklePath)*32)
+	for _, node := range merklePath {
+		flattenedMerkle = append(flattenedMerkle, node...)
+	}
+	ok, err := crypto_ffi.VerifyChainedProof(
 		manifestCommitment,
 		mduIndex,
 		manifestProof,
 		root,
 		commitment,
 		uint64(chunkIdx),
-		64,
-		merkleProof,
+		leafCount,
+		flattenedMerkle,
 		z,
 		y,
 		kzgProof,
 	)
 	require.NoError(t, err)
 	require.True(t, ok)
-
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
-	}
 
 	okMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,

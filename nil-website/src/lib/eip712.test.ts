@@ -22,7 +22,7 @@ test('CreateDeal typed data hashes to chain digest', async () => {
   const intent = {
     creator_evm: TEST_ACCOUNT.address,
     duration_blocks: 100,
-    service_hint: 'General:replicas=1',
+    service_hint: 'General',
     initial_escrow: '1000000',
     max_monthly_spend: '5000000',
     nonce: 1,
@@ -33,7 +33,7 @@ test('CreateDeal typed data hashes to chain digest', async () => {
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0x1a772cbd59c41ff8e25d84b45ed2d9ff2c301b8274aec1083ddde8934d70a6d2',
+    '0x451aed60aebda47645d60d0c2e397c0366ff4735024422f39f4199849e9e3c45',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)

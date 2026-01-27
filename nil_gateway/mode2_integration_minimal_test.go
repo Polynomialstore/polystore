@@ -169,7 +169,7 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 	state := &mode2DealState{
 		owner:       owner,
 		cid:         "",
-		serviceHint: "General:replicas=12:rs=8+4",
+		serviceHint: "General:rs=8+4",
 		providers:   providers,
 		endpoints:   endpoints,
 	}

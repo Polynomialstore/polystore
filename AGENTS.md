@@ -725,7 +725,8 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 #### 11.4.A Chain & Deal Cataloging
 - [x] **Task 1: RS parameter capture (deal creation).**
-  - Encode `rs=K+M` in `service_hint` (e.g., `General:replicas=12,rs=8+4`) until explicit proto fields exist.
+  - Encode `rs=K+M` in `service_hint` (e.g., `General:rs=8+4`) until explicit proto fields exist.
+  - `replicas=` is deprecated and should not be emitted (soft-locked on-chain).
   - Parse in `MsgCreateDeal`/`MsgCreateDealFromEvm` to set:
     - `deal.redundancy_mode = 2`
     - `requestedReplicas = N` (cap by available providers)
@@ -918,10 +919,11 @@ This is the **canonical execution checklist** for the next sprint, focused on re
     - **Change:** Make `/gateway/receipt` a real forwarder to `/sp/receipt` with authn, and add negative tests (wrong provider, wrong proof hash, replayed session).
     - **Pass gate:** Direct calls to `/sp/receipt` without gateway auth fail; forwarded calls succeed; negative tests pass.
 
-### 11.1.1 Devnet Alpha (Multi-SP, Mode 1 Single-Replica)
+### 11.1.1 Devnet Alpha (Multi-SP, Mode 2 Auto-Profile)
 
 This sprint turns the current “single-machine” gateway/provider implementation into a **multi-provider devnet** with **low expectations**:
-* Deals are Mode 1 but **single-replica** (`replicas=1`), so we do not need protocol-level replication yet.
+* Deals are **Mode 2 (StripeReplica)**, with RS profile **auto-selected** on-chain (or explicitly pinned via `service_hint=General:rs=K+M`).
+* New Mode 1 (replicas-only) deals are deprecated/soft-locked.
 * Providers are discoverable via **on-chain Multiaddr endpoints** (HTTP first, libp2p later).
 * Providers serve bytes+proof material and own session state; the gateway routes/proxies.
 
@@ -945,14 +947,14 @@ This sprint turns the current “single-machine” gateway/provider implementati
 - [x] **Provider:** Ensure download session chunks are recorded on the provider (not the gateway) in router mode.
 - **Pass gate:** Receipts/session receipts verify and submit even if the gateway restarts mid-download (provider session survives).
 
-#### Goal 4: Ingest directed to assigned provider (Mode 1 single replica)
+#### Goal 4: Ingest directed to assigned providers (Mode 2)
 - [x] **Upload:** Require `deal_id` for devnet-alpha upload flows (or route initial ingest based on deal assignment); ensure “first content commit” works for thin deals.
-- [x] **UI:** Default deal creation to `replicas=1` and ensure upload/commit uses deal_id consistently.
+- [x] **UI:** Default deal creation to `service_hint=General` (auto Mode 2) and ensure upload/commit uses deal_id consistently.
 - **Pass gate:** Create deal → upload → commit results in the assigned provider having the slab bytes and being able to serve + submit receipts.
 
 #### Goal 5: Devnet orchestration
 - [x] Add docker-compose / scripts to start 1 gateway-router + N providers with distinct keys/ports/storage roots.
-- [x] Add a smoke script: register providers (with Multiaddrs) → create deal (replicas=1) → upload/commit → fetch → submit session receipt.
+- [x] Add a smoke script: register providers (with Multiaddrs) → create deal (`service_hint=General`) → upload/commit → fetch → submit session receipt.
 - **Pass gate:** single command stands up a 3-provider devnet and runs the smoke.
 
 ### 11.1.2 Devnet Beta (Multi-Provider Onboarding, 5 Participants)

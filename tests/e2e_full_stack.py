@@ -55,8 +55,7 @@ def create_deal():
     duration = 100
     initial_escrow = 1000000
     max_monthly_spend = 5000000
-    replication = 1
-    service_hint = f"General:replicas={replication}"
+    service_hint = "General"
 
     domain_data = {
         "name": "NilStore",

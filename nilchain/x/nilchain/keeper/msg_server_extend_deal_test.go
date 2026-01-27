@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"fmt"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -22,17 +23,19 @@ func TestExtendDeal_BeforeExpiry_UpdatesEndAndAnchorAndEscrow(t *testing.T) {
 	params.DealExtensionGraceBlocks = 10
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	// Register a single provider; request replicas=1 to keep placement minimal.
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_extend_v1_"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	// Register minimal providers for Mode 2 (rs=2+1).
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_extend_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_extend_v1____"))
@@ -41,7 +44,7 @@ func TestExtendDeal_BeforeExpiry_UpdatesEndAndAnchorAndEscrow(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      10,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -69,8 +72,8 @@ func TestExtendDeal_BeforeExpiry_UpdatesEndAndAnchorAndEscrow(t *testing.T) {
 	// Extend before expiry at height=5. New end appends after current end.
 	ctx5 := ctx.WithBlockHeight(5)
 	_, err = msgServer.ExtendDeal(ctx5, &types.MsgExtendDeal{
-		Creator:                 owner,
-		DealId:                  resDeal.DealId,
+		Creator:                  owner,
+		DealId:                   resDeal.DealId,
 		AdditionalDurationBlocks: 10,
 	})
 	require.NoError(t, err)
@@ -92,16 +95,18 @@ func TestUpdateDealContent_UsesPricingAnchorAfterExtend(t *testing.T) {
 	params.DealExtensionGraceBlocks = 10
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_anchor_v1_"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_anchor_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_anchor_v1____"))
@@ -110,7 +115,7 @@ func TestUpdateDealContent_UsesPricingAnchorAfterExtend(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      10,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -129,8 +134,8 @@ func TestUpdateDealContent_UsesPricingAnchorAfterExtend(t *testing.T) {
 	// Extend at height=5 by 10 blocks: end=21, pricing_anchor_block=5.
 	ctx5 := ctx.WithBlockHeight(5)
 	_, err = msgServer.ExtendDeal(ctx5, &types.MsgExtendDeal{
-		Creator:                 owner,
-		DealId:                  resDeal.DealId,
+		Creator:                  owner,
+		DealId:                   resDeal.DealId,
 		AdditionalDurationBlocks: 10,
 	})
 	require.NoError(t, err)
@@ -164,16 +169,18 @@ func TestExtendDeal_AfterExpiryWithinGrace_UsesMaxEndAndNoDeadTime(t *testing.T)
 	params.MinDurationBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_grace_v1_"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_grace_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_grace_v1_____"))
@@ -183,7 +190,7 @@ func TestExtendDeal_AfterExpiryWithinGrace_UsesMaxEndAndNoDeadTime(t *testing.T)
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      5,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -201,8 +208,8 @@ func TestExtendDeal_AfterExpiryWithinGrace_UsesMaxEndAndNoDeadTime(t *testing.T)
 	// Renew after expiry at height=8 (within grace). base=max(end(6),h(8)) => 8.
 	ctx8 := ctx.WithBlockHeight(8)
 	_, err = msgServer.ExtendDeal(ctx8, &types.MsgExtendDeal{
-		Creator:                 owner,
-		DealId:                  resDeal.DealId,
+		Creator:                  owner,
+		DealId:                   resDeal.DealId,
 		AdditionalDurationBlocks: 5,
 	})
 	require.NoError(t, err)
@@ -224,16 +231,18 @@ func TestExtendDeal_AfterGraceFails(t *testing.T) {
 	params.MinDurationBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_fail_v1__"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_fail_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_fail_v1______"))
@@ -243,7 +252,7 @@ func TestExtendDeal_AfterGraceFails(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      5,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -251,8 +260,8 @@ func TestExtendDeal_AfterGraceFails(t *testing.T) {
 
 	ctx9 := ctx.WithBlockHeight(9)
 	_, err = msgServer.ExtendDeal(ctx9, &types.MsgExtendDeal{
-		Creator:                 owner,
-		DealId:                  resDeal.DealId,
+		Creator:                  owner,
+		DealId:                   resDeal.DealId,
 		AdditionalDurationBlocks: 1,
 	})
 	require.Error(t, err)
@@ -269,16 +278,18 @@ func TestUpdateDealContent_RejectsExpiredDeal(t *testing.T) {
 	params.MinDurationBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_exp_v1___"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_exp_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_exp_v1_______"))
@@ -287,7 +298,7 @@ func TestUpdateDealContent_RejectsExpiredDeal(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      1,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
@@ -317,16 +328,18 @@ func TestOpenRetrievalSession_RejectsExpiredDeal(t *testing.T) {
 	params.MinDurationBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(ctx, params))
 
-	providerBz := make([]byte, 20)
-	copy(providerBz, []byte("provider_open_exp_"))
-	provider, _ := f.addressCodec.BytesToString(providerBz)
-	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
-		Creator:      provider,
-		Capabilities: "General",
-		TotalStorage: 100000000000,
-		Endpoints:    testProviderEndpoints,
-	})
-	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte(fmt.Sprintf("provider_open_exp_%02d", i)))
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
 
 	ownerBz := make([]byte, 20)
 	copy(ownerBz, []byte("owner_open_exp____"))
@@ -335,7 +348,7 @@ func TestOpenRetrievalSession_RejectsExpiredDeal(t *testing.T) {
 	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      1,
-		ServiceHint:         "General:replicas=1",
+		ServiceHint:         "General:rs=2+1",
 		InitialEscrowAmount: math.NewInt(0),
 		MaxMonthlySpend:     math.NewInt(0),
 	})
