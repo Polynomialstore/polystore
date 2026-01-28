@@ -5,7 +5,7 @@ This document translates the guarded end-to-end scripts into a human‑operable 
 ## 1. Prerequisites
 
 1. Build or ensure the local tools are available (`nilchain/nilchaind`, gateway binary, `tsx` helper, etc.).
-2. Start the canonical devnet stack:
+2. Start the canonical devnet stack. The script now brings up a minimal faucet by default (auto-funding and relay remain disabled) so you can interact manually:
    ```bash
    ./scripts/run_local_stack.sh start
    ```
@@ -73,4 +73,3 @@ Manual checks derived from keeper tests:
 ## 6. Keeping the runbook up to date
 
 Whenever the scripts above change, mirror the updated commands back into this runbook. This doc should remain the human-readable companion to the scripted automation.
-

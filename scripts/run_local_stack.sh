@@ -33,9 +33,11 @@ NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
 export NIL_DISABLE_EVM_MEMPOOL
 # Auto-fund the default demo EVM account by calling the faucet once on startup.
-NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-1}"
+NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-0}"
+NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-0}"
 NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
-# Start the faucet service (dev-only convenience). Set to 0 for "mainnet parity" runs.
+# Start the faucet service (minimal faucet enabled by default).
+# The faucet runs, but auto-funding and the tx-relay remain off so the stack stays wallet-first.
 NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
 # Start the web UI (optional). Set to 0 for headless stacks / CI.
 NIL_START_WEB="${NIL_START_WEB:-1}"
@@ -658,7 +660,7 @@ start_sp_gateway() {
   banner "Starting SP gateway service(s) (ports starting at 8082)"
   ensure_nil_cli
   ensure_nil_gateway
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-6}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
