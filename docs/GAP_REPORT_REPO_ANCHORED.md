@@ -1,71 +1,108 @@
-# Gap Report (Repo-Anchored): NilStore Autonomous Runbook v2
+# Gap Report (Repo-Anchored): NilStore (Spec ↔ Code ↔ CI)
 
-Last updated: 2026-01-24
+Last updated: 2026-02-04
 
 This is the repo-specific gap matrix required by `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
-It is intentionally “requirements-first”: each row links the runbook/RFC requirement to the *current* implementation and the concrete place to change it.
+It is intentionally **requirements-first**: each row links a spec/RFC requirement to:
+- the *current* implementation (repo-anchored refs),
+- the concrete CI/test signal that proves it works,
+- and what is **not** proven yet.
 
 Legend:
-- **Status**: DONE / PARTIAL / NOT STARTED
-- **Primary refs**: where to look in code today
-- **Test gate**: the minimum bar for considering the item “landed”
+- **Status**: DONE / PARTIAL / MISSING
+  - **DONE**: implemented + has at least one deterministic test gate in CI.
+  - **PARTIAL**: implemented, but missing invariants and/or missing test coverage.
+  - **MISSING**: spec/RFC requirement not implemented (or not wired end-to-end).
+
+## CI: what is actually exercised (today)
+
+- Unit tests
+  - Chain: `go test ./nilchain/...`
+  - Gateway: `go test ./nil_gateway/...`
+  - Rust: `cargo test` in `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
+  - Web: `nil-website` build + unit tests + lint
+- E2E scripts (run in CI)
+  - Lifecycle: `scripts/e2e_lifecycle.sh` (+ `scripts/e2e_lifecycle_no_gateway.sh`) — uses **gateway tx relay** for deterministic runs.
+  - Retrieval fees: `e2e_retrieval_fees.sh`
+  - Retrieval sessions (CLI): `e2e_open_retrieval_session_cli.sh`, `e2e_open_retrieval_session_mode2_cli.sh`
+  - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
+- Browser E2E (Playwright; wallet-first via in-page E2E wallet)
+  - `scripts/e2e_browser_smoke_no_gateway.sh`
+  - `scripts/e2e_browser_libp2p_relay.sh`
+  - `scripts/e2e_mode2_stripe_multi_sp.sh`
+
+## CI does NOT prove (be explicit)
+
+- WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
+- Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
+- Dynamic pricing (storage or retrieval) beyond current parameterized fees
+- Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
+- Comprehensive security review / external audit
+
+## Phase 0 — Spec/code divergences to close before “trusted devnet soft launch”
+
+| Requirement | Status | Spec/RFC anchor | Current implementation (refs) | CI proof | Not proven / gap | Planned fix |
+|---|---:|---|---|---|---|---|
+| Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | MISSING | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | No explicit cap enforcement in `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | N/A | Spec/RFC claim is not enforced; a malicious client can commit arbitrarily large `size_bytes` | PR2 (`codex/spec-invariants-hard-caps`) |
+| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | PARTIAL | `rfcs/rfc-blob-alignment-and-striping.md` | Mode2 flows implemented end-to-end, but Playwright asserts only “downloaded something” | `scripts/e2e_mode2_stripe_multi_sp.sh` | No byte-for-byte assertion in `nil-website/tests/mode2-stripe.spec.ts` | PR4 (`codex/mode2-stripe-bytes-assert`) |
+| Allowlist retrieval policy verification has test vectors | PARTIAL | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification is implemented in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | N/A | No unit tests covering keccak merkle proofs; easiest place to regress | PR5 (`codex/allowlist-merkle-tests`) |
+| NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `nil_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./nil_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
 ## Phase 1 — Deal expiry + renewal (ExtendDeal)
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Deal has an explicit `end_block` term bound | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal.end_block); `nilchain/x/nilchain/keeper/msg_server.go` sets it on create | Term exists but is not enforced consistently | N/A | Covered indirectly by existing keeper tests |
-| Reject `UpdateDealContent*` once `height >= end_block` | NOT STARTED | `nilchain/x/nilchain/keeper/msg_server.go` (`UpdateDealContent`, `UpdateDealContentFromEvm`) has no expiry checks | Deals can be mutated after expiry | Add `if ctx.BlockHeight() >= deal.EndBlock { ... }` in both handlers | `go test ./nilchain/...` + new unit tests |
-| Reject `OpenRetrievalSession` once `height >= end_block` and enforce `expires_at <= end_block` | NOT STARTED | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`) does not check deal term | Sessions can outlive paid term; sessions can open on expired deals | Add term checks in `OpenRetrievalSession` (and future open msgs) | existing retrieval session keeper tests + new expiry cases |
-| Reject `ProveLiveness` once `height >= end_block` | NOT STARTED | `nilchain/x/nilchain/keeper/msg_server.go` (`ProveLiveness`) does not check deal term | Providers can keep earning/claiming after expiry (depends on reward logic) | Add deal ACTIVE guard early in `ProveLiveness` | `go test ./nilchain/...` + new unit test |
-| Implement `MsgExtendDeal` with spot pricing at extension time | NOT STARTED | No `MsgExtendDeal` proto or handler | Renewal flow missing | Add proto in `nilchain/proto/.../tx.proto`; implement in `nilchain/x/nilchain/keeper/msg_server.go` | new keeper unit tests + extend an e2e script |
-| Prevent “duration overcharge after renewal” via `pricing_anchor_block` | NOT STARTED | Term deposit uses `duration := deal.EndBlock - deal.StartBlock` for new bytes | Renewals would overcharge bytes added after renewal | Add `Deal.pricing_anchor_block` + modify term deposit duration to use `EndBlock - PricingAnchorBlock` for *new bytes* | new keeper unit tests around updates-before/after renewal |
-| Provider/gateway treat expired deals as gone; GC after `end_block + grace` | NOT STARTED | Gateway can read local shards without consulting deal term (`nil_gateway/main.go` `SpFetchShard`) | Serving expired deals breaks “no sessions after expiry” story and retention horizon | Add chain term checks in `GatewayFetch`/`SpFetchShard`; add GC worker (or document ops) | extend `./scripts/e2e_lifecycle.sh` with expiry + fetch failure |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Deal has an explicit `end_block` term bound | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal.end_block); set in `MsgCreateDeal*` handlers (`nilchain/x/nilchain/keeper/msg_server.go`) | `go test ./nilchain/...` | — |
+| Reject `UpdateDealContent*` once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`UpdateDealContent`, `UpdateDealContentFromEvm`) | `go test ./nilchain/...` | — |
+| Reject retrieval session opens once `height >= end_block` and enforce `expires_at <= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`, `OpenRetrievalSessionSponsored`, `OpenProtocolRetrievalSession`) | `go test ./nilchain/...` | — |
+| Reject liveness/retrieval proofs once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`ProveLiveness`, retrieval proof paths) | `go test ./nilchain/...` | — |
+| Implement `MsgExtendDeal` with spot pricing at extension time | DONE | `nilchain/proto/nilchain/nilchain/v1/tx.proto` + `nilchain/x/nilchain/keeper/msg_server.go` (`ExtendDeal`) | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
+| Prevent renewal overcharge via `pricing_anchor_block` | DONE | `nilchain/proto/.../types.proto` (Deal.pricing_anchor_block); duration uses anchor in `msg_server.go` | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
+| Refuse serving expired deals on data plane | DONE | `nil_gateway/main.go` (`GatewayFetch`, `SpFetchShard`) fetch deal meta and reject expired deals | `go test ./nil_gateway/...` + CI E2E scripts | Disk GC after grace is not implemented (ops/process gap) |
 
 ## Phase 2 — Mandatory retrieval sessions for all served bytes
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Data-plane requests MUST include `X-Nil-Session-Id` | PARTIAL | `nil_gateway/main.go` `GatewayFetch` parses `X-Nil-Session-Id`; CORS allows the header | Header is optional today; SP fetch (`SpFetchShard`) does not require it | Enforce header presence on any byte-serving endpoint in `nil_gateway/main.go` | add/extend e2e to assert out-of-session reads fail |
-| Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | PARTIAL | Chain session open validates manifest/provider/range (`nilchain/.../msg_server.go`); gateway has on-chain session aware flow for some fetches | Need “always-on” validation on serve path (including SP endpoints) | Centralize “session validate + range validate” helper in `nil_gateway/` and enforce everywhere | gateway unit tests + multi-SP e2e |
-| Enforce blob alignment + subset-of-session-range only (batching preserved) | PARTIAL | Chain enforces blob-range invariants at open (Mode 2 slot confinement); gateway supports ranged fetch behavior | Need enforce on serve path (esp. `SpFetchShard`); ensure batching is supported without over-constraining | Implement in gateway/provider read path; document accepted segmentation | e2e segmented vs batched download tests |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Data-plane requests MUST include `X-Nil-Session-Id` | DONE | `nil_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `nil_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
+| Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `nil_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `nil_gateway/session_enforcement_test.go`; `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
+| Enforce Mode2 slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `nilchain/x/nilchain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
 
 ## Phase 3 — Retrieval policies + sponsored/public sessions
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Deal retrieval policy fields (OwnerOnly/Allowlist/Voucher/Public) | NOT STARTED | No retrieval policy fields in `types.proto` | Only “owner-only” is enforced implicitly by `OpenRetrievalSession` | Add fields to `nilchain/proto/.../types.proto`; default to OwnerOnly for existing deals | keeper unit tests + protobuf regen |
-| `MsgOpenRetrievalSession` remains owner-only and owner-paid (frozen semantics) | DONE | `nilchain/x/nilchain/keeper/msg_server.go` enforces `msg.Creator == deal.Owner` and debits deal escrow | Must stay unchanged | N/A | existing keeper tests |
-| Implement requester-paid `MsgOpenRetrievalSessionSponsored` | NOT STARTED | No msg/handler | Needed so public/3p retrieval can’t drain deal escrow | Add proto + handler; add session funding fields; refund routing to payer | new unit tests + e2e public deal retrieval |
-| Implement allowlist verification (merkle root + proof) | NOT STARTED | No allowlist fields/logic | | Add merkle root field + proof verification in sponsored open | unit tests with test vectors |
-| Implement voucher (EIP-712 signature) + one-time nonce anti-replay | NOT STARTED | Chain has nonces for `OpenRetrievalSession` but not vouchers | Voucher replay prevention needs explicit nonce tracking | Add voucher nonce storage keyed by (deal, signer) or (deal, voucher-id) | unit tests + e2e replay attempt |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Deal retrieval policy fields (OwnerOnly/Allowlist/Voucher/Public) | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (RetrievalPolicy); `MsgUpdateDealRetrievalPolicy` in `tx.proto` + `msg_server.go` | `go test ./nilchain/...` | — |
+| `MsgOpenRetrievalSession` remains owner-only and owner-paid (frozen semantics) | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`) | `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | — |
+| Implement requester-paid `MsgOpenRetrievalSessionSponsored` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | — |
+| Implement allowlist verification (merkle root + proof) | PARTIAL | Implemented in `OpenRetrievalSessionSponsored`, but no tests | N/A | Missing deterministic test vectors (see Phase 0) |
+| Implement voucher (EIP-712 signature) + one-time nonce anti-replay | DONE | `OpenRetrievalSessionSponsored` + voucher nonce tracking in keeper | `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | — |
 
 ## Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Implement `MsgOpenProtocolRetrievalSession` | NOT STARTED | No msg/handler | Required for audits + repairs on restricted deals | Add proto + handler; deterministic auth rules | unit tests + multi-SP repair e2e |
-| Deterministic protocol auth: repair sessions only for `pending_provider` of REPAIRING slot | PARTIAL | Mode 2 repair concepts exist in `nilchain/x/nilchain/keeper/slashing_repair_test.go` and slot rules in `ProveLiveness` | Repair traffic is not session-accounted yet | Implement protocol open checks against slot state | `./scripts/e2e_deputy_ghost_repair_multi_sp.sh` extension |
-| Audit budget mint/caps + spending for protocol sessions | NOT STARTED | No dedicated audit budget module/accounting | Needed to fund audit traffic without draining users | Implement per RFC under `nilchain/x/nilchain/keeper/` and params | chain unit tests + epoch simulation |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Implement `MsgOpenProtocolRetrievalSession` | DONE | `nilchain/proto/.../tx.proto` + `nilchain/x/nilchain/keeper/msg_server.go` | `nilchain/x/nilchain/keeper/msg_server_protocol_sessions_test.go` | — |
+| Deterministic protocol auth (repair sessions only for pending provider of repairing slot) | DONE | `OpenProtocolRetrievalSession` REPAIR auth + Mode2 slot checks in keeper | `nilchain/x/nilchain/keeper/msg_server_protocol_sessions_test.go` | Multi-host repair flows are not yet validated (CI is single-machine) |
+| Audit budget mint/caps + spending for protocol sessions | DONE | `nilchain/x/nilchain/keeper/epoch_audit.go` + protocol budget module accounting | `nilchain/x/nilchain/keeper/epoch_audit_test.go` | — |
 
 ## Phase 5 — Compression-aware content pipeline (NilCEv1)
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Compress plaintext pre-encryption and store ciphertext bytes (pricing on stored size) | NOT STARTED | `nil_core/src/layout.rs` defines compression flags, but gateway does not implement NilCEv1 pipeline | End-to-end compression behavior missing | Implement NilCEv1 header + zstd/gzip in `nil_gateway/` and WASM pipeline | unit tests + browser smoke |
-| Decompress post-decrypt on retrieval | NOT STARTED | No NilCEv1 decode path | | Implement decode in gateway/wasm; ensure partial reads fetch header blobs | unit tests around header parsing |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Optional compression-aware uploads (NilCE v1 header + zstd) | PARTIAL | `nil_gateway/nilce.go` + `nil_gateway/main.go` (`NIL_NILCE=1`) | `nil_gateway/nilce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
 
 ## Phase 6 — Wallet-first UX (no relay/faucet dependency outside dev)
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| MetaMask-signed transactions for create/commit/open/confirm/cancel/extend | PARTIAL | EVM bridge msgs exist (`MsgCreateDealFromEvm`, `MsgUpdateDealContentFromEvm`); UI still uses faucet UX flows | Many write paths still rely on faucet/gateway signing in devnet | Remove/flag faucet flows; add missing EVM-msg equivalents where needed | playwright smoke in “no faucet” mode |
-| Disable tx relay + faucet by default (dev-only opt-in) | NOT STARTED | `nil_gateway/main.go` contains faucet signing and “creator has no balance” checks; website has `useFaucet` | Mainnet parity posture not default | Add explicit env flags (`ENABLE_TX_RELAY`, `NIL_AUTO_FAUCET_EVM` etc) and default off | e2e smoke with flags disabled |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Disable tx relay by default (dev-only opt-in) | DONE | `nil_gateway/main.go`: `NIL_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
+| Wallet-first chain writes (browser) | DONE | `nil-website/src/lib/e2eWallet.ts` injects E2E wallet for Playwright when `VITE_E2E=1` | Playwright suites listed above | Human UX polish for real MetaMask + remote RPC endpoints is still needed for soft launch |
 
-## Phase 7 — Economics (base rewards, draining, quotas hardening)
+## Phase 7 — Economics (rewards, draining, retrieval fees)
 
-| Requirement | Status | Current implementation (refs) | Gap / Notes | Planned fix (where) | Test gate |
-|---|---:|---|---|---|---|
-| Base reward pool mint/distribution | COMPLETE | `nilchain/x/nilchain/keeper/base_rewards.go` (epoch rent → mint → per-provider distribution) | — | — | `nilchain/x/nilchain/keeper/base_rewards_test.go` |
-| Provider draining / exit | COMPLETE | `nilchain/x/nilchain/keeper/draining.go`, `nilchain/x/nilchain/keeper/msg_provider_draining.go` | — | — | `nilchain/x/nilchain/keeper/draining_test.go` |
-| Quotas/credits exclude expired deals + exclude REPAIRING for rewards | COMPLETE | Expiry checks in `slashing.go`/`base_rewards.go`; REPAIRING excluded in `slashing.go` and reward weights | — | — | `nilchain/x/nilchain/keeper/slashing_repair_test.go` |
+| Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
+|---|---:|---|---|---|
+| Base reward pool mint/distribution | DONE | `nilchain/x/nilchain/keeper/base_rewards.go` | `nilchain/x/nilchain/keeper/base_rewards_test.go` | — |
+| Provider draining / exit | DONE | `nilchain/x/nilchain/keeper/draining.go`, `nilchain/x/nilchain/keeper/msg_provider_draining.go` | `nilchain/x/nilchain/keeper/draining_test.go` | — |
+| Retrieval fees (base + per-blob) settlement | DONE | `nilchain/x/nilchain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | “Dynamic” pricing is not implemented (separate track) |

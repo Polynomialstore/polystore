@@ -1,50 +1,62 @@
-# nilchain
-**nilchain** is a blockchain built using Cosmos SDK and Tendermint and created with [Ignite CLI](https://ignite.com/cli).
+# nilchain (NilStore L1)
 
-## Get started
+`nilchain` is the Cosmos SDK + Ethermint chain for NilStore. It tracks Deals,
+Providers, retrieval sessions, rewards, Mode2 slot state, and audit/repair flows.
 
-```
-ignite chain serve
-```
+Canonical protocol spec: `../spec.md` and `../rfcs/`.
 
-`serve` command installs dependencies, builds, initializes, and starts your blockchain in development.
+## Quick start (recommended)
 
-### Configure
+Use the repo orchestrators instead of Ignite:
 
-Your blockchain in development can be configured with `config.yml`. To learn more, see the [Ignite CLI docs](https://docs.ignite.com).
-
-### Web Frontend
-
-Additionally, Ignite CLI offers a frontend scaffolding feature (based on Vue) to help you quickly build a web frontend for your blockchain:
-
-Use: `ignite scaffold vue`
-This command can be run within your scaffolded blockchain project.
-
-
-For more information see the [monorepo for Ignite front-end development](https://github.com/ignite/web).
-
-## Release
-To release a new version of your blockchain, create and push a new tag with `v` prefix. A new draft release with the configured targets will be created.
-
-```
-git tag v0.1
-git push origin v0.1
+```bash
+../scripts/run_local_stack.sh start
+../scripts/run_local_stack.sh stop
 ```
 
-After a draft release is created, make your final changes from the release page and publish it.
+For a full CI-style lifecycle: `../scripts/e2e_lifecycle.sh`.
 
-### Install
-To install the latest version of your blockchain node's binary, execute the following command on your machine:
+## Build
 
+Requirements:
+- Go 1.22+
+- Rust (stable)
+
+Build the native crypto library first (used via cgo/FFI):
+
+```bash
+cd ../nil_core
+cargo build --release
 ```
-curl https://get.ignite.com/username/nilchain@latest! | sudo bash
+
+Build `nilchaind`:
+
+```bash
+cd ../nilchain
+export CGO_LDFLAGS="-L$(pwd)/../nil_core/target/release -lnil_core -ldl -lpthread -lm"
+go build -o ../bin/nilchaind ./cmd/nilchaind
 ```
-`username/nilchain` should match the `username` and `repo_name` of the Github repository to which the source code was pushed. Learn more about [the install process](https://github.com/ignite/installer).
 
-## Learn more
+Notes:
+- The trusted setup is `nilchain/trusted_setup.txt`. Many local scripts export
+  `KZG_TRUSTED_SETUP` automatically; if you run manually, set it explicitly.
+- On Linux, set `LD_LIBRARY_PATH` to include `../nil_core/target/release`.
+- On macOS, set `DYLD_LIBRARY_PATH` to include `../nil_core/target/release`.
 
-- [Ignite CLI](https://ignite.com/cli)
-- [Tutorials](https://docs.ignite.com/guide)
-- [Ignite CLI docs](https://docs.ignite.com)
-- [Cosmos SDK docs](https://docs.cosmos.network)
-- [Developer Chat](https://discord.com/invite/ignitecli)
+## Tests
+
+```bash
+go test ./...
+```
+
+If tests fail to load `libnil_core`, set:
+
+```bash
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(pwd)/../nil_core/target/release"
+```
+
+## Code map
+
+- Protos: `proto/nilchain/nilchain/v1/*.proto`
+- Module implementation: `x/nilchain/`
+- Rust FFI bindings used by Go: `x/crypto_ffi/`

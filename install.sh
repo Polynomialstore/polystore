@@ -55,11 +55,11 @@ cd nil_faucet
 go build -o ../bin/nil_faucet main.go
 cd ..
 
-# 6. Build nil-cli
-echo "🛠️  Building nil-cli..."
+# 6. Build nil_cli
+echo "🛠️  Building nil_cli..."
 cd nil_cli
 cargo build --release
-cp target/release/nil-cli ../bin/
+cp target/release/nil_cli ../bin/
 cd ..
 
 echo "-------------------------------------------"
@@ -75,4 +75,4 @@ echo "To start a P2P storage node:"
 echo "  ./bin/nil_p2p --port 9000"
 echo ""
 echo "To verify installation:"
-echo "  ./bin/nil-cli --help"
+echo "  ./bin/nil_cli --help"
