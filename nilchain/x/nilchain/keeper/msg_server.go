@@ -557,6 +557,9 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if height >= deal.EndBlock {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
+	if msg.Size_ > types.MAX_DEAL_BYTES {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("size_bytes exceeds MAX_DEAL_BYTES (size=%d max=%d)", msg.Size_, types.MAX_DEAL_BYTES)
+	}
 
 	params := k.GetParams(ctx)
 
@@ -666,6 +669,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 	if intent.SizeBytes == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("Size cannot be zero")
+	}
+	if intent.SizeBytes > types.MAX_DEAL_BYTES {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("size_bytes exceeds MAX_DEAL_BYTES (size=%d max=%d)", intent.SizeBytes, types.MAX_DEAL_BYTES)
 	}
 	if intent.TotalMdus == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")

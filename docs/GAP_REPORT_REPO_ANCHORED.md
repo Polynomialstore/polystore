@@ -17,7 +17,7 @@ Legend:
 ## CI: what is actually exercised (today)
 
 - Unit tests
-  - Chain: `go test ./nilchain/...`
+  - Chain: `cd nilchain && go test ./...`
   - Gateway: `go test ./nil_gateway/...`
   - Rust: `cargo test` in `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
   - Web: `nil-website` build + unit tests + lint
@@ -43,7 +43,7 @@ Legend:
 
 | Requirement | Status | Spec/RFC anchor | Current implementation (refs) | CI proof | Not proven / gap | Planned fix |
 |---|---:|---|---|---|---|---|
-| Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | MISSING | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | No explicit cap enforcement in `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | N/A | Spec/RFC claim is not enforced; a malicious client can commit arbitrarily large `size_bytes` | PR2 (`codex/spec-invariants-hard-caps`) |
+| Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `nilchain/x/nilchain/types/types.go` (`MAX_DEAL_BYTES`); `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd nilchain && go test ./...` (unit tests) | — | — |
 | Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | PARTIAL | `rfcs/rfc-blob-alignment-and-striping.md` | Mode2 flows implemented end-to-end, but Playwright asserts only “downloaded something” | `scripts/e2e_mode2_stripe_multi_sp.sh` | No byte-for-byte assertion in `nil-website/tests/mode2-stripe.spec.ts` | PR4 (`codex/mode2-stripe-bytes-assert`) |
 | Allowlist retrieval policy verification has test vectors | PARTIAL | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification is implemented in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | N/A | No unit tests covering keccak merkle proofs; easiest place to regress | PR5 (`codex/allowlist-merkle-tests`) |
 | NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `nil_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./nil_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
@@ -52,10 +52,10 @@ Legend:
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Deal has an explicit `end_block` term bound | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal.end_block); set in `MsgCreateDeal*` handlers (`nilchain/x/nilchain/keeper/msg_server.go`) | `go test ./nilchain/...` | — |
-| Reject `UpdateDealContent*` once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`UpdateDealContent`, `UpdateDealContentFromEvm`) | `go test ./nilchain/...` | — |
-| Reject retrieval session opens once `height >= end_block` and enforce `expires_at <= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`, `OpenRetrievalSessionSponsored`, `OpenProtocolRetrievalSession`) | `go test ./nilchain/...` | — |
-| Reject liveness/retrieval proofs once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`ProveLiveness`, retrieval proof paths) | `go test ./nilchain/...` | — |
+| Deal has an explicit `end_block` term bound | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal.end_block); set in `MsgCreateDeal*` handlers (`nilchain/x/nilchain/keeper/msg_server.go`) | `cd nilchain && go test ./...` | — |
+| Reject `UpdateDealContent*` once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`UpdateDealContent`, `UpdateDealContentFromEvm`) | `cd nilchain && go test ./...` | — |
+| Reject retrieval session opens once `height >= end_block` and enforce `expires_at <= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`, `OpenRetrievalSessionSponsored`, `OpenProtocolRetrievalSession`) | `cd nilchain && go test ./...` | — |
+| Reject liveness/retrieval proofs once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`ProveLiveness`, retrieval proof paths) | `cd nilchain && go test ./...` | — |
 | Implement `MsgExtendDeal` with spot pricing at extension time | DONE | `nilchain/proto/nilchain/nilchain/v1/tx.proto` + `nilchain/x/nilchain/keeper/msg_server.go` (`ExtendDeal`) | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
 | Prevent renewal overcharge via `pricing_anchor_block` | DONE | `nilchain/proto/.../types.proto` (Deal.pricing_anchor_block); duration uses anchor in `msg_server.go` | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
 | Refuse serving expired deals on data plane | DONE | `nil_gateway/main.go` (`GatewayFetch`, `SpFetchShard`) fetch deal meta and reject expired deals | `go test ./nil_gateway/...` + CI E2E scripts | Disk GC after grace is not implemented (ops/process gap) |
@@ -72,7 +72,7 @@ Legend:
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Deal retrieval policy fields (OwnerOnly/Allowlist/Voucher/Public) | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (RetrievalPolicy); `MsgUpdateDealRetrievalPolicy` in `tx.proto` + `msg_server.go` | `go test ./nilchain/...` | — |
+| Deal retrieval policy fields (OwnerOnly/Allowlist/Voucher/Public) | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (RetrievalPolicy); `MsgUpdateDealRetrievalPolicy` in `tx.proto` + `msg_server.go` | `cd nilchain && go test ./...` | — |
 | `MsgOpenRetrievalSession` remains owner-only and owner-paid (frozen semantics) | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`) | `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | — |
 | Implement requester-paid `MsgOpenRetrievalSessionSponsored` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | — |
 | Implement allowlist verification (merkle root + proof) | PARTIAL | Implemented in `OpenRetrievalSessionSponsored`, but no tests | N/A | Missing deterministic test vectors (see Phase 0) |
