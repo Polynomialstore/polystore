@@ -38,6 +38,11 @@ Runs a full lifecycle test (stack start -> create deal -> upload -> commit -> fe
 ./scripts/e2e_lifecycle.sh
 ```
 
+Notes:
+- This script is intentionally “dev convenient”: it enables the gateway tx relay and faucet so
+  the run is deterministic and does not require a real wallet UX.
+- “Wallet-first / no relay” posture is covered by the Playwright suites (see below).
+
 ## Manual devnet runbook
 
 For a choreography that mirrors the automated suites but is executed manually (create/upload/commit/fetch, multi-SP proofs, deputy repair, economic checks), follow `docs/manual-devnet-runbook.md`. Keep it in sync with the scripts listed above so the steps remain accurate as the system evolves.
@@ -59,9 +64,10 @@ All items below are expected to be verifiable via the unit tests and/or the e2e 
   - Audit budget + task derivation tests: `nilchain/x/nilchain/keeper/epoch_audit_test.go`
   - Protocol session open/consume tests: `nilchain/x/nilchain/keeper/msg_server_protocol_sessions_test.go`
 - Compression round-trip:
-  - Gateway NilCE compression flag support is exercised by gateway upload/fetch flows; verify via `scripts/e2e_lifecycle.sh` using a compressible file.
+  - NilCE v1 is **opt-in** (`NIL_NILCE=0` by default). The encode/decode helpers are unit-tested in `nil_gateway/nilce_test.go`.
+  - CI does not currently require NilCE-enabled end-to-end coverage.
 - Wallet-first chain writes (MetaMask/EVM signed intents; no relayer required):
-  - EVM bridge/precompile flows are exercised by `scripts/e2e_lifecycle.sh` (EVM-signed create + commit).
+  - Covered by Playwright E2E flows (in-page E2E wallet when `VITE_E2E=1`), not by `scripts/e2e_lifecycle.sh`.
 
 ## Provider draining / controlled churn (Phase 7)
 
@@ -86,3 +92,5 @@ go test ./...
 ## What remains / known gaps
 
 - Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
+- Mode2 Stripe Playwright E2E asserts “downloaded bytes exist”, but does not yet assert byte-for-byte equality with the upload (`nil-website/tests/mode2-stripe.spec.ts`).
+- `MAX_DEAL_BYTES` hard cap is described in `spec.md` / `rfcs/rfc-data-granularity-and-economics.md` but is not enforced in `MsgUpdateDealContent*` today (tracked in `docs/GAP_REPORT_REPO_ANCHORED.md`).

@@ -44,9 +44,9 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 
 - HTTP router + handlers:
   - `nil_gateway/main.go`
-    - `GatewayFetch` (user-facing download path; supports `X-Nil-Session-Id` today but does not require it by default)
-    - `SpFetchShard` (provider shard fetch; currently no on-chain session gating)
-    - multiple devnet-only flows that sign txs using the `faucet` key (wallet-first parity work remains)
+    - `GatewayFetch` (user-facing download path; **requires** `X-Nil-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
+    - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
+    - dev-only tx relay flows (`NIL_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
   - `nil_gateway/router_proxy.go` (gateway proxy/router for provider requests)
   - `nil_gateway/p2p_server.go` (P2P requests; forwards `X-Nil-Session-Id` when present)
 
@@ -56,6 +56,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `nil-website/src/components/Dashboard.tsx` (create deal, faucet UX, upload/commit, retrieval flows)
   - `nil-website/src/hooks/useFaucet.ts` (browser-triggered faucet calls; should be dev-only in wallet-first mode)
   - `nil-website/src/hooks/useTransportRouter.ts` (adds `X-Nil-Session-Id` when downloading)
+  - `nil-website/src/lib/e2eWallet.ts` (Playwright: injects an in-page “wallet” when `VITE_E2E=1`)
 - Web contract doc:
   - `nil-website/website-spec.md`
 
@@ -181,4 +182,3 @@ Where to implement:
 
 Test gates:
 - chain unit tests + e2e “epoch progression” scripts (to be added)
-

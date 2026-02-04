@@ -54,3 +54,4 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 ## Planning / Tracking
 
 - `MAINNET_GAP_TRACKER.md`: Tracked gaps between current implementation and the long-term Mainnet plan.
+- `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md`: PR-by-PR TODO list for the Feb 2026 trusted devnet soft launch.
