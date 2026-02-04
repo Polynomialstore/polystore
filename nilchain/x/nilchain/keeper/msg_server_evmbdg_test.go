@@ -334,6 +334,69 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 	require.Equal(t, updateIntent.SizeBytes, deal.Size_)
 }
 
+func TestUpdateDealContentFromEvm_RejectsOverMaxDealBytes(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte("evm_overcapprov__" + string(rune('A'+i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	privKey, err := gethCrypto.GenerateKey()
+	require.NoError(t, err)
+	evmAddr := gethCrypto.PubkeyToAddress(privKey.PublicKey)
+
+	chainID := sdk.UnwrapSDKContext(f.ctx).ChainID()
+	senderBz := []byte("relayer_overcap____")
+	sender, _ := f.addressCodec.BytesToString(senderBz)
+
+	createIntent := &types.EvmCreateDealIntent{
+		CreatorEvm:      evmAddr.Hex(),
+		DurationBlocks:  100,
+		ServiceHint:     "General",
+		InitialEscrow:   math.NewInt(1000000),
+		MaxMonthlySpend: math.NewInt(500000),
+		Nonce:           1,
+		ChainId:         chainID,
+	}
+	createSig := signCreateIntentEIP712(t, createIntent, privKey)
+
+	createRes, err := msgServer.CreateDealFromEvm(f.ctx, &types.MsgCreateDealFromEvm{
+		Sender:       sender,
+		Intent:       createIntent,
+		EvmSignature: createSig,
+	})
+	require.NoError(t, err)
+
+	updateIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:  evmAddr.Hex(),
+		DealId:      createRes.DealId,
+		Cid:         makeManifestRootHex(0xdd),
+		SizeBytes:   types.MAX_DEAL_BYTES + 1,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+		Nonce:       2,
+		ChainId:     chainID,
+	}
+	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
+
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       updateIntent,
+		EvmSignature: updateSig,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MAX_DEAL_BYTES")
+}
+
 func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)

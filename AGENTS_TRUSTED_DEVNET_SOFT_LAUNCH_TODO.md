@@ -22,29 +22,30 @@ Conventions:
 
 ## PR plan
 
-### PR1 — Docs reality check + gap matrix (CURRENT)
+### PR1 — Docs reality check + gap matrix (MERGED)
 
 - Branch: `codex/docs-review-gap-matrix`
 - Goal: Make it obvious **what exists**, **what CI proves**, and **what is still a gap**.
+- PR: https://github.com/Nil-Store/nil-store/pull/57
 - Test gate:
   - `bash -n install.sh`
 
 Checklist:
-- [ ] Add this TODO file.
-- [ ] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to match repo reality + CI coverage.
-- [ ] Fix doc index and onboarding docs (`DOCS.md`, `HAPPY_PATH.md`, `docs/TESTNET_READINESS_REPORT.md`).
-- [ ] Update repo-anchored agent runbook (`docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`).
-- [ ] Replace Ignite boilerplate chain readme (`nilchain/readme.md`).
-- [ ] Fix `install.sh` CLI binary name (`nil_cli` vs `nil-cli`).
+- [x] Add this TODO file.
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to match repo reality + CI coverage.
+- [x] Fix doc index and onboarding docs (`DOCS.md`, `HAPPY_PATH.md`, `docs/TESTNET_READINESS_REPORT.md`).
+- [x] Update repo-anchored agent runbook (`docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`).
+- [x] Replace Ignite boilerplate chain readme (`nilchain/readme.md`).
+- [x] Fix `install.sh` CLI binary name (`nil_cli` vs `nil-cli`).
 
 ---
 
-### PR2 — Spec-critical invariants (hard caps + safety rails)
+### PR2 — Spec-critical invariants (hard caps + safety rails) (CURRENT)
 
 - Branch: `codex/spec-invariants-hard-caps`
 - Goal: Close the most dangerous “spec says enforced, code doesn’t” gaps.
 - Test gate:
-  - `go test ./nilchain/...`
+  - `cd nilchain && go test ./...`
 
 Checklist:
 - [ ] Enforce `MAX_DEAL_BYTES` cap in `MsgUpdateDealContent*` (spec + RFC requirement).
@@ -85,7 +86,7 @@ Checklist:
 - Branch: `codex/allowlist-merkle-tests`
 - Goal: Turn allowlist logic from “implemented” into “proven”.
 - Test gate:
-  - `go test ./nilchain/...`
+  - `cd nilchain && go test ./...`
 
 Checklist:
 - [ ] Add unit tests for `OpenRetrievalSessionSponsored` allowlist proof verification (valid + invalid paths).
@@ -128,11 +129,10 @@ Checklist:
 - Branch: `codex/dynamic-pricing-mvp`
 - Goal: Add a testable first version of dynamic pricing without destabilizing the devnet.
 - Test gate:
-  - `go test ./nilchain/...`
+  - `cd nilchain && go test ./...`
   - `./e2e_retrieval_fees.sh`
 
 Checklist:
 - [ ] Define the minimal on-chain signal(s) (params vs. oracle vs. epoch-derived).
 - [ ] Implement pricing update mechanism + bounds.
 - [ ] Add simulation harness + invariants (no negative fees, monotonicity caps, etc.).
-
