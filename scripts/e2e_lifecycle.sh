@@ -25,6 +25,13 @@ UPLOAD_FILE="${UPLOAD_FILE:-$ROOT_DIR/README.md}"
 
 export EVM_PRIVKEY EVM_CHAIN_ID CHAIN_ID VERIFYING_CONTRACT
 
+# This E2E script exercises the gateway "tx relay" endpoints (e.g. /gateway/create-deal-evm),
+# so ensure the local stack is started with the relay enabled by default. The stack itself
+# can still default to relay-off for manual/wallet-first runs.
+export NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}"
+# This script also relies on the faucet to fund the EVM-derived NIL address.
+export NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
+
 if ! command -v curl >/dev/null 2>&1; then echo "ERROR: curl required" >&2; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "ERROR: python3 required" >&2; exit 1; fi
 
