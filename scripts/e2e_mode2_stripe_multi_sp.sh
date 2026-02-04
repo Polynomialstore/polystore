@@ -42,6 +42,7 @@ export PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
+export NIL_ENABLE_TX_RELAY=0
 
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 "$STACK_SCRIPT" start
@@ -52,6 +53,13 @@ wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
 wait_for_http "gateway router" "http://localhost:8080/health" "200" 60 1
 wait_for_http "provider #1" "http://localhost:8091/health" "200" 60 1
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
+
+echo "==> Asserting tx relay is disabled..."
+tx_relay_code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/gateway/create-deal-evm 2>/dev/null || true)"
+if [ "$tx_relay_code" != "403" ]; then
+  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with NIL_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
+  exit 1
+fi
 
 echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then

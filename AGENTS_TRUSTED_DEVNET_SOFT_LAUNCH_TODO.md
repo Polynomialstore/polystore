@@ -40,31 +40,32 @@ Checklist:
 
 ---
 
-### PR2 — Spec-critical invariants (hard caps + safety rails) (CURRENT)
+### PR2 — Spec-critical invariants (hard caps + safety rails) (MERGED)
 
 - Branch: `codex/spec-invariants-hard-caps`
 - Goal: Close the most dangerous “spec says enforced, code doesn’t” gaps.
+- PR: https://github.com/Nil-Store/nil-store/pull/58
 - Test gate:
   - `cd nilchain && go test ./...`
 
 Checklist:
-- [ ] Enforce `MAX_DEAL_BYTES` cap in `MsgUpdateDealContent*` (spec + RFC requirement).
-- [ ] Add unit tests for cap enforcement and error messages.
-- [ ] Update `spec.md`/RFC cross-links only if needed (keep spec normative; track implementation status in gap report).
+- [x] Enforce `MAX_DEAL_BYTES` cap in `MsgUpdateDealContent*` (spec + RFC requirement).
+- [x] Add unit tests for cap enforcement and error messages.
+- [x] Update `spec.md`/RFC cross-links only if needed (keep spec normative; track implementation status in gap report).
 
 ---
 
-### PR3 — Wallet-first local E2E (no relay, no hidden signer)
+### PR3 — Wallet-first local E2E (no relay, no hidden signer) (CURRENT)
 
 - Branch: `codex/e2e-wallet-first-no-relay`
 - Goal: Prove “no relay” posture works for real flows (not just docs).
 - Test gate:
-  - `scripts/e2e_browser_smoke_no_gateway.sh`
-  - (optional) `scripts/e2e_browser_libp2p_relay.sh`
+  - `scripts/e2e_browser_libp2p_relay.sh`
+  - (optional) `scripts/e2e_browser_smoke_no_gateway.sh`
 
 Checklist:
-- [ ] Add/extend an E2E script that runs with `NIL_ENABLE_TX_RELAY=0` and still completes create/commit/open-session/fetch.
-- [ ] Document the exact env var profile in `HAPPY_PATH.md` + `docs/TESTNET_READINESS_REPORT.md`.
+- [x] Add/extend an E2E script that runs with `NIL_ENABLE_TX_RELAY=0` and still completes create/commit/open-session/fetch.
+- [x] Document the exact env var profile in `HAPPY_PATH.md` + `docs/TESTNET_READINESS_REPORT.md`.
 
 ---
 

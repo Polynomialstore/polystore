@@ -1,6 +1,6 @@
 # NilStore Testnet Readiness Report
 
-Date: 2026-01-25
+Date: 2026-02-04
 
 This report is the Phase 8 deliverable from `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
@@ -93,4 +93,4 @@ go test ./...
 
 - Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
 - Mode2 Stripe Playwright E2E asserts “downloaded bytes exist”, but does not yet assert byte-for-byte equality with the upload (`nil-website/tests/mode2-stripe.spec.ts`).
-- `MAX_DEAL_BYTES` hard cap is described in `spec.md` / `rfcs/rfc-data-granularity-and-economics.md` but is not enforced in `MsgUpdateDealContent*` today (tracked in `docs/GAP_REPORT_REPO_ANCHORED.md`).
+  - Tracked in `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md` (PR4).
