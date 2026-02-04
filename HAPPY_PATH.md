@@ -31,6 +31,9 @@ scripts/e2e_lifecycle_no_gateway.sh
 These are “wallet-first” flows (no gateway tx relay). They install an in-page
 E2E wallet when `VITE_E2E=1`.
 
+Notes:
+- These scripts run with gateway tx relay explicitly disabled (`NIL_ENABLE_TX_RELAY=0`).
+
 ```bash
 # Upload falls back to direct SP (gateway absent)
 scripts/e2e_browser_smoke_no_gateway.sh

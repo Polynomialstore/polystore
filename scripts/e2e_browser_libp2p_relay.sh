@@ -138,6 +138,7 @@ export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export E2E_LOCAL_STACK=1
 export NIL_LOCAL_PROVIDER_COUNT=3
+export NIL_ENABLE_TX_RELAY=0
 
 # Ensure the browser libp2p client is enabled and uses the same protocol id.
 export VITE_P2P_ENABLED=1
@@ -160,6 +161,13 @@ banner "Starting local stack (relay forced)..."
 wait_for_http "web" "http://localhost:5173/"
 wait_for_http "gateway" "http://localhost:8080/status"
 wait_for_http "gateway health" "http://localhost:8080/health"
+
+banner "Asserting tx relay is disabled"
+tx_relay_code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/gateway/create-deal-evm 2>/dev/null || true)"
+if [ "$tx_relay_code" != "403" ]; then
+  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with NIL_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
+  exit 1
+fi
 
 banner "Running Playwright (libp2p relay)..."
 (cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/libp2p-relay-fetch.spec.ts)

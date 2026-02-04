@@ -76,13 +76,16 @@ test.describe('libp2p fetch (relay)', () => {
     expect(dealId).not.toBe('')
 
     // Mode 2 upload uses the FileSharder (gateway fast path, otherwise in-browser sharding).
-    const mode2FileInput = page.getByTestId('mdu-file-input')
-    if ((await mode2FileInput.count().catch(() => 0)) === 0) {
-      const toggle = page.getByTestId('tab-content')
-      if (await toggle.isVisible().catch(() => false)) {
-        await toggle.click()
+    // The Mode 2 file input isn't present until the FileSharder finishes loading deal params,
+    // so never use "input missing" as a proxy for "wrong tab" (can flake on slow CI).
+    const tabToggle = page.getByTestId('tab-content')
+    if (await tabToggle.isVisible().catch(() => false)) {
+      const label = ((await tabToggle.textContent()) || '').toLowerCase()
+      if (label.includes('back to upload')) {
+        await tabToggle.click()
       }
     }
+    const mode2FileInput = page.getByTestId('mdu-file-input')
     await expect(mode2FileInput).toHaveCount(1, { timeout: 120_000 })
     await mode2FileInput.setInputFiles({
       name: filePath,
