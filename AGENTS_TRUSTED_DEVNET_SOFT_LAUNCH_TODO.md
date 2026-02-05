@@ -307,10 +307,11 @@ Checklist:
 
 ---
 
-### PR19 — Hub ops safety defaults (bind to localhost by default) (CURRENT)
+### PR19 — Hub ops safety defaults (bind to localhost by default) (MERGED)
 
 - Branch: `codex/hub-local-bind-defaults`
 - Goal: Reduce accidental public exposure of hub-local ports by making the systemd env templates default to localhost bindings (Caddy stays the public entrypoint).
+- PR: https://github.com/Nil-Store/nil-store/pull/75
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
