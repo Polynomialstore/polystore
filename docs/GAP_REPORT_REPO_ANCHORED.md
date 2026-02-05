@@ -35,6 +35,7 @@ Legend:
 
 - WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
 - Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
+- Mode2 Stripe behavior under background `nil_gateway` system liveness prover load (CI disables it for determinism via `NIL_DISABLE_SYSTEM_LIVENESS=1`)
 - Dynamic pricing stability/tuning beyond bounded, unit-tested epoch adjustments (no long-running devnet evidence)
 - Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
 - Comprehensive security review / external audit
@@ -44,8 +45,8 @@ Legend:
 | Requirement | Status | Spec/RFC anchor | Current implementation (refs) | CI proof | Not proven / gap | Planned fix |
 |---|---:|---|---|---|---|---|
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `nilchain/x/nilchain/types/types.go` (`MAX_DEAL_BYTES`); `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd nilchain && go test ./...` (unit tests) | — | — |
-| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | PARTIAL | `rfcs/rfc-blob-alignment-and-striping.md` | Mode2 flows implemented end-to-end, but Playwright asserts only “downloaded something” | `scripts/e2e_mode2_stripe_multi_sp.sh` | No byte-for-byte assertion in `nil-website/tests/mode2-stripe.spec.ts` | PR4 (`codex/mode2-stripe-bytes-assert`) |
-| Allowlist retrieval policy verification has test vectors | PARTIAL | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification is implemented in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | N/A | No unit tests covering keccak merkle proofs; easiest place to regress | PR5 (`codex/allowlist-merkle-tests`) |
+| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `nil-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
+| Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | `cd nilchain && go test ./...` | — | — |
 | NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `nil_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./nil_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
 ## Phase 1 — Deal expiry + renewal (ExtendDeal)
@@ -75,7 +76,7 @@ Legend:
 | Deal retrieval policy fields (OwnerOnly/Allowlist/Voucher/Public) | DONE | `nilchain/proto/nilchain/nilchain/v1/types.proto` (RetrievalPolicy); `MsgUpdateDealRetrievalPolicy` in `tx.proto` + `msg_server.go` | `cd nilchain && go test ./...` | — |
 | `MsgOpenRetrievalSession` remains owner-only and owner-paid (frozen semantics) | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSession`) | `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | — |
 | Implement requester-paid `MsgOpenRetrievalSessionSponsored` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) | `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | — |
-| Implement allowlist verification (merkle root + proof) | PARTIAL | Implemented in `OpenRetrievalSessionSponsored`, but no tests | N/A | Missing deterministic test vectors (see Phase 0) |
+| Implement allowlist verification (merkle root + proof) | DONE | `OpenRetrievalSessionSponsored` verification + unit tests in `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | `cd nilchain && go test ./...` | — |
 | Implement voucher (EIP-712 signature) + one-time nonce anti-replay | DONE | `OpenRetrievalSessionSponsored` + voucher nonce tracking in keeper | `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | — |
 
 ## Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget

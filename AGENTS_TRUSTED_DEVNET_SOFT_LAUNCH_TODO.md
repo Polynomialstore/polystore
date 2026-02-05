@@ -199,10 +199,11 @@ Checklist:
 
 ---
 
-### PR12 — Caddy reverse proxy templates (HTTPS subdomains) (CURRENT)
+### PR12 — Caddy reverse proxy templates (HTTPS subdomains) (MERGED)
 
 - Branch: `codex/caddy-reverse-proxy-templates`
 - Goal: Provide copy/paste TLS reverse proxy configs for hub + providers to match the soft-launch endpoint profile.
+- PR: https://github.com/Nil-Store/nil-store/pull/68
 - Test gate:
   - `bash -n scripts/run_devnet_provider.sh`
 
@@ -210,3 +211,60 @@ Checklist:
 - [x] Add hub/provider example Caddyfiles under `ops/caddy/`.
 - [x] Link templates from `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` + `ops/systemd/README.md`.
 - [x] Update remote SP join quickstart to mention HTTPS endpoint variants.
+
+---
+
+### PR13 — Gap report sync (post-PR12) (CURRENT)
+
+- Branch: `codex/gap-report-sync`
+- Goal: Keep `docs/GAP_REPORT_REPO_ANCHORED.md` aligned with merged PR reality (no stale “planned fix” refs).
+- PR: https://github.com/Nil-Store/nil-store/pull/69
+- Test gate:
+  - `bash -n install.sh`
+
+Checklist:
+- [x] Mark PR12 as merged in this tracker.
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to reflect current CI assertions (Mode2 byte equality + allowlist proof vectors).
+- [x] Add next PR skeleton(s) for remaining trusted-devnet soft-launch work.
+
+---
+
+### PR14 — Stabilize Mode2 Stripe E2E (CI determinism) (MERGED)
+
+- Branch: `codex/mode2-stripe-e2e-stability`
+- Goal: Make Mode2 Stripe E2E stable on shared CI runners (reduce background contention).
+- PR: https://github.com/Nil-Store/nil-store/pull/70
+- Test gate:
+  - `bash -n scripts/e2e_mode2_stripe_multi_sp.sh`
+
+Checklist:
+- [x] Disable the background system liveness prover during this E2E run (`NIL_DISABLE_SYSTEM_LIVENESS=1` default).
+- [x] Cap Mode2 upload parallelism (`NIL_MODE2_UPLOAD_PARALLELISM=16` default).
+- [x] Keep both knobs overrideable for local stress runs.
+
+---
+
+### PR15 — Hub VPS “blank box → running devnet” runbook (systemd + caddy + web build) (NEXT)
+
+- Branch: `codex/hub-vps-runbook`
+- Goal: Make hub deployment a copy/paste process (DNS → build → systemd → caddy → verify).
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [ ] Add a hub operator runbook section: required ports, DNS records, Caddy install + reload, and systemd enable/start order.
+- [ ] Document `nil-website` build env for HTTPS subdomains (`VITE_LCD_BASE`, `VITE_EVM_RPC`, `VITE_GATEWAY_BASE`, `VITE_API_BASE`, `VITE_COSMOS_CHAIN_ID`, `VITE_CHAIN_ID`).
+- [ ] Add a “MetaMask add network” snippet (RPC URL, chain id, currency, explorer placeholder).
+
+---
+
+### PR16 — Devnet healthcheck script (hub + provider) (TODO)
+
+- Branch: `codex/devnet-healthcheck-script`
+- Goal: Replace “tribal knowledge” monitoring with a single script that fails loudly when the devnet is unhealthy.
+- Test gate:
+  - `bash -n scripts/devnet_healthcheck.sh`
+
+Checklist:
+- [ ] Add `scripts/devnet_healthcheck.sh` (hub mode + provider mode) to validate RPC/LCD/EVM/gateway/faucet/health endpoints.
+- [ ] Wire the script into `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md` as an optional daily check.
