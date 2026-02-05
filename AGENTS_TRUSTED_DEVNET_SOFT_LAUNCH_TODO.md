@@ -377,5 +377,5 @@ Checklist:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [ ] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
-- [ ] Update any local-stack docs that recommend `NIL_HOME=...` to mention the opt-in for re-init runs.
+- [x] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
+- [x] Update any local-stack docs that recommend `NIL_HOME=...` to mention the opt-in for re-init runs.

@@ -6,6 +6,8 @@
 #
 # Networking:
 #   By default, LCD + EVM JSON-RPC bind to localhost. Set NIL_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
+# Safety:
+#   If NIL_HOME points outside _artifacts and already exists, the script refuses to wipe it unless NIL_REINIT_HOME=1.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,6 +21,7 @@ RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
 NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
+NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
@@ -62,6 +65,94 @@ export NIL_GATEWAY_SP_AUTH
 echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+chain_home_is_under_artifacts() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required for this script (missing python3 in PATH)" >&2
+    exit 1
+  fi
+
+  python3 - "$CHAIN_HOME" "$ROOT_DIR/_artifacts" <<'PY'
+import os
+import sys
+
+home = os.path.realpath(sys.argv[1])
+artifacts = os.path.realpath(sys.argv[2])
+try:
+    common = os.path.commonpath([home, artifacts])
+except ValueError:
+    common = ""
+sys.exit(0 if common == artifacts else 1)
+PY
+}
+
+wipe_chain_home_if_safe() {
+  if [ -z "$CHAIN_HOME" ]; then
+    echo "Refusing to wipe: CHAIN_HOME is empty" >&2
+    exit 1
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required for this script (missing python3 in PATH)" >&2
+    exit 1
+  fi
+
+  if [ ! -e "$CHAIN_HOME" ]; then
+    return 0
+  fi
+
+  if [ ! -d "$CHAIN_HOME" ]; then
+    echo "Refusing to wipe: CHAIN_HOME exists but is not a directory: $CHAIN_HOME" >&2
+    exit 1
+  fi
+
+  local chain_home_real artifacts_real root_real
+  chain_home_real="$(python3 - "$CHAIN_HOME" <<'PY'
+import os, sys
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+  artifacts_real="$(python3 - "$ROOT_DIR/_artifacts" <<'PY'
+import os, sys
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+  root_real="$(python3 - "$ROOT_DIR" <<'PY'
+import os, sys
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+
+  if [ "$chain_home_real" = "/" ] || [ -z "$chain_home_real" ]; then
+    echo "Refusing to wipe: CHAIN_HOME resolved to an unsafe path: '$chain_home_real'" >&2
+    exit 1
+  fi
+  if [ "$chain_home_real" = "$root_real" ] || [ "$chain_home_real" = "$artifacts_real" ]; then
+    echo "Refusing to wipe: CHAIN_HOME resolved to a protected path: $chain_home_real" >&2
+    exit 1
+  fi
+
+  if chain_home_is_under_artifacts; then
+    banner "Wiping chain home under _artifacts: $CHAIN_HOME"
+    rm -rf "$CHAIN_HOME"
+    return 0
+  fi
+
+  if [ "$NIL_REINIT_HOME" != "1" ]; then
+    cat >&2 <<EOF
+Refusing to delete existing CHAIN_HOME outside the repo _artifacts/ tree:
+  CHAIN_HOME=$CHAIN_HOME
+  (resolved: $chain_home_real)
+
+If you really intend to re-initialize this home, re-run with:
+  NIL_REINIT_HOME=1
+EOF
+    exit 1
+  fi
+
+  banner "Wiping non-_artifacts chain home (NIL_REINIT_HOME=1): $CHAIN_HOME"
+  rm -rf "$CHAIN_HOME"
+}
 
 ensure_nil_core() {
   local lib_dir="$ROOT_DIR/nil_core/target/release"
@@ -484,7 +575,7 @@ register_demo_provider() {
 }
 
 init_chain() {
-  rm -rf "$CHAIN_HOME"
+  wipe_chain_home_if_safe
   banner "Initializing chain at $CHAIN_HOME"
   "$NILCHAIND_BIN" init local --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
 
@@ -957,9 +1048,10 @@ Faucet:      http://localhost:8081/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
 Web UI:      http://localhost:5173/#/dashboard
-Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
-Home:        $CHAIN_HOME
-To stop:     ./scripts/run_local_stack.sh stop
+	Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
+	Home:        $CHAIN_HOME
+	Re-init:     To wipe a non-_artifacts Home, set NIL_REINIT_HOME=1
+	To stop:     ./scripts/run_local_stack.sh stop
 EOF
 }
 
