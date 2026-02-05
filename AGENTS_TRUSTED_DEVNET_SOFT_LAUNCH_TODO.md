@@ -425,13 +425,27 @@ Checklist:
 
 ---
 
-### PR27 — Trusted devnet go/no-go checklist (CURRENT)
+### PR27 — Trusted devnet go/no-go checklist (MERGED)
 
 - Branch: `codex/devnet-go-no-go-checklist`
 - Goal: Add a crisp, operator-focused checklist for when we’re ready to invite collaborators (and what to verify first).
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/89
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
 - [x] Add a “Go/No-Go checklist” section to `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (hub + provider + website + smoke).
+
+---
+
+### PR28 — Trusted devnet collaborator packet (invite + quickstart) (CURRENT)
+
+- Branch: `codex/devnet-collaborator-packet`
+- Goal: Give hub operators a single “send this to collaborators” doc covering website testing + (optional) SP joining.
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [x] Add `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md` (website tester path + SP operator path).
+- [x] Link it from `DOCS.md` (Implementation Onboarding section).

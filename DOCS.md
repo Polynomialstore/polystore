@@ -45,6 +45,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 - `HAPPY_PATH.md`: Local devnet “happy path” runbook.
 - `DEVNET_MULTI_PROVIDER.md`: How to run a multi-provider devnet and join as a remote provider.
 - `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`: Trusted collaborator devnet soft launch pack (hub + remote providers).
+- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`: “Send this to collaborators” quickstart (website testing + optional SP join).
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`: Remote provider join quickstart (fast path).
 - `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`: Minimal monitoring checklist for the soft launch.
 
