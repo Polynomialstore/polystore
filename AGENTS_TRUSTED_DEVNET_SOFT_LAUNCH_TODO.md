@@ -354,14 +354,28 @@ Checklist:
 
 ---
 
-### PR22 — Bootstrap script: guard against accidental `rm -rf` of persistent home (CURRENT)
+### PR22 — Bootstrap script: guard against accidental `rm -rf` of persistent home (MERGED)
 
 - Branch: `codex/hub-bootstrap-rmrf-guard`
 - Goal: Reduce hub footguns by making `run_devnet_alpha_multi_sp.sh start` refuse to delete a non-artifacts `NIL_HOME` unless explicitly opted-in.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/82
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
 - [x] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
 - [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` bootstrap command to include the new opt-in when using a persistent hub home.
+
+---
+
+### PR23 — Local stack bootstrap: guard against accidental `rm -rf` of persistent home (CURRENT)
+
+- Branch: `codex/local-stack-rmrf-guard`
+- Goal: Mirror the hub bootstrap safety rails in `run_local_stack.sh` so `NIL_HOME` can’t be accidentally wiped without an explicit opt-in.
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_local_stack.sh`
+
+Checklist:
+- [ ] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
+- [ ] Update any local-stack docs that recommend `NIL_HOME=...` to mention the opt-in for re-init runs.
