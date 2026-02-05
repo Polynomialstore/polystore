@@ -36,6 +36,33 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 - `https://faucet.<domain>` → `http://127.0.0.1:8081` (faucet)
 - `https://web.<domain>` → static website build
 
+## Economics knobs (soft launch)
+
+Nilchain module params are stored in genesis under `app_state.nilchain.params` and can be patched at init-time
+by `scripts/run_devnet_alpha_multi_sp.sh` via env vars.
+
+Recommended soft-launch defaults:
+- Keep costs **low but non-zero**: set a small `deal_creation_fee`, non-zero `base_retrieval_fee`, and either:
+  - set a static non-zero `storage_price`, or
+  - enable the (bounded) dynamic pricing controller.
+
+Supported genesis overrides (all optional):
+- Static pricing:
+  - `NIL_DEAL_CREATION_FEE` (coin, e.g. `10stake`)
+  - `NIL_STORAGE_PRICE` (LegacyDec string, e.g. `0.00000000001`)
+  - `NIL_BASE_RETRIEVAL_FEE` (coin, e.g. `1stake`)
+  - `NIL_RETRIEVAL_PRICE_PER_BLOB` (coin, e.g. `1stake`)
+- Dynamic pricing (devnet experiment; disabled by default):
+  - `NIL_DYNAMIC_PRICING_ENABLED=1`
+  - Storage: `NIL_STORAGE_PRICE_MIN`, `NIL_STORAGE_PRICE_MAX`, `NIL_STORAGE_TARGET_UTILIZATION_BPS`
+  - Retrieval: `NIL_RETRIEVAL_PRICE_PER_BLOB_MIN`, `NIL_RETRIEVAL_PRICE_PER_BLOB_MAX`, `NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH`
+  - Clamp: `NIL_DYNAMIC_PRICING_MAX_STEP_BPS` (0 = no clamp)
+
+Notes:
+- When `NIL_DYNAMIC_PRICING_ENABLED=1` and a `*_MIN` value is provided, the init script defaults the current
+  price (`storage_price` / `retrieval_price_per_blob`) to the min unless explicitly set.
+- These are just genesis-time knobs; governance can update params later if desired.
+
 ## One-time: hub bootstrap (fastest path)
 
 The quickest way to get a working hub is to bring up a hub-only stack once (no local providers) and then switch to systemd.
@@ -43,6 +70,20 @@ The quickest way to get a working hub is to bring up a hub-only stack once (no l
 1) Start hub-only devnet once:
 
 ```bash
+PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+```
+
+Example (enable bounded dynamic pricing at startup):
+
+```bash
+NIL_DYNAMIC_PRICING_ENABLED=1 \
+NIL_DYNAMIC_PRICING_MAX_STEP_BPS=500 \
+NIL_STORAGE_PRICE_MIN=0.00000000001 \
+NIL_STORAGE_PRICE_MAX=0.00000000010 \
+NIL_STORAGE_TARGET_UTILIZATION_BPS=8000 \
+NIL_RETRIEVAL_PRICE_PER_BLOB_MIN=1stake \
+NIL_RETRIEVAL_PRICE_PER_BLOB_MAX=5stake \
+NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH=1000 \
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 

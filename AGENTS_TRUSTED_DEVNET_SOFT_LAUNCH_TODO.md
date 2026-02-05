@@ -131,10 +131,11 @@ Checklist:
 
 ---
 
-### PR8 — Dynamic pricing experiments (storage + retrieval) (CURRENT)
+### PR8 — Dynamic pricing experiments (storage + retrieval) (MERGED)
 
 - Branch: `codex/dynamic-pricing-mvp`
 - Goal: Add a testable first version of dynamic pricing without destabilizing the devnet.
+- PR: https://github.com/Nil-Store/nil-store/pull/64
 - Test gate:
   - `cd nilchain && go test ./...`
   - `./e2e_retrieval_fees.sh`
@@ -147,3 +148,17 @@ Checklist:
 Notes (MVP design):
 - Epoch-derived signals only (no oracle): storage utilization + prior-epoch retrieval demand.
 - Bounded, opt-in controller: min/max bounds + optional per-epoch step clamp; disabled by default.
+
+---
+
+### PR9 — Devnet economics knobs (genesis overrides + dynamic pricing enable) (CURRENT)
+
+- Branch: `codex/dynamic-pricing-devnet-wiring`
+- Goal: Make trusted devnet economics configurable (and make dynamic pricing easy to toggle on for experiments).
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [x] Add genesis override env vars in `scripts/run_devnet_alpha_multi_sp.sh` for pricing + dynamic pricing params.
+- [x] Document the overrides + example launch command in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
+- [x] Add a monitoring check for pricing params in `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`.

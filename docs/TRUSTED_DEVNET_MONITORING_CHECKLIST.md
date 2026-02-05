@@ -14,6 +14,8 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
   - `curl -sf http://127.0.0.1:8080/health >/dev/null`
 - Faucet is healthy (if enabled):
   - `curl -sf http://127.0.0.1:8081/health >/dev/null`
+- Pricing params are sane (and dynamic pricing status is intentional):
+  - `curl -sf http://127.0.0.1:1317/nilchain/nilchain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
 
 ## Hub — resource / network checks
 
@@ -42,4 +44,3 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - **Chain stuck**: check disk full first, then `nilchaind` logs for consensus errors; restart only after disk/IO is healthy.
 - **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `NIL_GATEWAY_SP_AUTH` match.
 - **Fetch failing**: confirm sessions are opening on-chain and clients are sending `X-Nil-Session-Id` (sessions are required by default).
-

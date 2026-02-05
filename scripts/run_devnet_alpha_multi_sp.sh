@@ -232,6 +232,7 @@ ensure_metadata() {
   python3 - "$genesis" <<'PY' || true
 import json, sys
 import os
+import re
 path = sys.argv[1]
 data = json.load(open(path))
 bank = data.get("app_state", {}).get("bank", {})
@@ -277,29 +278,114 @@ data["app_state"]["evm"] = evm
 # Optional devnet overrides for nilchain params (useful for fast CI/E2E loops).
 nilchain = data.get("app_state", {}).get("nilchain", {})
 params = nilchain.get("params", {}) if isinstance(nilchain, dict) else {}
-overrides = {
-    "month_len_blocks": os.getenv("NIL_MONTH_LEN_BLOCKS"),
-    "epoch_len_blocks": os.getenv("NIL_EPOCH_LEN_BLOCKS"),
-    "quota_bps_per_epoch_hot": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_HOT"),
-    "quota_bps_per_epoch_cold": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_COLD"),
-    "quota_min_blobs": os.getenv("NIL_QUOTA_MIN_BLOBS"),
-    "quota_max_blobs": os.getenv("NIL_QUOTA_MAX_BLOBS"),
-    "credit_cap_bps": os.getenv("NIL_CREDIT_CAP_BPS"),
-    "evict_after_missed_epochs": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS"),
-}
-for key, raw in overrides.items():
+default_denom = (os.getenv("NIL_DENOM") or "stake").strip() or "stake"
+
+def set_uint_param(key, env_key):
+    raw = os.getenv(env_key)
     if raw is None:
-        continue
+        return
     raw = raw.strip()
     if raw == "":
-        continue
+        return
     try:
         val = int(raw, 10)
     except Exception:
-        continue
+        return
     if val < 0:
-        continue
+        return
     params[key] = str(val)
+
+def set_dec_param(key, env_key):
+    raw = os.getenv(env_key)
+    if raw is None:
+        return False
+    raw = raw.strip()
+    if raw == "":
+        return False
+    if not re.match(r"^[0-9]+(\.[0-9]+)?$", raw):
+        return False
+    params[key] = raw
+    return True
+
+def parse_coin(raw, fallback_denom):
+    if raw is None:
+        return None
+    raw = raw.strip()
+    if raw == "":
+        return None
+
+    if raw.startswith("{"):
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            return None
+        denom = (obj.get("denom") or "").strip() or fallback_denom
+        amount = (obj.get("amount") or "").strip()
+        if not re.match(r"^[0-9]+$", amount):
+            return None
+        return {"denom": denom, "amount": amount}
+
+    m = re.match(r"^([0-9]+)([a-zA-Z][a-zA-Z0-9/:._-]*)?$", raw)
+    if not m:
+        return None
+    amount = m.group(1)
+    denom = m.group(2) or fallback_denom
+    return {"denom": denom, "amount": amount}
+
+def set_coin_param(key, env_key):
+    coin = parse_coin(os.getenv(env_key), default_denom)
+    if coin is None:
+        return False
+    params[key] = coin
+    return True
+
+def set_bool_param(key, env_key):
+    raw = os.getenv(env_key)
+    if raw is None:
+        return None
+    raw = raw.strip().lower()
+    if raw in ("1", "true", "t", "yes", "y", "on"):
+        params[key] = True
+        return True
+    if raw in ("0", "false", "f", "no", "n", "off"):
+        params[key] = False
+        return False
+    return None
+
+# Existing uint64 overrides.
+set_uint_param("month_len_blocks", "NIL_MONTH_LEN_BLOCKS")
+set_uint_param("epoch_len_blocks", "NIL_EPOCH_LEN_BLOCKS")
+set_uint_param("quota_bps_per_epoch_hot", "NIL_QUOTA_BPS_PER_EPOCH_HOT")
+set_uint_param("quota_bps_per_epoch_cold", "NIL_QUOTA_BPS_PER_EPOCH_COLD")
+set_uint_param("quota_min_blobs", "NIL_QUOTA_MIN_BLOBS")
+set_uint_param("quota_max_blobs", "NIL_QUOTA_MAX_BLOBS")
+set_uint_param("credit_cap_bps", "NIL_CREDIT_CAP_BPS")
+set_uint_param("evict_after_missed_epochs", "NIL_EVICT_AFTER_MISSED_EPOCHS")
+
+# Pricing knobs (optional, but useful for trusted devnet economics).
+storage_price_set = set_dec_param("storage_price", "NIL_STORAGE_PRICE")
+storage_price_min_set = set_dec_param("storage_price_min", "NIL_STORAGE_PRICE_MIN")
+storage_price_max_set = set_dec_param("storage_price_max", "NIL_STORAGE_PRICE_MAX")
+set_uint_param("storage_target_utilization_bps", "NIL_STORAGE_TARGET_UTILIZATION_BPS")
+
+base_retrieval_fee_set = set_coin_param("base_retrieval_fee", "NIL_BASE_RETRIEVAL_FEE")
+retrieval_price_set = set_coin_param("retrieval_price_per_blob", "NIL_RETRIEVAL_PRICE_PER_BLOB")
+retrieval_price_min_set = set_coin_param("retrieval_price_per_blob_min", "NIL_RETRIEVAL_PRICE_PER_BLOB_MIN")
+retrieval_price_max_set = set_coin_param("retrieval_price_per_blob_max", "NIL_RETRIEVAL_PRICE_PER_BLOB_MAX")
+set_uint_param("retrieval_target_blobs_per_epoch", "NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH")
+
+deal_creation_fee_set = set_coin_param("deal_creation_fee", "NIL_DEAL_CREATION_FEE")
+
+dynamic_enabled = set_bool_param("dynamic_pricing_enabled", "NIL_DYNAMIC_PRICING_ENABLED")
+set_uint_param("dynamic_pricing_max_step_bps", "NIL_DYNAMIC_PRICING_MAX_STEP_BPS")
+
+# If dynamic pricing is enabled and a min is provided, default the current price
+# to the min so genesis doesn't start at 0 (storage) or out of range (retrieval).
+if dynamic_enabled is True:
+    if storage_price_min_set and not storage_price_set:
+        params["storage_price"] = params.get("storage_price_min")
+    if retrieval_price_min_set and not retrieval_price_set:
+        params["retrieval_price_per_blob"] = params.get("retrieval_price_per_blob_min")
 if isinstance(nilchain, dict):
     nilchain["params"] = params
     data["app_state"]["nilchain"] = nilchain
