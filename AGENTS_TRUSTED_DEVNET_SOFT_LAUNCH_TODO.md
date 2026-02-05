@@ -322,10 +322,11 @@ Checklist:
 
 ---
 
-### PR20 — Faucet safe bind default (listen addr) (CURRENT)
+### PR20 — Faucet safe bind default (listen addr) (MERGED)
 
 - Branch: `codex/faucet-listen-addr`
 - Goal: Make the hub faucet bind to localhost by default (Caddy remains the public entrypoint).
+- PR: https://github.com/Nil-Store/nil-store/pull/78
 - Test gate:
   - `cd nil_faucet && go test ./...`
 
