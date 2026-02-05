@@ -44,6 +44,14 @@ export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export NIL_ENABLE_TX_RELAY=0
 
+# Keep CI deterministic: the system liveness prover can contend with Mode 2
+# upload/append and trigger timeouts on shared runners.
+export NIL_DISABLE_SYSTEM_LIVENESS="${NIL_DISABLE_SYSTEM_LIVENESS:-1}"
+
+# Gateway Mode 2 uploads replicate ~16 MiB of metadata per provider; cap parallelism
+# so providers don't starve under heavy concurrent disk/network IO.
+export NIL_MODE2_UPLOAD_PARALLELISM="${NIL_MODE2_UPLOAD_PARALLELISM:-16}"
+
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 "$STACK_SCRIPT" start
 
