@@ -438,14 +438,28 @@ Checklist:
 
 ---
 
-### PR28 — Trusted devnet collaborator packet (invite + quickstart) (CURRENT)
+### PR28 — Trusted devnet collaborator packet (invite + quickstart) (MERGED)
 
 - Branch: `codex/devnet-collaborator-packet`
 - Goal: Give hub operators a single “send this to collaborators” doc covering website testing + (optional) SP joining.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/90
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
 - [x] Add `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md` (website tester path + SP operator path).
 - [x] Link it from `DOCS.md` (Implementation Onboarding section).
+
+---
+
+### PR29 — Readiness report: trusted devnet links + CI limits (CURRENT)
+
+- Branch: `codex/readiness-report-devnet-links`
+- Goal: Make `docs/TESTNET_READINESS_REPORT.md` the crisp “are we ready?” entrypoint for the soft launch (with clear links + what CI doesn’t prove).
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_local_stack.sh`
+
+Checklist:
+- [x] Add a “Trusted devnet soft launch” section linking to the go/no-go checklist + collaborator packet + monitoring docs.
+- [x] Add a short “CI does not prove” section (WAN/long-run/security), linking to `docs/GAP_REPORT_REPO_ANCHORED.md` for the full matrix.

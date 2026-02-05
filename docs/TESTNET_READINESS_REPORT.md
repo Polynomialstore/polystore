@@ -51,6 +51,16 @@ Notes:
 
 For a choreography that mirrors the automated suites but is executed manually (create/upload/commit/fetch, multi-SP proofs, deputy repair, economic checks), follow `docs/manual-devnet-runbook.md`. Keep it in sync with the scripts listed above so the steps remain accurate as the system evolves.
 
+## Trusted devnet soft launch (hub + remote providers)
+
+When you are ready to invite **trusted collaborators** (WAN, multi-host), use these docs:
+
+- Hub + provider operator pack: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
+  - Includes: **Go/No-Go checklist** (“are we ready to invite people?”)
+- “Send this to collaborators” packet: `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
+- Remote SP join quickstart (fast path): `docs/REMOTE_SP_JOIN_QUICKSTART.md`
+- Minimal monitoring checklist: `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`
+
 ## Verification checklist (gates)
 
 All items below are expected to be verifiable via the unit tests and/or the e2e scripts.
@@ -97,3 +107,14 @@ go test ./...
 
 - Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
 - Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`nil-website/tests/mode2-stripe.spec.ts`).
+
+## CI does NOT prove (read before inviting collaborators)
+
+CI is **single-machine**. It is a strong regression signal, but it does not replace a real WAN rehearsal.
+
+- WAN / multi-host behavior (real latency, NAT, TLS, firewalling)
+- Long-running durability (restarts, disk pressure, compaction, GC)
+- Full cryptoeconomic adversarial behavior (griefing, bribery, strategic downtime)
+- Comprehensive security review / external audit
+
+For a spec↔code↔CI matrix (and what is explicitly “not proven yet”), see `docs/GAP_REPORT_REPO_ANCHORED.md`.
