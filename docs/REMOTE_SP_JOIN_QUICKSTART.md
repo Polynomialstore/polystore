@@ -16,6 +16,9 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 - This repo checked out
 - Go + Rust toolchains installed
 - A public reachable provider endpoint (recommended: inbound TCP port + HTTP; HTTPS is optional for this soft launch)
+- (Optional, recommended) systemd + a reverse proxy:
+  - systemd templates: `ops/systemd/nil-gateway-provider.service` + `ops/systemd/env/nil-gateway-provider.env`
+  - HTTPS reverse proxy example: `ops/caddy/Caddyfile.provider.example`
 
 ## Step-by-step
 
@@ -69,12 +72,20 @@ export PROVIDER_LISTEN=":8091"
 ./scripts/run_devnet_provider.sh start
 ```
 
+Long-running (recommended): use the systemd templates in `ops/systemd/` and copy/edit `ops/systemd/env/nil-gateway-provider.env`.
+
 ### 6) Verify
 
 On the provider:
 
 ```bash
 curl -sf http://127.0.0.1:8091/health
+```
+
+Or run the healthcheck script (recommended):
+
+```bash
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "$HUB_LCD" --provider-addr <nil1...>
 ```
 
 From the hub (or anywhere with LCD access):

@@ -273,10 +273,11 @@ Checklist:
 
 ---
 
-### PR17 — Mode2 Stripe E2E flake reduction (gateway readiness + retries) (CURRENT)
+### PR17 — Mode2 Stripe E2E flake reduction (gateway readiness + retries) (MERGED)
 
 - Branch: `codex/mode2-stripe-e2e-retry`
 - Goal: Reduce CI flakes in `scripts/e2e_mode2_stripe_multi_sp.sh` by waiting for the local gateway “Connected” state and adding a single retry for the Mode2 Stripe suite in CI.
+- PR: https://github.com/Nil-Store/nil-store/pull/73
 - Test gate:
   - `npm -C nil-website run test:unit`
   - `npm -C nil-website run lint`
@@ -286,3 +287,19 @@ Checklist:
 - [x] Add a stable selector/attribute for gateway connection status (so Playwright can wait for it).
 - [x] Update `nil-website/tests/mode2-stripe.spec.ts` to wait for gateway “Connected” before selecting files.
 - [x] Add a single CI retry for the Mode2 Stripe suite (targeted; not global).
+
+---
+
+### PR18 — Provider onboarding polish (quickstart + systemd + HTTPS + healthcheck) (CURRENT)
+
+- Branch: `codex/provider-onboarding-polish`
+- Goal: Make a remote SP join (and stay running) feel copy/paste: quickstart docs reference systemd templates, HTTPS proxy options, and the healthcheck script.
+- Test gate:
+  - `bash -n scripts/run_devnet_provider.sh`
+
+Checklist:
+- [x] Update `docs/REMOTE_SP_JOIN_QUICKSTART.md` to reference:
+  - `ops/systemd/nil-gateway-provider.service` + `ops/systemd/env/nil-gateway-provider.env`
+  - `ops/caddy/Caddyfile.provider.example` for HTTPS
+  - `scripts/devnet_healthcheck.sh provider ...` for verification
+- [x] Add a short “provider systemd” snippet to `ops/systemd/README.md`.

@@ -39,6 +39,26 @@ sudo systemctl enable --now nil-faucet
 journalctl -u nilchaind -f
 ```
 
+## Provider quick usage
+
+Providers can run `nil_gateway` in **provider** mode as a long-running service too:
+
+```bash
+sudo cp ops/systemd/nil-gateway-provider.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+sudo mkdir -p /etc/nilstore
+sudo cp ops/systemd/env/nil-gateway-provider.env /etc/nilstore/
+sudoedit /etc/nilstore/nil-gateway-provider.env
+
+sudo systemctl enable --now nil-gateway-provider
+```
+
+Minimum required edits in `nil-gateway-provider.env`:
+- `NIL_GATEWAY_SP_AUTH` must match the hub router
+- `NIL_CHAIN_ID`, `NIL_NODE`, `NIL_LCD_BASE` must point at the hub
+- `NIL_HOME` + `NIL_PROVIDER_KEY` must reference a key that exists locally
+
 ## Notes
 
 - These templates assume you checked the repo out at `/opt/nilstore`. Adjust as needed.
