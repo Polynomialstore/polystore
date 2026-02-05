@@ -16,17 +16,26 @@ Legend:
 
 ## CI: what is actually exercised (today)
 
+The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwright.yml` for a standalone Playwright run).
+
 - Unit tests
-  - Chain: `cd nilchain && go test ./...`
-  - Gateway: `go test ./nil_gateway/...`
+  - Go:
+    - Chain: `cd nilchain && go test ./...`
+    - Gateway: `cd nil_gateway && go test ./...`
+    - Faucet: `cd nil_faucet && go test ./...`
+    - Relayer: `cd nil_relayer && go test ./...`
   - Rust: `cargo test` in `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
-  - Web: `nil-website` build + unit tests + lint
-- E2E scripts (run in CI)
-  - Lifecycle: `scripts/e2e_lifecycle.sh` (+ `scripts/e2e_lifecycle_no_gateway.sh`) — uses **gateway tx relay** for deterministic runs.
+  - Web: `npm -C nil-website run build` + `npm -C nil-website run test:unit` + `npm -C nil-website run lint`
+  - Tauri GUI: `npm -C nil_gateway_gui test` + `cd nil_gateway_gui/src-tauri && cargo test` (plus fmt/clippy checks)
+  - Solidity contracts: `cd nil_bridge && forge test -vv`
+- Cross-target parity
+  - Native/WASM parity: CI builds `nil_core` with `wasm-pack` and runs `tools/parity/compare_parity.ts`.
+- E2E scripts (run in CI; single-machine)
+  - Lifecycle: `scripts/e2e_lifecycle.sh` (+ `scripts/e2e_lifecycle_no_gateway.sh`) — dev-convenient; uses faucet + **gateway tx relay** for deterministic runs.
   - Retrieval fees: `e2e_retrieval_fees.sh`
   - Retrieval sessions (CLI): `e2e_open_retrieval_session_cli.sh`, `e2e_open_retrieval_session_mode2_cli.sh`
   - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
-- Browser E2E (Playwright; wallet-first via in-page E2E wallet)
+- Browser E2E (Playwright; wallet-first via in-page E2E wallet; single-machine)
   - `scripts/e2e_browser_smoke_no_gateway.sh`
   - `scripts/e2e_browser_libp2p_relay.sh`
   - `scripts/e2e_mode2_stripe_multi_sp.sh`

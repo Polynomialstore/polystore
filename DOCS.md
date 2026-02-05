@@ -51,6 +51,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 ## Agent Runbooks
 
 - `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`: Autonomous phase plan for repo anchoring, deal lifecycle, retrieval policies, protocol hooks, and compression.
+- `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`: Repo-specific index of where things live + what CI actually runs.
 - `docs/GAP_REPORT_REPO_ANCHORED.md`: Requirement → implementation gap matrix (repo-anchored).
 - `docs/TESTNET_READINESS_REPORT.md`: Phase 8 testnet readiness gates + one-command local stack and e2e.
 

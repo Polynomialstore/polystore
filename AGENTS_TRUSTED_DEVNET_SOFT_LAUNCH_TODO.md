@@ -397,14 +397,28 @@ Checklist:
 
 ---
 
-### PR25 — Repo-anchored agent runbook refresh (CI truth + devnet tracker links) (CURRENT)
+### PR25 — Repo-anchored agent runbook refresh (CI truth + devnet tracker links) (MERGED)
 
 - Branch: `codex/agents-runbook-refresh`
 - Goal: Make the repo-anchored agent runbook match current CI reality and link to the trusted devnet tracker/docs.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/87
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
 - [x] Mark PR24 as MERGED (this PR is the follow-up).
 - [x] Refresh `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` (Feb 2026 reality: CI jobs, test gates, and doc index pointers).
+
+---
+
+### PR26 — Gap report CI truth + docs index pointer (CURRENT)
+
+- Branch: `codex/gap-report-ci-truth`
+- Goal: Make it explicit what CI jobs prove (and don’t) and make the doc index point to the repo-anchored agent runbook.
+- PR: (pending)
+- Test gate:
+  - `bash -n install.sh`
+
+Checklist:
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` CI section to match `.github/workflows/ci.yml` (Foundry, parity, Tauri, and E2E suites).
+- [x] Update `DOCS.md` to include `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` in the Agent Runbooks section.
