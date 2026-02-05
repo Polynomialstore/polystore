@@ -290,10 +290,11 @@ Checklist:
 
 ---
 
-### PR18 — Provider onboarding polish (quickstart + systemd + HTTPS + healthcheck) (CURRENT)
+### PR18 — Provider onboarding polish (quickstart + systemd + HTTPS + healthcheck) (MERGED)
 
 - Branch: `codex/provider-onboarding-polish`
 - Goal: Make a remote SP join (and stay running) feel copy/paste: quickstart docs reference systemd templates, HTTPS proxy options, and the healthcheck script.
+- PR: https://github.com/Nil-Store/nil-store/pull/74
 - Test gate:
   - `bash -n scripts/run_devnet_provider.sh`
 
@@ -303,3 +304,17 @@ Checklist:
   - `ops/caddy/Caddyfile.provider.example` for HTTPS
   - `scripts/devnet_healthcheck.sh provider ...` for verification
 - [x] Add a short “provider systemd” snippet to `ops/systemd/README.md`.
+
+---
+
+### PR19 — Hub ops safety defaults (bind to localhost by default) (CURRENT)
+
+- Branch: `codex/hub-local-bind-defaults`
+- Goal: Reduce accidental public exposure of hub-local ports by making the systemd env templates default to localhost bindings (Caddy stays the public entrypoint).
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [x] Update `ops/systemd/env/nilchaind.env` to default CometBFT RPC to localhost.
+- [x] Update `ops/systemd/env/nil-gateway-router.env` to default router listen addr to localhost.
+- [x] Add a brief note in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` that these are safe defaults for the HTTPS subdomain profile.

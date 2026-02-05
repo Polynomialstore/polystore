@@ -128,7 +128,7 @@ Minimum required edits:
 - set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
 - set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
-- recommended (hub behind Caddy): bind services to localhost and expose only via HTTPS:
+- recommended (hub behind Caddy): bind services to localhost and expose only via HTTPS (systemd env templates default to this):
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080`
   - `nil_faucet` currently binds to `:8081` (use a firewall to block direct `8081/tcp` and expose only via Caddy)
