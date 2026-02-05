@@ -382,11 +382,11 @@ Checklist:
 
 ---
 
-### PR24 — Local stack docs: safe reset + `NIL_REINIT_HOME` note (CURRENT)
+### PR24 — Local stack docs: safe reset + `NIL_REINIT_HOME` note (MERGED)
 
 - Branch: `codex/local-stack-reset-docs`
 - Goal: Make local dev runs safer and less confusing by documenting when the stack can wipe state, and how to intentionally reset.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/86
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
 
@@ -394,3 +394,17 @@ Checklist:
 - [x] Add a short “Reset state” note to `HAPPY_PATH.md` (default `_artifacts` is safe; persistent `NIL_HOME` requires `NIL_REINIT_HOME=1`).
 - [x] Update `docs/TESTNET_READINESS_REPORT.md` to mention `NIL_REINIT_HOME` and bump the report date.
 - [x] Update `docs/manual-devnet-runbook.md` prerequisites to mention safe reset behavior (and how to opt into wiping a persistent home).
+
+---
+
+### PR25 — Repo-anchored agent runbook refresh (CI truth + devnet tracker links) (CURRENT)
+
+- Branch: `codex/agents-runbook-refresh`
+- Goal: Make the repo-anchored agent runbook match current CI reality and link to the trusted devnet tracker/docs.
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_local_stack.sh`
+
+Checklist:
+- [x] Mark PR24 as MERGED (this PR is the follow-up).
+- [x] Refresh `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` (Feb 2026 reality: CI jobs, test gates, and doc index pointers).

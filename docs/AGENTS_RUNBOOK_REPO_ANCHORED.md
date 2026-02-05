@@ -1,16 +1,27 @@
 # AGENTS Runbook (Repo-Anchored): nilcoin2 / NilStore
 
-Last updated: 2026-01-24
+Last updated: 2026-02-05
 
 This file is the repo-specific companion to `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 It maps the runbook phases to real directories, files, and existing test gates in this repository.
 
 ## Canonical docs (this repo)
 
-- Protocol spec (canonical): `spec.md`
+- Protocol spec (normative): `spec.md`
+- Gap matrix (spec ↔ code ↔ CI): `docs/GAP_REPORT_REPO_ANCHORED.md`
+- Trusted devnet tracker (PR-by-PR): `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md`
+- “How to run locally” onboarding:
+  - `DOCS.md`
+  - `HAPPY_PATH.md`
+  - `docs/TESTNET_READINESS_REPORT.md`
+- Trusted devnet ops + onboarding:
+  - `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
+  - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
+  - `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`
+  - `docs/manual-devnet-runbook.md`
 - Economy narrative (non-normative): `ECONOMY.md`
 - RFCs: `rfcs/`
-- Tracking/checklists:
+- Mainnet parity trackers (longer-horizon reference):
   - `MAINNET_GAP_TRACKER.md`
   - `MAINNET_ECON_PARITY_CHECKLIST.md`
   - `AGENTS_MAINNET_PARITY.md`
@@ -69,6 +80,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `./scripts/run_devnet_alpha_multi_sp.sh stop`
 - Single-node stack:
   - `./scripts/run_local_stack.sh`
+  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, wiping requires `NIL_REINIT_HOME=1`.
 
 ### E2E scripts
 
@@ -78,6 +90,10 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 - Lifecycle:
   - `./scripts/e2e_lifecycle.sh`
   - `./scripts/e2e_lifecycle_no_gateway.sh`
+- Retrieval fees + sessions (CLI):
+  - `./e2e_retrieval_fees.sh`
+  - `./e2e_open_retrieval_session_cli.sh`
+  - `./e2e_open_retrieval_session_mode2_cli.sh`
 - Mode 2 + repair:
   - `./scripts/e2e_mode2_stripe_multi_sp.sh`
   - `./scripts/e2e_deputy_ghost_repair_multi_sp.sh`
@@ -88,97 +104,101 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `go test ./nilchain/...`
 - Gateway:
   - `go test ./nil_gateway/...`
+- Rust crates:
+  - `cd nil_core && cargo test`
+  - `cd nil_cli && cargo test`
+  - `cd nil_p2p && cargo test`
+  - `cd nil_mock_l1 && cargo test`
+- Website:
+  - `npm -C nil-website run test:unit`
+  - `npm -C nil-website run build`
+  - `npm -C nil-website run lint`
+- Tauri GUI:
+  - `npm -C nil_gateway_gui test`
+  - `npm -C nil_gateway_gui run build`
+  - `cd nil_gateway_gui/src-tauri && cargo test`
+- Foundry contracts:
+  - `cd nil_bridge && forge test -vv`
+
+## CI truth (GitHub Actions)
+
+The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
+
+At a high level, CI exercises:
+- Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
+- Rust unit tests: `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
+- Frontend: build + unit tests + lint (`nil-website`)
+- Tauri GUI: build + unit tests + clippy (`nil_gateway_gui`)
+- Native/WASM parity: `nil_core` wasm-pack build + `tools/parity/compare_parity.ts`
+- Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
+- Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)
+- Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
+- Solidity: `forge test` under `nil_bridge`
 
 ## Phase mapping (repo-specific)
 
-This is the recommended PR/commit decomposition to execute the autonomous runbook in this repo.
+The authoritative per-requirement status is `docs/GAP_REPORT_REPO_ANCHORED.md`.
+This section is a quick index of the phases in `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
-### Phase 0 — Repo anchoring + docs sync (DONE in docs-only commits)
+### Phase 0 — Repo anchoring + docs sync (DONE)
 
-Land/refresh:
-- `spec.md`, `ECONOMY.md`, and the RFC set under `rfcs/`.
-- `docs/AGENTS_AUTONOMOUS_RUNBOOK.md` + `docs/AGENT_PROMPT_AUTONOMOUS.md`
-- This file + `docs/GAP_REPORT_REPO_ANCHORED.md`
+Primary artifacts:
+- `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`
+- `docs/GAP_REPORT_REPO_ANCHORED.md`
+- `docs/TESTNET_READINESS_REPORT.md`
+- `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md`
 
-### Phase 1 — Deal expiry + renewal (ExtendDeal) (chain + gateway behaviors)
+### Phase 1 — Deal expiry + renewal (ExtendDeal) (DONE)
 
-Where to implement:
-- Add new fields/params in protos:
-  - `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal fields like `pricing_anchor_block`)
-  - `nilchain/proto/nilchain/nilchain/v1/params.proto` (e.g. `deal_extension_grace_blocks`)
-  - `nilchain/proto/nilchain/nilchain/v1/tx.proto` (new `MsgExtendDeal`)
-- Add keeper/MsgServer logic:
-  - `nilchain/x/nilchain/keeper/msg_server.go`
-    - enforce `current_height < deal.end_block` on:
-      - `UpdateDealContent*`
-      - `OpenRetrievalSession*` (and `expires_at <= end_block`)
-      - `ProveLiveness`
-    - implement `ExtendDeal` spot pricing + renewal grace window
-- Add gateway/provider “expired deal” behavior:
-  - `nil_gateway/main.go` (`GatewayFetch`, `SpFetchShard` should treat expired deals as gone and refuse)
+CI signals:
+- Unit tests: `cd nilchain && go test ./...` (see extend tests under `nilchain/x/nilchain/keeper/*extend*`)
+- E2E: `scripts/e2e_lifecycle.sh`
 
-Test gates:
-- `go test ./nilchain/...`
-- extend `./scripts/e2e_lifecycle.sh` or add a dedicated expiry/renewal script
+### Phase 2 — Mandatory retrieval sessions for all served bytes (DONE)
 
-### Phase 2 — Mandatory retrieval sessions for all served bytes (gateway/provider)
+CI signals:
+- Unit tests: chain + gateway (`go test` suites above)
+- E2E: `e2e_open_retrieval_session_cli.sh`, `e2e_open_retrieval_session_mode2_cli.sh`
 
-Where to implement:
-- Enforce `X-Nil-Session-Id` on any endpoint that returns Deal bytes:
-  - `nil_gateway/main.go` (`GatewayFetch`, `SpFetchShard`)
-  - `nil_gateway/router_proxy.go` (ensure proxy does not serve/cached bytes out-of-session)
-- Enforce blob-alignment + subset-of-session-range only (batching preserved).
+### Phase 3 — Retrieval policies + sponsored/public sessions (DONE)
 
-Test gates:
-- extend `./scripts/e2e_gateway_retrieval_multi_sp.sh` to include out-of-session failure cases
-- add unit coverage in `nil_gateway/` around range validation helpers
+CI signals:
+- Unit tests: allowlist + vouchers under `nilchain/x/nilchain/keeper/*sponsored*`
+- E2E: covered by lifecycle + retrieval-session scripts
 
-### Phase 3 — Retrieval access control + requester-paid sessions (chain + UI)
+### Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget (DONE)
 
-Where to implement:
-- Deal retrieval policy fields + session funding tracks:
-  - `nilchain/proto/.../types.proto`, `tx.proto`
-  - `nilchain/x/nilchain/keeper/msg_server.go`
-- UI:
-  - `nil-website/src/components/Dashboard.tsx` (policy selection + sponsored session open flow)
+CI signals:
+- Unit tests: protocol sessions + audit budget under `nilchain/x/nilchain/keeper/*protocol*` and `*audit*`
 
-Test gates:
-- chain unit tests under `nilchain/x/nilchain/keeper/*retrieval*`
-- browser e2e in `nil-website/tests/` (playwright)
+### Phase 5 — Compression-aware content pipeline (NilCE v1) (PARTIAL)
 
-### Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget
+CI signals:
+- Unit tests only: `go test ./nil_gateway/...` (NilCE helpers)
 
-Where to implement:
-- New msg `MsgOpenProtocolRetrievalSession` and deterministic authorization:
-  - `nilchain/x/nilchain/keeper/*` (repairs live in Mode2 slot logic; quotas in unified liveness)
+Not proven:
+- NilCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_NILCE=1`).
 
-Test gates:
-- `./scripts/e2e_deputy_ghost_repair_multi_sp.sh` extended to ensure repair traffic is session-accounted
+### Phase 6 — Wallet-first UX (DONE)
 
-### Phase 5 — Compression-aware pipeline (gateway/WASM/UI)
+CI signals:
+- Playwright suites: `scripts/e2e_browser_smoke_no_gateway.sh`, `scripts/e2e_browser_libp2p_relay.sh`
 
-Where to implement:
-- Gateway upload/download pipeline in `nil_gateway/`
-- WASM path in `nil_core/` + `nil-website/src/workers/`
+### Phase 7 — Economics (rewards, draining, retrieval fees, dynamic pricing) (DONE)
 
-Test gates:
-- unit tests for header parsing + round-trip
-- browser smoke for upload/download parity
+CI signals:
+- Unit tests: chain keeper suites
+- E2E: `e2e_retrieval_fees.sh`
 
-### Phase 6 — Wallet-first UX (disable relayer/faucet in non-dev mode)
+Notes:
+- Dynamic pricing is implemented and unit-tested, but is **disabled by default** and is not exercised by long-running devnet evidence.
 
-Where to implement:
-- UI: `nil-website/src/**` (stop requiring faucet flows in production posture)
-- Gateway: `nil_gateway/main.go` (disable tx relay signing by default)
+### Phase 8 — Testnet readiness + trusted devnet soft launch pack (DONE as docs/scripts; ops exercise pending)
 
-Test gates:
-- `./scripts/e2e_browser_smoke.sh` (and “no gateway” variants) in mainnet-parity mode
+Primary artifacts:
+- `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (hub + collaborator onboarding)
+- `docs/REMOTE_SP_JOIN_QUICKSTART.md` (remote provider join)
+- `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md` + `scripts/devnet_healthcheck.sh` (ops checks)
 
-### Phase 7 — Economics integration (emissions, audit budget, draining)
-
-Where to implement:
-- `nilchain/x/nilchain/keeper/*` issuance + audit budget module accounting
-- provider draining policy additions to provider state types/keepers
-
-Test gates:
-- chain unit tests + e2e “epoch progression” scripts (to be added)
+Not proven:
+- WAN/multi-host behavior (latency, TLS/firewalls, NAT) and long-running durability are not proven by CI.
