@@ -553,14 +553,30 @@ Checklist:
 
 ---
 
-### PR36 — CI hygiene: remove `set-output` deprecation warnings (Rust + cache actions) (CURRENT)
+### PR36 — CI hygiene: remove `set-output` deprecation warnings (Rust + cache actions) (MERGED)
 
 - Branch: `codex/ci-rust-action-update`
 - Goal: Reduce CI noise and future breakage risk by removing GitHub Actions `set-output` deprecation warnings (update Rust toolchain + cache actions).
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/98
 - Test gate:
   - `ruby -e 'require \"yaml\"; %w[.github/workflows/ci.yml .github/workflows/e2e_playwright.yml .github/workflows/tauri_release.yml].each { |p| YAML.load_file(p) }'`
 
 Checklist:
-- [ ] Replace `actions-rs/toolchain@v1` with a maintained Rust toolchain action in CI workflows.
-- [ ] Bump `actions/cache@v3` → `actions/cache@v4` in CI workflows.
+- [x] Replace `actions-rs/toolchain@v1` with a maintained Rust toolchain action in CI workflows.
+- [x] Bump `actions/cache@v3` → `actions/cache@v4` in CI workflows.
+
+---
+
+### PR37 — Docs: refresh `README.md` for devnet soft launch posture (CURRENT)
+
+- Branch: `codex/readme-devnet-refresh`
+- Goal: Make the repo entrypoint accurate for collaborators (canonical scripts, toolchain versions, and “what CI proves” pointers).
+- PR: (create)
+- Test gate:
+  - `bash -n scripts/run_local_stack.sh`
+  - `bash -n scripts/e2e_lifecycle.sh`
+
+Checklist:
+- [x] Update `README.md` quickstart to point to `DOCS.md`, `HAPPY_PATH.md`, and trusted devnet docs.
+- [x] Update toolchain requirements and correct script names (notably Playwright libp2p relay).
+- [x] Add explicit pointers to `docs/GAP_REPORT_REPO_ANCHORED.md` (“what CI proves / doesn’t prove”).

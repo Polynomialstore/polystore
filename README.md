@@ -1,109 +1,74 @@
-# NilStore Network (Testnet Phase 3)
+# NilStore Network
 
-NilStore is a decentralized storage network optimizing for performance and verifiability without sealing. This repository contains the full stack for the "Store Wars" Incentivized Testnet.
+NilStore is a verifiable decentralized storage network (Cosmos-SDK chain + gateway router + web UI).
 
-## 🚀 Getting Started
+This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**:
+- A hub operator runs the chain + router gateway + faucet + website on a VPS.
+- Invite-only collaborators test end-to-end flows (website) and optionally run Storage Provider gateways on WAN hosts.
 
-### 1. Quick Start (Release Binaries)
-Download the latest release tarball (GitHub Releases) and extract it.
+## Start here (canonical docs)
+
+- Documentation index: `DOCS.md`
+- Local runbook (fast): `HAPPY_PATH.md`
+- Spec ↔ code ↔ CI gap matrix (what CI proves / doesn’t): `docs/GAP_REPORT_REPO_ANCHORED.md`
+- Testnet readiness gates + one-command suites: `docs/TESTNET_READINESS_REPORT.md`
+- Trusted devnet pack (hub + remote providers): `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
+- Collaborator packet (“send this to testers”): `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
+
+## Quick start (local, what CI exercises)
+
+End-to-end lifecycle smoke (stack start → create deal → upload → commit → open retrieval session → fetch → stop):
 
 ```bash
-tar -xvf nilstore-vX.Y.Z-<OS>-<ARCH>.tar.gz
-cd dist
-./bin/nilchaind start
+scripts/e2e_lifecycle.sh
 ```
 
-### 2. Build from Source
-
-**Prerequisites:**
-*   Go 1.22+
-*   Rust (latest stable)
-*   Make
-*   Clang/GCC
+Manual stack (keeps processes running until you stop them):
 
 ```bash
-# Build everything
+scripts/run_local_stack.sh start
+scripts/run_local_stack.sh stop
+```
+
+Browser E2E (Playwright; wallet-first via in-page E2E wallet when `VITE_E2E=1`):
+
+```bash
+# Mode 2 (StripeReplica): 12 providers + router + browser sharding
+scripts/e2e_mode2_stripe_multi_sp.sh
+
+# Gateway absent: upload falls back to direct SP paths
+scripts/e2e_browser_smoke_no_gateway.sh
+
+# Retrieval uses libp2p relay transport
+scripts/e2e_browser_libp2p_relay.sh
+```
+
+## Build prerequisites (current CI profile)
+
+- Go `1.25.x` (see `nilchain/go.mod`, `nil_gateway/go.mod`, etc.)
+- Rust (stable) + `wasm-pack` + `wasm32-unknown-unknown` target
+- Node.js `20.x` + npm
+- (Optional) Foundry (`forge`) for `nil_bridge` contract tests
+
+To build the full release bundle locally:
+
+```bash
 ./release.sh
 ```
 
-### 3. Running the Network (Local DevNet)
+## Components
 
-We provide an automated script to spin up a local chain, register providers, and run a full lifecycle test.
+- `nilchain` (L1): Cosmos-SDK chain (deals, proofs, economics, retrieval sessions)
+- `nil_core` (Rust): cryptographic primitives (KZG, Merkle, Reed-Solomon), exposed via C-FFI and WASM
+- `nil_cli`: client tooling (sharding / commitment generation)
+- `nil_gateway`: router + provider gateway (HTTP APIs; retrieval/session enforcement)
+- `nil_faucet`: devnet faucet service (token-auth capable)
+- `nil-website`: web UI (React/Vite) for onboarding + deal flows
 
-```bash
-# Run End-to-End "Happy Path"
-./e2e_flow.sh
+## What CI does (and does not) prove
 
-# Run Elasticity & Budget Checks
-./e2e_elasticity.sh
+CI is **single-machine** and is a strong regression signal, but it does **not** replace a real WAN rehearsal (NAT/TLS/firewalls, restarts, disk pressure, adversarial behavior, etc.).
 
-# Run Slashing & Fault Injection
-./e2e_slashing.sh
-```
-
-### 4. Browser E2E (Playwright)
-
-These scripts start the appropriate local stack and run the targeted Playwright specs used in CI.
-
-```bash
-# Mode 2 (StripeReplica): 12 providers + gateway router
-./scripts/e2e_mode2_stripe_multi_sp.sh
-
-# Gateway absent: upload falls back to direct SP
-./scripts/e2e_browser_smoke_no_gateway.sh
-
-# LibP2P enabled: retrieval uses libp2p transport
-./scripts/e2e_browser_libp2p.sh
-```
-
-## 📦 Components
-
-*   **`nilchain` (L1):** The consensus layer (Cosmos SDK). Handles deals, proofs (KZG), and economics.
-*   **`nil_core` (Rust):** Cryptographic primitives (KZG, Merkle, Reed-Solomon) exposed via C-FFI and WASM.
-*   **`nil_cli`:** Client tool for sharding files and generating commitments.
-*   **`nil_gateway`:** S3-compatible gateway for Web2 apps.
-*   **`nil_faucet`:** Token faucet service for testnet users.
-*   **`nil-website`:** The frontend explorer and dashboard (React).
-
-## 🌐 Web Dashboard & Faucet
-
-To run the frontend explorer:
-
-```bash
-cd nil-website
-npm install
-npm run dev
-```
-
-To run the Faucet service (requires running chain):
-
-```bash
-cd nil_faucet
-./nil_faucet
-```
-
-## 📊 Economics & Governance
-
-*   **Token:** $NIL ($STOR)
-*   **Inflation:** Halving every 1000 blocks.
-*   **Elasticity:** User-funded "Stripe-Aligned Scaling".
-*   **Governance:** On-chain parameter updates via `MsgUpdateParams`.
-
-See `ECONOMY.md` for the full tokenomics specification.
-
-## 📚 Documentation
-
-See `DOCS.md` for a curated index of canonical protocol docs, RFCs, and working notes.
-
-## 🧩 Multi-Provider Devnet (Join Guide)
-
-- Local multi-provider devnet (single machine): `PROVIDER_COUNT=5 ./scripts/run_devnet_alpha_multi_sp.sh start`
-- Hub + remote providers: see `DEVNET_MULTI_PROVIDER.md`
-
-## 🧪 Performance Benchmarks
-
-See `performance/PERFORMANCE_TEST_PLAN.md` and the **Performance Report** page on the website for detailed benchmarks.
-
-## 🤝 Contributing
-
-Please read `CONTRIBUTING.md` (coming soon) for details on our code of conduct and the process for submitting pull requests.
+For the authoritative breakdown, read:
+- `docs/GAP_REPORT_REPO_ANCHORED.md` (requirement → implementation → CI proof → explicit gaps)
+- `docs/TESTNET_READINESS_REPORT.md` (runbooks + readiness gates)
