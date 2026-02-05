@@ -1,0 +1,14 @@
+{
+  # Optional: set your ACME email for certificate issuance.
+  # email you@example.com
+}
+
+# Provider reverse proxy (remote SP).
+#
+# Replace `sp1.example.com` with a DNS name you control.
+# This proxies HTTPS :443 → local provider gateway (default :8091).
+
+sp1.example.com {
+  reverse_proxy 127.0.0.1:8091
+}
+

@@ -1,0 +1,36 @@
+{
+  # Optional: set your ACME email for certificate issuance.
+  # email you@example.com
+}
+
+# Hub reverse proxy (trusted devnet soft launch).
+#
+# Replace `example.com` with your domain and create the DNS records:
+#   rpc.example.com, lcd.example.com, evm.example.com, gateway.example.com, faucet.example.com, web.example.com
+
+rpc.example.com {
+  reverse_proxy 127.0.0.1:26657
+}
+
+lcd.example.com {
+  reverse_proxy 127.0.0.1:1317
+}
+
+evm.example.com {
+  reverse_proxy 127.0.0.1:8545
+}
+
+gateway.example.com {
+  reverse_proxy 127.0.0.1:8080
+}
+
+faucet.example.com {
+  reverse_proxy 127.0.0.1:8081
+}
+
+web.example.com {
+  root * /opt/nilstore/nil-website/dist
+  encode zstd gzip
+  file_server
+}
+

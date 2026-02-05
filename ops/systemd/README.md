@@ -43,4 +43,4 @@ journalctl -u nilchaind -f
 - If you run a reverse proxy for HTTPS subdomains, configure CORS to allow the website origin to call:
   - `gateway.*` (upload/fetch)
   - `lcd.*` / `evm.*` (wallet RPC)
-
+- Caddy example configs live in `ops/caddy/`.

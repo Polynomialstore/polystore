@@ -182,10 +182,11 @@ Checklist:
 
 ---
 
-### PR11 — Website faucet auth token (collaborator UX) (CURRENT)
+### PR11 — Website faucet auth token (collaborator UX) (MERGED)
 
 - Branch: `codex/website-faucet-auth-token`
 - Goal: Allow token-protected faucet funding from the website UI (without baking secrets into the build).
+- PR: https://github.com/Nil-Store/nil-store/pull/67
 - Test gate:
   - `npm -C nil-website run test:unit`
   - `npm -C nil-website run build`
@@ -195,3 +196,17 @@ Checklist:
 - [x] Send `X-Nil-Faucet-Auth` header from `useFaucet` when token is set.
 - [x] Add UI input (Dashboard + First File wizard + Testnet Docs) for collaborators to paste/save/clear the token.
 - [x] Update trusted devnet docs with the UI token flow.
+
+---
+
+### PR12 — Caddy reverse proxy templates (HTTPS subdomains) (CURRENT)
+
+- Branch: `codex/caddy-reverse-proxy-templates`
+- Goal: Provide copy/paste TLS reverse proxy configs for hub + providers to match the soft-launch endpoint profile.
+- Test gate:
+  - `bash -n scripts/run_devnet_provider.sh`
+
+Checklist:
+- [x] Add hub/provider example Caddyfiles under `ops/caddy/`.
+- [x] Link templates from `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` + `ops/systemd/README.md`.
+- [x] Update remote SP join quickstart to mention HTTPS endpoint variants.

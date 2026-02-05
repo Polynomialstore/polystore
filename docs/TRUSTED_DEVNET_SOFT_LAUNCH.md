@@ -36,6 +36,9 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 - `https://faucet.<domain>` → `http://127.0.0.1:8081` (faucet)
 - `https://web.<domain>` → static website build
 
+Reverse proxy templates:
+- Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
+
 ## Economics knobs (soft launch)
 
 Nilchain module params are stored in genesis under `app_state.nilchain.params` and can be patched at init-time

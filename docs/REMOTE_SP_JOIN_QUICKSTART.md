@@ -6,8 +6,8 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 ## What you need from the hub operator
 
-- Hub RPC: `tcp://<hub-host>:26657`
-- Hub LCD: `http://<hub-host>:1317`
+- Hub RPC: `tcp://<hub-host>:26657` (or `https://rpc.<domain>`)
+- Hub LCD: `http://<hub-host>:1317` (or `https://lcd.<domain>`)
 - Shared chain ID: `<chain-id>`
 - Shared router↔provider auth token: `NIL_GATEWAY_SP_AUTH=...`
 
@@ -48,8 +48,8 @@ If you need HTTPS/DNS-based endpoints, see `docs/networking/PROVIDER_ENDPOINTS.m
 ### 4) Register your provider on-chain
 
 ```bash
-export HUB_NODE="tcp://<hub-host>:26657"
-export HUB_LCD="http://<hub-host>:1317"
+export HUB_NODE="tcp://<hub-host>:26657"  # or https://rpc.<domain>
+export HUB_LCD="http://<hub-host>:1317"   # or https://lcd.<domain>
 export CHAIN_ID="<chain-id>"
 export PROVIDER_KEY="provider1"
 
@@ -90,4 +90,3 @@ curl -sf "$HUB_LCD/nilchain/nilchain/v1/providers" | jq '.providers | length'
 - Router can’t reach provider:
   - firewall/NAT; ensure your `PROVIDER_ENDPOINT` is reachable **from the hub**
   - confirm `NIL_GATEWAY_SP_AUTH` matches the hub router
-
