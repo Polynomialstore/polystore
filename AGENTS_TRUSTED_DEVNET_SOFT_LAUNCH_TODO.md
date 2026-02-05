@@ -509,11 +509,11 @@ Checklist:
 
 ---
 
-### PR33 — Dynamic pricing: E2E smoke for storage price update (CURRENT)
+### PR33 — Dynamic pricing: E2E smoke for storage price update (MERGED)
 
 - Branch: `codex/dynamic-pricing-storage-e2e`
 - Goal: Add a deterministic E2E smoke path to validate the storage dynamic pricing controller updates `storage_price` at the next epoch boundary (opt-in; does not change CI defaults).
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/95
 - Test gate:
   - `bash -n e2e_retrieval_fees.sh`
   - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
@@ -522,3 +522,17 @@ Checklist:
 - [x] Extend `e2e_retrieval_fees.sh` dynamic mode to patch storage dynamic pricing params in genesis.
 - [x] Assert `storage_price` updates to `storage_price_max` at the next epoch boundary (alongside the existing retrieval assertion).
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` dynamic pricing row to reflect the new smoke coverage.
+
+---
+
+### PR34 — CI: deflake Playwright “Gateway Absent” upload flow (CURRENT)
+
+- Branch: `codex/deflake-gateway-absent-ui`
+- Goal: Reduce flakes in `nil-website/tests/gateway-absent-ui.spec.ts` by ensuring the test reliably navigates back to the Mode 2 upload panel (and enables Advanced only if needed) before waiting on `mdu-file-input`.
+- PR: (create)
+- Test gate:
+  - `npm -C nil-website run test:unit`
+  - `scripts/e2e_browser_smoke_no_gateway.sh`
+
+Checklist:
+- [x] Update `nil-website/tests/gateway-absent-ui.spec.ts` to robustly reach the upload UI before selecting a file.
