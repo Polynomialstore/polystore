@@ -1,6 +1,6 @@
 # AGENTS TODO — Project Review → Spec/Doc Sync → Trusted Devnet Soft Launch (Feb 2026)
 
-Last updated: 2026-02-04
+Last updated: 2026-02-05
 
 This file is a **repo-tracked, PR-by-PR TODO list** for getting NilStore to a
 **trusted-collaborator devnet soft launch** (hub VPS + remote SPs).
@@ -55,10 +55,11 @@ Checklist:
 
 ---
 
-### PR3 — Wallet-first local E2E (no relay, no hidden signer) (CURRENT)
+### PR3 — Wallet-first local E2E (no relay, no hidden signer) (MERGED)
 
 - Branch: `codex/e2e-wallet-first-no-relay`
 - Goal: Prove “no relay” posture works for real flows (not just docs).
+- PR: https://github.com/Nil-Store/nil-store/pull/59
 - Test gate:
   - `scripts/e2e_browser_libp2p_relay.sh`
   - (optional) `scripts/e2e_browser_smoke_no_gateway.sh`
@@ -69,7 +70,7 @@ Checklist:
 
 ---
 
-### PR4 — Mode2 stripe integrity: byte-for-byte retrieval assertion
+### PR4 — Mode2 stripe integrity: byte-for-byte retrieval assertion (CURRENT)
 
 - Branch: `codex/mode2-stripe-bytes-assert`
 - Goal: Upgrade the Mode2 Stripe E2E signal from “downloaded something” to “downloaded the right bytes”.
@@ -77,8 +78,9 @@ Checklist:
   - `scripts/e2e_mode2_stripe_multi_sp.sh`
 
 Checklist:
-- [ ] Update `nil-website/tests/mode2-stripe.spec.ts` to assert downloaded bytes (or hash) == uploaded.
-- [ ] Ensure the test continues to work with chunked/ranged gateway fetches.
+- [x] Update `nil-website/tests/mode2-stripe.spec.ts` to assert downloaded bytes (or hash) == uploaded.
+- [x] Ensure the test continues to work with chunked/ranged gateway fetches.
+- [x] Fix Mode2 provider→provider shard fetches: `/sp/shard` requires `X‑Nil‑Gateway‑Auth` and no longer enforces the user session range across the full shard leaf interval (router still enforces user sessions on `/gateway/fetch`).
 
 ---
 

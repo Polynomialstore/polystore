@@ -195,6 +195,7 @@ func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, 
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 	if strings.TrimSpace(sessionID) != "" {
 		req.Header.Set("X-Nil-Session-Id", sessionID)
 	}
