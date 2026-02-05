@@ -319,3 +319,17 @@ Checklist:
 - [x] Update `ops/systemd/env/nilchaind.env` to default CometBFT RPC to localhost.
 - [x] Update `ops/systemd/env/nil-gateway-router.env` to default router listen addr to localhost.
 - [x] Add a brief note in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` that these are safe defaults for the HTTPS subdomain profile.
+
+---
+
+### PR20 — Faucet safe bind default (listen addr) (CURRENT)
+
+- Branch: `codex/faucet-listen-addr`
+- Goal: Make the hub faucet bind to localhost by default (Caddy remains the public entrypoint).
+- Test gate:
+  - `cd nil_faucet && go test ./...`
+
+Checklist:
+- [x] Add `NIL_LISTEN_ADDR` support to `nil_faucet` (default `127.0.0.1:8081`).
+- [x] Update `ops/systemd/env/nil-faucet.env` to set `NIL_LISTEN_ADDR=127.0.0.1:8081`.
+- [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` to remove the “firewall-only” faucet bind note.

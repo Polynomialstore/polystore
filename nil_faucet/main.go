@@ -23,6 +23,7 @@ import (
 var (
 	chainID     = envDefault("NIL_CHAIN_ID", "test-1")
 	homeDir     = envDefault("NIL_HOME", "../.nilchain")
+	listenAddr  = envDefault("NIL_LISTEN_ADDR", "127.0.0.1:8081")
 	amount      = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
 	denom       = envDefault("NIL_DENOM", "stake")
 	gasPrices   = envDefault("NIL_GAS_PRICES", "0.001aatom")
@@ -51,8 +52,8 @@ func main() {
 	// Enable CORS
 	r.Use(mux.CORSMethodMiddleware(r))
 
-	log.Printf("Starting NilChain Faucet on :8081 (chain-id=%s, home=%s)\n", chainID, homeDir)
-	log.Fatal(http.ListenAndServe(":8081", r))
+	log.Printf("Starting NilChain Faucet on %s (chain-id=%s, home=%s)\n", listenAddr, chainID, homeDir)
+	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
 
 // deriveNilchaindDir attempts to find a working directory where nilchaind

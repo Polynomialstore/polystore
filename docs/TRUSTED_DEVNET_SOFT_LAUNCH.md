@@ -131,7 +131,7 @@ Minimum required edits:
 - recommended (hub behind Caddy): bind services to localhost and expose only via HTTPS (systemd env templates default to this):
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080`
-  - `nil_faucet` currently binds to `:8081` (use a firewall to block direct `8081/tcp` and expose only via Caddy)
+  - `nil-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
 
 3) Enable + start (recommended order):
 
