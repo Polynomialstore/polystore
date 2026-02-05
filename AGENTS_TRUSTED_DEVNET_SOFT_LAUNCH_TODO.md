@@ -525,14 +525,28 @@ Checklist:
 
 ---
 
-### PR34 — CI: deflake Playwright “Gateway Absent” upload flow (CURRENT)
+### PR34 — CI: deflake Playwright “Gateway Absent” upload flow (MERGED)
 
 - Branch: `codex/deflake-gateway-absent-ui`
 - Goal: Reduce flakes in `nil-website/tests/gateway-absent-ui.spec.ts` by ensuring the test reliably navigates back to the Mode 2 upload panel (and enables Advanced only if needed) before waiting on `mdu-file-input`.
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/96
 - Test gate:
   - `npm -C nil-website run test:unit`
   - `scripts/e2e_browser_smoke_no_gateway.sh`
 
 Checklist:
 - [x] Update `nil-website/tests/gateway-absent-ui.spec.ts` to robustly reach the upload UI before selecting a file.
+
+---
+
+### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (CURRENT)
+
+- Branch: `codex/ci-go-1-25x`
+- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `nil_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
+- PR: (create)
+- Test gate:
+  - `ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/ci.yml\"); YAML.load_file(\".github/workflows/tauri_release.yml\")'`
+
+Checklist:
+- [ ] Update `.github/workflows/ci.yml` `actions/setup-go` versions to `1.25.x`.
+- [ ] Update `.github/workflows/tauri_release.yml` `actions/setup-go` version to `1.25.x`.
