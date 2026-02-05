@@ -244,10 +244,11 @@ Checklist:
 
 ---
 
-### PR15 — Hub VPS “blank box → running devnet” runbook (systemd + caddy + web build) (CURRENT)
+### PR15 — Hub VPS “blank box → running devnet” runbook (systemd + caddy + web build) (MERGED)
 
 - Branch: `codex/hub-vps-runbook`
 - Goal: Make hub deployment a copy/paste process (DNS → build → systemd → caddy → verify).
+- PR: https://github.com/Nil-Store/nil-store/pull/71
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
@@ -258,7 +259,7 @@ Checklist:
 
 ---
 
-### PR16 — Devnet healthcheck script (hub + provider) (TODO)
+### PR16 — Devnet healthcheck script (hub + provider) (CURRENT)
 
 - Branch: `codex/devnet-healthcheck-script`
 - Goal: Replace “tribal knowledge” monitoring with a single script that fails loudly when the devnet is unhealthy.
@@ -266,5 +267,5 @@ Checklist:
   - `bash -n scripts/devnet_healthcheck.sh`
 
 Checklist:
-- [ ] Add `scripts/devnet_healthcheck.sh` (hub mode + provider mode) to validate RPC/LCD/EVM/gateway/faucet/health endpoints.
-- [ ] Wire the script into `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md` as an optional daily check.
+- [x] Add `scripts/devnet_healthcheck.sh` (hub mode + provider mode) to validate RPC/LCD/EVM/gateway/faucet/health endpoints.
+- [x] Wire the script into `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md` as an optional daily check.

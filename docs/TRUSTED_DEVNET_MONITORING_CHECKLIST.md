@@ -4,6 +4,9 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 ## Hub (VPS) — daily checks
 
+- Run the healthcheck script (recommended; `curl` required, `jq` optional):
+  - Hub-local ports: `scripts/devnet_healthcheck.sh hub`
+  - Public HTTPS endpoints: `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway https://gateway.<domain> --faucet https://faucet.<domain>`
 - Chain is producing blocks:
   - `curl -s http://127.0.0.1:26657/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
 - LCD is responsive:
@@ -32,6 +35,8 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 ## Providers (remote SPs) — daily checks
 
+- Run the healthcheck script (recommended):
+  - `scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:<PORT> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
 - Provider gateway is healthy:
   - `curl -sf http://127.0.0.1:<PORT>/health >/dev/null`
 - Provider is visible on-chain (from hub):
