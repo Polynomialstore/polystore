@@ -466,14 +466,29 @@ Checklist:
 
 ---
 
-### PR30 — Agent file hygiene: point to current trackers (CURRENT)
+### PR30 — Agent file hygiene: point to current trackers (MERGED)
 
 - Branch: `codex/agent-files-hygiene`
 - Goal: Reduce confusion by making the root agent docs clearly point to the Feb 2026 trusted devnet tracker and repo-anchored runbooks.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/92
 - Test gate:
   - `bash -n install.sh`
 
 Checklist:
 - [x] Update `AGENTS.md` to treat `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md` as the canonical trusted-devnet TODO list (and clarify this file is a roadmap).
 - [x] Update `docs/AGENTS_AUTONOMOUS_RUNBOOK.md` header to point to `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` + `docs/GAP_REPORT_REPO_ANCHORED.md` for current reality.
+
+---
+
+### PR31 — Dynamic pricing: E2E smoke for retrieval price update (CURRENT)
+
+- Branch: `codex/dynamic-pricing-e2e`
+- Goal: Add a deterministic E2E smoke path to validate the retrieval dynamic pricing controller updates `retrieval_price_per_blob` at the next epoch boundary.
+- PR: https://github.com/Nil-Store/nil-store/pull/93
+- Test gate:
+  - `bash -n e2e_retrieval_fees.sh`
+  - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
+
+Checklist:
+- [x] Add an opt-in dynamic pricing mode to `e2e_retrieval_fees.sh` that asserts `retrieval_price_per_blob` updates at the next epoch.
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` dynamic pricing row with the new manual E2E command.

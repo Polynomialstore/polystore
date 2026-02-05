@@ -17,6 +17,8 @@ BINARY="$ROOT_DIR/nilchaind"
 LCD_BASE="http://127.0.0.1:1317"
 RPC_STATUS="http://127.0.0.1:26657/status"
 
+DYNAMIC_PRICING_E2E="${NIL_DYNAMIC_PRICING_E2E:-0}"
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1"
@@ -157,6 +159,33 @@ data["app_state"]["bank"] = bank
 json.dump(data, open(path, "w"), indent=1)
 PY
 
+if [ "$DYNAMIC_PRICING_E2E" = "1" ]; then
+  banner "Patching genesis: enable dynamic pricing (retrieval)"
+  python3 - "$HOME_DIR/config/genesis.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+
+nilchain = data.get("app_state", {}).get("nilchain", {})
+params = nilchain.get("params", {})
+
+params["dynamic_pricing_enabled"] = True
+params["dynamic_pricing_max_step_bps"] = 0
+params["epoch_len_blocks"] = 5
+
+params["base_retrieval_fee"] = {"denom": "stake", "amount": "1"}
+params["retrieval_target_blobs_per_epoch"] = 1
+params["retrieval_price_per_blob_min"] = {"denom": "stake", "amount": "1"}
+params["retrieval_price_per_blob_max"] = {"denom": "stake", "amount": "10"}
+params["retrieval_price_per_blob"] = {"denom": "stake", "amount": "1"}
+
+nilchain["params"] = params
+data["app_state"]["nilchain"] = nilchain
+
+json.dump(data, open(path, "w"), indent=1)
+PY
+fi
+
 sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "1s"/' "$HOME_DIR/config/config.toml"
 sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0token"/' "$HOME_DIR/config/app.toml"
 sed -i.bak '/\[api\]/,/\[/{s/^enable = false/enable = true/;}' "$HOME_DIR/config/app.toml"
@@ -226,7 +255,7 @@ PY
 BLOB_COUNT=2
 
 banner "Opening retrieval session"
-run_yes "$BINARY" tx nilchain open-retrieval-session \
+OPEN_RES=$(run_yes "$BINARY" tx nilchain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -235,7 +264,18 @@ run_yes "$BINARY" tx nilchain open-retrieval-session \
   --blob-count "$BLOB_COUNT" \
   --nonce "$NONCE" \
   --expires-at "$EXPIRES_AT" \
-  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+OPEN_HASH=$(echo "$OPEN_RES" | jq -r '.txhash // empty')
+if [ -z "$OPEN_HASH" ]; then
+  echo "Failed to parse open retrieval session tx hash"
+  exit 1
+fi
+OPEN_TX=$(wait_for_tx "$OPEN_HASH" 30 1) || { echo "OpenRetrievalSession tx not found"; exit 1; }
+OPEN_HEIGHT=$(echo "$OPEN_TX" | jq -r '.height // empty')
+if [ -z "$OPEN_HEIGHT" ] || [ "$OPEN_HEIGHT" = "null" ]; then
+  echo "Failed to parse open retrieval session height"
+  exit 1
+fi
 
 SESSION_ID=""
 for i in {1..30}; do
@@ -283,6 +323,26 @@ PY
 if [ "$ESCROW_AFTER_CANCEL" != "$EXPECTED_AFTER_CANCEL" ]; then
   echo "Escrow after cancel mismatch: got $ESCROW_AFTER_CANCEL, expected $EXPECTED_AFTER_CANCEL"
   exit 1
+fi
+
+if [ "$DYNAMIC_PRICING_E2E" = "1" ]; then
+  banner "Waiting for next epoch to confirm dynamic pricing update"
+  EPOCH_LEN=$(echo "$PARAMS_JSON" | jq -r '.params.epoch_len_blocks // "0"')
+  if [ -z "$EPOCH_LEN" ] || [ "$EPOCH_LEN" = "null" ] || [ "$EPOCH_LEN" -le 0 ]; then
+    echo "Invalid epoch_len_blocks: $EPOCH_LEN"
+    exit 1
+  fi
+
+  EPOCH_ID_OPEN=$(((OPEN_HEIGHT - 1) / EPOCH_LEN + 1))
+  NEXT_EPOCH_START=$((EPOCH_ID_OPEN * EPOCH_LEN + 1))
+  wait_for_height "$NEXT_EPOCH_START" 60 1 || { echo "Next epoch start not reached (target=$NEXT_EPOCH_START)"; exit 1; }
+
+  UPDATED_PARAMS_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/params")
+  UPDATED_PRICE=$(echo "$UPDATED_PARAMS_JSON" | jq -r '.params.retrieval_price_per_blob.amount // "0"')
+  if [ "$UPDATED_PRICE" != "10" ]; then
+    echo "Dynamic pricing did not update retrieval_price_per_blob as expected: got $UPDATED_PRICE, expected 10"
+    exit 1
+  fi
 fi
 
 banner "Retrieval fee smoke test passed"
