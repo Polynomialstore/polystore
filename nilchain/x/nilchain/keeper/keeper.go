@@ -50,6 +50,8 @@ type Keeper struct {
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
 	VoucherUsedNonces             collections.Map[collections.Pair[uint64, uint64], bool]
 	AuditTasks                    collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
+	DynamicPricingLastEpoch       collections.Item[uint64]
+	RetrievalDemandByEpoch        collections.Map[uint64, uint64]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -129,6 +131,19 @@ func NewKeeper(
 			"audit_tasks",
 			collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key),
 			codec.CollValue[types.AuditTask](cdc),
+		),
+		DynamicPricingLastEpoch: collections.NewItem(
+			sb,
+			types.DynamicPricingLastEpochKey,
+			"dynamic_pricing_last_epoch",
+			collections.Uint64Value,
+		),
+		RetrievalDemandByEpoch: collections.NewMap(
+			sb,
+			types.RetrievalDemandByEpochKey,
+			"retrieval_demand_by_epoch",
+			collections.Uint64Key,
+			collections.Uint64Value,
 		),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),

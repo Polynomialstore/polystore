@@ -115,10 +115,11 @@ Checklist:
 
 ---
 
-### PR7 — Website onboarding overhaul (collaborator UX) (CURRENT)
+### PR7 — Website onboarding overhaul (collaborator UX) (MERGED)
 
 - Branch: `codex/website-onboarding-overhaul`
 - Goal: A collaborator can store and retrieve a file with minimal context.
+- PR: https://github.com/Nil-Store/nil-store/pull/63
 - Test gate:
   - `npm -C nil-website run test:unit`
   - `npm -C nil-website run build`
@@ -130,7 +131,7 @@ Checklist:
 
 ---
 
-### PR8 — Dynamic pricing experiments (storage + retrieval)
+### PR8 — Dynamic pricing experiments (storage + retrieval) (CURRENT)
 
 - Branch: `codex/dynamic-pricing-mvp`
 - Goal: Add a testable first version of dynamic pricing without destabilizing the devnet.
@@ -139,6 +140,10 @@ Checklist:
   - `./e2e_retrieval_fees.sh`
 
 Checklist:
-- [ ] Define the minimal on-chain signal(s) (params vs. oracle vs. epoch-derived).
-- [ ] Implement pricing update mechanism + bounds.
-- [ ] Add simulation harness + invariants (no negative fees, monotonicity caps, etc.).
+- [x] Define the minimal on-chain signal(s) (params vs. oracle vs. epoch-derived).
+- [x] Implement pricing update mechanism + bounds.
+- [x] Add simulation harness + invariants (no negative fees, monotonicity caps, etc.).
+
+Notes (MVP design):
+- Epoch-derived signals only (no oracle): storage utilization + prior-epoch retrieval demand.
+- Bounded, opt-in controller: min/max bounds + optional per-epoch step clamp; disabled by default.

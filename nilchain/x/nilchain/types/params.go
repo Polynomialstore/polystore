@@ -35,6 +35,15 @@ var (
 	KeyMaxRepairingRatioBps  = []byte("MaxRepairingBytesRatioBps")
 	KeyRotationBytesPerEpoch = []byte("RotationBytesPerEpoch")
 
+	KeyDynamicPricingEnabled        = []byte("DynamicPricingEnabled")
+	KeyStoragePriceMin              = []byte("StoragePriceMin")
+	KeyStoragePriceMax              = []byte("StoragePriceMax")
+	KeyStorageTargetUtilizationBps  = []byte("StorageTargetUtilizationBps")
+	KeyRetrievalPricePerBlobMin     = []byte("RetrievalPricePerBlobMin")
+	KeyRetrievalPricePerBlobMax     = []byte("RetrievalPricePerBlobMax")
+	KeyRetrievalTargetBlobsPerEpoch = []byte("RetrievalTargetBlobsPerEpoch")
+	KeyDynamicPricingMaxStepBps     = []byte("DynamicPricingMaxStepBps")
+
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
 	KeyQuotaBpsPerEpochCold   = []byte("QuotaBpsPerEpochCold")
@@ -55,10 +64,16 @@ func NewParams(
 	halvingInterval uint64,
 	eip712ChainID uint64,
 	storagePrice math.LegacyDec,
+	storagePriceMin math.LegacyDec,
+	storagePriceMax math.LegacyDec,
+	storageTargetUtilizationBps uint64,
 	dealCreationFee sdk.Coin,
 	minDurationBlocks uint64,
 	baseRetrievalFee sdk.Coin,
 	retrievalPricePerBlob sdk.Coin,
+	retrievalPricePerBlobMin sdk.Coin,
+	retrievalPricePerBlobMax sdk.Coin,
+	retrievalTargetBlobsPerEpoch uint64,
 	retrievalBurnBps uint64,
 	monthLenBlocks uint64,
 	epochLenBlocks uint64,
@@ -80,18 +95,26 @@ func NewParams(
 	maxDrainBytesPerEpoch uint64,
 	maxRepairingBytesRatioBps uint64,
 	rotationBytesPerEpoch uint64,
+	dynamicPricingEnabled bool,
+	dynamicPricingMaxStepBps uint64,
 ) Params {
 	return Params{
-		BaseStripeCost:        baseStripeCost,
-		HalvingInterval:       halvingInterval,
-		Eip712ChainId:         eip712ChainID,
-		StoragePrice:          storagePrice,
-		DealCreationFee:       dealCreationFee,
-		MinDurationBlocks:     minDurationBlocks,
-		BaseRetrievalFee:      baseRetrievalFee,
-		RetrievalPricePerBlob: retrievalPricePerBlob,
-		RetrievalBurnBps:      retrievalBurnBps,
-		MonthLenBlocks:        monthLenBlocks,
+		BaseStripeCost:               baseStripeCost,
+		HalvingInterval:              halvingInterval,
+		Eip712ChainId:                eip712ChainID,
+		StoragePrice:                 storagePrice,
+		StoragePriceMin:              storagePriceMin,
+		StoragePriceMax:              storagePriceMax,
+		StorageTargetUtilizationBps:  storageTargetUtilizationBps,
+		DealCreationFee:              dealCreationFee,
+		MinDurationBlocks:            minDurationBlocks,
+		BaseRetrievalFee:             baseRetrievalFee,
+		RetrievalPricePerBlob:        retrievalPricePerBlob,
+		RetrievalPricePerBlobMin:     retrievalPricePerBlobMin,
+		RetrievalPricePerBlobMax:     retrievalPricePerBlobMax,
+		RetrievalTargetBlobsPerEpoch: retrievalTargetBlobsPerEpoch,
+		RetrievalBurnBps:             retrievalBurnBps,
+		MonthLenBlocks:               monthLenBlocks,
 
 		EpochLenBlocks:             epochLenBlocks,
 		QuotaBpsPerEpochHot:        quotaBpsPerEpochHot,
@@ -114,6 +137,9 @@ func NewParams(
 		MaxDrainBytesPerEpoch:     maxDrainBytesPerEpoch,
 		MaxRepairingBytesRatioBps: maxRepairingBytesRatioBps,
 		RotationBytesPerEpoch:     rotationBytesPerEpoch,
+
+		DynamicPricingEnabled:    dynamicPricingEnabled,
+		DynamicPricingMaxStepBps: dynamicPricingMaxStepBps,
 	}
 }
 
@@ -124,10 +150,16 @@ func DefaultParams() Params {
 		1000,                 // HalvingInterval
 		31337,                // EIP712ChainId (MetaMask localhost default)
 		math.LegacyNewDec(0), // StoragePrice
+		math.LegacyNewDec(0), // StoragePriceMin (dynamic pricing; disabled by default)
+		math.LegacyNewDec(0), // StoragePriceMax (dynamic pricing; disabled by default)
+		0,                    // StorageTargetUtilizationBps (0 disables dynamic storage pricing)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // DealCreationFee
 		10, // MinDurationBlocks
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // BaseRetrievalFee (provisional devnet default)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlob (provisional devnet default)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlobMin (dynamic pricing; disabled by default)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlobMax (dynamic pricing; disabled by default)
+		0,       // RetrievalTargetBlobsPerEpoch (0 disables dynamic retrieval pricing)
 		500,     // RetrievalBurnBps (5%)
 		1000,    // MonthLenBlocks (devnet-friendly "month")
 		100,     // EpochLenBlocks (devnet-friendly "epoch")
@@ -149,6 +181,8 @@ func DefaultParams() Params {
 		0,       // MaxDrainBytesPerEpoch (disabled by default)
 		0,       // MaxRepairingBytesRatioBps (disabled by default)
 		0,       // RotationBytesPerEpoch (disabled by default)
+		false,   // DynamicPricingEnabled
+		500,     // DynamicPricingMaxStepBps (5% per epoch; unused when disabled)
 	)
 }
 
@@ -159,10 +193,16 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyHalvingInterval, &p.HalvingInterval, validateHalvingInterval),
 		paramtypes.NewParamSetPair(KeyEip712ChainID, &p.Eip712ChainId, validateEip712ChainID),
 		paramtypes.NewParamSetPair(KeyStoragePrice, &p.StoragePrice, validateStoragePrice),
+		paramtypes.NewParamSetPair(KeyStoragePriceMin, &p.StoragePriceMin, validateStoragePrice),
+		paramtypes.NewParamSetPair(KeyStoragePriceMax, &p.StoragePriceMax, validateStoragePrice),
+		paramtypes.NewParamSetPair(KeyStorageTargetUtilizationBps, &p.StorageTargetUtilizationBps, validateBps),
 		paramtypes.NewParamSetPair(KeyDealCreationFee, &p.DealCreationFee, validateDealCreationFee),
 		paramtypes.NewParamSetPair(KeyMinDurationBlocks, &p.MinDurationBlocks, validateMinDurationBlocks),
 		paramtypes.NewParamSetPair(KeyBaseRetrievalFee, &p.BaseRetrievalFee, validateBaseRetrievalFee),
 		paramtypes.NewParamSetPair(KeyRetrievalPricePerBlob, &p.RetrievalPricePerBlob, validateRetrievalPricePerBlob),
+		paramtypes.NewParamSetPair(KeyRetrievalPricePerBlobMin, &p.RetrievalPricePerBlobMin, validateRetrievalPricePerBlob),
+		paramtypes.NewParamSetPair(KeyRetrievalPricePerBlobMax, &p.RetrievalPricePerBlobMax, validateRetrievalPricePerBlob),
+		paramtypes.NewParamSetPair(KeyRetrievalTargetBlobsPerEpoch, &p.RetrievalTargetBlobsPerEpoch, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyRetrievalBurnBps, &p.RetrievalBurnBps, validateRetrievalBurnBps),
 		paramtypes.NewParamSetPair(KeyMonthLenBlocks, &p.MonthLenBlocks, validateMonthLenBlocks),
 
@@ -185,6 +225,9 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyMaxDrainBytesPerEpoch, &p.MaxDrainBytesPerEpoch, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyMaxRepairingRatioBps, &p.MaxRepairingBytesRatioBps, validateBps),
 		paramtypes.NewParamSetPair(KeyRotationBytesPerEpoch, &p.RotationBytesPerEpoch, validateUint64Any),
+
+		paramtypes.NewParamSetPair(KeyDynamicPricingEnabled, &p.DynamicPricingEnabled, validateBool),
+		paramtypes.NewParamSetPair(KeyDynamicPricingMaxStepBps, &p.DynamicPricingMaxStepBps, validateBps),
 	}
 }
 
@@ -202,6 +245,15 @@ func (p Params) Validate() error {
 	if err := validateStoragePrice(p.StoragePrice); err != nil {
 		return err
 	}
+	if err := validateStoragePrice(p.StoragePriceMin); err != nil {
+		return err
+	}
+	if err := validateStoragePrice(p.StoragePriceMax); err != nil {
+		return err
+	}
+	if p.StoragePriceMax.LT(p.StoragePriceMin) {
+		return fmt.Errorf("storage_price_max must be >= storage_price_min (got %s < %s)", p.StoragePriceMax, p.StoragePriceMin)
+	}
 	if err := validateDealCreationFee(p.DealCreationFee); err != nil {
 		return err
 	}
@@ -213,6 +265,15 @@ func (p Params) Validate() error {
 	}
 	if err := validateRetrievalPricePerBlob(p.RetrievalPricePerBlob); err != nil {
 		return err
+	}
+	if err := validateRetrievalPricePerBlob(p.RetrievalPricePerBlobMin); err != nil {
+		return err
+	}
+	if err := validateRetrievalPricePerBlob(p.RetrievalPricePerBlobMax); err != nil {
+		return err
+	}
+	if p.RetrievalPricePerBlobMax.Amount.LT(p.RetrievalPricePerBlobMin.Amount) {
+		return fmt.Errorf("retrieval_price_per_blob_max must be >= retrieval_price_per_blob_min (got %s < %s)", p.RetrievalPricePerBlobMax.Amount, p.RetrievalPricePerBlobMin.Amount)
 	}
 	if err := validateRetrievalBurnBps(p.RetrievalBurnBps); err != nil {
 		return err
@@ -284,6 +345,12 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateUint64Any(p.RotationBytesPerEpoch); err != nil {
+		return err
+	}
+	if err := validateBool(p.DynamicPricingEnabled); err != nil {
+		return err
+	}
+	if err := validateBps(p.DynamicPricingMaxStepBps); err != nil {
 		return err
 	}
 	return nil
@@ -522,6 +589,14 @@ func validateBps(i interface{}) error {
 	}
 	if v > 10000 {
 		return fmt.Errorf("bps must be <= 10000 (got %d)", v)
+	}
+	return nil
+}
+
+func validateBool(i interface{}) error {
+	_, ok := i.(bool)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 	return nil
 }

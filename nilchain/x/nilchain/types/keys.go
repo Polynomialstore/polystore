@@ -42,6 +42,8 @@ var (
 	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
 	VoucherUsedNonceKey              = collections.NewPrefix("VoucherUsedNonce/value/")
 	AuditTasksKey                    = collections.NewPrefix("AuditTasks/value/")
+	DynamicPricingLastEpochKey       = collections.NewPrefix("DynamicPricingLastEpoch/value/")
+	RetrievalDemandByEpochKey        = collections.NewPrefix("RetrievalDemandByEpoch/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

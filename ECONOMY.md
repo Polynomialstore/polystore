@@ -1,6 +1,6 @@
 # NilStore Economy & Tokenomics (Deal Expiry + Wallet-First + Sessions-First)
 
-Last updated: 2026-01-23
+Last updated: 2026-02-05
 
 This document is a synthesis of:
 - the prior token flow narrative (pre-2026-01-23),
@@ -77,6 +77,21 @@ NilStore’s retrieval market is **session-based** and (for testnet/mainnet pari
 Implications:
 - There is no “free” retrieval path in production mode; every served byte is fee-accounted and attributable for liveness/quotas.
 - Batching/segmentation choices primarily affect UX and base-fee amortization, not accounting semantics.
+
+### 2.3.1 Dynamic pricing (devnet experiment; optional)
+
+NilStore’s devnet includes an **optional**, deterministic, **epoch-based** dynamic pricing controller.
+When enabled, the chain may update:
+
+- `storage_price` each epoch based on **storage utilization** (active slot bytes vs. active provider capacity)
+- `retrieval_price_per_blob` each epoch based on **prior-epoch retrieval demand** (blobs requested in session opens)
+
+The controller is bounded by on-chain parameters:
+- Storage: `storage_price_min`, `storage_price_max`, `storage_target_utilization_bps`
+- Retrieval: `retrieval_price_per_blob_min`, `retrieval_price_per_blob_max`, `retrieval_target_blobs_per_epoch`
+- Step limit: `dynamic_pricing_max_step_bps` (max per-epoch change; `0` disables the step clamp)
+
+Defaults are conservative: `dynamic_pricing_enabled=false` and targets set to `0` (no dynamic updates).
 
 
 

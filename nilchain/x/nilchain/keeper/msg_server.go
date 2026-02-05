@@ -2142,6 +2142,10 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
 	}
 
+	if err := k.recordRetrievalDemand(ctx, msg.BlobCount); err != nil {
+		return nil, err
+	}
+
 	return &types.MsgOpenRetrievalSessionResponse{SessionId: sessionID}, nil
 }
 
@@ -2477,6 +2481,10 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
 	}
 
+	if err := k.recordRetrievalDemand(ctx, msg.BlobCount); err != nil {
+		return nil, err
+	}
+
 	return &types.MsgOpenRetrievalSessionSponsoredResponse{SessionId: sessionID}, nil
 }
 
@@ -2785,6 +2793,10 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	if consumeAuditTask {
 		// Consume tasks on successful open so they cannot be reused with a new nonce.
 		_ = k.AuditTasks.Remove(ctx, consumeAuditTaskKey)
+	}
+
+	if err := k.recordRetrievalDemand(ctx, msg.BlobCount); err != nil {
+		return nil, err
 	}
 
 	return &types.MsgOpenProtocolRetrievalSessionResponse{SessionId: sessionID}, nil

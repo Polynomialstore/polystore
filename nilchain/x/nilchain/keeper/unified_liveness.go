@@ -53,8 +53,12 @@ func (k Keeper) BeginBlock(goCtx context.Context) error {
 	}
 
 	// Epoch start hooks:
+	// - Update dynamic pricing parameters (devnet-only; optional, bounded).
 	// - Mint deterministic protocol audit budget (with carryover cap).
 	// - Derive deterministic audit tasks (bounded by what the budget can afford).
+	if err := k.updateDynamicPricingAtEpochStart(ctx, epochID); err != nil {
+		return err
+	}
 	if _, _, err := k.mintProtocolAuditBudget(ctx); err != nil {
 		return err
 	}

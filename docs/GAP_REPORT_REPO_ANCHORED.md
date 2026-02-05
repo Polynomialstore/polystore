@@ -1,6 +1,6 @@
 # Gap Report (Repo-Anchored): NilStore (Spec ↔ Code ↔ CI)
 
-Last updated: 2026-02-04
+Last updated: 2026-02-05
 
 This is the repo-specific gap matrix required by `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 It is intentionally **requirements-first**: each row links a spec/RFC requirement to:
@@ -35,7 +35,7 @@ Legend:
 
 - WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
 - Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
-- Dynamic pricing (storage or retrieval) beyond current parameterized fees
+- Dynamic pricing stability/tuning beyond bounded, unit-tested epoch adjustments (no long-running devnet evidence)
 - Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
 - Comprehensive security review / external audit
 
@@ -105,4 +105,5 @@ Legend:
 |---|---:|---|---|---|
 | Base reward pool mint/distribution | DONE | `nilchain/x/nilchain/keeper/base_rewards.go` | `nilchain/x/nilchain/keeper/base_rewards_test.go` | — |
 | Provider draining / exit | DONE | `nilchain/x/nilchain/keeper/draining.go`, `nilchain/x/nilchain/keeper/msg_provider_draining.go` | `nilchain/x/nilchain/keeper/draining_test.go` | — |
-| Retrieval fees (base + per-blob) settlement | DONE | `nilchain/x/nilchain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | “Dynamic” pricing is not implemented (separate track) |
+| Retrieval fees (base + per-blob) settlement | DONE | `nilchain/x/nilchain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | Dynamic pricing is optional and not exercised by E2E (unit-tested only) |
+| Dynamic pricing (storage + retrieval params; epoch-based controller) | DONE | `nilchain/proto/nilchain/nilchain/v1/params.proto`; `nilchain/x/nilchain/keeper/dynamic_pricing.go` | `nilchain/x/nilchain/keeper/dynamic_pricing_test.go` | Disabled by default; economics not tuned; no long-running devnet evidence |

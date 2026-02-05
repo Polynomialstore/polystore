@@ -100,4 +100,37 @@ message Params {
   // Optional "chaos monkey" rotation budget (bytes per epoch).
   // 0 disables routine rotation.
   uint64 rotation_bytes_per_epoch = 29;
+
+  // --- Dynamic pricing experiments (devnet-only; disabled by default) ---
+  // When enabled, the chain may update storage/retrieval price parameters
+  // deterministically at epoch boundaries based on on-chain signals.
+  bool dynamic_pricing_enabled = 30;
+
+  // Storage pricing bounds used by the dynamic controller.
+  string storage_price_min = 31 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ];
+  string storage_price_max = 32 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ];
+  // Utilization target (basis points) at which storage_price reaches storage_price_max.
+  // 0 disables dynamic storage pricing.
+  uint64 storage_target_utilization_bps = 33;
+
+  // Retrieval pricing bounds used by the dynamic controller.
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob_min = 34 [
+    (gogoproto.nullable) = false
+  ];
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob_max = 35 [
+    (gogoproto.nullable) = false
+  ];
+  // Demand target (blobs per epoch) at which retrieval_price_per_blob reaches retrieval_price_per_blob_max.
+  // 0 disables dynamic retrieval pricing.
+  uint64 retrieval_target_blobs_per_epoch = 36;
+
+  // Max per-epoch step (basis points) for dynamic price updates.
+  // 0 disables the step clamp (directly set to target).
+  uint64 dynamic_pricing_max_step_bps = 37;
 }
