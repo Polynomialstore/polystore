@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle2, Coins, Download, HardDrive, Rocket, Upload }
 import { appConfig } from '../config'
 import { StatusBar } from '../components/StatusBar'
 import { ConnectWallet } from '../components/ConnectWallet'
+import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -393,23 +394,26 @@ export function FirstFile() {
             Faucet is disabled in this build. Fund your wallet externally, then continue.
           </div>
         ) : (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => void handleRequestFunds()}
-              disabled={!isConnected || faucetLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-700 dark:text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60"
-            >
-              <Coins className="w-4 h-4" />
-              {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
-            </button>
-            <div className="text-xs text-muted-foreground">
-              {faucetTx ? (
-                <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
-              ) : (
-                <span>Balance: {balanceLabel}</span>
-              )}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => void handleRequestFunds()}
+                disabled={!isConnected || faucetLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-700 dark:text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60"
+              >
+                <Coins className="w-4 h-4" />
+                {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
+              </button>
+              <div className="text-xs text-muted-foreground">
+                {faucetTx ? (
+                  <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
+                ) : (
+                  <span>Balance: {balanceLabel}</span>
+                )}
+              </div>
             </div>
+            <FaucetAuthTokenInput />
           </div>
         )}
       </section>

@@ -166,10 +166,11 @@ Checklist:
 
 ---
 
-### PR10 — Faucet access control (auth token) + remove stale endpoints (CURRENT)
+### PR10 — Faucet access control (auth token) + remove stale endpoints (MERGED)
 
 - Branch: `codex/faucet-auth-token`
 - Goal: Make the devnet faucet truly “collaborator-only” and reduce exposed surface area.
+- PR: https://github.com/Nil-Store/nil-store/pull/66
 - Test gate:
   - `cd nil_faucet && go test ./...`
 
@@ -178,3 +179,19 @@ Checklist:
 - [x] Improve rate limiting IP parsing (use forwarded headers / host-only).
 - [x] Remove stale `/create-deal` endpoint from `nil_faucet`.
 - [x] Update trusted devnet docs + systemd env template with the auth knob.
+
+---
+
+### PR11 — Website faucet auth token (collaborator UX) (CURRENT)
+
+- Branch: `codex/website-faucet-auth-token`
+- Goal: Allow token-protected faucet funding from the website UI (without baking secrets into the build).
+- Test gate:
+  - `npm -C nil-website run test:unit`
+  - `npm -C nil-website run build`
+
+Checklist:
+- [x] Add localStorage-backed faucet auth token helper.
+- [x] Send `X-Nil-Faucet-Auth` header from `useFaucet` when token is set.
+- [x] Add UI input (Dashboard + First File wizard + Testnet Docs) for collaborators to paste/save/clear the token.
+- [x] Update trusted devnet docs with the UI token flow.

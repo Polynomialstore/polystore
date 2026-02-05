@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ethToNil } from '../lib/address'
 import { appConfig } from '../config'
+import { getFaucetAuthToken } from '../lib/faucetAuthToken'
 
 export function useFaucet() {
   const [loading, setLoading] = useState(false)
@@ -25,9 +26,15 @@ export function useFaucet() {
         let lastError: Error | null = null
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const token = getFaucetAuthToken()
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+            if (token) {
+                headers['X-Nil-Faucet-Auth'] = token
+            }
+
             const response = await fetch(`${appConfig.apiBase}/faucet`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ address: targetAddress })
             })
 
@@ -47,6 +54,10 @@ export function useFaucet() {
             }
 
             const errText = await response.text().catch(() => '')
+            if (response.status === 401) {
+                const msg = (errText || 'Unauthorized').trim()
+                throw new Error(`${msg}. Set the Faucet access token in the UI (if required).`)
+            }
             if (response.status === 429) {
                 const retryAfter = response.headers.get('retry-after')
                 const retrySeconds = retryAfter ? Number.parseFloat(retryAfter) : NaN

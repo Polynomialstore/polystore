@@ -142,6 +142,10 @@ curl -X POST -H "Content-Type: application/json" \
   https://faucet.<domain>/faucet
 ```
 
+Website UI (optional):
+- If you enable faucet funding in the web build (`VITE_ENABLE_FAUCET=1`), collaborators can paste the token into the UI
+  (Dashboard / First File wizard) and then use the “Get Testnet NIL” button.
+
 ## Collaborator “first file” smoke
 
 For a collaborator validating their SP is actually participating:

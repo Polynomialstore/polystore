@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { FileSharder } from "../components/FileSharder";
 import { FaucetWidget } from "../components/FaucetWidget";
+import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
 import { appConfig } from "../config";
 import { ethToNil } from "../lib/address";
 import { lcdFetchDeals } from "../api/lcdClient";
@@ -180,6 +181,7 @@ export const TestnetDocs = () => {
                 </p>
                 <div className="p-4 bg-secondary/10 rounded-xl border border-border/50 flex flex-col items-center justify-center gap-2">
                     <FaucetWidget />
+                    {appConfig.faucetEnabled ? <FaucetAuthTokenInput className="w-full" /> : null}
                     <p className="text-xs text-muted-foreground mt-2 text-center">
                         Works with both 0x... and nil1... addresses when the faucet is enabled.
                     </p>

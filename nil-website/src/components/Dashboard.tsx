@@ -14,6 +14,7 @@ import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
+import { FaucetAuthTokenInput } from './FaucetAuthTokenInput'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { maybeWrapNilceZstd } from '../lib/nilce'
 import { injectedConnector } from '../lib/web3Config'
@@ -2168,6 +2169,11 @@ export function Dashboard() {
               {faucetTx ? (
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
+                </div>
+              ) : null}
+              {appConfig.faucetEnabled ? (
+                <div className="mt-3">
+                  <FaucetAuthTokenInput />
                 </div>
               ) : null}
             </div>
