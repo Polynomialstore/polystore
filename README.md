@@ -14,6 +14,7 @@ This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**
 - Testnet readiness gates + one-command suites: `docs/TESTNET_READINESS_REPORT.md`
 - Trusted devnet pack (hub + remote providers): `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
 - Collaborator packet (“send this to testers”): `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
+- Provider endpoint profiles (`direct` vs `cloudflare-tunnel`): `docs/networking/PROVIDER_ENDPOINTS.md`
 
 ## Quick start (local, what CI exercises)
 

@@ -73,7 +73,7 @@ This packet is intentionally short; the canonical SP join docs are:
 
 ### 0) Prereqs
 
-- A Linux host with a **publicly reachable** TCP port (recommended: `8091/tcp`)
+- A Linux host (publicly reachable **or** behind NAT via Cloudflare Tunnel)
 - Go + Rust toolchains installed
 - This repo checked out
 
@@ -91,11 +91,22 @@ Ask the hub operator to fund your provider address with a small amount of `aatom
 
 ### 3) Choose your provider endpoint multiaddr
 
-Example (HTTP, public IP + port):
+Option A (direct HTTP, public IP + port):
 
 ```bash
 export PROVIDER_ENDPOINT="/ip4/<your-public-ip>/tcp/8091/http"
 ```
+
+Option B (Cloudflare Tunnel HTTPS, behind NAT):
+
+```bash
+# After creating a Cloudflare Tunnel hostname (example: sp1.<domain>)
+export PROVIDER_ENDPOINT="/dns4/sp1.<domain>/tcp/443/https"
+```
+
+In your tunnel config, point that hostname to the local provider listener (for example `service: http://localhost:8091`).
+
+Cloudflare Tunnel setup reference (recommended for NAT): `docs/networking/PROVIDER_ENDPOINTS.md`.
 
 ### 4) Register on-chain (uses the hub RPC/LCD)
 
@@ -156,4 +167,3 @@ Please capture:
 - A screenshot + browser console log (website), or command output (CLI)
 
 If you can reproduce reliably, that’s gold: include “steps to reproduce” from a fresh page load or fresh process start.
-

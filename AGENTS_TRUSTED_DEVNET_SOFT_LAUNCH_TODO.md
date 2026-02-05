@@ -597,3 +597,19 @@ Checklist:
 - [x] Update `docs/manual-devnet-runbook.md` to clearly separate “script parity (tx relay)” vs “wallet-first (no relay)” flows.
 - [x] Fix any stale endpoint/script references (use `scripts/devnet_healthcheck.sh` and `/health` where appropriate).
 - [x] Ensure `docs/TESTNET_READINESS_REPORT.md` references remain accurate (update wording only if needed).
+
+---
+
+### PR39 — Docs: NAT-friendly hub/SP setup via Cloudflare Tunnel (CURRENT)
+
+- Branch: `codex/cloudflare-nat-devnet-docs`
+- Goal: Make trusted-devnet setup clear for home servers behind NAT by adding a first-class Cloudflare Tunnel profile for hub ingress and provider endpoints.
+- PR: (create)
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+  - `bash -n scripts/run_devnet_provider.sh`
+
+Checklist:
+- [x] Add a Cloudflare Tunnel profile to `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` for hub endpoints (`rpc/lcd/evm/gateway/faucet/web`) when inbound `80/443` is unavailable.
+- [x] Update provider onboarding docs (`docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`, `docs/REMOTE_SP_JOIN_QUICKSTART.md`) with direct vs tunnel endpoint examples.
+- [x] Improve docs discoverability (`README.md`, `DOCS.md`) by linking `docs/networking/PROVIDER_ENDPOINTS.md`.

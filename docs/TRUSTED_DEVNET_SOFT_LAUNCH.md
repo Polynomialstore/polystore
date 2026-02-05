@@ -11,12 +11,12 @@ Related:
 
 ## Architecture (locked for soft launch)
 
-- **Hub (VPS)** runs:
+- **Hub** runs (either public VPS or home server behind NAT):
   - `nilchaind` (CometBFT RPC + LCD + EVM JSON-RPC)
   - `nil_gateway` in **router** mode
   - `nil_faucet` (enabled, rate-limited; collaborator-only)
   - `nil-website` (static build behind HTTPS)
-- **Providers (remote SPs)** run:
+- **Providers (remote SPs)** run (direct endpoint or Cloudflare Tunnel endpoint):
   - `nil_gateway` in **provider** mode (one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
@@ -39,11 +39,31 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
 
-## Hub VPS runbook (blank box → running devnet)
+## Connectivity profiles (choose one)
 
-This section is the **hub operator** checklist for standing up the public endpoints on a fresh VPS.
+### Profile A — Public ingress + Caddy (default)
 
-### 0) DNS + firewall (required)
+- Hub has reachable inbound `80/443`.
+- DNS (`rpc/lcd/evm/gateway/faucet/web`) resolves directly to the hub public IP.
+- Caddy terminates TLS and proxies to localhost ports.
+
+### Profile B — Home server behind NAT/CGNAT + Cloudflare Tunnel
+
+- Hub is not directly reachable from the internet.
+- `cloudflared` publishes the same public hostnames and forwards to localhost ports.
+- Inbound `80/443` on the hub is not required.
+- Provider machines can also use Cloudflare Tunnel endpoints (`/dns4/<host>/tcp/443/https`) when they cannot open inbound ports.
+- Endpoint details for providers: `docs/networking/PROVIDER_ENDPOINTS.md`.
+
+## Hub runbook (blank box → running devnet)
+
+This section is the **hub operator** checklist for standing up public endpoints on either:
+- a public VPS (Profile A), or
+- a home server behind NAT/CGNAT (Profile B).
+
+### 0) Choose ingress profile (required)
+
+#### Profile A (public ingress + Caddy)
 
 1) Create DNS records (A/AAAA) for:
 - `rpc.<domain>`
@@ -64,13 +84,28 @@ Keep the underlying service ports **local-only** (recommended) or **firewalled**
 - `8080` (router gateway)
 - `8081` (faucet)
 
+#### Profile B (home server behind NAT/CGNAT + Cloudflare Tunnel)
+
+1) In Cloudflare DNS, use proxied hostnames for:
+- `rpc.<domain>`
+- `lcd.<domain>`
+- `evm.<domain>`
+- `gateway.<domain>`
+- `faucet.<domain>`
+- `web.<domain>`
+
+2) Keep only SSH inbound to the server (typically `22/tcp` on LAN/VPN as you prefer).
+
+3) Keep all NilStore services bound to localhost (`127.0.0.1`), then publish them through `cloudflared` (section 4B).
+
 ### 1) Install prerequisites (one-time)
 
 You need toolchains to build binaries + the static website:
 - Go (see `go.mod`; currently Go `1.25.x`)
 - Rust (stable) + `wasm-pack` + `wasm32-unknown-unknown`
 - Node.js + npm
-- Caddy (for HTTPS)
+- Caddy (Profile A reverse proxy, or Profile B local static web server on `127.0.0.1:8088`)
+- cloudflared (Profile B)
 
 ### 2) Clone + bootstrap chain home (one-time)
 
@@ -137,7 +172,7 @@ Minimum required edits:
 - set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
 - set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
-- recommended (hub behind Caddy): bind services to localhost and expose only via HTTPS (systemd env templates default to this):
+- recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080`
   - `nil-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
@@ -150,7 +185,9 @@ sudo systemctl enable --now nil-gateway-router
 sudo systemctl enable --now nil-faucet
 ```
 
-### 4) Caddy (HTTPS reverse proxy)
+### 4) Caddy (HTTPS reverse proxy, Profile A)
+
+If you are using Profile B (Cloudflare Tunnel), skip this section and use section 4B.
 
 1) Copy the hub example and replace `example.com`:
 
@@ -163,6 +200,78 @@ sudoedit /etc/caddy/Caddyfile
 
 ```bash
 sudo systemctl reload caddy || sudo systemctl restart caddy
+```
+
+### 4B) Cloudflare Tunnel (NAT/CGNAT profile, replaces public ingress)
+
+Use this when the hub is behind NAT and you cannot expose inbound `80/443`.
+
+1) Authenticate and create the hub tunnel:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create nilstore-hub
+cloudflared tunnel route dns nilstore-hub rpc.<domain>
+cloudflared tunnel route dns nilstore-hub lcd.<domain>
+cloudflared tunnel route dns nilstore-hub evm.<domain>
+cloudflared tunnel route dns nilstore-hub gateway.<domain>
+cloudflared tunnel route dns nilstore-hub faucet.<domain>
+cloudflared tunnel route dns nilstore-hub web.<domain>
+```
+
+2) Create `/etc/cloudflared/config.yml`:
+
+```yaml
+tunnel: <HUB_TUNNEL_ID>
+credentials-file: /etc/cloudflared/<HUB_TUNNEL_ID>.json
+ingress:
+  - hostname: rpc.<domain>
+    service: http://127.0.0.1:26657
+  - hostname: lcd.<domain>
+    service: http://127.0.0.1:1317
+  - hostname: evm.<domain>
+    service: http://127.0.0.1:8545
+  - hostname: gateway.<domain>
+    service: http://127.0.0.1:8080
+  - hostname: faucet.<domain>
+    service: http://127.0.0.1:8081
+  - hostname: web.<domain>
+    service: http://127.0.0.1:8088
+  - service: http_status:404
+```
+
+3) Run a local web static server at `127.0.0.1:8088` (one simple option):
+
+```bash
+sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
+{
+  auto_https off
+}
+
+:8088 {
+  bind 127.0.0.1
+  root * /opt/nilstore/nil-website/dist
+  encode zstd gzip
+  file_server
+}
+EOF
+sudo systemctl restart caddy
+```
+
+4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
+The exact install command depends on your distro package; common pattern:
+
+```bash
+sudo cloudflared service install
+sudo systemctl enable --now cloudflared
+```
+
+5) Validate public endpoints:
+
+```bash
+curl -fsS https://rpc.<domain>/status >/dev/null
+curl -fsS https://gateway.<domain>/health >/dev/null
+curl -fsS https://web.<domain>/ >/dev/null
 ```
 
 ### 5) Website build (static, served at `web.<domain>`)
@@ -300,6 +409,7 @@ Send each collaborator:
 Then have them follow:
 
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
+- `docs/networking/PROVIDER_ENDPOINTS.md` (choose `direct` or `cloudflare-tunnel` endpoint type)
 
 ## Faucet / funding (collaborators)
 
@@ -341,6 +451,7 @@ For a collaborator validating their SP is actually participating:
   - the registration tx likely failed (fund provider key for gas)
 - Router can’t reach provider:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
+  - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
   - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
 - Fetch fails with “missing X-Nil-Session-Id”:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
@@ -349,14 +460,14 @@ For a collaborator validating their SP is actually participating:
 
 This is the “are we ready to invite people?” checklist. If any item is failing, treat it as a **No-Go** until resolved.
 
-### Hub (VPS)
+### Hub
 
 - DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `gateway.*`, `faucet.*`, `web.*` (200s; correct CORS where needed).
 - Hub healthcheck passes (preferred):
   - `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway https://gateway.<domain> --faucet https://faucet.<domain>`
 - Chain is producing blocks and not catching up:
   - `curl -s https://rpc.<domain>/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
-- Hub services are bound to localhost (recommended; Caddy is the only public listener):
+- Hub services are bound to localhost (recommended; only edge processes listen publicly: Caddy for Profile A, cloudflared for Profile B):
   - `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'`
 - Faucet is configured for invite-only (recommended):
   - `NIL_FAUCET_AUTH_TOKEN` set and tested via curl.

@@ -15,7 +15,7 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 - This repo checked out
 - Go + Rust toolchains installed
-- A public reachable provider endpoint (recommended: inbound TCP port + HTTP; HTTPS is optional for this soft launch)
+- A reachable provider endpoint (either direct public IP/port-forward, or Cloudflare Tunnel HTTPS)
 - (Optional, recommended) systemd + a reverse proxy:
   - systemd templates: `ops/systemd/nil-gateway-provider.service` + `ops/systemd/env/nil-gateway-provider.env`
   - HTTPS reverse proxy example: `ops/caddy/Caddyfile.provider.example`
@@ -36,7 +36,7 @@ Ask the hub operator to send you some `aatom` (gas) via the faucet or a direct b
 
 ### 3) Pick an endpoint multiaddr
 
-For the simplest join, register an IP+port endpoint:
+Option A (direct/public endpoint): register an IP+port endpoint:
 
 - `/ip4/<your-public-ip>/tcp/8091/http`
 
@@ -46,7 +46,18 @@ Set it:
 export PROVIDER_ENDPOINT="/ip4/<your-public-ip>/tcp/8091/http"
 ```
 
-If you need HTTPS/DNS-based endpoints, see `docs/networking/PROVIDER_ENDPOINTS.md`.
+Option B (behind NAT with Cloudflare Tunnel): register DNS+HTTPS endpoint:
+
+- `/dns4/sp.<domain>/tcp/443/https`
+
+```bash
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"
+```
+
+In your tunnel ingress, route that hostname to the local provider listener (for example `service: http://localhost:8091`).
+
+Cloudflare Tunnel setup and endpoint helper details:
+- `docs/networking/PROVIDER_ENDPOINTS.md`
 
 ### 4) Register your provider on-chain
 
