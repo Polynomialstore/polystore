@@ -149,12 +149,14 @@ The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,38
 
 ### 6.1 The Unified Market & Elasticity
 
+**Implementation status (Feb 2026):** `MsgSignalSaturation` exists and is unit-tested, but Mode 2 overlay elasticity (multi‑stripe provider sets + `mode2_slots` expansion / selection) is not yet modeled end‑to‑end. Treat §6.1–§6.2 as **design intent** beyond the parts explicitly called out as “current implementation”. For repo‑anchored reality, see `docs/GAP_REPORT_REPO_ANCHORED.md`.
+
 #### 6.1.1 Traffic Management (Saturation)
 To prevent punishment of high-performing nodes during viral events, the protocol supports **Pre-emptive Scaling**.
 
 1.  **Saturation Signal:** An SP submits `MsgSignalSaturation(DealID)`.
-    *   *Condition:* SP must be currently **Platinum/Gold** and have high retrieval session volume.
-2.  **Action:** The Chain increases `Deal.CurrentReplication` (e.g., 12 -> 15) and triggers `SystemPlacement` to recruit **Edge** nodes.
+    *   *Current implementation:* sender must be an assigned provider; tier/volume gating is TBD.
+2.  **Action:** The Chain increases `Deal.CurrentReplication` by a full stripe (currently +12; e.g., 12 -> 24) and triggers `SystemPlacement` to recruit additional providers.
 3.  **Incentive:** The signaling SP is NOT penalized. They maintain their tier on manageable traffic, while overflow is routed to new replicas.
 
 #### 6.1.2 User-Funded Elasticity

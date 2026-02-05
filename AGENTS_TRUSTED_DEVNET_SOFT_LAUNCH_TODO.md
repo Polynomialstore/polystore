@@ -480,7 +480,7 @@ Checklist:
 
 ---
 
-### PR31 — Dynamic pricing: E2E smoke for retrieval price update (CURRENT)
+### PR31 — Dynamic pricing: E2E smoke for retrieval price update (MERGED)
 
 - Branch: `codex/dynamic-pricing-e2e`
 - Goal: Add a deterministic E2E smoke path to validate the retrieval dynamic pricing controller updates `retrieval_price_per_blob` at the next epoch boundary.
@@ -492,3 +492,17 @@ Checklist:
 Checklist:
 - [x] Add an opt-in dynamic pricing mode to `e2e_retrieval_fees.sh` that asserts `retrieval_price_per_blob` updates at the next epoch.
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` dynamic pricing row with the new manual E2E command.
+
+---
+
+### PR32 — Spec/gap: clarify Mode2 elasticity (SignalSaturation) status (CURRENT)
+
+- Branch: `codex/mode2-elasticity-gap`
+- Goal: Make `spec.md` + `docs/GAP_REPORT_REPO_ANCHORED.md` explicitly reflect the current implementation status of saturation/elastic scaling (Mode2 overlay stripes are not fully modeled yet).
+- PR: https://github.com/Nil-Store/nil-store/pull/94
+- Test gate:
+  - `bash -n scripts/devnet_healthcheck.sh`
+
+Checklist:
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to track saturation/elasticity (MsgSignalSaturation) as PARTIAL for Mode2 (docs clarity; not an implementation change).
+- [x] Update `spec.md` §6.1/§6.2 to call out current Mode2 elasticity limitations and point to the repo-anchored gap report.
