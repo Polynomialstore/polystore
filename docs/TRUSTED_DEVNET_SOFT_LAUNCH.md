@@ -129,10 +129,15 @@ Collaborators must have funds for gas (and any protocol fees). For the current d
 - EVM gas denom is `aatom` (see `nilchain` params / genesis).
 - The faucet can send both `aatom` and `stake` (default `NIL_AMOUNT`).
 
+Faucet access control (recommended for invite-only):
+- Deploy behind reverse-proxy auth, and/or set `NIL_FAUCET_AUTH_TOKEN` on the faucet service.
+  - When set, requests MUST include `X-Nil-Faucet-Auth: <token>`.
+
 Faucet request (example):
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
+  -H "X-Nil-Faucet-Auth: <token>" \
   -d '{"address":"nil1..."}' \
   https://faucet.<domain>/faucet
 ```

@@ -151,10 +151,11 @@ Notes (MVP design):
 
 ---
 
-### PR9 — Devnet economics knobs (genesis overrides + dynamic pricing enable) (CURRENT)
+### PR9 — Devnet economics knobs (genesis overrides + dynamic pricing enable) (MERGED)
 
 - Branch: `codex/dynamic-pricing-devnet-wiring`
 - Goal: Make trusted devnet economics configurable (and make dynamic pricing easy to toggle on for experiments).
+- PR: https://github.com/Nil-Store/nil-store/pull/65
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
@@ -162,3 +163,18 @@ Checklist:
 - [x] Add genesis override env vars in `scripts/run_devnet_alpha_multi_sp.sh` for pricing + dynamic pricing params.
 - [x] Document the overrides + example launch command in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 - [x] Add a monitoring check for pricing params in `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`.
+
+---
+
+### PR10 — Faucet access control (auth token) + remove stale endpoints (CURRENT)
+
+- Branch: `codex/faucet-auth-token`
+- Goal: Make the devnet faucet truly “collaborator-only” and reduce exposed surface area.
+- Test gate:
+  - `cd nil_faucet && go test ./...`
+
+Checklist:
+- [x] Add optional auth token (`NIL_FAUCET_AUTH_TOKEN`) required via `X-Nil-Faucet-Auth`.
+- [x] Improve rate limiting IP parsing (use forwarded headers / host-only).
+- [x] Remove stale `/create-deal` endpoint from `nil_faucet`.
+- [x] Update trusted devnet docs + systemd env template with the auth knob.

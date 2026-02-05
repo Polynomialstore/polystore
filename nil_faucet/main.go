@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,14 +21,17 @@ import (
 
 // Config (overridable via env)
 var (
-	chainID   = envDefault("NIL_CHAIN_ID", "test-1")
-	homeDir   = envDefault("NIL_HOME", "../.nilchain")
-	amount    = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
-	denom     = envDefault("NIL_DENOM", "stake")
-	gasPrices = envDefault("NIL_GAS_PRICES", "0.001aatom")
-	cooldown  = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
+	chainID     = envDefault("NIL_CHAIN_ID", "test-1")
+	homeDir     = envDefault("NIL_HOME", "../.nilchain")
+	amount      = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
+	denom       = envDefault("NIL_DENOM", "stake")
+	gasPrices   = envDefault("NIL_GAS_PRICES", "0.001aatom")
+	cooldown    = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
 	nilchaindBin = envDefault("NILCHAIND_BIN", "nilchaind")
 	cmdTimeout   = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 20)) * time.Second
+
+	// Optional: when set, POST endpoints require X-Nil-Faucet-Auth header.
+	authToken = envDefault("NIL_FAUCET_AUTH_TOKEN", "")
 )
 
 var (
@@ -38,19 +43,9 @@ type FaucetRequest struct {
 	Address string `json:"address"`
 }
 
-type DealRequest struct {
-	Creator         string `json:"creator"`
-	Cid             string `json:"cid"`
-	Size            uint64 `json:"size"`
-	Duration        uint64 `json:"duration"`
-	InitialEscrow   string `json:"initialEscrow"`
-	MaxMonthlySpend string `json:"maxMonthlySpend"`
-}
-
 func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/faucet", RequestFunds).Methods("POST", "OPTIONS")
-	r.HandleFunc("/create-deal", CreateDeal).Methods("POST", "OPTIONS")
 	r.HandleFunc("/health", HealthCheck).Methods("GET")
 
 	// Enable CORS
@@ -115,6 +110,9 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "OPTIONS" {
 		return
 	}
+	if !authorizeRequest(w, r) {
+		return
+	}
 
 	var req FaucetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -123,7 +121,7 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate Limit (Simple IP based)
-	ip := r.RemoteAddr // In prod, use X-Forwarded-For
+	ip := clientIP(r)
 	mu.Lock()
 	if last, ok := lastRequest[ip]; ok {
 		if time.Since(last) < cooldown {
@@ -173,62 +171,42 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func CreateDeal(w http.ResponseWriter, r *http.Request) {
-	setCORS(w)
-	if r.Method == "OPTIONS" {
-		return
-	}
-
-	var req DealRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	if req.Creator == "" || req.Cid == "" || req.Size == 0 || req.Duration == 0 {
-		http.Error(w, "Missing fields", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("CreateDeal for %s cid=%s size=%d duration=%d", req.Creator, req.Cid, req.Size, req.Duration)
-
-	ctx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
-	defer cancel()
-	cmd := execNilchaind(ctx, "tx", "nilchain", "create-deal",
-		req.Cid,
-		fmt.Sprintf("%d", req.Size),
-		fmt.Sprintf("%d", req.Duration),
-		req.InitialEscrow,
-		req.MaxMonthlySpend,
-		"--chain-id", chainID,
-		"--from", "faucet",
-		"--yes",
-		"--keyring-backend", "test",
-		"--home", homeDir,
-		"--gas-prices", gasPrices,
-		"--gas", "auto",
-		"--gas-adjustment", "1.4",
-		"--broadcast-mode", "block",
-	)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("CreateDeal failed: %s", string(output))
-		http.Error(w, fmt.Sprintf("Tx failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("CreateDeal success: %s", string(output))
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status":  "success",
-		"tx_hash": "check faucet logs",
-	})
-}
-
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Nil-Faucet-Auth")
+}
+
+func authorizeRequest(w http.ResponseWriter, r *http.Request) bool {
+	if authToken == "" {
+		return true
+	}
+	given := strings.TrimSpace(r.Header.Get("X-Nil-Faucet-Auth"))
+	if given == "" || subtle.ConstantTimeCompare([]byte(given), []byte(authToken)) != 1 {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
+func clientIP(r *http.Request) string {
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			ip := strings.TrimSpace(parts[0])
+			if ip != "" {
+				return ip
+			}
+		}
+	}
+	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		return xrip
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
