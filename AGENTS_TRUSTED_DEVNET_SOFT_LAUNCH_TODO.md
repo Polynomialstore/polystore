@@ -363,5 +363,5 @@ Checklist:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
-- [ ] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
-- [ ] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` bootstrap command to include the new opt-in when using a persistent hub home.
+- [x] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
+- [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` bootstrap command to include the new opt-in when using a persistent hub home.

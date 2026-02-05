@@ -89,6 +89,12 @@ sudo chown -R "$USER":"$USER" /var/lib/nilstore
 NIL_HOME=/var/lib/nilstore/nilchaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
+If you need to re-run bootstrap later, the script will refuse to delete an existing non-`_artifacts/` home unless you explicitly opt in:
+
+```bash
+NIL_HOME=/var/lib/nilstore/nilchaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+```
+
 Note: the bootstrap script binds LCD + EVM JSON-RPC to localhost by default (safe for the hub-behind-Caddy profile).
 If you intentionally want to bind them to `0.0.0.0` for LAN / non-proxy debugging, set `NIL_BIND_ALL=1` and firewall accordingly.
 
@@ -102,7 +108,7 @@ Stop the script-managed processes:
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 ```
 
-Important: `run_devnet_alpha_multi_sp.sh start` **re-initializes** its chain home on every start. Use it only for bootstrap and local smoke tests.
+Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `NIL_REINIT_HOME=1` is set. Use it only for bootstrap and local smoke tests.
 
 ### 3) systemd (hub services)
 
@@ -269,7 +275,7 @@ PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 ```
 
-Important: `run_devnet_alpha_multi_sp.sh start` **re-initializes** its chain home on every start. Do not use it as a long-running “service manager” for the soft launch.
+Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `NIL_REINIT_HOME=1` is set. Do not use it as a long-running “service manager” for the soft launch.
 
 ## Hub: long-running (systemd templates)
 
