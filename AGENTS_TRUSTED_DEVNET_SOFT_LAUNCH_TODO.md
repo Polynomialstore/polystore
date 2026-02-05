@@ -583,11 +583,11 @@ Checklist:
 
 ---
 
-### PR38 — Docs: sync manual devnet runbook with current scripts (CURRENT)
+### PR38 — Docs: sync manual devnet runbook with current scripts (MERGED)
 
 - Branch: `codex/manual-runbook-sync`
 - Goal: Keep `docs/manual-devnet-runbook.md` aligned with the guarded E2E scripts and current “relay-off by default” posture (make the profiles explicit).
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/100
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
   - `bash -n scripts/e2e_lifecycle.sh`
