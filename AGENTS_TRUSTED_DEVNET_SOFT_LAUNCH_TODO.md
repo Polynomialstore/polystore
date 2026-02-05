@@ -337,17 +337,31 @@ Checklist:
 
 ---
 
-### PR21 — Bootstrap scripts: local-only LCD/EVM binds by default (CURRENT)
+### PR21 — Bootstrap scripts: local-only LCD/EVM binds by default (MERGED)
 
 - Branch: `codex/hub-bootstrap-local-binds`
 - Goal: Align the bootstrap scripts with the hub safety posture: bind LCD + EVM JSON-RPC to localhost by default, with an opt-in for `0.0.0.0` when needed.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/80
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [ ] Add `NIL_BIND_ALL=1` knob (default `0`) to opt into `0.0.0.0` binds for LCD/EVM JSON-RPC.
-- [ ] Update `scripts/run_devnet_alpha_multi_sp.sh` init-time config patching to respect `NIL_BIND_ALL`.
-- [ ] Update `scripts/run_local_stack.sh` init-time config patching (perl + python fallback) to respect `NIL_BIND_ALL`.
-- [ ] Document the knob in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (LAN / non-proxy debugging use only).
+- [x] Add `NIL_BIND_ALL=1` knob (default `0`) to opt into `0.0.0.0` binds for LCD/EVM JSON-RPC.
+- [x] Update `scripts/run_devnet_alpha_multi_sp.sh` init-time config patching to respect `NIL_BIND_ALL`.
+- [x] Update `scripts/run_local_stack.sh` init-time config patching (perl + python fallback) to respect `NIL_BIND_ALL`.
+- [x] Document the knob in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (LAN / non-proxy debugging use only).
+
+---
+
+### PR22 — Bootstrap script: guard against accidental `rm -rf` of persistent home (CURRENT)
+
+- Branch: `codex/hub-bootstrap-rmrf-guard`
+- Goal: Reduce hub footguns by making `run_devnet_alpha_multi_sp.sh start` refuse to delete a non-artifacts `NIL_HOME` unless explicitly opted-in.
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [ ] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
+- [ ] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` bootstrap command to include the new opt-in when using a persistent hub home.
