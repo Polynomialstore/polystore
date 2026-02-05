@@ -6,6 +6,8 @@ Files:
 - `ops/systemd/*.service`: unit templates
 - `ops/systemd/env/*.env`: EnvironmentFile templates (copy to `/etc/nilstore/*.env`)
 
+For the full “blank box → running devnet” hub runbook, see `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
+
 ## Quick usage
 
 1) Copy units:
@@ -26,7 +28,9 @@ sudoedit /etc/nilstore/nil-gateway-router.env
 3) Enable + start (hub):
 
 ```bash
-sudo systemctl enable --now nilchaind nil-gateway-router nil-faucet
+sudo systemctl enable --now nilchaind
+sudo systemctl enable --now nil-gateway-router
+sudo systemctl enable --now nil-faucet
 ```
 
 4) Tail logs:

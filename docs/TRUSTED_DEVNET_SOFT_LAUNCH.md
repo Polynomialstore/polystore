@@ -39,6 +39,172 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
 
+## Hub VPS runbook (blank box → running devnet)
+
+This section is the **hub operator** checklist for standing up the public endpoints on a fresh VPS.
+
+### 0) DNS + firewall (required)
+
+1) Create DNS records (A/AAAA) for:
+- `rpc.<domain>`
+- `lcd.<domain>`
+- `evm.<domain>`
+- `gateway.<domain>`
+- `faucet.<domain>`
+- `web.<domain>`
+
+2) Open inbound ports:
+- `22/tcp` (SSH)
+- `80/tcp` + `443/tcp` (Caddy / HTTPS)
+
+Keep the underlying service ports **local-only** (recommended) or **firewalled**:
+- `26657` (CometBFT RPC)
+- `1317` (LCD REST)
+- `8545` (EVM JSON-RPC)
+- `8080` (router gateway)
+- `8081` (faucet)
+
+### 1) Install prerequisites (one-time)
+
+You need toolchains to build binaries + the static website:
+- Go (see `go.mod`; currently Go `1.25.x`)
+- Rust (stable) + `wasm-pack` + `wasm32-unknown-unknown`
+- Node.js + npm
+- Caddy (for HTTPS)
+
+### 2) Clone + bootstrap chain home (one-time)
+
+This produces a persistent chain home directory and prints the router↔provider shared secret.
+
+```bash
+sudo mkdir -p /opt && sudo chown "$USER":"$USER" /opt
+git clone https://github.com/Nil-Store/nil-store.git /opt/nilstore
+cd /opt/nilstore
+
+# Use a persistent chain home outside the repo (matches `ops/systemd/env/nilchaind.env` defaults).
+sudo mkdir -p /var/lib/nilstore
+sudo chown -R "$USER":"$USER" /var/lib/nilstore
+
+# One-time init (hub only; no local providers; no web).
+NIL_HOME=/var/lib/nilstore/nilchaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+```
+
+Copy out (and store safely):
+- the printed `SP Auth` token (also at `_artifacts/devnet_alpha_multi_sp/sp_auth.txt`)
+- the printed `Home:` directory (should match the `NIL_HOME` you chose; keep it for systemd)
+
+Stop the script-managed processes:
+
+```bash
+PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
+```
+
+Important: `run_devnet_alpha_multi_sp.sh start` **re-initializes** its chain home on every start. Use it only for bootstrap and local smoke tests.
+
+### 3) systemd (hub services)
+
+Systemd templates live in `ops/systemd/` (also see `ops/systemd/README.md`).
+
+1) Install units:
+
+```bash
+sudo cp ops/systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+2) Install env files and fill in the `<set-me>` values:
+
+```bash
+sudo mkdir -p /etc/nilstore
+sudo cp ops/systemd/env/*.env /etc/nilstore/
+
+sudoedit /etc/nilstore/nilchaind.env
+sudoedit /etc/nilstore/nil-gateway-router.env
+sudoedit /etc/nilstore/nil-faucet.env
+```
+
+Minimum required edits:
+- set `NIL_HOME` to the persistent chain home printed by the bootstrap script
+- set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
+- set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
+- set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
+- recommended (hub behind Caddy): bind services to localhost and expose only via HTTPS:
+  - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
+  - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080`
+  - `nil_faucet` currently binds to `:8081` (use a firewall to block direct `8081/tcp` and expose only via Caddy)
+
+3) Enable + start (recommended order):
+
+```bash
+sudo systemctl enable --now nilchaind
+sudo systemctl enable --now nil-gateway-router
+sudo systemctl enable --now nil-faucet
+```
+
+### 4) Caddy (HTTPS reverse proxy)
+
+1) Copy the hub example and replace `example.com`:
+
+```bash
+sudo cp /opt/nilstore/ops/caddy/Caddyfile.hub.example /etc/caddy/Caddyfile
+sudoedit /etc/caddy/Caddyfile
+```
+
+2) Reload:
+
+```bash
+sudo systemctl reload caddy || sudo systemctl restart caddy
+```
+
+### 5) Website build (static, served at `web.<domain>`)
+
+The website is built with Vite; the **endpoint URLs are embedded at build time**.
+
+Build requirements:
+- Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
+- `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
+
+Build example:
+
+```bash
+cd /opt/nilstore/nil-website
+npm ci
+
+VITE_API_BASE=https://faucet.<domain> \
+VITE_LCD_BASE=https://lcd.<domain> \
+VITE_GATEWAY_BASE=https://gateway.<domain> \
+VITE_EVM_RPC=https://evm.<domain> \
+VITE_COSMOS_CHAIN_ID=31337 \
+VITE_CHAIN_ID=31337 \
+VITE_ENABLE_FAUCET=1 \
+npm run build
+```
+
+Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
+
+### 6) MetaMask “add network” snippet (share with collaborators)
+
+In MetaMask → **Add network manually**:
+- Network name: `NilStore Devnet`
+- New RPC URL: `https://evm.<domain>`
+- Chain ID: `31337` (`0x7a69`)
+- Currency symbol: `ATOM` (EVM gas denom is `aatom` in the current devnet profile)
+- Block explorer URL: (leave blank)
+
+### 7) Verify (hub)
+
+Sanity checks (replace `<domain>`):
+
+```bash
+curl -fsS https://lcd.<domain>/cosmos/base/tendermint/v1beta1/node_info >/dev/null
+curl -fsS https://lcd.<domain>/nilchain/nilchain/v1/params >/dev/null
+curl -fsS https://evm.<domain> -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' >/dev/null
+curl -fsS https://gateway.<domain>/health >/dev/null
+curl -fsS -o /dev/null -w '%{http_code}\n' https://faucet.<domain>/faucet
+curl -fsS https://web.<domain>/ >/dev/null
+```
+
 ## Economics knobs (soft launch)
 
 Nilchain module params are stored in genesis under `app_state.nilchain.params` and can be patched at init-time

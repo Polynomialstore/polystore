@@ -214,7 +214,7 @@ Checklist:
 
 ---
 
-### PR13 — Gap report sync (post-PR12) (CURRENT)
+### PR13 — Gap report sync (post-PR12) (MERGED)
 
 - Branch: `codex/gap-report-sync`
 - Goal: Keep `docs/GAP_REPORT_REPO_ANCHORED.md` aligned with merged PR reality (no stale “planned fix” refs).
@@ -244,7 +244,7 @@ Checklist:
 
 ---
 
-### PR15 — Hub VPS “blank box → running devnet” runbook (systemd + caddy + web build) (NEXT)
+### PR15 — Hub VPS “blank box → running devnet” runbook (systemd + caddy + web build) (CURRENT)
 
 - Branch: `codex/hub-vps-runbook`
 - Goal: Make hub deployment a copy/paste process (DNS → build → systemd → caddy → verify).
@@ -252,9 +252,9 @@ Checklist:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
-- [ ] Add a hub operator runbook section: required ports, DNS records, Caddy install + reload, and systemd enable/start order.
-- [ ] Document `nil-website` build env for HTTPS subdomains (`VITE_LCD_BASE`, `VITE_EVM_RPC`, `VITE_GATEWAY_BASE`, `VITE_API_BASE`, `VITE_COSMOS_CHAIN_ID`, `VITE_CHAIN_ID`).
-- [ ] Add a “MetaMask add network” snippet (RPC URL, chain id, currency, explorer placeholder).
+- [x] Add a hub operator runbook section: required ports, DNS records, Caddy install + reload, and systemd enable/start order.
+- [x] Document `nil-website` build env for HTTPS subdomains (`VITE_LCD_BASE`, `VITE_EVM_RPC`, `VITE_GATEWAY_BASE`, `VITE_API_BASE`, `VITE_COSMOS_CHAIN_ID`, `VITE_CHAIN_ID`).
+- [x] Add a “MetaMask add network” snippet (RPC URL, chain id, currency, explorer placeholder).
 
 ---
 
