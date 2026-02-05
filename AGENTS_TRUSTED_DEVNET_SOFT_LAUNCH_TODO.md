@@ -70,10 +70,11 @@ Checklist:
 
 ---
 
-### PR4 — Mode2 stripe integrity: byte-for-byte retrieval assertion (CURRENT)
+### PR4 — Mode2 stripe integrity: byte-for-byte retrieval assertion (MERGED)
 
 - Branch: `codex/mode2-stripe-bytes-assert`
 - Goal: Upgrade the Mode2 Stripe E2E signal from “downloaded something” to “downloaded the right bytes”.
+- PR: https://github.com/Nil-Store/nil-store/pull/60
 - Test gate:
   - `scripts/e2e_mode2_stripe_multi_sp.sh`
 
@@ -84,7 +85,7 @@ Checklist:
 
 ---
 
-### PR5 — Allowlist access control test vectors (chain)
+### PR5 — Allowlist access control test vectors (chain) (CURRENT)
 
 - Branch: `codex/allowlist-merkle-tests`
 - Goal: Turn allowlist logic from “implemented” into “proven”.
@@ -92,8 +93,8 @@ Checklist:
   - `cd nilchain && go test ./...`
 
 Checklist:
-- [ ] Add unit tests for `OpenRetrievalSessionSponsored` allowlist proof verification (valid + invalid paths).
-- [ ] Add deterministic merkle test vectors (keccak leaves, indices, paths).
+- [x] Add unit tests for `OpenRetrievalSessionSponsored` allowlist proof verification (valid + invalid paths).
+- [x] Add deterministic merkle test vectors (keccak leaves, indices, paths).
 
 ---
 
