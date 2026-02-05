@@ -99,10 +99,11 @@ Checklist:
 
 ---
 
-### PR6 — Trusted devnet “soft launch” pack (ops + onboarding) (CURRENT)
+### PR6 — Trusted devnet “soft launch” pack (ops + onboarding) (MERGED)
 
 - Branch: `codex/devnet-soft-launch-pack`
 - Goal: Make onboarding a collaborator a **30-minute task**, not an archeological dig.
+- PR: https://github.com/Nil-Store/nil-store/pull/62
 - Test gate:
   - `scripts/run_devnet_alpha_multi_sp.sh start` (local smoke)
 
@@ -114,7 +115,7 @@ Checklist:
 
 ---
 
-### PR7 — Website onboarding overhaul (collaborator UX)
+### PR7 — Website onboarding overhaul (collaborator UX) (CURRENT)
 
 - Branch: `codex/website-onboarding-overhaul`
 - Goal: A collaborator can store and retrieve a file with minimal context.
@@ -123,9 +124,9 @@ Checklist:
   - `npm -C nil-website run build`
 
 Checklist:
-- [ ] Guided “First File” flow (connect → fund → alloc → upload → commit → retrieve).
-- [ ] Prominent environment/status panel (chain/gateway/provider health).
-- [ ] Copy-paste “share this with the devs” diagnostics bundle.
+- [x] Guided “First File” flow (connect → fund → alloc → upload → commit → retrieve).
+- [x] Prominent environment/status panel (chain/gateway/provider health).
+- [x] Copy-paste “share this with the devs” diagnostics bundle.
 
 ---
 

@@ -1,9 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchStatus, ServiceStatus } from '../lib/status'
 import { appConfig } from '../config'
 import { useAccount, useChainId } from 'wagmi'
 import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
+import { CheckCircle2, Copy, RefreshCw } from 'lucide-react'
+
+async function copyText(text: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  if (typeof document === 'undefined') {
+    throw new Error('clipboard unavailable')
+  }
+  const el = document.createElement('textarea')
+  el.value = text
+  el.setAttribute('readonly', 'true')
+  el.style.position = 'fixed'
+  el.style.top = '0'
+  el.style.left = '0'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  document.execCommand('copy')
+  document.body.removeChild(el)
+}
 
 function Badge({ label, status }: { label: string; status: ServiceStatus }) {
   const colors =
@@ -37,22 +59,51 @@ export function StatusBar() {
     lcd: 'warn' as ServiceStatus,
     evm: 'warn' as ServiceStatus,
     faucet: 'warn' as ServiceStatus,
+    gateway: 'warn' as ServiceStatus,
     chainIdMatch: 'warn' as ServiceStatus,
   })
+  const [providerCount, setProviderCount] = useState<number | undefined>(undefined)
   const [evmChainId, setEvmChainId] = useState<number | undefined>(undefined)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [copyError, setCopyError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const providerStatus = useMemo<ServiceStatus>(() => {
+    if (providerCount === undefined) return 'warn'
+    if (providerCount === 0) return 'error'
+    return 'ok'
+  }, [providerCount])
 
   useEffect(() => {
-    fetchStatus(appConfig.chainId).then((res) => {
-      setSummary({
-        lcd: res.lcd,
-        evm: res.evm,
-        faucet: res.faucet,
-        chainIdMatch: res.chainIdMatch,
-      })
-      setHeight(res.height)
-      setChainName(res.networkName)
-      setEvmChainId(res.evmChainId)
-    })
+    let cancelled = false
+
+    const load = async () => {
+      setRefreshing(true)
+      try {
+        const res = await fetchStatus(appConfig.chainId)
+        if (cancelled) return
+        setSummary({
+          lcd: res.lcd,
+          evm: res.evm,
+          faucet: res.faucet,
+          gateway: res.gateway,
+          chainIdMatch: res.chainIdMatch,
+        })
+        setHeight(res.height)
+        setChainName(res.networkName)
+        setEvmChainId(res.evmChainId)
+        setProviderCount(res.providerCount)
+      } finally {
+        if (!cancelled) setRefreshing(false)
+      }
+    }
+
+    load()
+    const interval = window.setInterval(load, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
   }, [])
 
   const walletBadge =
@@ -69,11 +120,62 @@ export function StatusBar() {
   const lastReason =
     lastTrace?.chosen && lastFailure?.errorMessage ? ` (${lastFailure.errorMessage})` : ''
 
+  const handleCopyDiagnostics = async () => {
+    setCopyState('idle')
+    setCopyError(null)
+    try {
+      const diagnostics = {
+        timestamp: new Date().toISOString(),
+        location: typeof window !== 'undefined' ? window.location.href : '',
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        appConfig: {
+          chainId: appConfig.chainId,
+          cosmosChainId: appConfig.cosmosChainId,
+          lcdBase: appConfig.lcdBase,
+          evmRpc: appConfig.evmRpc,
+          gatewayBase: appConfig.gatewayBase,
+          spBase: appConfig.spBase,
+          apiBase: appConfig.apiBase,
+          faucetEnabled: appConfig.faucetEnabled,
+          gatewayDisabled: appConfig.gatewayDisabled,
+          p2pEnabled: appConfig.p2pEnabled,
+          nilstorePrecompile: appConfig.nilstorePrecompile,
+        },
+        wallet: {
+          connected: isConnected,
+          locked: isLocked,
+          walletChainId: chainId ?? null,
+        },
+        status: {
+          ...summary,
+          height: height ?? null,
+          lcdChainId: chainName ?? null,
+          evmChainId: evmChainId ?? null,
+          providerCount: providerCount ?? null,
+        },
+        transport: {
+          preference,
+          lastTrace,
+        },
+      }
+      await copyText(JSON.stringify(diagnostics, null, 2))
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setCopyError(msg || 'copy failed')
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 4000)
+    }
+  }
+
   return (
     <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">
       <Badge label={`LCD`} status={summary.lcd} />
       <Badge label={`EVM`} status={summary.evm} />
+      {!appConfig.gatewayDisabled && <Badge label={`Gateway`} status={summary.gateway} />}
       {appConfig.faucetEnabled && <Badge label={`Faucet`} status={summary.faucet} />}
+      <Badge label={`Providers ${providerCount ?? '—'}`} status={providerStatus} />
       <Badge label={`Chain ID`} status={summary.chainIdMatch} />
       {walletBadge}
       {height && <span className="opacity-75">Height: {height}</span>}
@@ -95,6 +197,37 @@ export function StatusBar() {
           {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
         </select>
       </label>
+      <button
+        type="button"
+        onClick={() => void handleCopyDiagnostics()}
+        className="inline-flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors"
+        title={copyError ? `Copy failed: ${copyError}` : 'Copy diagnostics bundle for the devs'}
+      >
+        {copyState === 'copied' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+        {copyState === 'copied' ? 'Copied' : 'Copy diag'}
+      </button>
+      <button
+        type="button"
+        onClick={() => void fetchStatus(appConfig.chainId).then((res) => {
+          setSummary({
+            lcd: res.lcd,
+            evm: res.evm,
+            faucet: res.faucet,
+            gateway: res.gateway,
+            chainIdMatch: res.chainIdMatch,
+          })
+          setHeight(res.height)
+          setChainName(res.networkName)
+          setEvmChainId(res.evmChainId)
+          setProviderCount(res.providerCount)
+        })}
+        disabled={refreshing}
+        className="inline-flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors disabled:opacity-60"
+        title="Refresh status"
+      >
+        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+        Refresh
+      </button>
     </div>
   )
 }

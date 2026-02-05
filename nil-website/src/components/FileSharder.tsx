@@ -134,6 +134,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
   const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
+  const persistInFlightRef = useRef<Promise<void> | null>(null)
+  const lastPersistedManifestRootRef = useRef<string | null>(null)
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -202,7 +204,77 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined);
-  }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
+
+    const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
+    if (!hasLocalArtifacts) return
+
+    const manifestRoot = currentManifestRoot
+    const manifestBlob = currentManifestBlob
+    const mdus = collectedMdus.slice()
+    const shards = mode2Shards.slice()
+    const witnessCount = shardProgress.totalWitnessMdus
+
+    const persistPromise = (async () => {
+      const safeRoot = String(manifestRoot || '').trim()
+      if (!safeRoot) return
+      if (lastPersistedManifestRootRef.current === safeRoot) return
+
+      // Serialize writes to OPFS to avoid interleaving blobs from multiple commits.
+      if (persistInFlightRef.current) {
+        try {
+          await persistInFlightRef.current
+        } catch {
+          // ignore: new commit will attempt to write a complete slab anyway
+        }
+      }
+
+      try {
+        addLog('> Saving committed slab to OPFS...')
+        await writeManifestRoot(dealId, safeRoot)
+        if (manifestBlob && manifestBlob.byteLength > 0) {
+          await writeManifestBlob(dealId, manifestBlob)
+        }
+        for (const mdu of mdus) {
+          await writeMdu(dealId, mdu.index, mdu.data)
+        }
+        if (isMode2 && shards.length > 0) {
+          for (const mdu of shards) {
+            const slabIndex = 1 + witnessCount + mdu.index
+            for (let slot = 0; slot < mdu.shards.length; slot++) {
+              const shard = mdu.shards[slot]
+              if (!shard) continue
+              await writeShard(dealId, slabIndex, slot, shard)
+            }
+          }
+        }
+
+        lastPersistedManifestRootRef.current = safeRoot
+        addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.')
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        addLog(`> Failed to save MDUs locally: ${msg}`)
+      }
+    })()
+
+    persistInFlightRef.current = persistPromise
+    void persistPromise.finally(() => {
+      if (persistInFlightRef.current === persistPromise) {
+        persistInFlightRef.current = null
+      }
+    })
+  }, [
+    addLog,
+    collectedMdus,
+    commitHash,
+    currentManifestBlob,
+    currentManifestRoot,
+    dealId,
+    isCommitSuccess,
+    isMode2,
+    mode2Shards,
+    onCommitSuccess,
+    shardProgress.totalWitnessMdus,
+  ]);
 
   const uploadMode2 = useCallback(async () => {
     if (!currentManifestRoot || !currentManifestBlob) {
@@ -585,55 +657,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     shardProgress.totalWitnessMdus,
   ]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const persist = async () => {
-      if (!isCommitSuccess) return;
-      if (!currentManifestRoot) return;
-      if (collectedMdus.length === 0 && !isMode2) return;
-
-      try {
-        addLog('> Saving committed slab to OPFS...');
-        await writeManifestRoot(dealId, currentManifestRoot);
-        if (currentManifestBlob) {
-          await writeManifestBlob(dealId, currentManifestBlob);
-        }
-        for (const mdu of collectedMdus) {
-          if (cancelled) return;
-          await writeMdu(dealId, mdu.index, mdu.data);
-        }
-        if (isMode2 && mode2Shards.length > 0) {
-          const witnessCount = shardProgress.totalWitnessMdus;
-          for (const mdu of mode2Shards) {
-            const slabIndex = 1 + witnessCount + mdu.index;
-            for (let slot = 0; slot < mdu.shards.length; slot++) {
-              const shard = mdu.shards[slot];
-              if (!shard) continue;
-              await writeShard(dealId, slabIndex, slot, shard);
-            }
-          }
-        }
-        addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.');
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        addLog(`> Failed to save MDUs locally: ${msg}`);
-      }
-    };
-    void persist();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    addLog,
-    collectedMdus,
-    currentManifestBlob,
-    currentManifestRoot,
-    dealId,
-    isCommitSuccess,
-    isMode2,
-    mode2Shards,
-    shardProgress.totalWitnessMdus,
-  ]);
+  // Note: OPFS persistence is handled in the commit-success effect above so we can
+  // await it before starting the next file without being cancelled by state resets.
 
   const ensureWasmReady = useCallback(async () => {
     if (wasmStatus === 'ready') return
@@ -696,6 +721,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!isConnected) {
         alert('Connect wallet first');
         return;
+      }
+
+      if (persistInFlightRef.current) {
+        try {
+          await persistInFlightRef.current
+        } catch {
+          // ignore
+        }
       }
 
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };

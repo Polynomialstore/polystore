@@ -1674,6 +1674,8 @@ export function Dashboard() {
         </div>
       )}
 
+      <StatusBar />
+
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
         {/*
@@ -2483,7 +2485,6 @@ export function Dashboard() {
             Network &amp; routing (advanced)
           </div>
           <div className="p-6 space-y-6">
-          <StatusBar />
           {proofs.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">

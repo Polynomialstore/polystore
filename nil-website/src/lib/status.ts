@@ -6,15 +6,17 @@ export interface StatusSummary {
   lcd: ServiceStatus
   evm: ServiceStatus
   faucet: ServiceStatus
+  gateway: ServiceStatus
   chainIdMatch: ServiceStatus
   height?: number
   networkName?: string
   evmChainId?: number
+  providerCount?: number
   error?: string
 }
 
 export async function fetchStatus(expectedChainId: number): Promise<StatusSummary> {
-  const summary: StatusSummary = { lcd: 'warn', evm: 'warn', faucet: 'warn', chainIdMatch: 'warn' }
+  const summary: StatusSummary = { lcd: 'warn', evm: 'warn', faucet: 'warn', gateway: 'warn', chainIdMatch: 'warn' }
   try {
     const res = await fetch(`${appConfig.lcdBase}/cosmos/base/tendermint/v1beta1/blocks/latest`)
     if (res.ok) {
@@ -27,6 +29,17 @@ export async function fetchStatus(expectedChainId: number): Promise<StatusSummar
     }
   } catch (e) {
     summary.lcd = 'error'
+  }
+
+  try {
+    const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+    if (res.ok) {
+      const json = await res.json()
+      const providers = Array.isArray(json?.providers) ? json.providers : []
+      summary.providerCount = Number(providers.length)
+    }
+  } catch (e) {
+    // optional
   }
 
   try {
@@ -47,6 +60,15 @@ export async function fetchStatus(expectedChainId: number): Promise<StatusSummar
     }
   } catch (e) {
     summary.evm = 'error'
+  }
+
+  if (!appConfig.gatewayDisabled) {
+    try {
+      const res = await fetch(`${appConfig.gatewayBase}/health`)
+      summary.gateway = res.ok ? 'ok' : 'warn'
+    } catch (e) {
+      summary.gateway = 'error'
+    }
   }
 
   if (appConfig.faucetEnabled) {
