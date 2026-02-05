@@ -148,10 +148,11 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Logic:** Provider submits `MsgSubmitRetrievalSessionProof` on-chain.
     *   **Role:** Canonical proof submission path.
 
-*   **`GET /sp/shard`** *(Mode 2 Provider API)*
+*   **`GET /sp/shard`** *(Mode 2 Provider API; internal)*
+    *   **Headers:** `X‑Nil‑Gateway‑Auth: <shared token>` (**required**).
     *   **Query Params:** `deal_id`, `manifest_root`, `mdu_index`, `slot`.
     *   **Logic:** Streams `mdu_<index>_slot_<slot>.bin` from the provider’s storage root.
-    *   **Role:** Used by gateways/clients to reconstruct Mode 2 MDUs when local shards are missing.
+    *   **Role:** Provider‑to‑provider shard reads used to reconstruct Mode 2 MDUs when local shards are missing. Browsers should fetch bytes via `/gateway/fetch/...` instead.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.

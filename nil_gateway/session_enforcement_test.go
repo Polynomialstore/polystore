@@ -187,15 +187,15 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	}
 }
 
-func TestSpFetchShard_RequiresOnchainSession_WhenEnabled(t *testing.T) {
+func TestSpFetchShard_RequiresGatewayAuth(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 
 	r := testRouter()
 	req := httptest.NewRequest(http.MethodGet, "/sp/shard?deal_id=1&mdu_index=2&slot=0&manifest_root=0x"+strings.Repeat("11", 48), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 missing session, got %d (%s)", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 forbidden, got %d (%s)", w.Code, w.Body.String())
 	}
 }
 

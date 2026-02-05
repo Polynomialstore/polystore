@@ -5399,12 +5399,9 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if requireOnchainSession {
-		raw := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
-		if raw == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
-			return
-		}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
 	}
 
 	q := r.URL.Query()
@@ -5442,112 +5439,8 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if requireOnchainSession {
-		sessionKey, _, err := parseSessionIDHex(strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")))
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", err.Error())
-			return
-		}
-		sess, err := fetchRetrievalSession(sessionKey)
-		if err != nil {
-			if errors.Is(err, ErrSessionNotFound) {
-				writeJSONError(w, http.StatusNotFound, "retrieval session not found on chain", "")
-				return
-			}
-			writeJSONError(w, http.StatusInternalServerError, "failed to fetch retrieval session", err.Error())
-			return
-		}
-		if sess.DealId != dealID {
-			writeJSONError(w, http.StatusBadRequest, "session deal_id mismatch", "")
-			return
-		}
-		if len(sess.ManifestRoot) != 48 || !bytes.Equal(sess.ManifestRoot, parsed.Bytes[:]) {
-			writeJSONError(w, http.StatusBadRequest, "session manifest_root mismatch", "")
-			return
-		}
-		if sess.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
-			writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", sess.Status))
-			return
-		}
-
-		h, herr := fetchLatestHeight(r.Context(), lcdBase)
-		if herr != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to fetch chain height", herr.Error())
-			return
-		}
-		meta, derr := fetchDealMeta(dealID)
-		if derr != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to fetch deal", derr.Error())
-			return
-		}
-		if meta.EndBlock != 0 && h >= meta.EndBlock {
-			writeJSONError(w, http.StatusGone, "deal expired", fmt.Sprintf("end_block=%d", meta.EndBlock))
-			return
-		}
-		if sess.ExpiresAt != 0 && h > sess.ExpiresAt {
-			writeJSONError(w, http.StatusForbidden, "session expired", "")
-			return
-		}
-		if meta.EndBlock != 0 && sess.ExpiresAt != 0 && sess.ExpiresAt > meta.EndBlock {
-			writeJSONError(w, http.StatusForbidden, "session outlives deal term", "")
-			return
-		}
-
-		serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
-		if serr != nil {
-			log.Printf("SpFetchShard: failed to fetch service hint: %v", serr)
-			serviceHint = ""
-		}
-		stripe, serr := stripeParamsFromHint(serviceHint)
-		if serr != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid deal service hint", serr.Error())
-			return
-		}
-		if stripe.mode != 2 || stripe.rows == 0 || stripe.leafCount == 0 {
-			writeJSONError(w, http.StatusBadRequest, "SpFetchShard only supported for Mode 2 deals", "")
-			return
-		}
-		startLeaf, overflow := mulUint64(slot, stripe.rows)
-		if overflow {
-			writeJSONError(w, http.StatusBadRequest, "invalid slot mapping", "start_leaf overflow")
-			return
-		}
-		if stripe.rows == 0 {
-			writeJSONError(w, http.StatusBadRequest, "invalid stripe params", "rows is zero")
-			return
-		}
-		endLeaf := startLeaf + stripe.rows - 1
-		if endLeaf < startLeaf {
-			writeJSONError(w, http.StatusBadRequest, "invalid slot mapping", "end_leaf overflow")
-			return
-		}
-		reqStart, overflow := addUint64(mduIndex*stripe.leafCount, startLeaf)
-		if overflow {
-			writeJSONError(w, http.StatusBadRequest, "invalid request range", "start_global overflow")
-			return
-		}
-		reqEnd, overflow := addUint64(mduIndex*stripe.leafCount, endLeaf)
-		if overflow {
-			writeJSONError(w, http.StatusBadRequest, "invalid request range", "end_global overflow")
-			return
-		}
-		sessStart, overflow := addUint64(sess.StartMduIndex*stripe.leafCount, uint64(sess.StartBlobIndex))
-		if overflow {
-			writeJSONError(w, http.StatusBadRequest, "invalid session range", "start_global overflow")
-			return
-		}
-		sessEnd := sessStart + sess.BlobCount - 1
-		if sessEnd < sessStart {
-			writeJSONError(w, http.StatusBadRequest, "invalid session range", "end_global overflow")
-			return
-		}
-		if reqStart < sessStart || reqEnd > sessEnd {
-			writeJSONError(w, http.StatusForbidden, "range outside session", "open a session that covers this shard range")
-			return
-		}
-	}
 	rootDir := dealScopedDir(dealID, parsed)
-	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
+	filename := fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot)
 	path := filepath.Join(rootDir, filename)
 
 	f, err := os.Open(path)

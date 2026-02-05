@@ -86,6 +86,14 @@ test.describe('mode2 stripe', () => {
     let fetchCalls = 0
     const chunkPromises: Promise<void>[] = []
     const chunkBytes: Array<{ start: number; bytes: Buffer }> = []
+    const fetchEvents: Array<{
+      url: string
+      origin: string
+      status: number
+      provider: string
+      range: string
+      bodyLen: number
+    }> = []
     page.on('response', (resp) => {
       const url = resp.url()
       if (!url.includes('/gateway/fetch/')) return
@@ -97,6 +105,23 @@ test.describe('mode2 stripe', () => {
       const p = (async () => {
         try {
           const body = await resp.body()
+          const headers = resp.headers()
+          const provider = String(headers['x-nil-provider'] || headers['X-Nil-Provider'] || '')
+          let origin = ''
+          try {
+            origin = new URL(url).origin
+          } catch (err) {
+            void err
+            origin = ''
+          }
+          fetchEvents.push({
+            url,
+            origin,
+            status: resp.status(),
+            provider,
+            range: typeof range === 'string' ? range : '',
+            bodyLen: body.length,
+          })
           chunkBytes.push({ start, bytes: Buffer.from(body) })
         } catch (err) {
           void err
@@ -123,6 +148,9 @@ test.describe('mode2 stripe', () => {
     await downloadBtn.click()
 
     await expect(page.getByText(/Receipt submitted on-chain|Receipt failed/i)).toBeVisible({ timeout: 360_000 })
+    const routeEl = page.getByTestId('transport-route')
+    const routeAttempts = (await routeEl.getAttribute('data-transport-attempts').catch(() => null)) || ''
+    const routeFailure = (await routeEl.getAttribute('data-transport-failure').catch(() => null)) || ''
 
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
 
@@ -168,6 +196,32 @@ test.describe('mode2 stripe', () => {
     const maxExpected = fileBytes.length
     expect(downloaded.length).toBeGreaterThan(0)
     expect(downloaded.length).toBeLessThanOrEqual(maxExpected)
+    const expectedHash = crypto.createHash('sha256').update(fileBytes).digest('hex')
+    const actualHash = crypto.createHash('sha256').update(downloaded).digest('hex')
+    if (downloaded.length !== fileBytes.length || actualHash !== expectedHash) {
+      console.log(
+        JSON.stringify(
+          {
+            routeAttempts,
+            routeFailure,
+            fetchEvents: fetchEvents
+              .slice()
+              .sort((a, b) => a.range.localeCompare(b.range))
+              .map((e) => ({
+                origin: e.origin,
+                status: e.status,
+                provider: e.provider,
+                range: e.range,
+                bodyLen: e.bodyLen,
+              })),
+          },
+          null,
+          2,
+        ),
+      )
+    }
+    expect(downloaded.length).toBe(fileBytes.length)
+    expect(actualHash).toBe(expectedHash)
   })
 
   test('mode2 append keeps prior files', async ({ page }) => {
