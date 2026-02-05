@@ -391,6 +391,6 @@ Checklist:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [ ] Add a short “Reset state” note to `HAPPY_PATH.md` (default `_artifacts` is safe; persistent `NIL_HOME` requires `NIL_REINIT_HOME=1`).
-- [ ] Update `docs/TESTNET_READINESS_REPORT.md` to mention `NIL_REINIT_HOME` and bump the report date.
-- [ ] Update `docs/manual-devnet-runbook.md` prerequisites to mention safe reset behavior (and how to opt into wiping a persistent home).
+- [x] Add a short “Reset state” note to `HAPPY_PATH.md` (default `_artifacts` is safe; persistent `NIL_HOME` requires `NIL_REINIT_HOME=1`).
+- [x] Update `docs/TESTNET_READINESS_REPORT.md` to mention `NIL_REINIT_HOME` and bump the report date.
+- [x] Update `docs/manual-devnet-runbook.md` prerequisites to mention safe reset behavior (and how to opt into wiping a persistent home).

@@ -1,6 +1,6 @@
 # NilStore Testnet Readiness Report
 
-Date: 2026-02-04
+Date: 2026-02-05
 
 This report is the Phase 8 deliverable from `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
@@ -11,6 +11,10 @@ Start the full local stack (chain + faucet + gateways + optional web UI):
 ```bash
 ./scripts/run_local_stack.sh start
 ```
+
+Notes:
+- `run_local_stack.sh start` **always re-initializes** the chain home.
+- Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
 
 Stop everything started by the script:
 

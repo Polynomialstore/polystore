@@ -9,6 +9,10 @@ This document translates the guarded end-to-end scripts into a human‑operable 
    ```bash
    ./scripts/run_local_stack.sh start
    ```
+   Notes:
+   - `run_local_stack.sh start` **always re-initializes** the chain home.
+   - Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
+     - Example: `NIL_HOME=/var/lib/nilstore/local NIL_REINIT_HOME=1 ./scripts/run_local_stack.sh start`
    This launches CometBFT + EVM chain, faucet, router, and SP gateways configured for multi‑SP scenarios.
 3. Confirm health endpoints are returning 200 (LCD `/cosmos/base/tendermint/v1beta1/node_info`, gateway `/gateway/create-deal-evm`), as done by `scripts/e2e_lifecycle.sh`.
 
