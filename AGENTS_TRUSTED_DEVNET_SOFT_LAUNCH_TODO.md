@@ -539,14 +539,28 @@ Checklist:
 
 ---
 
-### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (CURRENT)
+### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (MERGED)
 
 - Branch: `codex/ci-go-1-25x`
 - Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `nil_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/97
 - Test gate:
   - `ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/ci.yml\"); YAML.load_file(\".github/workflows/tauri_release.yml\")'`
 
 Checklist:
-- [ ] Update `.github/workflows/ci.yml` `actions/setup-go` versions to `1.25.x`.
-- [ ] Update `.github/workflows/tauri_release.yml` `actions/setup-go` version to `1.25.x`.
+- [x] Update `.github/workflows/ci.yml` `actions/setup-go` versions to `1.25.x`.
+- [x] Update `.github/workflows/tauri_release.yml` `actions/setup-go` version to `1.25.x`.
+
+---
+
+### PR36 — CI hygiene: remove `set-output` deprecation warnings (Rust + cache actions) (CURRENT)
+
+- Branch: `codex/ci-rust-action-update`
+- Goal: Reduce CI noise and future breakage risk by removing GitHub Actions `set-output` deprecation warnings (update Rust toolchain + cache actions).
+- PR: (create)
+- Test gate:
+  - `ruby -e 'require \"yaml\"; %w[.github/workflows/ci.yml .github/workflows/e2e_playwright.yml .github/workflows/tauri_release.yml].each { |p| YAML.load_file(p) }'`
+
+Checklist:
+- [ ] Replace `actions-rs/toolchain@v1` with a maintained Rust toolchain action in CI workflows.
+- [ ] Bump `actions/cache@v3` → `actions/cache@v4` in CI workflows.
