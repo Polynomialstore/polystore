@@ -344,3 +344,48 @@ For a collaborator validating their SP is actually participating:
   - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
 - Fetch fails with “missing X-Nil-Session-Id”:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
+
+## Go/No-Go checklist (before inviting collaborators)
+
+This is the “are we ready to invite people?” checklist. If any item is failing, treat it as a **No-Go** until resolved.
+
+### Hub (VPS)
+
+- DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `gateway.*`, `faucet.*`, `web.*` (200s; correct CORS where needed).
+- Hub healthcheck passes (preferred):
+  - `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway https://gateway.<domain> --faucet https://faucet.<domain>`
+- Chain is producing blocks and not catching up:
+  - `curl -s https://rpc.<domain>/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
+- Hub services are bound to localhost (recommended; Caddy is the only public listener):
+  - `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'`
+- Faucet is configured for invite-only (recommended):
+  - `NIL_FAUCET_AUTH_TOKEN` set and tested via curl.
+- Pricing params are sane (and dynamic pricing status is intentional):
+  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
+
+### Providers (remote SP baseline)
+
+- Provider healthcheck passes:
+  - `scripts/devnet_healthcheck.sh provider --provider https://provider.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
+- Provider is visible on-chain and has reachable endpoints:
+  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
+- Router↔provider auth secret matches (`NIL_GATEWAY_SP_AUTH`) and is stored out-of-band (treat like a password).
+
+### Website (collaborator UX)
+
+- Web build points at the correct HTTPS endpoints (`VITE_*` vars) and loads without console errors.
+- “Connect wallet” works and MetaMask is on the correct network (RPC + chain id).
+- If faucet UI is enabled (`VITE_ENABLE_FAUCET=1`), the token flow works (paste token → fund → clear token works).
+
+### End-to-end smoke (must pass)
+
+- From the website: create deal → upload → commit → retrieve a file; verify the retrieved bytes match the upload.
+- Confirm requests are session-scoped (sessions are required by default):
+  - successful fetch includes `X-Nil-Session-Id` on the request path
+  - hub response includes `X-Nil-Provider` (who served the bytes)
+
+### Rollback / safety (know before inviting)
+
+- How to pause/disable the faucet quickly (systemd stop + reverse-proxy disable).
+- How to rotate `NIL_GATEWAY_SP_AUTH` (requires restarting hub router + all providers).
+- How to snapshot/backup the chain home (`NIL_HOME`) and the hub’s gateway data dirs before changes.

@@ -411,14 +411,27 @@ Checklist:
 
 ---
 
-### PR26 — Gap report CI truth + docs index pointer (CURRENT)
+### PR26 — Gap report CI truth + docs index pointer (MERGED)
 
 - Branch: `codex/gap-report-ci-truth`
 - Goal: Make it explicit what CI jobs prove (and don’t) and make the doc index point to the repo-anchored agent runbook.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/88
 - Test gate:
   - `bash -n install.sh`
 
 Checklist:
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` CI section to match `.github/workflows/ci.yml` (Foundry, parity, Tauri, and E2E suites).
 - [x] Update `DOCS.md` to include `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` in the Agent Runbooks section.
+
+---
+
+### PR27 — Trusted devnet go/no-go checklist (CURRENT)
+
+- Branch: `codex/devnet-go-no-go-checklist`
+- Goal: Add a crisp, operator-focused checklist for when we’re ready to invite collaborators (and what to verify first).
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+
+Checklist:
+- [x] Add a “Go/No-Go checklist” section to `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (hub + provider + website + smoke).
