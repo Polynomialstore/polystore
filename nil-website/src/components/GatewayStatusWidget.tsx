@@ -64,6 +64,8 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
 
   return (
     <div 
+      data-testid="gateway-status-widget"
+      data-status={status}
       className={`flex items-center gap-1 text-sm ${colorClass} ${className}`}
       title={tooltip}
     >

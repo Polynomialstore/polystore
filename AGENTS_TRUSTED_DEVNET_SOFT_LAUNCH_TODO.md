@@ -259,13 +259,30 @@ Checklist:
 
 ---
 
-### PR16 — Devnet healthcheck script (hub + provider) (CURRENT)
+### PR16 — Devnet healthcheck script (hub + provider) (MERGED)
 
 - Branch: `codex/devnet-healthcheck-script`
 - Goal: Replace “tribal knowledge” monitoring with a single script that fails loudly when the devnet is unhealthy.
+- PR: https://github.com/Nil-Store/nil-store/pull/72
 - Test gate:
   - `bash -n scripts/devnet_healthcheck.sh`
 
 Checklist:
 - [x] Add `scripts/devnet_healthcheck.sh` (hub mode + provider mode) to validate RPC/LCD/EVM/gateway/faucet/health endpoints.
 - [x] Wire the script into `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md` as an optional daily check.
+
+---
+
+### PR17 — Mode2 Stripe E2E flake reduction (gateway readiness + retries) (CURRENT)
+
+- Branch: `codex/mode2-stripe-e2e-retry`
+- Goal: Reduce CI flakes in `scripts/e2e_mode2_stripe_multi_sp.sh` by waiting for the local gateway “Connected” state and adding a single retry for the Mode2 Stripe suite in CI.
+- Test gate:
+  - `npm -C nil-website run test:unit`
+  - `npm -C nil-website run lint`
+  - `bash -n scripts/e2e_mode2_stripe_multi_sp.sh`
+
+Checklist:
+- [x] Add a stable selector/attribute for gateway connection status (so Playwright can wait for it).
+- [x] Update `nil-website/tests/mode2-stripe.spec.ts` to wait for gateway “Connected” before selecting files.
+- [x] Add a single CI retry for the Mode2 Stripe suite (targeted; not global).

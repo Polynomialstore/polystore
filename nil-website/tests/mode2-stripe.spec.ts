@@ -1,9 +1,14 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
+
+async function waitForGatewayConnected(page: Page): Promise<void> {
+  const widget = page.getByTestId('gateway-status-widget')
+  await expect(widget).toHaveAttribute('data-status', 'connected', { timeout: 60_000 })
+}
 
 function cachedFileNameForPath(filePath: string): string {
   const normalized = String(filePath ?? '')
@@ -14,6 +19,7 @@ function cachedFileNameForPath(filePath: string): string {
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
   test.use({ acceptDownloads: true })
+  test.describe.configure({ retries: process.env.CI ? 1 : 0 })
 
   test('mode2 deal → shard → upload → commit → retrieve', async ({ page }) => {
     test.setTimeout(600_000)
@@ -50,6 +56,7 @@ test.describe('mode2 stripe', () => {
     expect(dealId).not.toBe('')
 
     await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+    await waitForGatewayConnected(page)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: filePath,
@@ -260,6 +267,7 @@ test.describe('mode2 stripe', () => {
     expect(dealId).not.toBe('')
 
     await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+    await waitForGatewayConnected(page)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileA.name,
