@@ -15,10 +15,6 @@ const metadata = {
   icons: [],
 };
 
-const modal = new WalletConnectModal({
-  projectId: PROJECT_ID,
-});
-
 type WalletStatus = "disconnected" | "connecting" | "connected";
 
 function parseAccount(account: string) {
@@ -64,6 +60,7 @@ export function useWallet() {
       setError("WalletConnect not initialized");
       return;
     }
+    const modal = new WalletConnectModal({ projectId: PROJECT_ID });
     setStatus("connecting");
     setError(null);
     try {
