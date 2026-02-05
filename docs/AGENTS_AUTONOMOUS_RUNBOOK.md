@@ -7,6 +7,10 @@
 
 This runbook is intentionally verbose and operational. It is designed so an autonomous agent can execute it end-to-end without asking for clarifications.
 
+Note (Feb 2026): this repo now has a **repo-anchored** version of the key outputs:
+- `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` (where things live + what CI runs)
+- `docs/GAP_REPORT_REPO_ANCHORED.md` (spec ↔ code ↔ CI matrix)
+
 ---
 
 ## 0) Non‑negotiables (hard constraints)
@@ -480,4 +484,3 @@ The agent is done when:
 - CI is green,
 - documentation matches behavior,
 - and the testnet launch checklist can be executed by a human without tribal knowledge.
-

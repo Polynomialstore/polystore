@@ -452,14 +452,28 @@ Checklist:
 
 ---
 
-### PR29 — Readiness report: trusted devnet links + CI limits (CURRENT)
+### PR29 — Readiness report: trusted devnet links + CI limits (MERGED)
 
 - Branch: `codex/readiness-report-devnet-links`
 - Goal: Make `docs/TESTNET_READINESS_REPORT.md` the crisp “are we ready?” entrypoint for the soft launch (with clear links + what CI doesn’t prove).
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/91
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
 - [x] Add a “Trusted devnet soft launch” section linking to the go/no-go checklist + collaborator packet + monitoring docs.
 - [x] Add a short “CI does not prove” section (WAN/long-run/security), linking to `docs/GAP_REPORT_REPO_ANCHORED.md` for the full matrix.
+
+---
+
+### PR30 — Agent file hygiene: point to current trackers (CURRENT)
+
+- Branch: `codex/agent-files-hygiene`
+- Goal: Reduce confusion by making the root agent docs clearly point to the Feb 2026 trusted devnet tracker and repo-anchored runbooks.
+- PR: (pending)
+- Test gate:
+  - `bash -n install.sh`
+
+Checklist:
+- [x] Update `AGENTS.md` to treat `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md` as the canonical trusted-devnet TODO list (and clarify this file is a roadmap).
+- [x] Update `docs/AGENTS_AUTONOMOUS_RUNBOOK.md` header to point to `docs/AGENTS_RUNBOOK_REPO_ANCHORED.md` + `docs/GAP_REPORT_REPO_ANCHORED.md` for current reality.
