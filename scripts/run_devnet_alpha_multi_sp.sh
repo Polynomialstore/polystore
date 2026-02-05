@@ -13,6 +13,9 @@
 #
 # Hub-only mode (no local providers):
 #   PROVIDER_COUNT=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+#
+# Networking:
+#   By default, LCD + EVM JSON-RPC bind to localhost. Set NIL_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,6 +29,7 @@ RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
+NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
@@ -423,9 +427,17 @@ init_chain() {
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
-  perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
-  perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
-  perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  if [ "$NIL_BIND_ALL" = "1" ]; then
+    perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
+    perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  else
+    # Safe-by-default (hub profile): keep LCD + JSON-RPC local-only and expose only via reverse proxy.
+    perl -pi -e 's|^address *= *"0\\.0\\.0\\.0:8545"|address = "127.0.0.1:8545"|' "$APP_TOML"
+    perl -pi -e 's|^ws-address *= *"0\\.0\\.0\\.0:8546"|ws-address = "127.0.0.1:8546"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://0\\.0\\.0\\.0:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+  fi
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
   perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
 }

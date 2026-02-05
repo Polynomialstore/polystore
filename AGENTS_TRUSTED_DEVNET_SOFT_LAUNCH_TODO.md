@@ -334,3 +334,20 @@ Checklist:
 - [x] Add `NIL_LISTEN_ADDR` support to `nil_faucet` (default `127.0.0.1:8081`).
 - [x] Update `ops/systemd/env/nil-faucet.env` to set `NIL_LISTEN_ADDR=127.0.0.1:8081`.
 - [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` to remove the “firewall-only” faucet bind note.
+
+---
+
+### PR21 — Bootstrap scripts: local-only LCD/EVM binds by default (CURRENT)
+
+- Branch: `codex/hub-bootstrap-local-binds`
+- Goal: Align the bootstrap scripts with the hub safety posture: bind LCD + EVM JSON-RPC to localhost by default, with an opt-in for `0.0.0.0` when needed.
+- PR: (pending)
+- Test gate:
+  - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
+  - `bash -n scripts/run_local_stack.sh`
+
+Checklist:
+- [ ] Add `NIL_BIND_ALL=1` knob (default `0`) to opt into `0.0.0.0` binds for LCD/EVM JSON-RPC.
+- [ ] Update `scripts/run_devnet_alpha_multi_sp.sh` init-time config patching to respect `NIL_BIND_ALL`.
+- [ ] Update `scripts/run_local_stack.sh` init-time config patching (perl + python fallback) to respect `NIL_BIND_ALL`.
+- [ ] Document the knob in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (LAN / non-proxy debugging use only).

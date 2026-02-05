@@ -89,6 +89,9 @@ sudo chown -R "$USER":"$USER" /var/lib/nilstore
 NIL_HOME=/var/lib/nilstore/nilchaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
+Note: the bootstrap script binds LCD + EVM JSON-RPC to localhost by default (safe for the hub-behind-Caddy profile).
+If you intentionally want to bind them to `0.0.0.0` for LAN / non-proxy debugging, set `NIL_BIND_ALL=1` and firewall accordingly.
+
 Copy out (and store safely):
 - the printed `SP Auth` token (also at `_artifacts/devnet_alpha_multi_sp/sp_auth.txt`)
 - the printed `Home:` directory (should match the `NIL_HOME` you chose; keep it for systemd)

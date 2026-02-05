@@ -3,6 +3,9 @@
 # Usage:
 #   ./scripts/run_local_stack.sh start   # default
 #   ./scripts/run_local_stack.sh stop    # kill background processes started by this script
+#
+# Networking:
+#   By default, LCD + EVM JSON-RPC bind to localhost. Set NIL_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,6 +18,7 @@ EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
+NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
@@ -524,23 +528,44 @@ PY
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
-  perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
-  perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
-  perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  if [ "$NIL_BIND_ALL" = "1" ]; then
+    perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
+    perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+  else
+    # Safer local dev defaults: keep LCD + JSON-RPC local-only. Set NIL_BIND_ALL=1 to override.
+    perl -pi -e 's|^address *= *"0\\.0\\.0\\.0:8545"|address = "127.0.0.1:8545"|' "$APP_TOML"
+    perl -pi -e 's|^ws-address *= *"0\\.0\\.0\\.0:8546"|ws-address = "127.0.0.1:8546"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://0\\.0\\.0\\.0:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+  fi
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
   perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
   # Fallback patcher in case formats change (pure string replace to avoid extra deps)
   python3 - "$APP_TOML" <<'PY' || true
-import sys, pathlib
+import os, sys, pathlib
 path = pathlib.Path(sys.argv[1])
 txt = path.read_text()
-for src, dst in [
-    ('address = "127.0.0.1:8545"', 'address = "0.0.0.0:8545"'),
-    ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
-    ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
+bind_all = os.environ.get("NIL_BIND_ALL", "0") == "1"
+replacements = [
     ('enabled-unsafe-cors = false', 'enabled-unsafe-cors = true'),
     ('evm-chain-id = 262144', 'evm-chain-id = 31337'),
-]:
+]
+if bind_all:
+    replacements = [
+        ('address = "127.0.0.1:8545"', 'address = "0.0.0.0:8545"'),
+        ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
+        ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
+        ('address = "tcp://127.0.0.1:1317"', 'address = "tcp://0.0.0.0:1317"'),
+    ] + replacements
+else:
+    replacements = [
+        ('address = "0.0.0.0:8545"', 'address = "127.0.0.1:8545"'),
+        ('ws-address = "0.0.0.0:8546"', 'ws-address = "127.0.0.1:8546"'),
+        ('address = "tcp://0.0.0.0:1317"', 'address = "tcp://127.0.0.1:1317"'),
+        ('address = "tcp://localhost:1317"', 'address = "tcp://127.0.0.1:1317"'),
+    ] + replacements
+for src, dst in replacements:
     txt = txt.replace(src, dst)
 path.write_text(txt)
 PY
