@@ -1,0 +1,45 @@
+# Trusted Devnet Monitoring Checklist (Soft Launch)
+
+This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
+
+## Hub (VPS) — daily checks
+
+- Chain is producing blocks:
+  - `curl -s http://127.0.0.1:26657/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
+- LCD is responsive:
+  - `curl -sf http://127.0.0.1:1317/cosmos/base/tendermint/v1beta1/node_info >/dev/null`
+- EVM JSON-RPC is responsive:
+  - `curl -sf -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' http://127.0.0.1:8545 >/dev/null`
+- Router gateway is healthy:
+  - `curl -sf http://127.0.0.1:8080/health >/dev/null`
+- Faucet is healthy (if enabled):
+  - `curl -sf http://127.0.0.1:8081/health >/dev/null`
+
+## Hub — resource / network checks
+
+- Disk: `df -h` (watch the chain home + gateway upload dirs)
+- RAM: `free -h`
+- Open ports (hub-local): `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'`
+- Reverse-proxy/TLS (if used): confirm each public subdomain returns 200s (and CORS headers where needed).
+
+## Hub — logs
+
+- `journalctl -u nilchaind -S today --no-pager | tail -n 200`
+- `journalctl -u nil-gateway-router -S today --no-pager | tail -n 200`
+- `journalctl -u nil-faucet -S today --no-pager | tail -n 200`
+
+## Providers (remote SPs) — daily checks
+
+- Provider gateway is healthy:
+  - `curl -sf http://127.0.0.1:<PORT>/health >/dev/null`
+- Provider is visible on-chain (from hub):
+  - `curl -sf http://127.0.0.1:1317/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
+- Router can reach provider endpoint (from hub):
+  - `curl -sf <provider-public-url>/health >/dev/null`
+
+## When something breaks (quick triage)
+
+- **Chain stuck**: check disk full first, then `nilchaind` logs for consensus errors; restart only after disk/IO is healthy.
+- **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `NIL_GATEWAY_SP_AUTH` match.
+- **Fetch failing**: confirm sessions are opening on-chain and clients are sending `X-Nil-Session-Id` (sessions are required by default).
+

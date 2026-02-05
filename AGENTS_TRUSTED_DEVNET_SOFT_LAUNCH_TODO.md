@@ -85,10 +85,11 @@ Checklist:
 
 ---
 
-### PR5 — Allowlist access control test vectors (chain) (CURRENT)
+### PR5 — Allowlist access control test vectors (chain) (MERGED)
 
 - Branch: `codex/allowlist-merkle-tests`
 - Goal: Turn allowlist logic from “implemented” into “proven”.
+- PR: https://github.com/Nil-Store/nil-store/pull/61
 - Test gate:
   - `cd nilchain && go test ./...`
 
@@ -98,7 +99,7 @@ Checklist:
 
 ---
 
-### PR6 — Trusted devnet “soft launch” pack (ops + onboarding)
+### PR6 — Trusted devnet “soft launch” pack (ops + onboarding) (CURRENT)
 
 - Branch: `codex/devnet-soft-launch-pack`
 - Goal: Make onboarding a collaborator a **30-minute task**, not an archeological dig.
@@ -106,10 +107,10 @@ Checklist:
   - `scripts/run_devnet_alpha_multi_sp.sh start` (local smoke)
 
 Checklist:
-- [ ] Write `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (roles, endpoints, funding, troubleshooting).
-- [ ] Add systemd unit templates + env-file templates for hub services.
-- [ ] Add a “remote SP join” quickstart (based on `DEVNET_MULTI_PROVIDER.md`, but simplified).
-- [ ] Add basic monitoring checklist (disk, RAM, ports, logs, chain height).
+- [x] Write `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (roles, endpoints, funding, troubleshooting).
+- [x] Add systemd unit templates + env-file templates for hub services.
+- [x] Add a “remote SP join” quickstart (based on `DEVNET_MULTI_PROVIDER.md`, but simplified).
+- [x] Add basic monitoring checklist (disk, RAM, ports, logs, chain height).
 
 ---
 

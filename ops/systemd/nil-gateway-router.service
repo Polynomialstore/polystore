@@ -1,0 +1,15 @@
+[Unit]
+Description=NilStore router gateway (nil_gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/nilstore/nil-gateway-router.env
+WorkingDirectory=/opt/nilstore
+ExecStart=${NIL_GATEWAY_BIN}
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
