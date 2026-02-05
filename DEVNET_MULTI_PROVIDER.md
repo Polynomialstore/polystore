@@ -2,6 +2,10 @@
 
 This guide is for running a shared devnet where multiple people can join as Storage Providers (SPs) and the hub routes deals to them.
 
+If you are onboarding trusted collaborators for a long-lived soft launch, start with:
+- `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
+- `docs/REMOTE_SP_JOIN_QUICKSTART.md`
+
 ## Mental Model
 
 - **Hub** runs: `nilchaind` (RPC/LCD/EVM), `nil_faucet`, **gateway-router** (`nil_gateway` in router mode), and optionally `nil-website`.
@@ -91,4 +95,3 @@ Create a deal, upload a file, and downloads will route through the hub gateway t
   - ensure both router + provider share the same `NIL_GATEWAY_SP_AUTH`
 - Remote provider submitting txs to the wrong node:
   - set `NIL_NODE=tcp://<hub-host>:26657` (provider gateway uses this for `nilchaind tx/query`)
-

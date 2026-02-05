@@ -1,0 +1,15 @@
+[Unit]
+Description=NilStore devnet faucet (nil_faucet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/nilstore/nil-faucet.env
+WorkingDirectory=/opt/nilstore
+ExecStart=${NIL_FAUCET_BIN}
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
