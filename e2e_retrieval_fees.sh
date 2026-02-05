@@ -160,7 +160,7 @@ json.dump(data, open(path, "w"), indent=1)
 PY
 
 if [ "$DYNAMIC_PRICING_E2E" = "1" ]; then
-  banner "Patching genesis: enable dynamic pricing (retrieval)"
+  banner "Patching genesis: enable dynamic pricing (storage + retrieval)"
   python3 - "$HOME_DIR/config/genesis.json" <<'PY'
 import json, sys
 path = sys.argv[1]
@@ -172,6 +172,11 @@ params = nilchain.get("params", {})
 params["dynamic_pricing_enabled"] = True
 params["dynamic_pricing_max_step_bps"] = 0
 params["epoch_len_blocks"] = 5
+
+params["storage_target_utilization_bps"] = 1
+params["storage_price_min"] = "0.000001"
+params["storage_price_max"] = "0.000002"
+params["storage_price"] = "0.000001"
 
 params["base_retrieval_fee"] = {"denom": "stake", "amount": "1"}
 params["retrieval_target_blobs_per_epoch"] = 1
@@ -343,6 +348,15 @@ if [ "$DYNAMIC_PRICING_E2E" = "1" ]; then
     echo "Dynamic pricing did not update retrieval_price_per_blob as expected: got $UPDATED_PRICE, expected 10"
     exit 1
   fi
+
+  UPDATED_STORAGE_PRICE=$(echo "$UPDATED_PARAMS_JSON" | jq -r '.params.storage_price // "0"')
+  python3 - <<PY
+from decimal import Decimal
+got = Decimal("$UPDATED_STORAGE_PRICE")
+expected = Decimal("0.000002")
+if got != expected:
+    raise SystemExit(f"Dynamic pricing did not update storage_price as expected: got {got}, expected {expected}")
+PY
 fi
 
 banner "Retrieval fee smoke test passed"

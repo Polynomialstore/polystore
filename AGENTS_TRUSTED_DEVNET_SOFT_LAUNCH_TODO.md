@@ -495,7 +495,7 @@ Checklist:
 
 ---
 
-### PR32 — Spec/gap: clarify Mode2 elasticity (SignalSaturation) status (CURRENT)
+### PR32 — Spec/gap: clarify Mode2 elasticity (SignalSaturation) status (MERGED)
 
 - Branch: `codex/mode2-elasticity-gap`
 - Goal: Make `spec.md` + `docs/GAP_REPORT_REPO_ANCHORED.md` explicitly reflect the current implementation status of saturation/elastic scaling (Mode2 overlay stripes are not fully modeled yet).
@@ -506,3 +506,19 @@ Checklist:
 Checklist:
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to track saturation/elasticity (MsgSignalSaturation) as PARTIAL for Mode2 (docs clarity; not an implementation change).
 - [x] Update `spec.md` §6.1/§6.2 to call out current Mode2 elasticity limitations and point to the repo-anchored gap report.
+
+---
+
+### PR33 — Dynamic pricing: E2E smoke for storage price update (CURRENT)
+
+- Branch: `codex/dynamic-pricing-storage-e2e`
+- Goal: Add a deterministic E2E smoke path to validate the storage dynamic pricing controller updates `storage_price` at the next epoch boundary (opt-in; does not change CI defaults).
+- PR: (create)
+- Test gate:
+  - `bash -n e2e_retrieval_fees.sh`
+  - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
+
+Checklist:
+- [x] Extend `e2e_retrieval_fees.sh` dynamic mode to patch storage dynamic pricing params in genesis.
+- [x] Assert `storage_price` updates to `storage_price_max` at the next epoch boundary (alongside the existing retrieval assertion).
+- [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` dynamic pricing row to reflect the new smoke coverage.
