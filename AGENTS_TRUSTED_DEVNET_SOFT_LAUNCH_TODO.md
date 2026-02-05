@@ -567,11 +567,11 @@ Checklist:
 
 ---
 
-### PR37 — Docs: refresh `README.md` for devnet soft launch posture (CURRENT)
+### PR37 — Docs: refresh `README.md` for devnet soft launch posture (MERGED)
 
 - Branch: `codex/readme-devnet-refresh`
 - Goal: Make the repo entrypoint accurate for collaborators (canonical scripts, toolchain versions, and “what CI proves” pointers).
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/99
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
   - `bash -n scripts/e2e_lifecycle.sh`
@@ -580,3 +580,20 @@ Checklist:
 - [x] Update `README.md` quickstart to point to `DOCS.md`, `HAPPY_PATH.md`, and trusted devnet docs.
 - [x] Update toolchain requirements and correct script names (notably Playwright libp2p relay).
 - [x] Add explicit pointers to `docs/GAP_REPORT_REPO_ANCHORED.md` (“what CI proves / doesn’t prove”).
+
+---
+
+### PR38 — Docs: sync manual devnet runbook with current scripts (CURRENT)
+
+- Branch: `codex/manual-runbook-sync`
+- Goal: Keep `docs/manual-devnet-runbook.md` aligned with the guarded E2E scripts and current “relay-off by default” posture (make the profiles explicit).
+- PR: (create)
+- Test gate:
+  - `bash -n scripts/run_local_stack.sh`
+  - `bash -n scripts/e2e_lifecycle.sh`
+  - `bash -n scripts/e2e_lifecycle_no_gateway.sh`
+
+Checklist:
+- [x] Update `docs/manual-devnet-runbook.md` to clearly separate “script parity (tx relay)” vs “wallet-first (no relay)” flows.
+- [x] Fix any stale endpoint/script references (use `scripts/devnet_healthcheck.sh` and `/health` where appropriate).
+- [x] Ensure `docs/TESTNET_READINESS_REPORT.md` references remain accurate (update wording only if needed).
