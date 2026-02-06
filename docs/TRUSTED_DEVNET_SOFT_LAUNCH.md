@@ -450,6 +450,10 @@ For trusted-devnet bring-up, you can run multiple logical providers on the hub h
   - `/ip4/127.0.0.1/tcp/8091/http`
   - `/ip4/127.0.0.1/tcp/8092/http`
   - `/ip4/127.0.0.1/tcp/8093/http`
+- Important:
+  - These localhost endpoints are only reachable from the hub machine itself.
+  - For external website users (no local gateway), publish provider HTTPS hostnames (direct or Cloudflare Tunnel)
+    and register those endpoints on-chain instead of `127.0.0.1` multiaddrs.
 - Keep each provider isolated with its own:
   - `NIL_HOME` (separate keyring + state)
   - `NIL_UPLOAD_DIR`
@@ -491,9 +495,26 @@ Website UI (optional):
 
 For a collaborator validating their SP is actually participating:
 
-1) Use the website to upload a file.
-2) Retrieve it back (byte-for-byte).
-3) If retrieval fails, grab:
+1) Use the website to create a deal (trusted-devnet default: Mode 2 `2+1`).
+2) Wait for the success message: `Capacity Allocated. Deal ID: <id>`.
+3) Select that exact deal row, upload a file, and commit.
+   - In local-gateway Mode 2 fast path, the UI may go directly to `Commit to Chain` (no separate upload button).
+4) Verify on-chain deal state is updated:
+
+```bash
+curl -sf https://lcd.<domain>/nilchain/nilchain/v1/deals/<id> | jq '.deal | {id,size,manifest_root,total_mdus,witness_mdus}'
+```
+
+5) Verify provider-side file presence (local Phase A example):
+
+```bash
+curl -sf "http://127.0.0.1:8091/gateway/list-files/<manifest_root_hex>?deal_id=<id>&owner=<nil1...>" | jq
+curl -sf "http://127.0.0.1:8092/gateway/list-files/<manifest_root_hex>?deal_id=<id>&owner=<nil1...>" | jq
+curl -sf "http://127.0.0.1:8093/gateway/list-files/<manifest_root_hex>?deal_id=<id>&owner=<nil1...>" | jq
+```
+
+6) Retrieve it back (byte-for-byte).
+7) If retrieval fails, grab:
    - the hub `X-Nil-Provider` response header (who served the bytes)
    - the provider’s `/health` response
    - the hub router logs around the request

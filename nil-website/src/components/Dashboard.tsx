@@ -963,58 +963,69 @@ export function Dashboard() {
       )
       return
     }
-      try {
-        let serviceHint = ''
-        // Default trusted-devnet profile: explicit 2+1 (overridable in Advanced).
-        serviceHint = buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
+    const previousTargetDealId = targetDealId
+    // Prevent accidental uploads to a stale deal while createDeal is still in-flight.
+    setTargetDealId('')
+    setStagedUpload(null)
 
-        // Optional: explicit RS profile.
-        if (placementProfile === 'custom') {
-          const k = Number(rsK)
-          const m = Number(rsM)
-          if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
-            setStatusTone('error')
-            setStatusMsg('Custom Mode 2 profile requires numeric K and M values.')
-            return
-          }
-          if (64 % k !== 0) {
-            setStatusTone('error')
-            setStatusMsg('Custom Mode 2 profile requires K to divide 64.')
-            return
-          }
-          const slots = k + m
-          if (providerCount === 0) {
-            setStatusTone('error')
-            setStatusMsg('Provider list not loaded yet. Retry in a few seconds.')
-            return
-          }
-          if (slots > providerCount) {
-            setStatusTone('error')
-            setStatusMsg(`Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`)
-            return
-          }
-          serviceHint = buildServiceHint('General', { rsK: k, rsM: m })
+    try {
+      let serviceHint = ''
+      // Default trusted-devnet profile: explicit 2+1 (overridable in Advanced).
+      serviceHint = buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
+
+      // Optional: explicit RS profile.
+      if (placementProfile === 'custom') {
+        const k = Number(rsK)
+        const m = Number(rsM)
+        if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
+          setStatusTone('error')
+          setStatusMsg('Custom Mode 2 profile requires numeric K and M values.')
+          setTargetDealId(previousTargetDealId)
+          return
         }
-        const res = await submitDeal({
-          creator: evmCreator,
-          duration: Number(duration),
-          initialEscrow,
-          maxMonthlySpend,
-          serviceHint,
-        })
-        setStatusTone('success')
-        setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
-        if (nilAddress) {
-          await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
-          await fetchBalances(nilAddress)
-          // Auto-switch to content tab and pre-fill deal ID
-          setTargetDealId(String(res.deal_id))
-          setActiveTab('mdu')
+        if (64 % k !== 0) {
+          setStatusTone('error')
+          setStatusMsg('Custom Mode 2 profile requires K to divide 64.')
+          setTargetDealId(previousTargetDealId)
+          return
         }
-      } catch (e) {
-        setStatusTone('error')
-        setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
+        const slots = k + m
+        if (providerCount === 0) {
+          setStatusTone('error')
+          setStatusMsg('Provider list not loaded yet. Retry in a few seconds.')
+          setTargetDealId(previousTargetDealId)
+          return
+        }
+        if (slots > providerCount) {
+          setStatusTone('error')
+          setStatusMsg(`Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`)
+          setTargetDealId(previousTargetDealId)
+          return
+        }
+        serviceHint = buildServiceHint('General', { rsK: k, rsM: m })
       }
+
+      const res = await submitDeal({
+        creator: evmCreator,
+        duration: Number(duration),
+        initialEscrow,
+        maxMonthlySpend,
+        serviceHint,
+      })
+      setStatusTone('success')
+      setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
+      if (nilAddress) {
+        await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
+        await fetchBalances(nilAddress)
+        // Auto-switch to content tab and pre-fill deal ID
+        setTargetDealId(String(res.deal_id))
+        setActiveTab('mdu')
+      }
+    } catch (e) {
+      setTargetDealId(previousTargetDealId)
+      setStatusTone('error')
+      setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
+    }
   }
 
   const handleCreateDealClick = async () => {
