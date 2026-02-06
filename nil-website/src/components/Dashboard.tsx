@@ -949,7 +949,8 @@ export function Dashboard() {
           }
       } catch (e) {
           setStatusTone('error')
-          setStatusMsg('Faucet request failed. Is the faucet running?')
+          const details = e instanceof Error ? e.message : String(e)
+          setStatusMsg(`Faucet request failed: ${details || 'Unknown error'}`)
       }
   }
 
