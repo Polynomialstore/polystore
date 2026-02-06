@@ -74,30 +74,30 @@ export const ShardingDeepDive = () => {
             <Layers className="w-5 h-5 text-purple-500" /> Mode 2: StripeReplica (RS(K, K+M))
           </h3>
           <p className="text-muted-foreground mb-6">
-            Each 8 MiB MDU is encoded with Reed-Solomon across <strong>N = K+M provider slots</strong> (default <strong>N=12</strong>). Each slot stores <strong>8 MiB / K</strong> bytes per MDU (default <strong>1 MiB</strong> when <strong>K=8</strong>), aligned to <strong>128 KiB blobs</strong> for shared-nothing verification.
+            Each 8 MiB MDU is encoded with Reed-Solomon across <strong>N = K+M provider slots</strong>. Trusted devnet defaults to <strong>2+1</strong> for lighter bring-up; protocol defaults remain aligned to <strong>8+4</strong> for larger deployments. Each slot stores <strong>8 MiB / K</strong> bytes per MDU, aligned to <strong>128 KiB blobs</strong> for shared-nothing verification.
           </p>
           <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <p className="text-sm text-muted-foreground mb-4">
-              <strong>The Math (default profile):</strong> <strong>K=8</strong> data slots + <strong>M=4</strong> parity slots (<strong>N=12</strong>). The protocol is defined as RS(K, K+M) (with <strong>K | 64</strong>), so other profiles are possible.
+              <strong>The Math (trusted-devnet default):</strong> <strong>K=2</strong> data slots + <strong>M=1</strong> parity slot (<strong>N=3</strong>). The protocol is defined as RS(K, K+M) (with <strong>K | 64</strong>), so larger profiles (for example <strong>8+4</strong>) remain supported.
             </p>
             <div className="flex justify-around items-center text-center mt-6">
               <div className="flex flex-col items-center">
-                <span className="text-4xl font-bold text-blue-400">8</span>
-                <span className="text-sm text-muted-foreground">Data Slots (default)</span>
+                <span className="text-4xl font-bold text-blue-400">2</span>
+                <span className="text-sm text-muted-foreground">Data Slots (trusted-devnet default)</span>
               </div>
               <span className="text-3xl text-muted-foreground">+</span>
               <div className="flex flex-col items-center">
-                <span className="text-4xl font-bold text-purple-400">4</span>
-                <span className="text-sm text-muted-foreground">Parity Slots (default)</span>
+                <span className="text-4xl font-bold text-purple-400">1</span>
+                <span className="text-sm text-muted-foreground">Parity Slots (trusted-devnet default)</span>
               </div>
               <span className="text-3xl text-muted-foreground">=</span>
               <div className="flex flex-col items-center">
-                <span className="text-4xl font-bold text-green-400">12</span>
-                <span className="text-sm text-muted-foreground">Total Slots (default)</span>
+                <span className="text-4xl font-bold text-green-400">3</span>
+                <span className="text-sm text-muted-foreground">Total Slots (trusted-devnet default)</span>
               </div>
             </div>
             <p className="text-sm text-muted-foreground italic mt-6">
-              In the default 8+4 profile, you can lose any 4 of 12 nodes (33%) and still recover the file.
+              In the trusted-devnet 2+1 profile, you can lose any 1 of 3 nodes (33%) and still recover the file.
             </p>
           </div>
         </section>

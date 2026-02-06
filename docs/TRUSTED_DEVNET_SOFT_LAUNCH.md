@@ -441,6 +441,29 @@ Then have them follow:
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
 - `docs/networking/PROVIDER_ENDPOINTS.md` (choose `direct` or `cloudflare-tunnel` endpoint type)
 
+### Optional: Local multi-provider Phase A (single host, RS 2+1)
+
+For trusted-devnet bring-up, you can run multiple logical providers on the hub host itself.
+
+- Recommended target for Phase A: `3` providers (`K=2`, `M=1`).
+- Register local endpoints as:
+  - `/ip4/127.0.0.1/tcp/8091/http`
+  - `/ip4/127.0.0.1/tcp/8092/http`
+  - `/ip4/127.0.0.1/tcp/8093/http`
+- Keep each provider isolated with its own:
+  - `NIL_HOME` (separate keyring + state)
+  - `NIL_UPLOAD_DIR`
+  - `NIL_SESSION_DB_PATH`
+- If faucet throttling slows provider funding, fund provider keys directly from the local `faucet` key via `nilchaind tx bank send`.
+
+Provider health checks (local):
+
+```bash
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain> --provider-addr nil1...
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8092 --hub-lcd https://lcd.<domain> --provider-addr nil1...
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8093 --hub-lcd https://lcd.<domain> --provider-addr nil1...
+```
+
 ## Faucet / funding (collaborators)
 
 Collaborators must have funds for gas (and any protocol fees). For the current devnet profile:
@@ -491,6 +514,8 @@ For a collaborator validating their SP is actually participating:
   - ensure `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release` is set in each `/etc/nilstore/*.env`
 - `nilchaind` fails binding gRPC `localhost:9090`:
   - set a free port in `/var/lib/nilstore/nilchaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
+- Multiple providers on one host fail to start (port bind errors):
+  - either disable provider libp2p for the soft launch (`NIL_P2P_ENABLED=0`) or assign unique `NIL_P2P_LISTEN_ADDRS` per provider
 
 ## Go/No-Go checklist (before inviting collaborators)
 

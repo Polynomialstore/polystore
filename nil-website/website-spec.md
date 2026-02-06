@@ -65,13 +65,16 @@ The application uses Vite for building and handling environment variables. Confi
 #### Environment Variables (`.env`)
 | Variable | Default | Description |
 |:---|:---|:---|
-| `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL. |
-| `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD (Light Client Daemon) URL. |
-| `VITE_GATEWAY_BASE` | `http://localhost:8080` | Optional local gateway base (routing + proof relay). |
+| `VITE_PUBLIC_DOMAIN` | *(empty)* | Optional domain override for auto endpoint inference (for example `nilstore.org` → `faucet/lcd/gateway/evm` subdomains). |
+| `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL (auto-falls back to `https://faucet.<domain>` when hosted on matching public domain). |
+| `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD URL (auto-falls back to `https://lcd.<domain>` when hosted on matching public domain). |
+| `VITE_GATEWAY_BASE` | `http://localhost:8080` | Gateway base URL (auto-falls back to `https://gateway.<domain>` when hosted on matching public domain). |
 | `VITE_SP_BASE` | `http://localhost:8082` | Default Storage Provider base for direct uploads/fetches. |
 | `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
-| `VITE_EVM_RPC` | `http://localhost:8545` | JSON-RPC endpoint for the EVM layer. |
+| `VITE_EVM_RPC` | `http://localhost:8545` | EVM JSON-RPC endpoint (auto-falls back to `https://evm.<domain>` when hosted on matching public domain). |
 | `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
+| `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |
+| `VITE_DEFAULT_RS_M` | `1` | Default RS M used by web deal creation when not explicitly overridden. |
 | `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
 | `VITE_NILSTORE_PRECOMPILE` | `0x0000...0900` | NilStore precompile address (create/update/retrieval sessions). |
 | `VITE_E2E` | `0` | Enable injected E2E wallet shim when `1`. |

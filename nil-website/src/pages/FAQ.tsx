@@ -143,7 +143,7 @@ const faqs = [
       },
       {
         q: "What happens if a node goes offline?",
-        a: "We use Erasure Coding (like RAID for the internet). A file is striped across K+M slots (default 8+4). Any K slots can reconstruct the data, so the network can repair missing shards and keep deals healthy."
+        a: "We use Erasure Coding (like RAID for the internet). A file is striped across K+M slots (trusted-devnet default 2+1; production target 8+4). Any K slots can reconstruct the data, so the network can repair missing shards and keep deals healthy."
       }
     ]
   }

@@ -90,6 +90,7 @@ export function Dashboard() {
     chainId: appConfig.chainId,
   })
   const providerCount = providers.length
+  const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
   const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
@@ -230,8 +231,8 @@ export function Dashboard() {
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
   const [placementProfile, setPlacementProfile] = useState<'auto' | 'custom'>('auto')
-  const [rsK, setRsK] = useState('8')
-  const [rsM, setRsM] = useState('4')
+  const [rsK, setRsK] = useState(String(appConfig.defaultRsK))
+  const [rsM, setRsM] = useState(String(appConfig.defaultRsM))
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
@@ -964,8 +965,8 @@ export function Dashboard() {
     }
       try {
         let serviceHint = ''
-        // Default: auto-select Mode 2 RS profile on-chain.
-        serviceHint = buildServiceHint('General', {})
+        // Default trusted-devnet profile: explicit 2+1 (overridable in Advanced).
+        serviceHint = buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
 
         // Optional: explicit RS profile.
         if (placementProfile === 'custom') {
@@ -2320,9 +2321,9 @@ export function Dashboard() {
               {!showAdvanced ? (
                 <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
                   <div>
-                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (auto RS selection, recommended)
+                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (default RS {defaultRsLabel}, recommended)
                     <span className="ml-2 text-[11px] text-muted-foreground">
-                      Turn on Advanced to pin a custom RS profile.
+                      Turn on Advanced to override K/M.
                     </span>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
@@ -2340,7 +2341,7 @@ export function Dashboard() {
                       data-testid="alloc-placement-profile"
                       className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                     >
-                      <option value="auto">Mode 2 (Auto, recommended)</option>
+                      <option value="auto">Mode 2 (Default {defaultRsLabel}, recommended)</option>
                       <option value="custom">Mode 2 (Custom RS)</option>
                     </select>
                   </label>

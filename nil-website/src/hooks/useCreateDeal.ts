@@ -25,7 +25,7 @@ export function useCreateDeal() {
       if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
       const serviceHint = input.serviceHint && input.serviceHint.trim().length > 0
         ? input.serviceHint.trim()
-        : buildServiceHint('General', {})
+        : buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
 
       const ethereum = window.ethereum
       if (!ethereum || typeof ethereum.request !== 'function') {
