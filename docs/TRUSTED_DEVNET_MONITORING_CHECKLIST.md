@@ -37,12 +37,16 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 - Run the healthcheck script (recommended):
   - `scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:<PORT> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
+  - Public endpoint example: `scripts/devnet_healthcheck.sh provider --provider https://sp1.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
 - Provider gateway is healthy:
   - `curl -sf http://127.0.0.1:<PORT>/health >/dev/null`
 - Provider is visible on-chain (from hub):
   - `curl -sf http://127.0.0.1:1317/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
 - Router can reach provider endpoint (from hub):
   - `curl -sf <provider-public-url>/health >/dev/null`
+- Active providers are using public endpoints (no accidental localhost endpoint leakage):
+  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\"), (.draining // false)] | @tsv'`
+  - Ensure active entries resolve to `/dns4/<public-host>/tcp/443/https`.
 
 ## When something breaks (quick triage)
 

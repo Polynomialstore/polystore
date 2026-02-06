@@ -21,6 +21,15 @@ The chain stores endpoints as strings, expected to be **multiaddrs**, e.g.:
 
 The gateway router understands `/http` and `/https` and converts them to `http(s)://host:port`.
 
+Important (current protocol behavior):
+- `register-provider` is one-time per provider address.
+- Endpoint lists are **not** mutable after registration in the current devnet build.
+- If you accidentally register localhost endpoints (for example `/ip4/127.0.0.1/...`) and need public endpoints:
+  - Create/fund a new provider key.
+  - Register the new key with `/dns4/<public-host>/tcp/443/https`.
+  - Switch your provider gateway service to the new key.
+  - Mark the old provider as draining with `set-provider-draining --draining`.
+
 ## Helper: Print Endpoint Multiaddrs
 
 From `nil_gateway/`, you can generate the exact `--endpoint` values:
@@ -153,4 +162,3 @@ Since we have native clients, we can attempt:
 
 - direct QUIC/UDP + hole punching (with a coordination service)
 - fallback to `direct` or `cloudflare-tunnel` endpoints when it fails
-

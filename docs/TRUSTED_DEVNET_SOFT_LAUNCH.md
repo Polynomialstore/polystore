@@ -294,11 +294,80 @@ curl -fsS https://gateway.<domain>/health >/dev/null
 curl -fsS https://web.<domain>/ >/dev/null
 ```
 
+### 4C) Profile B local multi-SP: publish `sp1/sp2/sp3` via Cloudflare Tunnel
+
+If you run multiple provider gateways on the hub host (for example local RS `2+1` on `:8091/:8092/:8093`), publish each provider under its own hostname:
+
+- `sp1.<domain>` → `http://127.0.0.1:8091`
+- `sp2.<domain>` → `http://127.0.0.1:8092`
+- `sp3.<domain>` → `http://127.0.0.1:8093`
+
+Recommended pattern: use a **separate** tunnel for provider hostnames so hub ingress config and provider ingress config are independent.
+
+```bash
+cloudflared tunnel create nilstore-providers
+cloudflared tunnel route dns nilstore-providers sp1.<domain>
+cloudflared tunnel route dns nilstore-providers sp2.<domain>
+cloudflared tunnel route dns nilstore-providers sp3.<domain>
+```
+
+Example user-level config (`~/.config/cloudflared/providers.<domain>.yml`):
+
+```yaml
+tunnel: <PROVIDER_TUNNEL_ID>
+credentials-file: /home/<user>/.cloudflared/<PROVIDER_TUNNEL_ID>.json
+ingress:
+  - hostname: sp1.<domain>
+    service: http://127.0.0.1:8091
+  - hostname: sp2.<domain>
+    service: http://127.0.0.1:8092
+  - hostname: sp3.<domain>
+    service: http://127.0.0.1:8093
+  - service: http_status:404
+```
+
+Run it with user systemd (works without root changes to `/etc/cloudflared/config.yml`):
+
+```bash
+loginctl enable-linger <user>
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/cloudflared-providers.service <<'EOF'
+[Unit]
+Description=cloudflared tunnel for NilStore provider hostnames
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config %h/.config/cloudflared/providers.<domain>.yml tunnel run
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now cloudflared-providers.service
+```
+
+Then register provider endpoints on-chain as:
+
+- `/dns4/sp1.<domain>/tcp/443/https`
+- `/dns4/sp2.<domain>/tcp/443/https`
+- `/dns4/sp3.<domain>/tcp/443/https`
+
 ### 5) Website build (static, served at `web.<domain>`)
 
 Skip this section if your website is already hosted elsewhere (for example a GitHub-integrated deploy).
 
-The website is built with Vite; the **endpoint URLs are embedded at build time**.
+The website is built with Vite.
+
+- You can set explicit endpoint URLs at build time (`VITE_*` vars below).
+- If deployed on `nilstore.org` (or `*.nilstore.org`) and `VITE_*` are omitted, the app auto-infers:
+  - `https://faucet.nilstore.org`
+  - `https://lcd.nilstore.org`
+  - `https://gateway.nilstore.org`
+  - `https://evm.nilstore.org`
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
@@ -446,26 +515,28 @@ Then have them follow:
 For trusted-devnet bring-up, you can run multiple logical providers on the hub host itself.
 
 - Recommended target for Phase A: `3` providers (`K=2`, `M=1`).
-- Register local endpoints as:
-  - `/ip4/127.0.0.1/tcp/8091/http`
-  - `/ip4/127.0.0.1/tcp/8092/http`
-  - `/ip4/127.0.0.1/tcp/8093/http`
-- Important:
-  - These localhost endpoints are only reachable from the hub machine itself.
-  - For external website users (no local gateway), publish provider HTTPS hostnames (direct or Cloudflare Tunnel)
-    and register those endpoints on-chain instead of `127.0.0.1` multiaddrs.
+- For externally reachable browser flows, register public HTTPS provider endpoints on-chain:
+  - `/dns4/sp1.<domain>/tcp/443/https`
+  - `/dns4/sp2.<domain>/tcp/443/https`
+  - `/dns4/sp3.<domain>/tcp/443/https`
+- Keep `127.0.0.1` endpoint registration only for temporary local-only debugging.
+- Important protocol caveat: provider endpoints are immutable per provider address in the current devnet build.
+  - If you accidentally register `/ip4/127.0.0.1/...` and need public endpoints later, rotate to new provider keys, register the public endpoints, and mark old providers as draining.
 - Keep each provider isolated with its own:
   - `NIL_HOME` (separate keyring + state)
   - `NIL_UPLOAD_DIR`
   - `NIL_SESSION_DB_PATH`
 - If faucet throttling slows provider funding, fund provider keys directly from the local `faucet` key via `nilchaind tx bank send`.
 
-Provider health checks (local):
+Provider health checks:
 
 ```bash
 scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain> --provider-addr nil1...
 scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8092 --hub-lcd https://lcd.<domain> --provider-addr nil1...
 scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8093 --hub-lcd https://lcd.<domain> --provider-addr nil1...
+scripts/devnet_healthcheck.sh provider --provider https://sp1.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...
+scripts/devnet_healthcheck.sh provider --provider https://sp2.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...
+scripts/devnet_healthcheck.sh provider --provider https://sp3.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...
 ```
 
 ## Faucet / funding (collaborators)
@@ -519,10 +590,30 @@ curl -sf "http://127.0.0.1:8093/gateway/list-files/<manifest_root_hex>?deal_id=<
    - the provider’s `/health` response
    - the hub router logs around the request
 
+### Public CLI smoke (wallet-first / tx relay disabled)
+
+If `POST /gateway/create-deal-evm` returns `403`, that is expected in wallet-first mode (`NIL_ENABLE_TX_RELAY=0`).
+Use this flow instead:
+
+1) Generate EVM intents with `nil-website/scripts/sign_intent.ts` (`create-deal`, then `update-content`).
+2) Submit intents directly on-chain:
+   - `nilchaind tx nilchain create-deal-from-evm <create_payload.json> ...`
+   - `nilchaind tx nilchain update-deal-content-from-evm <update_payload.json> ...`
+3) Use gateway data path:
+   - upload: `POST https://gateway.<domain>/gateway/upload?deal_id=<id>`
+   - plan session: `GET https://gateway.<domain>/gateway/plan-retrieval-session/<manifest_root>?...`
+4) Open retrieval session with `nil-website/scripts/open_retrieval_session.ts`.
+5) Sign fetch request with `nil-website/scripts/sign_intent.ts sign-fetch-request`.
+6) Fetch bytes from `https://gateway.<domain>/gateway/fetch/<manifest_root>?...` with session + signed request headers.
+7) Verify byte equality (`cmp` / sha256).
+
 ## Troubleshooting (hub)
 
 - Provider doesn’t show up on `/nilchain/nilchain/v1/providers`:
   - the registration tx likely failed (fund provider key for gas)
+- You registered `/ip4/127.0.0.1/...` and need public endpoint hostnames now:
+  - endpoint updates are immutable for an already registered provider address
+  - rotate to a new provider key, register `/dns4/<public-host>/tcp/443/https`, then set old provider to draining
 - Router can’t reach provider:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
@@ -559,9 +650,11 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 ### Providers (remote SP baseline)
 
 - Provider healthcheck passes:
-  - `scripts/devnet_healthcheck.sh provider --provider https://provider.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
+  - `scripts/devnet_healthcheck.sh provider --provider https://sp1.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
 - Provider is visible on-chain and has reachable endpoints:
   - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
+- Active providers are registered with public `/dns4/.../tcp/443/https` endpoints (not localhost):
+  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\")] | @tsv'`
 - Router↔provider auth secret matches (`NIL_GATEWAY_SP_AUTH`) and is stored out-of-band (treat like a password).
 
 ### Website (collaborator UX)

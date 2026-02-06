@@ -4,13 +4,18 @@ This is the concrete collaborator packet for the current trusted devnet hub depl
 
 ## Live Endpoints
 
-- Website: `https://web.nilstore.org` (externally hosted)
+- Website: `https://nilstore.org` (primary) / `https://web.nilstore.org` (if enabled)
 - EVM RPC: `https://evm.nilstore.org`
 - Hub RPC: `https://rpc.nilstore.org`
 - Hub LCD: `https://lcd.nilstore.org`
 - Gateway: `https://gateway.nilstore.org`
 - Faucet: `https://faucet.nilstore.org/faucet`
 - Chain ID: `31337` (`0x7a69`)
+
+Provider public endpoints (Mode 2 `2+1` baseline):
+- `https://sp1.nilstore.org` → provider `nil1tw3q590k5uphtsk9k5ts0vfjynjpep0glx3cqx`
+- `https://sp2.nilstore.org` → provider `nil1989447ygkvh96e2ua2mmmlnmz4q2zv96sh94mq`
+- `https://sp3.nilstore.org` → provider `nil13z0nyrtuwj25eh3zeah75eukagc2epjrqt35ne`
 
 ## What Collaborators Need From Hub Operator
 
@@ -29,6 +34,10 @@ This is the concrete collaborator packet for the current trusted devnet hub depl
 - POST to `https://faucet.nilstore.org/faucet` with header `X-Nil-Faucet-Auth: <token>`.
 4) Run the flow:
 - create deal → upload → commit → retrieve.
+
+Notes:
+- This deployment is wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
+- The website flow uses direct EVM transactions (MetaMask / precompile), then uses the gateway for data path.
 
 ## SP Operator Quickstart
 
@@ -65,9 +74,9 @@ Provider operator baseline:
 
 ```bash
 scripts/devnet_healthcheck.sh provider \
-  --provider https://provider.<domain> \
+  --provider https://sp1.nilstore.org \
   --hub-lcd https://lcd.nilstore.org \
-  --provider-addr nil1...
+  --provider-addr nil1tw3q590k5uphtsk9k5ts0vfjynjpep0glx3cqx
 ```
 
 ## Reporting Template For Issues
