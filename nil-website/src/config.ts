@@ -63,8 +63,9 @@ const FAUCET_ENABLED = (() => {
   if (typeof raw === 'string') {
     return raw === '1'
   }
-  // Default: disabled. Enable explicitly via VITE_ENABLE_FAUCET=1 for dev/test.
-  return false
+  // Public trusted-devnet deployments (e.g. *.nilstore.org) default to faucet-on.
+  // Keep local/dev default off unless explicitly enabled.
+  return PUBLIC_DOMAIN !== ''
 })()
 const COSMOS_CHAIN_ID = envString(import.meta.env.VITE_COSMOS_CHAIN_ID) || '31337'
 const BRIDGE_ADDRESS = envString(import.meta.env.VITE_BRIDGE_ADDRESS) || '0x0000000000000000000000000000000000000000'

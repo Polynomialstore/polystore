@@ -74,9 +74,10 @@ export const TestnetDocs = () => {
             <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
               <h3 className="font-bold text-lg text-foreground">2. Run Faucet (Optional)</h3>
               <p className="text-sm text-muted-foreground mb-2">
-                The faucet is a dev-only helper. It is disabled by default in the UI; enable it explicitly with
-                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
-                when running the web UI.
+                The faucet is a dev-only helper. On trusted-devnet public domains (for example
+                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">*.nilstore.org</code>) the UI enables faucet by default.
+                You can always override with
+                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1|0</code>.
               </p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
                 <p className="text-green-400"># In a new terminal window</p>
@@ -102,8 +103,10 @@ export const TestnetDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Deal)</h2>
           <p className="text-muted-foreground">
             All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile.
-            The faucet is dev-only: if you want the "Get Testnet NIL" button, run the faucet and enable it in the UI with
-            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>.
+            The faucet is dev-only; the "Get Testnet NIL" button is auto-enabled on trusted-devnet public domains and can be forced with
+            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
+            or hidden with
+            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=0</code>.
           </p>
           <p className="text-sm text-muted-foreground">
             The browser client can shard and commit using WASM + OPFS. The local gateway is optional routing/cache infrastructure, and Mode 2 deals require client-side RS encoding with direct uploads to assigned providers.
