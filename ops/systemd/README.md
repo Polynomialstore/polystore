@@ -62,6 +62,10 @@ Minimum required edits in `nil-gateway-provider.env`:
 ## Notes
 
 - These templates assume you checked the repo out at `/opt/nilstore`. Adjust as needed.
+- Unit `ExecStart` commands intentionally use a shell wrapper so EnvironmentFile
+  variables (for example `NILCHAIND_BIN`) are expanded correctly by systemd.
+- The env templates include `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release`
+  so binaries linked against `libnil_core.so` start cleanly under systemd.
 - The router↔provider auth token **must match** across the hub router and all providers:
   - `NIL_GATEWAY_SP_AUTH=...`
 - If you run a reverse proxy for HTTPS subdomains, configure CORS to allow the website origin to call:

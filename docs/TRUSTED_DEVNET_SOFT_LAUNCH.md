@@ -32,9 +32,9 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 - `https://rpc.<domain>` → `http://127.0.0.1:26657` (CometBFT RPC)
 - `https://lcd.<domain>` → `http://127.0.0.1:1317` (LCD REST)
 - `https://evm.<domain>` → `http://127.0.0.1:8545` (EVM JSON-RPC)
-- `https://gateway.<domain>` → `http://127.0.0.1:8080` (router gateway)
+- `https://gateway.<domain>` → `http://127.0.0.1:<router-port>` (router gateway; default `8080`)
 - `https://faucet.<domain>` → `http://127.0.0.1:8081` (faucet)
-- `https://web.<domain>` → static website build
+- `https://web.<domain>` → static website build (optional if hosted elsewhere)
 
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
@@ -92,7 +92,7 @@ Keep the underlying service ports **local-only** (recommended) or **firewalled**
 - `evm.<domain>`
 - `gateway.<domain>`
 - `faucet.<domain>`
-- `web.<domain>`
+- `web.<domain>` (optional if website is hosted separately, e.g. GitHub/Netlify)
 
 2) Keep only SSH inbound to the server (typically `22/tcp` on LAN/VPN as you prefer).
 
@@ -172,9 +172,10 @@ Minimum required edits:
 - set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
 - set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
+- set `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release` in all nilstore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
-  - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080`
+  - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
   - `nil-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
 
 3) Enable + start (recommended order):
@@ -216,6 +217,7 @@ cloudflared tunnel route dns nilstore-hub lcd.<domain>
 cloudflared tunnel route dns nilstore-hub evm.<domain>
 cloudflared tunnel route dns nilstore-hub gateway.<domain>
 cloudflared tunnel route dns nilstore-hub faucet.<domain>
+# Optional if this host serves web.<domain>:
 cloudflared tunnel route dns nilstore-hub web.<domain>
 ```
 
@@ -232,9 +234,10 @@ ingress:
   - hostname: evm.<domain>
     service: http://127.0.0.1:8545
   - hostname: gateway.<domain>
-    service: http://127.0.0.1:8080
+    service: http://127.0.0.1:8080  # or your NIL_LISTEN_ADDR port
   - hostname: faucet.<domain>
     service: http://127.0.0.1:8081
+  # Optional if this host serves web.<domain>:
   - hostname: web.<domain>
     service: http://127.0.0.1:8088
   - service: http_status:404
@@ -259,9 +262,25 @@ sudo systemctl restart caddy
 ```
 
 4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
-The exact install command depends on your distro package; common pattern:
+Package-manager path (preferred when apt/dnf is healthy):
 
 ```bash
+sudo cloudflared service install
+sudo systemctl enable --now cloudflared
+```
+
+If package-manager state is broken, install `cloudflared` from the official GitHub release binary:
+
+```bash
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64) CF_ARCH=amd64 ;;
+  aarch64|arm64) CF_ARCH=arm64 ;;
+  *) echo "unsupported arch: $ARCH" && exit 1 ;;
+esac
+curl -fL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o /tmp/cloudflared
+chmod +x /tmp/cloudflared
+sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
 sudo cloudflared service install
 sudo systemctl enable --now cloudflared
 ```
@@ -271,10 +290,13 @@ sudo systemctl enable --now cloudflared
 ```bash
 curl -fsS https://rpc.<domain>/status >/dev/null
 curl -fsS https://gateway.<domain>/health >/dev/null
+# Optional if this host serves web.<domain>:
 curl -fsS https://web.<domain>/ >/dev/null
 ```
 
 ### 5) Website build (static, served at `web.<domain>`)
+
+Skip this section if your website is already hosted elsewhere (for example a GitHub-integrated deploy).
 
 The website is built with Vite; the **endpoint URLs are embedded at build time**.
 
@@ -296,6 +318,14 @@ VITE_COSMOS_CHAIN_ID=31337 \
 VITE_CHAIN_ID=31337 \
 VITE_ENABLE_FAUCET=1 \
 npm run build
+```
+
+Helper script (from repo root):
+
+```bash
+scripts/build_website_public.sh <domain>
+# example:
+scripts/build_website_public.sh nilstore.org
 ```
 
 Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
@@ -455,6 +485,12 @@ For a collaborator validating their SP is actually participating:
   - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
 - Fetch fails with “missing X-Nil-Session-Id”:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
+- systemd service exits with `203/EXEC`:
+  - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
+- nil services fail with `libnil_core.so: cannot open shared object file`:
+  - ensure `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release` is set in each `/etc/nilstore/*.env`
+- `nilchaind` fails binding gRPC `localhost:9090`:
+  - set a free port in `/var/lib/nilstore/nilchaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 
 ## Go/No-Go checklist (before inviting collaborators)
 
@@ -462,13 +498,13 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 ### Hub
 
-- DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `gateway.*`, `faucet.*`, `web.*` (200s; correct CORS where needed).
+- DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `gateway.*`, `faucet.*` (and `web.*` if hosted on the hub) with correct CORS.
 - Hub healthcheck passes (preferred):
   - `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway https://gateway.<domain> --faucet https://faucet.<domain>`
 - Chain is producing blocks and not catching up:
   - `curl -s https://rpc.<domain>/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
 - Hub services are bound to localhost (recommended; only edge processes listen publicly: Caddy for Profile A, cloudflared for Profile B):
-  - `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'`
+  - `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'` (replace `8080` if you chose a non-default router port)
 - Faucet is configured for invite-only (recommended):
   - `NIL_FAUCET_AUTH_TOKEN` set and tested via curl.
 - Pricing params are sane (and dynamic pricing status is intentional):

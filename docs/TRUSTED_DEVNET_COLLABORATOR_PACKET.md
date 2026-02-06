@@ -2,6 +2,9 @@
 
 This is the “send this to collaborators” doc for the **trusted devnet soft launch**.
 
+For a concrete example with real hostnames, see:
+- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md`
+
 Audience:
 - **Website testers** (no server required)
 - **Storage Provider (SP) operators** (optional; run `nil_gateway` in provider mode)

@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=/etc/nilstore/nil-gateway-provider.env
 WorkingDirectory=/opt/nilstore
-ExecStart=${NIL_GATEWAY_BIN}
+ExecStart=/bin/bash -lc 'exec "$NIL_GATEWAY_BIN"'
 Restart=on-failure
 RestartSec=2
 
