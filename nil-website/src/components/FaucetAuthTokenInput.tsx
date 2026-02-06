@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { getFaucetAuthToken, setFaucetAuthToken } from '../lib/faucetAuthToken'
+import { getFaucetAuthToken, hasBuildFaucetAuthToken, setFaucetAuthToken } from '../lib/faucetAuthToken'
 
 export function FaucetAuthTokenInput({ className = '' }: { className?: string }) {
   const [token, setToken] = useState('')
   const [visible, setVisible] = useState(false)
   const [hasSavedToken, setHasSavedToken] = useState(false)
+  const [buildTokenConfigured, setBuildTokenConfigured] = useState(false)
 
   useEffect(() => {
     const saved = getFaucetAuthToken()
     setToken(saved ?? '')
     setHasSavedToken(Boolean(saved))
+    setBuildTokenConfigured(hasBuildFaucetAuthToken())
   }, [])
 
   const handleSave = () => {
@@ -22,8 +24,9 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
 
   const handleClear = () => {
     setFaucetAuthToken(null)
-    setToken('')
-    setHasSavedToken(false)
+    const saved = getFaucetAuthToken()
+    setToken(saved ?? '')
+    setHasSavedToken(Boolean(saved))
   }
 
   return (
@@ -35,6 +38,11 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
             Only needed if the faucet responds with <span className="font-mono">Unauthorized</span>. Stored in your browser
             only.
           </div>
+          {buildTokenConfigured ? (
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              A deployment-level faucet token is configured for this site.
+            </div>
+          ) : null}
         </div>
         <button
           type="button"
@@ -80,4 +88,3 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
     </div>
   )
 }
-

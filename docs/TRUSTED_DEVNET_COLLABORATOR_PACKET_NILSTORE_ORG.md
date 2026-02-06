@@ -30,7 +30,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 - Chain ID: `31337`
 - Currency: `ATOM`
 3) Fund test address:
-- Use website faucet flow if enabled, or
+- Use website faucet flow (this deployment may include a preconfigured faucet token), or
 - POST to `https://faucet.nilstore.org/faucet` with header `X-Nil-Faucet-Auth: <token>`.
 4) Run the flow:
 - create deal → upload → commit → retrieve.

@@ -386,6 +386,9 @@ VITE_EVM_RPC=https://evm.<domain> \
 VITE_COSMOS_CHAIN_ID=31337 \
 VITE_CHAIN_ID=31337 \
 VITE_ENABLE_FAUCET=1 \
+# Optional (public/demo convenience): embed faucet auth token in web build.
+# WARNING: anyone with browser access can extract and use this token.
+VITE_FAUCET_AUTH_TOKEN=<token> \
 npm run build
 ```
 
@@ -559,8 +562,9 @@ curl -X POST -H "Content-Type: application/json" \
 ```
 
 Website UI (optional):
-- If you enable faucet funding in the web build (`VITE_ENABLE_FAUCET=1`), collaborators can paste the token into the UI
-  (Dashboard / First File wizard) and then use the “Get Testnet NIL” button.
+- If you enable faucet funding in the web build (`VITE_ENABLE_FAUCET=1`), collaborators can:
+  - paste the token into the UI (Dashboard / First File wizard), or
+  - use a deployment-level token via `VITE_FAUCET_AUTH_TOKEN` so no manual token entry is required.
 
 ## Collaborator “first file” smoke
 
@@ -662,6 +666,7 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 - Web build points at the correct HTTPS endpoints (`VITE_*` vars) and loads without console errors.
 - “Connect wallet” works and MetaMask is on the correct network (RPC + chain id).
 - If faucet UI is enabled (`VITE_ENABLE_FAUCET=1`), the token flow works (paste token → fund → clear token works).
+  - If using `VITE_FAUCET_AUTH_TOKEN`, verify faucet requests succeed without manual token entry.
 
 ### End-to-end smoke (must pass)
 
