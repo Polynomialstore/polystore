@@ -23,14 +23,14 @@ export function useNetwork() {
                  method: 'wallet_addEthereumChain',
                  params: [{
                      chainId: `0x${appConfig.chainId.toString(16)}`,
-                     chainName: 'NilChain Local',
+                     chainName: 'NilStore Devnet',
                      nativeCurrency: {
                          name: 'NIL',
                          symbol: 'NIL',
                          decimals: 18,
                      },
                      rpcUrls: [appConfig.evmRpc],
-                     blockExplorerUrls: ['http://localhost:5173'],
+                     blockExplorerUrls: [appConfig.explorerBase],
                  }],
              })
              // Try switching again after adding

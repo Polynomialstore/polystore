@@ -7,7 +7,7 @@ import { installE2eWallet } from './e2eWallet'
 // Define the local NilChain network
 export const nilChain = defineChain({
   id: appConfig.chainId,
-  name: 'NilChain Local',
+  name: 'NilStore Devnet',
   nativeCurrency: {
     decimals: 18,
     name: 'NIL',
@@ -17,7 +17,7 @@ export const nilChain = defineChain({
     default: { http: [appConfig.evmRpc] },
   },
   blockExplorers: {
-    default: { name: 'NilExplorer', url: 'http://localhost:5173' },
+    default: { name: 'NilExplorer', url: appConfig.explorerBase },
   },
 })
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { appConfig } from '../config';
 
 interface Provider {
   address: string;
@@ -13,16 +14,22 @@ export const Leaderboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:1317/nilchain/nilchain/v1/providers')
-      .then(res => res.json())
+    const controller = new AbortController();
+    const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`;
+
+    fetch(url, { signal: controller.signal })
+      .then((res) => res.json())
       .then(data => {
         setProviders(data.providers || []);
         setLoading(false);
       })
       .catch(err => {
+        if (controller.signal.aborted) return;
         console.error("Failed to fetch providers:", err);
         setLoading(false);
       });
+
+    return () => controller.abort();
   }, []);
 
   if (loading) return <div className="text-white">Loading Leaderboard...</div>;

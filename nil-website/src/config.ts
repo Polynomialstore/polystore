@@ -7,6 +7,11 @@ function detectRuntimeHost(): string {
   return String(window.location.hostname || '').trim().toLowerCase()
 }
 
+function detectRuntimeOrigin(): string {
+  if (typeof window === 'undefined') return ''
+  return String(window.location.origin || '').trim()
+}
+
 function inferPublicDomain(runtimeHost: string): string {
   const explicit = envString(import.meta.env.VITE_PUBLIC_DOMAIN).toLowerCase()
   if (explicit) return explicit
@@ -28,6 +33,7 @@ function parsePositiveInt(value: unknown, fallback: number): number {
 }
 
 const RUNTIME_HOST = detectRuntimeHost()
+const RUNTIME_ORIGIN = detectRuntimeOrigin()
 const PUBLIC_DOMAIN = inferPublicDomain(RUNTIME_HOST)
 const defaultBase = (subdomain: string, localDefault: string): string =>
   PUBLIC_DOMAIN ? `https://${subdomain}.${PUBLIC_DOMAIN}` : localDefault
@@ -35,6 +41,9 @@ const defaultBase = (subdomain: string, localDefault: string): string =>
 const API_BASE = envString(import.meta.env.VITE_API_BASE) || defaultBase('faucet', 'http://localhost:8081')
 const LCD_BASE = envString(import.meta.env.VITE_LCD_BASE) || defaultBase('lcd', 'http://localhost:1317')
 const GATEWAY_BASE = envString(import.meta.env.VITE_GATEWAY_BASE) || defaultBase('gateway', 'http://localhost:8080')
+const EXPLORER_BASE =
+  envString(import.meta.env.VITE_EXPLORER_BASE) ||
+  (RUNTIME_ORIGIN || defaultBase('web', 'http://localhost:5173'))
 const SP_BASE =
   envString(import.meta.env.VITE_SP_BASE) ||
   (PUBLIC_DOMAIN ? defaultBase('gateway', 'http://localhost:8082') : 'http://localhost:8082')
@@ -80,6 +89,7 @@ export const appConfig = {
   cosmosChainId: COSMOS_CHAIN_ID,
   bridgeAddress: BRIDGE_ADDRESS,
   nilstorePrecompile: NILSTORE_PRECOMPILE.trim(),
+  explorerBase: EXPLORER_BASE.replace(/\/$/, ''),
   defaultRsK: DEFAULT_RS_K,
   defaultRsM: DEFAULT_RS_M,
 }
