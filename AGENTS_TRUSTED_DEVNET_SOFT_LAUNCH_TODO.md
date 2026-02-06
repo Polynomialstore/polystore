@@ -600,11 +600,11 @@ Checklist:
 
 ---
 
-### PR39 — Docs: NAT-friendly hub/SP setup via Cloudflare Tunnel (CURRENT)
+### PR39 — Docs: NAT-friendly hub/SP setup via Cloudflare Tunnel (MERGED)
 
 - Branch: `codex/cloudflare-nat-devnet-docs`
 - Goal: Make trusted-devnet setup clear for home servers behind NAT by adding a first-class Cloudflare Tunnel profile for hub ingress and provider endpoints.
-- PR: (create)
+- PR: https://github.com/Nil-Store/nil-store/pull/102
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
   - `bash -n scripts/run_devnet_provider.sh`
