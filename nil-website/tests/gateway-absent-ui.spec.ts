@@ -23,14 +23,18 @@ test.describe('gateway absent', () => {
 
     await page.waitForSelector('#root', { timeout: 60_000 })
     await page.waitForSelector(
-      '[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"]',
+      '[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]',
       {
         timeout: 60_000,
         state: 'attached',
       },
     )
     const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    if (!(await walletAddress.isVisible().catch(() => false))) {
+    const cosmosIdentity = page.getByTestId('cosmos-identity')
+    const connected =
+      (await walletAddress.isVisible().catch(() => false)) ||
+      (await cosmosIdentity.isVisible().catch(() => false))
+    if (!connected) {
       const connectButton = page.getByTestId('connect-wallet').first()
       await connectButton.click({ force: true })
       await page.evaluate(async () => {
@@ -40,7 +44,9 @@ test.describe('gateway absent', () => {
         }
         await eth.request({ method: 'eth_requestAccounts' })
       })
-      await expect(walletAddress).toBeVisible({ timeout: 60_000 })
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]')).toBeVisible({
+        timeout: 60_000,
+      })
     }
 
     await page.getByTestId('faucet-request').click()

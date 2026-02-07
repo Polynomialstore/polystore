@@ -33,7 +33,8 @@ test.describe('libp2p fetch (relay)', () => {
         await page.waitForSelector('body', { state: 'attached' })
         const hasConnect = await page.getByTestId('connect-wallet').count().catch(() => 0)
         const hasAddress = await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').count()
-        if (hasConnect > 0 || hasAddress > 0) return
+        const hasCosmosIdentity = await page.getByTestId('cosmos-identity').count().catch(() => 0)
+        if (hasConnect > 0 || hasAddress > 0 || hasCosmosIdentity > 0) return
         await page.waitForTimeout(1000)
         await page.reload({ waitUntil: 'networkidle' })
       }
@@ -42,9 +43,15 @@ test.describe('libp2p fetch (relay)', () => {
 
     await waitForWalletControls()
     const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    if (!(await walletAddress.isVisible().catch(() => false))) {
+    const cosmosIdentity = page.getByTestId('cosmos-identity')
+    const connected =
+      (await walletAddress.isVisible().catch(() => false)) ||
+      (await cosmosIdentity.isVisible().catch(() => false))
+    if (!connected) {
       await page.getByTestId('connect-wallet').first().click()
-      await expect(walletAddress).toBeVisible({ timeout: 60_000 })
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]')).toBeVisible({
+        timeout: 60_000,
+      })
     }
 
     const advancedToggle = page.getByTestId('workspace-advanced-toggle')
