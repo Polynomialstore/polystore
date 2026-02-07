@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,6 +31,23 @@ type mode2IngestResult struct {
 	sizeBytes       uint64
 	witnessMdus     uint64
 	userMdus        uint64
+}
+
+type providerUploadHTTPError struct {
+	statusCode int
+	status     string
+	body       string
+}
+
+func (e *providerUploadHTTPError) Error() string {
+	if e == nil {
+		return "upload failed"
+	}
+	msg := strings.TrimSpace(e.body)
+	if msg == "" {
+		return fmt.Sprintf("upload failed: %s", e.status)
+	}
+	return fmt.Sprintf("upload failed: %s (%s)", e.status, msg)
 }
 
 const mode2SlabCompleteMarker = ".slab_complete"
@@ -1074,55 +1092,134 @@ func mode2UploadArtifactsToProviders(
 		slot         string
 	}
 
-	uploadBlob := func(ctx context.Context, task uploadTask) error {
-		f, err := os.Open(task.path)
-		if err != nil {
-			return err
+	isRetryableUploadErr := func(err error) bool {
+		if err == nil {
+			return false
 		}
-		defer f.Close()
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return false
+		}
 
-		fi, err := f.Stat()
+		var httpErr *providerUploadHTTPError
+		if errors.As(err, &httpErr) {
+			switch httpErr.statusCode {
+			case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+				return true
+			default:
+				return false
+			}
+		}
+
+		var netErr net.Error
+		if errors.As(err, &netErr) {
+			if netErr.Timeout() {
+				return true
+			}
+		}
+
+		msg := strings.ToLower(err.Error())
+		retryHints := []string{
+			"protocol_error",
+			"stream error",
+			"http2: transport",
+			"connection reset by peer",
+			"broken pipe",
+			"unexpected eof",
+			"server closed idle connection",
+			"use of closed network connection",
+		}
+		for _, hint := range retryHints {
+			if strings.Contains(msg, hint) {
+				return true
+			}
+		}
+		return false
+	}
+
+	uploadBlob := func(ctx context.Context, task uploadTask) error {
+		fi, err := os.Stat(task.path)
 		if err != nil {
 			return err
 		}
+		const maxAttempts = 3
 		if task.maxBytes > 0 && fi.Size() > task.maxBytes {
 			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(task.path), fi.Size())
 		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, task.url, f)
-		if err != nil {
-			return err
-		}
-		req.ContentLength = fi.Size()
-		req.Header.Set("Content-Type", "application/octet-stream")
-		// Avoid sending large bodies when the SP would reject early (deal validation,
-		// missing headers, etc). This prevents spurious client-side "ContentLength ...
-		// with Body length ..." transport errors when the server responds before
-		// reading the full payload.
-		req.Header.Set("Expect", "100-continue")
-		if task.dealID != "" {
-			req.Header.Set("X-Nil-Deal-ID", task.dealID)
-		}
-		if task.mduIndex != "" {
-			req.Header.Set("X-Nil-Mdu-Index", task.mduIndex)
-		}
-		if task.slot != "" {
-			req.Header.Set("X-Nil-Slot", task.slot)
-		}
-		if task.manifestRoot != "" {
-			req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
+		openBody := func() (io.ReadCloser, error) {
+			return os.Open(task.path)
 		}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
+		uploadOnce := func(ctx context.Context) error {
+			body, err := openBody()
+			if err != nil {
+				return err
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, task.url, body)
+			if err != nil {
+				_ = body.Close()
+				return err
+			}
+			defer req.Body.Close()
+			req.GetBody = openBody
+			req.ContentLength = fi.Size()
+			req.Header.Set("Content-Type", "application/octet-stream")
+			// Avoid sending large bodies when the SP would reject early (deal validation,
+			// missing headers, etc). This prevents spurious client-side "ContentLength ...
+			// with Body length ..." transport errors when the server responds before
+			// reading the full payload.
+			req.Header.Set("Expect", "100-continue")
+			if task.dealID != "" {
+				req.Header.Set("X-Nil-Deal-ID", task.dealID)
+			}
+			if task.mduIndex != "" {
+				req.Header.Set("X-Nil-Mdu-Index", task.mduIndex)
+			}
+			if task.slot != "" {
+				req.Header.Set("X-Nil-Slot", task.slot)
+			}
+			if task.manifestRoot != "" {
+				req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
+			}
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				msg, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+				return &providerUploadHTTPError{
+					statusCode: resp.StatusCode,
+					status:     resp.Status,
+					body:       string(msg),
+				}
+			}
+			return nil
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			msg, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-			return fmt.Errorf("upload failed: %s (%s)", resp.Status, strings.TrimSpace(string(msg)))
+
+		var lastErr error
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			err := uploadOnce(ctx)
+			if err == nil {
+				return nil
+			}
+			lastErr = err
+			if attempt == maxAttempts || !isRetryableUploadErr(err) {
+				break
+			}
+			backoff := time.Duration(attempt*attempt) * 250 * time.Millisecond
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
 		}
-		return nil
+		return fmt.Errorf("upload to %s failed after retries: %w", task.url, lastErr)
 	}
 
 	tasks := make([]uploadTask, 0, totalUploads)
