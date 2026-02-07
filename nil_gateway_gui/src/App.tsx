@@ -766,7 +766,7 @@ export default function App() {
             >
               {logs.length === 0 ? (
                 <p className="text-slate-400">
-                  Waiting for logs. Start or connect to a local sidecar to stream output.
+                  Waiting for gateway logs. Start or connect to the local gateway sidecar to stream output.
                 </p>
               ) : (
                 logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
