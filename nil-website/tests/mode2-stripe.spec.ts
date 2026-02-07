@@ -502,8 +502,11 @@ test.describe('mode2 stripe', () => {
       state: 'attached',
     })
     if ((await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false))) {
-      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
-      await uploadBtn.click()
+      const preUploadText = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
+      if (!/Upload Complete/i.test(preUploadText)) {
+        await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+        await uploadBtn.click()
+      }
       await expect
         .poll(async () => {
           const text = (await uploadBtn.textContent().catch(() => '')) || ''
