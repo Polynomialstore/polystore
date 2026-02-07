@@ -88,7 +88,7 @@ impl SidecarManager {
         let binary = resolve_binary_path(&app, config.binary_path.clone(), "nil_gateway")?;
         let args = config.args.unwrap_or_default();
 
-        let mut cmd = Command::new(binary);
+        let mut cmd = Command::new(&binary);
         cmd.args(args)
             .env("NIL_LISTEN_ADDR", &listen_addr)
             // Desktop sidecar default: keep libp2p disabled unless explicitly enabled.
