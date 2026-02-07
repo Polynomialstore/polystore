@@ -1,7 +1,9 @@
 package crypto_ffi
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/../../../nil_core/target/release -lnil_core -ldl -lpthread -lm
+#cgo LDFLAGS: -L${SRCDIR}/../../../nil_core/target/release -lnil_core
+#cgo linux LDFLAGS: -ldl -lpthread -lm
+#cgo darwin LDFLAGS: -lpthread -lm
 #include <stdlib.h> // For C.free
 
 	// FFI declarations for Rust functions

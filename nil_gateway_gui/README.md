@@ -18,11 +18,24 @@
 
 ## Build From Source
 
+Linux prerequisites (Ubuntu/Debian):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
 ```bash
 cd nil_gateway_gui
 npm ci
 npm run tauri build
 ```
+
+`npm run tauri build` runs `scripts/build_sidecars.mjs`, which builds/stages:
+- `nil_gateway`
+- `nil_cli`
+- `nil_core` shared library (`.so`/`.dylib`/`.dll`)
+- `trusted_setup.txt`
 
 ## Notes
 

@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -101,6 +102,7 @@ impl SidecarManager {
             if is_resource_ready(&trusted_setup_path) {
                 cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
             }
+            configure_sidecar_runtime_env(&mut cmd, &resource_dir);
         }
 
         if let Some(env) = config.env {
@@ -254,4 +256,37 @@ fn is_resource_ready(path: &Path) -> bool {
     fs::metadata(path)
         .map(|meta| meta.len() > 1024)
         .unwrap_or(false)
+}
+
+fn has_any_resource(dir: &Path, names: &[&str]) -> bool {
+    names.iter().any(|name| is_resource_ready(&dir.join(name)))
+}
+
+fn extend_env_path_list(cmd: &mut Command, key: &str, dir: &Path) {
+    let mut paths: Vec<PathBuf> = vec![dir.to_path_buf()];
+    if let Some(existing) = env::var_os(key) {
+        paths.extend(env::split_paths(&existing));
+    }
+    if let Ok(joined) = env::join_paths(paths) {
+        cmd.env(key, joined);
+    }
+}
+
+fn configure_sidecar_runtime_env(cmd: &mut Command, resource_dir: &Path) {
+    let bin_dir = resource_dir.join("bin");
+
+    #[cfg(target_os = "linux")]
+    if has_any_resource(&bin_dir, &["libnil_core.so"]) {
+        extend_env_path_list(cmd, "LD_LIBRARY_PATH", &bin_dir);
+    }
+
+    #[cfg(target_os = "macos")]
+    if has_any_resource(&bin_dir, &["libnil_core.dylib"]) {
+        extend_env_path_list(cmd, "DYLD_LIBRARY_PATH", &bin_dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    if has_any_resource(&bin_dir, &["nil_core.dll", "libnil_core.dll"]) {
+        extend_env_path_list(cmd, "PATH", &bin_dir);
+    }
 }

@@ -33,6 +33,9 @@ jobs:
         with:
           go-version: '1.25.x'
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install Linux system deps
         if: runner.os == 'Linux'
         run: |

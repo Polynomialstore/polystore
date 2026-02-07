@@ -36,6 +36,10 @@
       "bin/nil_gateway.exe",
       "bin/nil_cli",
       "bin/nil_cli.exe",
+      "bin/libnil_core.so",
+      "bin/libnil_core.dylib",
+      "bin/nil_core.dll",
+      "bin/libnil_core.dll",
       "trusted_setup.txt"
     ]
   }

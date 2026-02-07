@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -8,8 +8,37 @@ const rootDir = join(__dirname, "..", "..");
 const binDir = join(rootDir, "nil_gateway_gui", "src-tauri", "bin");
 const resourceDir = join(rootDir, "nil_gateway_gui", "src-tauri");
 const ext = process.platform === "win32" ? ".exe" : "";
+const nilCoreReleaseDir = join(rootDir, "nil_core", "target", "release");
+
+let nilCoreArtifacts;
+if (process.platform === "win32") {
+  nilCoreArtifacts = ["nil_core.dll", "libnil_core.dll"];
+} else if (process.platform === "darwin") {
+  nilCoreArtifacts = ["libnil_core.dylib"];
+} else {
+  nilCoreArtifacts = ["libnil_core.so"];
+}
 
 mkdirSync(binDir, { recursive: true });
+
+console.log("==> Building nil_core shared library");
+execFileSync("cargo", ["build", "--release"], {
+  cwd: join(rootDir, "nil_core"),
+  stdio: "inherit",
+});
+
+const nilCorePath = nilCoreArtifacts
+  .map((name) => join(nilCoreReleaseDir, name))
+  .find((candidate) => existsSync(candidate));
+
+if (!nilCorePath) {
+  throw new Error(
+    `nil_core shared library not found in ${nilCoreReleaseDir} (expected one of: ${nilCoreArtifacts.join(", ")})`,
+  );
+}
+
+console.log(`==> Staging ${basename(nilCorePath)}`);
+copyFileSync(nilCorePath, join(binDir, basename(nilCorePath)));
 
 console.log("==> Building nil_gateway sidecar");
 execFileSync(
