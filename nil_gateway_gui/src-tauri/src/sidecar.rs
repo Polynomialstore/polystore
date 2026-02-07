@@ -49,7 +49,7 @@ impl SidecarManager {
         let mut guard = self
             .base_url
             .lock()
-            .map_err(|_| "sidecar lock poisoned".to_string())?;
+            .map_err(|_| "gateway lock poisoned".to_string())?;
         *guard = Some(normalized);
         Ok(())
     }
@@ -57,7 +57,7 @@ impl SidecarManager {
     pub fn base_url(&self) -> Result<String, String> {
         self.base_url
             .lock()
-            .map_err(|_| "sidecar lock poisoned".to_string())?
+            .map_err(|_| "gateway lock poisoned".to_string())?
             .clone()
             .ok_or_else(|| "gateway not started".to_string())
     }
@@ -70,7 +70,7 @@ impl SidecarManager {
         let mut guard = self
             .child
             .lock()
-            .map_err(|_| "sidecar lock poisoned".to_string())?;
+            .map_err(|_| "gateway lock poisoned".to_string())?;
         if let Some(child) = guard.as_ref() {
             let base_url = self.base_url()?;
             return Ok(GatewayStartResponse {
@@ -91,13 +91,16 @@ impl SidecarManager {
         let mut cmd = Command::new(&binary);
         cmd.args(args)
             .env("NIL_LISTEN_ADDR", &listen_addr)
-            // Desktop sidecar default: keep libp2p disabled unless explicitly enabled.
+            // Local desktop Gateway default: keep libp2p disabled unless explicitly enabled.
             // This avoids startup collisions on hosts already running router/provider daemons.
             .env("NIL_P2P_ENABLED", "0")
+            // Local desktop Gateway should not run synthetic system-liveness ticks unless
+            // explicitly requested. Those ticks need provider key material and create noisy logs.
+            .env("NIL_DISABLE_SYSTEM_LIVENESS", "1")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // First, derive runtime env from the resolved sidecar binary path itself.
+        // First, derive runtime env from the resolved gateway binary path itself.
         // This makes packaged Linux installs robust even when resource_dir resolution
         // differs across distros/layouts.
         configure_sidecar_from_binary_layout(&mut cmd, &binary);
@@ -127,7 +130,7 @@ impl SidecarManager {
             let mut guard = self
                 .base_url
                 .lock()
-                .map_err(|_| "sidecar lock poisoned".to_string())?;
+                .map_err(|_| "gateway lock poisoned".to_string())?;
             *guard = Some(base_url.clone());
         }
 
@@ -162,7 +165,7 @@ impl SidecarManager {
         std::thread::sleep(Duration::from_millis(350));
         if let Some(status) = child
             .try_wait()
-            .map_err(|err| format!("failed to check sidecar status: {err}"))?
+            .map_err(|err| format!("failed to check gateway status: {err}"))?
         {
             return Err(format!(
                 "gateway exited during startup (status: {status}). Check logs for bind/lib dependency errors."
@@ -177,7 +180,7 @@ impl SidecarManager {
         let mut guard = self
             .child
             .lock()
-            .map_err(|_| "sidecar lock poisoned".to_string())?;
+            .map_err(|_| "gateway lock poisoned".to_string())?;
         if let Some(mut child) = guard.take() {
             let _ = child.kill();
         }

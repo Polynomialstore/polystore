@@ -28,6 +28,8 @@ type GatewayPhase =
 
 const LOG_BUFFER_LIMIT = 400;
 const STATUS_POLL_MS = 10_000;
+const STARTUP_PROBE_ATTEMPTS = 20;
+const STARTUP_PROBE_DELAY_MS = 250;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -144,6 +146,25 @@ export default function App() {
     [probeStatus],
   );
 
+  const probeAfterStart = useCallback(
+    async (baseUrl: string) => {
+      let lastErr: unknown = null;
+      await gatewayAttach(baseUrl);
+      for (let attempt = 0; attempt < STARTUP_PROBE_ATTEMPTS; attempt += 1) {
+        try {
+          return await probeStatus();
+        } catch (err) {
+          lastErr = err;
+          if (attempt < STARTUP_PROBE_ATTEMPTS - 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, STARTUP_PROBE_DELAY_MS));
+          }
+        }
+      }
+      throw lastErr ?? new Error("Gateway did not become ready after startup.");
+    },
+    [probeStatus],
+  );
+
   const ensureGateway = useCallback(
     async (opts?: { startIfOffline?: boolean }) => {
       const startIfOffline = opts?.startIfOffline ?? true;
@@ -171,11 +192,12 @@ export default function App() {
             listen_addr: normalizeListenAddr(normalizedBase),
             env: {
               NIL_P2P_ENABLED: "0",
+              NIL_DISABLE_SYSTEM_LIVENESS: "1",
               NIL_LOCAL_IMPORT_ENABLED: "1",
               NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
             },
           });
-          await attachAndProbe(normalizedBase);
+          await probeAfterStart(normalizedBase);
           addLog("Local Gateway started successfully.");
         } catch (startErr) {
           const msg = errorMessage(startErr, "Failed to start gateway");
@@ -186,7 +208,7 @@ export default function App() {
         }
       }
     },
-    [addLog, attachAndProbe, gatewayBaseUrl],
+    [addLog, attachAndProbe, gatewayBaseUrl, probeAfterStart],
   );
 
   useEffect(() => {
