@@ -23,6 +23,7 @@ export interface FetchStatusOptions {
 const GATEWAY_STATUS_PATH = '/status'
 const GATEWAY_HEALTH_PATH = '/health'
 let cachedGatewayPath: '/status' | '/health' = '/status'
+let cachedGatewayStatus: ServiceStatus = 'warn'
 
 async function probeGateway(base: string): Promise<ServiceStatus> {
   const baseUrl = String(base || '').replace(/\/$/, '')
@@ -60,11 +61,14 @@ async function probeGateway(base: string): Promise<ServiceStatus> {
 }
 
 export async function fetchStatus(expectedChainId: number, options: FetchStatusOptions = {}): Promise<StatusSummary> {
+  if (appConfig.gatewayDisabled) {
+    cachedGatewayStatus = 'warn'
+  }
   const summary: StatusSummary = {
     lcd: 'warn',
     evm: 'warn',
     faucet: appConfig.faucetEnabled ? 'ok' : 'warn',
-    gateway: appConfig.gatewayDisabled ? 'warn' : 'ok',
+    gateway: appConfig.gatewayDisabled ? 'warn' : cachedGatewayStatus,
     chainIdMatch: 'warn',
   }
   try {
@@ -115,8 +119,10 @@ export async function fetchStatus(expectedChainId: number, options: FetchStatusO
   if (options.probeOptionalHealth && !appConfig.gatewayDisabled) {
     try {
       summary.gateway = await probeGateway(appConfig.gatewayBase)
+      cachedGatewayStatus = summary.gateway
     } catch (e) {
       summary.gateway = 'error'
+      cachedGatewayStatus = 'error'
     }
   }
 
