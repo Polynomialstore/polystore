@@ -18,7 +18,7 @@ jobs:
         include:
           - platform: macos-latest
             bundles: dmg
-          - platform: ubuntu-latest
+          - platform: ubuntu-22.04
             bundles: deb,rpm
           - platform: windows-latest
             bundles: nsis,msi
