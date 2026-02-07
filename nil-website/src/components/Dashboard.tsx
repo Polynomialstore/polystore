@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -18,12 +18,14 @@ import { FaucetAuthTokenInput } from './FaucetAuthTokenInput'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { maybeWrapNilceZstd } from '../lib/nilce'
 import { injectedConnector } from '../lib/web3Config'
+import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
+import { useLocalGateway } from '../hooks/useLocalGateway'
 
 interface Provider {
   address: string
@@ -88,8 +90,10 @@ export function Dashboard() {
     address,
     chainId: appConfig.chainId,
   })
+  const localGateway = useLocalGateway(45_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
+  const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases'
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
   const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
@@ -217,6 +221,25 @@ export function Dashboard() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
+    }
+  }
+
+  const handleEnsureWalletAccess = async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
+      if (isWalletLocked || (isConnected && !hasAuthorizedAccount)) {
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
+        await ethereum.request({ method: 'eth_requestAccounts' })
+      } else if (!isConnected) {
+        await connectAsync({ connector: injectedConnector })
+      }
+      await switchNetwork().catch(() => undefined)
+    } catch (e) {
+      setStatusTone('error')
+      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
     }
   }
 
@@ -1413,6 +1436,7 @@ export function Dashboard() {
   )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
+  const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-muted/10">
@@ -1669,6 +1693,102 @@ export function Dashboard() {
           {statusMsg}
         </div>
       )}
+
+      <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
+        <div className="grid gap-3 p-4 lg:grid-cols-3">
+          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Testnet Funds</div>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div
+                  className="truncate font-mono text-[11px] text-muted-foreground"
+                  data-testid="cosmos-identity"
+                  title={nilAddress || undefined}
+                >
+                  {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Stake: <span className="font-mono text-foreground" data-testid="cosmos-stake-balance">{bankBalances.stake || '—'}</span>
+                </div>
+              </div>
+              {appConfig.faucetEnabled ? (
+                <button
+                  data-testid="faucet-request"
+                  onClick={handleRequestFunds}
+                  disabled={!address || faucetBusy}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
+                </button>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">Faucet off</span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Account</div>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-mono text-[11px] text-foreground" title={address || undefined}>
+                  {walletAddressShort}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  {isWalletLocked
+                    ? 'Wallet locked'
+                    : !hasAuthorizedAccount
+                      ? 'Wallet authorization required'
+                      : isWrongNetwork
+                        ? `Wrong chain (${activeChainId})`
+                        : `Chain ${activeChainId}`}
+                </div>
+              </div>
+              {(isWalletLocked || !hasAuthorizedAccount || isWrongNetwork) ? (
+                <button
+                  type="button"
+                  onClick={isWrongNetwork ? handleSwitchNetwork : () => void handleEnsureWalletAccess()}
+                  className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  {isWrongNetwork ? 'Switch' : isWalletLocked ? 'Unlock' : 'Authorize'}
+                </button>
+              ) : (
+                <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">Ready</span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Gateway Sidecar</div>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-foreground">
+                  {localGateway.status === 'connected' ? 'Local gateway connected' : 'Local gateway not detected'}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Use desktop sidecar for localhost gateway flows.
+                </div>
+              </div>
+              <a
+                href={gatewayDesktopReleaseUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Desktop
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+        {faucetTx ? (
+          <div className="border-t border-border/80 px-4 py-2 text-[11px] text-muted-foreground">
+            Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
+          </div>
+        ) : null}
+      </div>
 
       <StatusBar />
 
@@ -2124,55 +2244,11 @@ export function Dashboard() {
         </div>
 
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Testnet funds
-                </div>
-                <div
-                  className="mt-1 font-mono text-[11px] text-muted-foreground truncate"
-                  data-testid="cosmos-identity"
-                  title={nilAddress || undefined}
-                >
-                  {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
-                </div>
-              </div>
-              {appConfig.faucetEnabled ? (
-                <button
-                  data-testid="faucet-request"
-                  onClick={handleRequestFunds}
-                  disabled={!address || faucetBusy}
-                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  <Coins className="h-4 w-4" />
-                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get Testnet NIL'}
-                </button>
-              ) : (
-                <div className="text-[11px] text-muted-foreground text-right">
-                  Faucet disabled (mainnet parity)
-                </div>
-              )}
+          {appConfig.faucetEnabled && !hasBuildFaucetAuthToken() ? (
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm p-4">
+              <FaucetAuthTokenInput />
             </div>
-            <div className="px-6 pb-4">
-              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                <span>Balance</span>
-                <span className="font-mono text-foreground" data-testid="cosmos-stake-balance">
-                  {bankBalances.stake || '—'}
-                </span>
-              </div>
-              {faucetTx ? (
-                <div className="mt-2 text-[11px] text-muted-foreground">
-                  Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
-                </div>
-              ) : null}
-              {appConfig.faucetEnabled ? (
-                <div className="mt-3">
-                  <FaucetAuthTokenInput />
-                </div>
-              ) : null}
-            </div>
-          </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
