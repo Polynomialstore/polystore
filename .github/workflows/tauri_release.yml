@@ -10,17 +10,23 @@ permissions:
 
 jobs:
   build:
-    name: Build Tauri App (${{ matrix.platform }})
+    name: Build Tauri App (${{ matrix.label }})
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-13
+            label: macos-intel
+            bundles: dmg
+          - platform: macos-15
+            label: macos-apple-silicon
             bundles: dmg
           - platform: ubuntu-22.04
+            label: linux-ubuntu-22.04
             bundles: deb,rpm
-          - platform: windows-latest
+          - platform: windows-2022
+            label: windows-2022
             bundles: nsis,msi
 
     steps:
