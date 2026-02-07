@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
@@ -90,8 +91,16 @@ impl SidecarManager {
         let mut cmd = Command::new(binary);
         cmd.args(args)
             .env("NIL_LISTEN_ADDR", &listen_addr)
+            // Desktop sidecar default: keep libp2p disabled unless explicitly enabled.
+            // This avoids startup collisions on hosts already running router/provider daemons.
+            .env("NIL_P2P_ENABLED", "0")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        // First, derive runtime env from the resolved sidecar binary path itself.
+        // This makes packaged Linux installs robust even when resource_dir resolution
+        // differs across distros/layouts.
+        configure_sidecar_from_binary_layout(&mut cmd, &binary);
 
         if let Ok(resource_dir) = app.path().resource_dir() {
             let nil_cli_path = resource_dir.join("bin").join(binary_filename("nil_cli"));
@@ -146,6 +155,18 @@ impl SidecarManager {
                     emit_log(&app_handle, &line);
                 }
             });
+        }
+
+        // Catch immediate startup failures (for example port collisions) and surface
+        // a concrete error to the UI instead of failing later on status probe.
+        std::thread::sleep(Duration::from_millis(350));
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|err| format!("failed to check sidecar status: {err}"))?
+        {
+            return Err(format!(
+                "gateway exited during startup (status: {status}). Check logs for bind/lib dependency errors."
+            ));
         }
 
         *guard = Some(child);
@@ -235,11 +256,24 @@ fn resolve_binary_path(
     }
 
     let filename = binary_filename(name);
+    let mut resource_roots: Vec<PathBuf> = Vec::new();
+
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let candidates = [
-            resource_dir.join("bin").join(&filename),
-            resource_dir.join(&filename),
-        ];
+        resource_roots.push(resource_dir);
+    }
+
+    if let Ok(current_exe) = env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            // Debian/Ubuntu install layout:
+            //   /usr/bin/nil_gateway_gui -> /usr/lib/nil_gateway_gui/bin/nil_gateway
+            resource_roots.push(exe_dir.join("..").join("lib").join("nil_gateway_gui"));
+        }
+    }
+
+    resource_roots.push(PathBuf::from("/usr/lib/nil_gateway_gui"));
+
+    for root in resource_roots {
+        let candidates = [root.join("bin").join(&filename), root.join(&filename)];
         if let Some(found) = candidates
             .iter()
             .find(|path| is_resource_ready(path))
@@ -274,19 +308,47 @@ fn extend_env_path_list(cmd: &mut Command, key: &str, dir: &Path) {
 
 fn configure_sidecar_runtime_env(cmd: &mut Command, resource_dir: &Path) {
     let bin_dir = resource_dir.join("bin");
+    configure_sidecar_runtime_env_for_bin_dir(cmd, &bin_dir);
+}
 
+fn configure_sidecar_runtime_env_for_bin_dir(cmd: &mut Command, bin_dir: &Path) {
     #[cfg(target_os = "linux")]
-    if has_any_resource(&bin_dir, &["libnil_core.so"]) {
-        extend_env_path_list(cmd, "LD_LIBRARY_PATH", &bin_dir);
+    if has_any_resource(bin_dir, &["libnil_core.so"]) {
+        extend_env_path_list(cmd, "LD_LIBRARY_PATH", bin_dir);
     }
 
     #[cfg(target_os = "macos")]
-    if has_any_resource(&bin_dir, &["libnil_core.dylib"]) {
-        extend_env_path_list(cmd, "DYLD_LIBRARY_PATH", &bin_dir);
+    if has_any_resource(bin_dir, &["libnil_core.dylib"]) {
+        extend_env_path_list(cmd, "DYLD_LIBRARY_PATH", bin_dir);
     }
 
     #[cfg(target_os = "windows")]
-    if has_any_resource(&bin_dir, &["nil_core.dll", "libnil_core.dll"]) {
-        extend_env_path_list(cmd, "PATH", &bin_dir);
+    if has_any_resource(bin_dir, &["nil_core.dll", "libnil_core.dll"]) {
+        extend_env_path_list(cmd, "PATH", bin_dir);
     }
+}
+
+fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
+    let binary_path = PathBuf::from(binary);
+    if !binary_path.is_absolute() {
+        return;
+    }
+
+    let Some(bin_dir) = binary_path.parent() else {
+        return;
+    };
+
+    let nil_cli_path = bin_dir.join(binary_filename("nil_cli"));
+    if is_resource_ready(&nil_cli_path) {
+        cmd.env("NIL_CLI_BIN", &nil_cli_path);
+    }
+
+    if let Some(root_dir) = bin_dir.parent() {
+        let trusted_setup_path = root_dir.join("trusted_setup.txt");
+        if is_resource_ready(&trusted_setup_path) {
+            cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+        }
+    }
+
+    configure_sidecar_runtime_env_for_bin_dir(cmd, bin_dir);
 }

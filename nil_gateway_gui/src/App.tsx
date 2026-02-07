@@ -53,6 +53,16 @@ const defaultCreateForm: CreateDealForm = {
   eip712ChainId: "31337",
 };
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  if (typeof err === "string" && err.trim().length > 0) {
+    return err;
+  }
+  return fallback;
+}
+
 export default function App() {
   const wallet = useWallet();
   const shortAddress = wallet.address
@@ -115,9 +125,7 @@ export default function App() {
         setGateway(status);
         setGatewayError(null);
       } catch (err) {
-        setGatewayError(
-          err instanceof Error ? err.message : "Gateway status failed",
-        );
+        setGatewayError(errorMessage(err, "Gateway status failed"));
       }
     }, 5000);
 
@@ -152,6 +160,7 @@ export default function App() {
         await gatewayStart({
           listen_addr: listenAddr,
           env: {
+            NIL_P2P_ENABLED: "0",
             NIL_LOCAL_IMPORT_ENABLED: "1",
             NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
           },
@@ -163,9 +172,7 @@ export default function App() {
         }
       } catch (err) {
         if (mounted) {
-          setGatewayError(
-            err instanceof Error ? err.message : "Failed to start gateway",
-          );
+          setGatewayError(errorMessage(err, "Failed to start gateway"));
         }
       }
     };
@@ -226,6 +233,7 @@ export default function App() {
       await gatewayStart({
         listen_addr: listenAddr,
         env: {
+          NIL_P2P_ENABLED: "0",
           NIL_LOCAL_IMPORT_ENABLED: "1",
           NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
         },
@@ -233,9 +241,7 @@ export default function App() {
       const status = await gatewayStatus();
       setGateway(status);
     } catch (err) {
-      setGatewayError(
-        err instanceof Error ? err.message : "Failed to start gateway",
-      );
+      setGatewayError(errorMessage(err, "Failed to start gateway"));
     } finally {
       setGatewayStarting(false);
     }
@@ -249,9 +255,7 @@ export default function App() {
       const status = await gatewayStatus();
       setGateway(status);
     } catch (err) {
-      setGatewayError(
-        err instanceof Error ? err.message : "Failed to attach gateway",
-      );
+      setGatewayError(errorMessage(err, "Failed to attach gateway"));
     } finally {
       setGatewayAttachBusy(false);
     }
