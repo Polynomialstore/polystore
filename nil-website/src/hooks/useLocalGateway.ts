@@ -28,18 +28,52 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<LocalGatewayDetails | null>(null);
-  const pollIntervalRef = useRef<number>(pollInterval); // Use ref for stable poll interval
+  const statusRef = useRef<GatewayStatus>('disconnected');
+  const errorRef = useRef<string | null>(null);
+  const detailsRef = useRef<LocalGatewayDetails | null>(null);
 
   useEffect(() => {
     if (appConfig.gatewayDisabled) {
       setStatus('disconnected');
       setError('Gateway disabled');
       setDetails(null);
+      statusRef.current = 'disconnected';
+      errorRef.current = 'Gateway disabled';
+      detailsRef.current = null;
       return;
     }
+
+    const updateStatus = (next: GatewayStatus) => {
+      if (statusRef.current === next) return;
+      statusRef.current = next;
+      setStatus(next);
+    };
+    const updateError = (next: string | null) => {
+      if (errorRef.current === next) return;
+      errorRef.current = next;
+      setError(next);
+    };
+    const updateDetails = (next: LocalGatewayDetails | null) => {
+      const curr = detailsRef.current;
+      if (
+        (curr === null && next === null) ||
+        (curr !== null && next !== null && JSON.stringify(curr) === JSON.stringify(next))
+      ) {
+        return;
+      }
+      detailsRef.current = next;
+      setDetails(next);
+    };
+
+    let inFlight = false;
+
     const checkGatewayStatus = async () => {
-      setStatus('connecting');
-      setError(null); // Clear previous errors
+      if (inFlight) return;
+      inFlight = true;
+      if (statusRef.current !== 'connected') {
+        updateStatus('connecting');
+      }
+      updateError(null); // Clear previous errors
       try {
         const baseUrl = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
         const statusUrl = `${baseUrl}${GATEWAY_STATUS_ENDPOINT}`;
@@ -51,18 +85,18 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
         if (response.ok) {
           const payload = await response.json().catch(() => null);
           if (payload && typeof payload === 'object') {
-            setDetails(payload as LocalGatewayDetails);
+            updateDetails(payload as LocalGatewayDetails);
           } else {
-            setDetails(null);
+            updateDetails(null);
           }
-          setStatus('connected');
+          updateStatus('connected');
           return;
         }
 
         if (response.status !== 404) {
-          setStatus('disconnected');
-          setError(`Gateway responded with status: ${response.status}`);
-          setDetails(null);
+          updateStatus('disconnected');
+          updateError(`Gateway responded with status: ${response.status}`);
+          updateDetails(null);
           return;
         }
 
@@ -71,24 +105,26 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
           signal: AbortSignal.timeout(3000),
         });
         if (healthRes.ok) {
-          setStatus('connected');
-          setDetails(null);
+          updateStatus('connected');
+          updateDetails(null);
         } else {
-          setStatus('disconnected');
-          setError(`Gateway responded with status: ${healthRes.status}`);
-          setDetails(null);
+          updateStatus('disconnected');
+          updateError(`Gateway responded with status: ${healthRes.status}`);
+          updateDetails(null);
         }
       } catch (e: unknown) {
-        setStatus('disconnected');
+        updateStatus('disconnected');
         const err = e as Error;
         if (err.name === 'AbortError') {
-            setError('Connection timed out');
+          updateError('Connection timed out');
         } else if (err.message && err.message.includes('Failed to fetch')) { // Common error for connection refused/unreachable
-            setError('Could not connect to local gateway');
+          updateError('Could not connect to local gateway');
         } else {
-            setError(err.message || 'Unknown error during connection');
+          updateError(err.message || 'Unknown error during connection');
         }
-        setDetails(null);
+        updateDetails(null);
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -96,11 +132,11 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
     checkGatewayStatus();
 
     // Set up polling
-    const intervalId = setInterval(checkGatewayStatus, pollIntervalRef.current);
+    const intervalId = setInterval(checkGatewayStatus, pollInterval);
 
     // Cleanup
     return () => clearInterval(intervalId);
-  }, [pollIntervalRef]); // Dependency array to re-run effect if pollInterval changes
+  }, [pollInterval]); // Re-run effect when poll interval changes
 
   return { status, url: appConfig.gatewayBase, error, details };
 }
