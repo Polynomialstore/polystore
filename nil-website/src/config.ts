@@ -2,14 +2,10 @@ function envString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-const ENV: Record<string, string | undefined> = (() => {
-  try {
-    const meta = import.meta as ImportMeta & { env?: Record<string, string | undefined> }
-    return meta?.env ?? {}
-  } catch {
-    return {}
-  }
-})()
+// Keep a direct `import.meta.env` access so Vite can statically inject VITE_* envs.
+// In node:test (non-Vite), `import.meta.env` may be undefined; fallback to {}.
+const ENV: Record<string, string | undefined> =
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {})
 
 function detectRuntimeHost(): string {
   if (typeof window === 'undefined') return ''
