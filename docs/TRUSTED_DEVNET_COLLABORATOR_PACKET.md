@@ -21,7 +21,7 @@ You should receive:
 - Chain ID: `<chain-id>` (e.g. `31337`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
 - Faucet auth token (optional): a secret string you paste into the website UI (do **not** share publicly)
-- Gateway URL (optional; for diagnostics): `https://gateway.<domain>`
+- Local gateway sidecar endpoint (optional): `http://localhost:8080`
 
 If you are running an SP, you also need:
 - Hub RPC: `https://rpc.<domain>`
@@ -60,6 +60,10 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 2. Upload a small file (start with ~10–100 KiB).
 3. Commit the content (this updates the on-chain `manifest_root`).
 4. Retrieve the file back and confirm it matches what you uploaded.
+
+Optional but recommended:
+- Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
+- Download from: `https://github.com/Nil-Store/nil-store/releases`.
 
 Tip: if you test with a text file, change a line and re-upload to confirm the commit changes the retrieval.
 
@@ -166,7 +170,7 @@ Please capture:
 - For retrieval failures:
   - request headers you used (notably `X-Nil-Session-Id`, if you were using curl)
   - hub response header `X-Nil-Provider` (who served the bytes)
-  - the hub `gateway.*` URL and timestamp
+  - whether you were using a local sidecar gateway (`http://localhost:8080`) and timestamp
 - A screenshot + browser console log (website), or command output (CLI)
 
 If you can reproduce reliably, that’s gold: include “steps to reproduce” from a fresh page load or fresh process start.

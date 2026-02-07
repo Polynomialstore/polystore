@@ -22,7 +22,8 @@ FAUCET_AUTH_TOKEN="${FAUCET_AUTH_TOKEN:-${VITE_FAUCET_AUTH_TOKEN:-}}"
 
 VITE_API_BASE="${VITE_API_BASE:-https://faucet.${DOMAIN}}"
 VITE_LCD_BASE="${VITE_LCD_BASE:-https://lcd.${DOMAIN}}"
-VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-https://gateway.${DOMAIN}}"
+# Gateway is sidecar-only for trusted devnet: keep localhost by default.
+VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:8080}"
 VITE_EVM_RPC="${VITE_EVM_RPC:-https://evm.${DOMAIN}}"
 
 cd "$WEB_DIR"

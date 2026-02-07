@@ -13,6 +13,7 @@ export const TestnetDocs = () => {
   const { address } = useAccount();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [targetDealId, setTargetDealId] = useState("");
+  const gatewayGuiReleaseUrl = "https://github.com/Nil-Store/nil-store/releases";
 
   useEffect(() => {
     if (address) {
@@ -47,7 +48,7 @@ export const TestnetDocs = () => {
             <Download className="w-6 h-6 text-blue-500" /> Quick Start
           </h2>
           <p className="text-muted-foreground">
-            Since the network is in active development, we recommend building from source.
+            For chain/provider operators we recommend building from source. Browser users can install the local gateway sidecar from releases.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6">
@@ -109,8 +110,24 @@ export const TestnetDocs = () => {
             <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=0</code>.
           </p>
           <p className="text-sm text-muted-foreground">
-            The browser client can shard and commit using WASM + OPFS. The local gateway is optional routing/cache infrastructure, and Mode 2 deals require client-side RS encoding with direct uploads to assigned providers.
+            The browser client can shard and commit using WASM + OPFS. The local gateway is a localhost sidecar (not a shared public service).
+            If no local gateway is running, uploads still work via in-browser sharding and direct provider transport.
           </p>
+          <div className="rounded-xl border border-border/60 bg-secondary/10 p-4 text-sm text-muted-foreground">
+            <div className="font-semibold text-foreground">Local Gateway Sidecar (recommended)</div>
+            <div className="mt-1">
+              Install <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway_gui</code>, start it, then refresh this page.
+              The website probes <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://localhost:8080</code> only.
+            </div>
+            <a
+              href={gatewayGuiReleaseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex items-center rounded-md border border-border bg-background/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/50"
+            >
+              Download Nil Gateway GUI
+            </a>
+          </div>
           <div className="bg-secondary/10 rounded-xl p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
             <p>$ # (optional) in nil_faucet/</p>
             <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>

@@ -28,7 +28,12 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
       : '';
   const p2p = details?.p2p_addrs?.length ? details.p2p_addrs.join(', ') : '';
 
-  switch (status) {
+  if (error === 'Gateway disabled') {
+    icon = <AlertCircle className="w-4 h-4" />;
+    colorClass = 'text-muted-foreground';
+    text = 'Sidecar Off';
+    tooltip = 'Local gateway checks are disabled by configuration.';
+  } else switch (status) {
     case 'connected':
       icon = <Wifi className="w-4 h-4" />;
       colorClass = 'text-green-500';

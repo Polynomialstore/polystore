@@ -45,7 +45,7 @@ Examples:
     --rpc https://rpc.<domain> \
     --lcd https://lcd.<domain> \
     --evm https://evm.<domain> \
-    --gateway https://gateway.<domain> \
+    --gateway http://127.0.0.1:8080 \
     --faucet https://faucet.<domain>
 
   # Provider checks (on a provider host):

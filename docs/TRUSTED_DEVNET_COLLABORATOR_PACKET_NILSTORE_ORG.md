@@ -8,7 +8,6 @@ This is the concrete collaborator packet for the current trusted devnet hub depl
 - EVM RPC: `https://evm.nilstore.org`
 - Hub RPC: `https://rpc.nilstore.org`
 - Hub LCD: `https://lcd.nilstore.org`
-- Gateway: `https://gateway.nilstore.org`
 - Faucet: `https://faucet.nilstore.org/faucet`
 - Chain ID: `31337` (`0x7a69`)
 
@@ -35,9 +34,13 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 4) Run the flow:
 - create deal → upload → commit → retrieve.
 
+Local sidecar gateway (recommended for gateway-assisted flows):
+- Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
+- Download builds: `https://github.com/Nil-Store/nil-store/releases`.
+
 Notes:
 - This deployment is wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
-- The website flow uses direct EVM transactions (MetaMask / precompile), then uses the gateway for data path.
+- The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost gateway sidecar.
 
 ## SP Operator Quickstart
 
@@ -66,7 +69,7 @@ scripts/devnet_healthcheck.sh hub \
   --rpc https://rpc.nilstore.org \
   --lcd https://lcd.nilstore.org \
   --evm https://evm.nilstore.org \
-  --gateway https://gateway.nilstore.org \
+  --gateway http://127.0.0.1:8080 \
   --faucet https://faucet.nilstore.org
 ```
 

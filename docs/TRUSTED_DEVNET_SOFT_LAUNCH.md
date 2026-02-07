@@ -20,6 +20,7 @@ Related:
   - `nil_gateway` in **provider** mode (one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
+  - Optional local gateway sidecar (`nil_gateway_gui` / `nil_gateway`) on `http://localhost:8080`
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).
@@ -32,9 +33,13 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 - `https://rpc.<domain>` → `http://127.0.0.1:26657` (CometBFT RPC)
 - `https://lcd.<domain>` → `http://127.0.0.1:1317` (LCD REST)
 - `https://evm.<domain>` → `http://127.0.0.1:8545` (EVM JSON-RPC)
-- `https://gateway.<domain>` → `http://127.0.0.1:<router-port>` (router gateway; default `8080`)
 - `https://faucet.<domain>` → `http://127.0.0.1:8081` (faucet)
 - `https://web.<domain>` → static website build (optional if hosted elsewhere)
+
+Gateway policy for this soft launch:
+- Do **not** publish a shared `gateway.<domain>` endpoint.
+- Keep router gateway local-only on the hub (`127.0.0.1:<router-port>`).
+- Website users should run a local sidecar gateway when they want gateway-assisted flows.
 
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
@@ -44,7 +49,7 @@ Reverse proxy templates:
 ### Profile A — Public ingress + Caddy (default)
 
 - Hub has reachable inbound `80/443`.
-- DNS (`rpc/lcd/evm/gateway/faucet/web`) resolves directly to the hub public IP.
+- DNS (`rpc/lcd/evm/faucet/web`) resolves directly to the hub public IP.
 - Caddy terminates TLS and proxies to localhost ports.
 
 ### Profile B — Home server behind NAT/CGNAT + Cloudflare Tunnel
@@ -69,7 +74,6 @@ This section is the **hub operator** checklist for standing up public endpoints 
 - `rpc.<domain>`
 - `lcd.<domain>`
 - `evm.<domain>`
-- `gateway.<domain>`
 - `faucet.<domain>`
 - `web.<domain>`
 
@@ -90,7 +94,6 @@ Keep the underlying service ports **local-only** (recommended) or **firewalled**
 - `rpc.<domain>`
 - `lcd.<domain>`
 - `evm.<domain>`
-- `gateway.<domain>`
 - `faucet.<domain>`
 - `web.<domain>` (optional if website is hosted separately, e.g. GitHub/Netlify)
 
@@ -215,7 +218,6 @@ cloudflared tunnel create nilstore-hub
 cloudflared tunnel route dns nilstore-hub rpc.<domain>
 cloudflared tunnel route dns nilstore-hub lcd.<domain>
 cloudflared tunnel route dns nilstore-hub evm.<domain>
-cloudflared tunnel route dns nilstore-hub gateway.<domain>
 cloudflared tunnel route dns nilstore-hub faucet.<domain>
 # Optional if this host serves web.<domain>:
 cloudflared tunnel route dns nilstore-hub web.<domain>
@@ -233,8 +235,6 @@ ingress:
     service: http://127.0.0.1:1317
   - hostname: evm.<domain>
     service: http://127.0.0.1:8545
-  - hostname: gateway.<domain>
-    service: http://127.0.0.1:8080  # or your NIL_LISTEN_ADDR port
   - hostname: faucet.<domain>
     service: http://127.0.0.1:8081
   # Optional if this host serves web.<domain>:
@@ -289,7 +289,6 @@ sudo systemctl enable --now cloudflared
 
 ```bash
 curl -fsS https://rpc.<domain>/status >/dev/null
-curl -fsS https://gateway.<domain>/health >/dev/null
 # Optional if this host serves web.<domain>:
 curl -fsS https://web.<domain>/ >/dev/null
 ```
@@ -366,8 +365,9 @@ The website is built with Vite.
 - If deployed on `nilstore.org` (or `*.nilstore.org`) and `VITE_*` are omitted, the app auto-infers:
   - `https://faucet.nilstore.org`
   - `https://lcd.nilstore.org`
-  - `https://gateway.nilstore.org`
   - `https://evm.nilstore.org`
+- Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user sidecar.
+- Recommended sidecar distribution for collaborators: `nil_gateway_gui` release artifacts.
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
@@ -381,7 +381,6 @@ npm ci
 
 VITE_API_BASE=https://faucet.<domain> \
 VITE_LCD_BASE=https://lcd.<domain> \
-VITE_GATEWAY_BASE=https://gateway.<domain> \
 VITE_EVM_RPC=https://evm.<domain> \
 VITE_COSMOS_CHAIN_ID=31337 \
 VITE_CHAIN_ID=31337 \
@@ -420,9 +419,10 @@ curl -fsS https://lcd.<domain>/cosmos/base/tendermint/v1beta1/node_info >/dev/nu
 curl -fsS https://lcd.<domain>/nilchain/nilchain/v1/params >/dev/null
 curl -fsS https://evm.<domain> -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' >/dev/null
-curl -fsS https://gateway.<domain>/health >/dev/null
 curl -fsS -o /dev/null -w '%{http_code}\n' https://faucet.<domain>/faucet
 curl -fsS https://web.<domain>/ >/dev/null
+# local-only router gateway check (run on hub host):
+curl -fsS http://127.0.0.1:8080/health >/dev/null
 ```
 
 ## Economics knobs (soft launch)
@@ -504,7 +504,7 @@ Use the env templates under `ops/systemd/env/` and make sure:
 ## Provider onboarding
 
 Send each collaborator:
-- Hub endpoints (rpc/lcd/evm/gateway/faucet)
+- Hub endpoints (rpc/lcd/evm/faucet)
 - The chain ID(s)
 - The shared router↔provider auth token (`NIL_GATEWAY_SP_AUTH`)
 
@@ -603,12 +603,12 @@ Use this flow instead:
 2) Submit intents directly on-chain:
    - `nilchaind tx nilchain create-deal-from-evm <create_payload.json> ...`
    - `nilchaind tx nilchain update-deal-content-from-evm <update_payload.json> ...`
-3) Use gateway data path:
-   - upload: `POST https://gateway.<domain>/gateway/upload?deal_id=<id>`
-   - plan session: `GET https://gateway.<domain>/gateway/plan-retrieval-session/<manifest_root>?...`
+3) Use local sidecar gateway data path:
+   - upload: `POST http://127.0.0.1:8080/gateway/upload?deal_id=<id>`
+   - plan session: `GET http://127.0.0.1:8080/gateway/plan-retrieval-session/<manifest_root>?...`
 4) Open retrieval session with `nil-website/scripts/open_retrieval_session.ts`.
 5) Sign fetch request with `nil-website/scripts/sign_intent.ts sign-fetch-request`.
-6) Fetch bytes from `https://gateway.<domain>/gateway/fetch/<manifest_root>?...` with session + signed request headers.
+6) Fetch bytes from `http://127.0.0.1:8080/gateway/fetch/<manifest_root>?...` with session + signed request headers.
 7) Verify byte equality (`cmp` / sha256).
 
 ## Troubleshooting (hub)
@@ -639,9 +639,9 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 ### Hub
 
-- DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `gateway.*`, `faucet.*` (and `web.*` if hosted on the hub) with correct CORS.
+- DNS + HTTPS are live for `rpc.*`, `lcd.*`, `evm.*`, `faucet.*` (and `web.*` if hosted on the hub) with correct CORS.
 - Hub healthcheck passes (preferred):
-  - `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway https://gateway.<domain> --faucet https://faucet.<domain>`
+  - `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --faucet https://faucet.<domain> --gateway http://127.0.0.1:8080`
 - Chain is producing blocks and not catching up:
   - `curl -s https://rpc.<domain>/status | jq '.result.sync_info.latest_block_height,.result.sync_info.catching_up'`
 - Hub services are bound to localhost (recommended; only edge processes listen publicly: Caddy for Profile A, cloudflared for Profile B):

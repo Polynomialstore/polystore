@@ -81,6 +81,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
   const { connectAsync } = useConnect();
   const localGateway = useLocalGateway();
+  const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases'
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -1805,7 +1806,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         gatewayReachable ? (
                           'Local gateway connected (fast path).'
                         ) : (
-                          'No local gateway detected (in-browser sharding).'
+                          'No local gateway sidecar detected (in-browser sharding fallback).'
                         )
                       ) : wasmStatus === 'initializing' ? (
                         'Preparing in-browser sharding…'
@@ -1835,6 +1836,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </label>
                 {gatewayMode2Enabled && gatewayReachable ? (
                   <span>Gateway Mode 2 handles compression independently.</span>
+                ) : null}
+                {!appConfig.gatewayDisabled && !gatewayReachable ? (
+                  <a
+                    href={gatewayGuiReleaseUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-md border border-border bg-background/70 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/50"
+                  >
+                    Install local gateway sidecar
+                  </a>
                 ) : null}
               </div>
             </div>

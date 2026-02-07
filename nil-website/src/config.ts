@@ -24,6 +24,33 @@ function inferPublicDomain(runtimeHost: string): string {
   return ''
 }
 
+function extractHostname(urlOrHost: string): string {
+  const raw = String(urlOrHost || '').trim()
+  if (!raw) return ''
+  try {
+    return new URL(raw).hostname.toLowerCase()
+  } catch {
+    try {
+      return new URL(`http://${raw}`).hostname.toLowerCase()
+    } catch {
+      return ''
+    }
+  }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  if (!hostname) return false
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') return true
+  if (hostname.startsWith('127.')) return true
+  return false
+}
+
+function localOnlyGatewayBase(candidate: string, fallback: string): string {
+  const host = extractHostname(candidate)
+  if (isLoopbackHost(host)) return candidate
+  return fallback
+}
+
 function parsePositiveInt(value: unknown, fallback: number): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
@@ -37,16 +64,18 @@ const RUNTIME_ORIGIN = detectRuntimeOrigin()
 const PUBLIC_DOMAIN = inferPublicDomain(RUNTIME_HOST)
 const defaultBase = (subdomain: string, localDefault: string): string =>
   PUBLIC_DOMAIN ? `https://${subdomain}.${PUBLIC_DOMAIN}` : localDefault
+const LOCAL_GATEWAY_BASE = 'http://localhost:8080'
 
 const API_BASE = envString(import.meta.env.VITE_API_BASE) || defaultBase('faucet', 'http://localhost:8081')
 const LCD_BASE = envString(import.meta.env.VITE_LCD_BASE) || defaultBase('lcd', 'http://localhost:1317')
-const GATEWAY_BASE = envString(import.meta.env.VITE_GATEWAY_BASE) || defaultBase('gateway', 'http://localhost:8080')
+const GATEWAY_BASE = localOnlyGatewayBase(
+  envString(import.meta.env.VITE_GATEWAY_BASE) || LOCAL_GATEWAY_BASE,
+  LOCAL_GATEWAY_BASE,
+)
 const EXPLORER_BASE =
   envString(import.meta.env.VITE_EXPLORER_BASE) ||
   (RUNTIME_ORIGIN || defaultBase('web', 'http://localhost:5173'))
-const SP_BASE =
-  envString(import.meta.env.VITE_SP_BASE) ||
-  (PUBLIC_DOMAIN ? defaultBase('gateway', 'http://localhost:8082') : 'http://localhost:8082')
+const SP_BASE = envString(import.meta.env.VITE_SP_BASE) || 'http://localhost:8082'
 const GATEWAY_DISABLED = import.meta.env.VITE_DISABLE_GATEWAY === '1'
 const P2P_ENABLED = (() => {
   const raw = import.meta.env.VITE_P2P_ENABLED
