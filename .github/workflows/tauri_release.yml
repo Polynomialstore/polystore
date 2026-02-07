@@ -15,7 +15,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - platform: macos-latest
+            bundles: dmg
+          - platform: ubuntu-latest
+            bundles: deb,rpm
+          - platform: windows-latest
+            bundles: nsis,msi
 
     steps:
       - uses: actions/checkout@v4
@@ -64,3 +70,4 @@ jobs:
           releaseBody: "Automated release build."
           releaseDraft: false
           prerelease: false
+          args: --bundles ${{ matrix.bundles }}
