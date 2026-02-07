@@ -121,7 +121,7 @@ export const Layout = () => {
                 className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-lg shadow-cyan-500/20 hover:scale-105 hover:shadow-cyan-500/40 transition-all duration-300"
               >
                 <Rocket className="w-4 h-4 fill-current" />
-                🚀 NilStore Testnet
+                NilStore Testnet
               </Link>
 
               {/* Mobile Toggle */}
@@ -154,7 +154,7 @@ export const Layout = () => {
                     className="block w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-center text-xl shadow-lg shadow-cyan-500/20 active:scale-95 transition-transform flex items-center justify-center gap-3"
                   >
                     <Rocket className="w-6 h-6 fill-current" />
-                    🚀 NilStore Testnet
+                    NilStore Testnet
                 </Link>
 
                 <div className="h-[1px] bg-border/50"></div>
