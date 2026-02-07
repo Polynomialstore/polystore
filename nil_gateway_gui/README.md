@@ -4,17 +4,23 @@
 
 ## Download
 
-- Releases: `https://github.com/Nil-Store/nil-store/releases`
+- Releases: `https://github.com/Nil-Store/nil-store/releases/latest`
 - CI release workflow: `.github/workflows/tauri_release.yml`
 
 ## User Quick Start
 
 1. Download and install the latest GUI build for your OS from GitHub Releases.
-2. Start Nil Gateway GUI.
+2. Start Nil Gateway GUI (it auto-checks localhost and auto-starts the sidecar if needed).
 3. Verify local health:
    - `curl -sf http://localhost:8080/health`
 4. Open `https://nilstore.org/#/dashboard`.
-   - The top-right gateway indicator should show connected.
+   - The dashboard gateway indicator should show local sidecar connected.
+
+## Sidecar-First UX Notes
+
+- Default base URL is `http://127.0.0.1:8080` (website-compatible localhost flow).
+- The GUI shows live sidecar logs from the embedded gateway process.
+- Main actions are sidecar lifecycle (`Connect`, `Start gateway`, `Stop`), with API smoke actions behind **Advanced (experimental)**.
 
 ## Build From Source
 

@@ -91,6 +91,10 @@ export async function gatewayStatus(): Promise<GatewayStatusResponse> {
   return invoke("gateway_status");
 }
 
+export async function gatewayStop(): Promise<void> {
+  return invoke("gateway_stop");
+}
+
 export async function gatewayAttach(baseUrl: string): Promise<void> {
   return invoke("gateway_attach", { baseUrl });
 }
