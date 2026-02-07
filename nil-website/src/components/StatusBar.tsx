@@ -157,6 +157,14 @@ export function StatusBar() {
   const lastFailure = lastTrace?.attempts.find((a) => !a.ok)
   const lastReason =
     lastTrace?.chosen && lastFailure?.errorMessage ? ` (${lastFailure.errorMessage})` : ''
+  const routeShouldUseGateway =
+    !appConfig.gatewayDisabled &&
+    summary.gateway === 'ok' &&
+    (preference === 'auto' || preference === 'prefer_gateway')
+  const routeDegraded =
+    routeShouldUseGateway &&
+    Boolean(lastTrace?.chosen?.backend) &&
+    lastTrace?.chosen?.backend !== 'gateway'
 
   const handleCopyDiagnostics = async () => {
     setCopyState('idle')
@@ -221,7 +229,10 @@ export function StatusBar() {
       {evmChainId !== undefined && (
         <span className="opacity-75">EVM Chain: {evmChainId}</span>
       )}
-      <span className="opacity-75">Route: {lastRoute}{lastReason}</span>
+      <span className={routeDegraded ? 'text-amber-600 dark:text-amber-300' : 'opacity-75'}>
+        Route: {lastRoute}{lastReason}
+        {routeDegraded ? ' (gateway available)' : ''}
+      </span>
       <label className="flex items-center gap-2">
         <span className="opacity-75">Preference</span>
         <select

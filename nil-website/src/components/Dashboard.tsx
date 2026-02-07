@@ -93,7 +93,7 @@ export function Dashboard() {
   const localGateway = useLocalGateway(45_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
-  const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases'
+  const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
 
   // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
   const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)

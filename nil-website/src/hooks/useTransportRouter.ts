@@ -125,6 +125,15 @@ export function useTransportRouter() {
         if (candidate === 'prefer_p2p' && appConfig.p2pEnabled) return 'prefer_p2p'
         return 'prefer_direct_sp'
       }
+      if (candidate === 'auto' && typeof window !== 'undefined') {
+        try {
+          if (window.localStorage.getItem('nil_local_gateway_connected') === '1') {
+            return 'prefer_gateway'
+          }
+        } catch {
+          // Ignore storage access failures; fallback to default auto behavior.
+        }
+      }
       if (candidate === 'prefer_p2p' && !appConfig.p2pEnabled) return 'auto'
       return candidate
     },

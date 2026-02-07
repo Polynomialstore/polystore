@@ -13,7 +13,7 @@ export const TestnetDocs = () => {
   const { address } = useAccount();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [targetDealId, setTargetDealId] = useState("");
-  const gatewayGuiReleaseUrl = "https://github.com/Nil-Store/nil-store/releases";
+  const gatewayGuiReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
 
   useEffect(() => {
     if (address) {

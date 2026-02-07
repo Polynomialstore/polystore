@@ -81,7 +81,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
   const { connectAsync } = useConnect();
   const localGateway = useLocalGateway();
-  const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases'
+  const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
   const [wasmError, setWasmError] = useState<string | null>(null);

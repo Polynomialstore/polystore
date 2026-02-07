@@ -25,6 +25,16 @@ const GATEWAY_STATUS_ENDPOINT = '/status';
 const GATEWAY_HEALTH_ENDPOINT = '/health';
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const HIDDEN_POLL_INTERVAL_MS = 120_000;
+const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected';
+
+function persistLocalGatewayConnected(connected: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_KEY, connected ? '1' : '0');
+  } catch {
+    // best-effort only
+  }
+}
 
 export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS): LocalGatewayInfo {
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
@@ -42,13 +52,18 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       statusRef.current = 'disconnected';
       errorRef.current = 'Gateway disabled';
       detailsRef.current = null;
+      persistLocalGatewayConnected(false);
       return;
     }
+
+    // Reset to disconnected on each hook initialization; a successful probe flips this back to connected.
+    persistLocalGatewayConnected(false);
 
     const updateStatus = (next: GatewayStatus) => {
       if (statusRef.current === next) return;
       statusRef.current = next;
       setStatus(next);
+      persistLocalGatewayConnected(next === 'connected');
     };
     const updateError = (next: string | null) => {
       if (errorRef.current === next) return;
