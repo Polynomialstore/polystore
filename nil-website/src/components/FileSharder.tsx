@@ -7,7 +7,17 @@ import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
 import { NILFS_RECORD_PATH_MAX_BYTES, sanitizeNilfsRecordPath } from '../lib/nilfsPath';
-import { readMdu, writeManifestBlob, writeManifestRoot, writeMdu, writeShard } from '../lib/storage/OpfsAdapter';
+import {
+  listDealFiles,
+  readManifestBlob,
+  readManifestRoot,
+  readMdu,
+  readShard,
+  writeManifestBlob,
+  writeManifestRoot,
+  writeMdu,
+  writeShard,
+} from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
@@ -374,6 +384,184 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       setMode2Uploading(false)
     }
   }, [collectedMdus, currentManifestBlob, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams])
+
+  const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
+    const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
+    const spBase = appConfig.spBase.replace(/\/$/, '')
+    if (!gatewayBase || gatewayBase === spBase || appConfig.gatewayDisabled) {
+      return false
+    }
+
+    let manifestRoot = String((await readManifestRoot(dealId)) || '').trim()
+    if (!manifestRoot) {
+      try {
+        const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
+        manifestRoot = String(deal?.cid || '').trim()
+      } catch {
+        manifestRoot = ''
+      }
+    }
+    const manifestKey = manifestRoot.replace(/^0x/i, '').trim()
+    if (!manifestKey || /^0+$/.test(manifestKey)) {
+      addLog('> Gateway rehydrate skipped: no committed manifest root found in browser state.')
+      return false
+    }
+
+    const mdu0 = await readMdu(dealId, 0)
+    if (!mdu0) {
+      addLog('> Gateway rehydrate skipped: local MDU #0 missing in OPFS.')
+      return false
+    }
+
+    const nilfsFiles = parseNilfsFilesFromMdu0(mdu0)
+    if (nilfsFiles.length === 0) {
+      addLog('> Gateway rehydrate skipped: local MDU #0 has no file records.')
+      return false
+    }
+
+    let witnessCount = 0
+    try {
+      const inferred = await inferWitnessCountFromOpfs(dealId, nilfsFiles)
+      witnessCount = inferred.witnessCount
+      if (inferred.userCount <= 0) {
+        addLog('> Gateway rehydrate skipped: no local user MDUs found in OPFS.')
+        return false
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addLog(`> Gateway rehydrate skipped: unable to infer slab layout (${msg}).`)
+      return false
+    }
+
+    const fileNames = await listDealFiles(dealId)
+    const shardFiles = fileNames
+      .map((name) => {
+        const m = /^mdu_(\d+)_slot_(\d+)\.bin$/.exec(name)
+        if (!m) return null
+        const mduIndex = Number(m[1])
+        const slot = Number(m[2])
+        if (!Number.isFinite(mduIndex) || !Number.isFinite(slot)) return null
+        return { mduIndex, slot }
+      })
+      .filter((entry): entry is { mduIndex: number; slot: number } => !!entry)
+      .sort((a, b) => a.mduIndex - b.mduIndex || a.slot - b.slot)
+
+    if (shardFiles.length === 0) {
+      addLog('> Gateway rehydrate skipped: no local shard files found in OPFS.')
+      return false
+    }
+
+    let mirrorMduPath = '/sp/upload_mdu'
+    let mirrorShardPath = '/sp/upload_shard'
+    let mirrorManifestPath = '/sp/upload_manifest'
+    try {
+      const statusRes = await fetch(`${gatewayBase}/status`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2500),
+      })
+      if (statusRes.ok) {
+        const payload = await statusRes.json().catch(() => null)
+        if (payload && typeof payload === 'object' && payload.mode === 'router') {
+          mirrorMduPath = '/gateway/mirror_mdu'
+          mirrorShardPath = '/gateway/mirror_shard'
+          mirrorManifestPath = '/gateway/mirror_manifest'
+          addLog('> Gateway router detected; rehydrate will use mirror endpoints.')
+        }
+      } else if (statusRes.status !== 404) {
+        addLog(`> Gateway rehydrate skipped: gateway unavailable (${statusRes.status}).`)
+        return false
+      } else {
+        const health = await fetch(`${gatewayBase}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(2500),
+        })
+        if (!health.ok) {
+          addLog(`> Gateway rehydrate skipped: gateway unavailable (${health.status}).`)
+          return false
+        }
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addLog(`> Gateway rehydrate skipped: cannot reach local gateway (${msg}).`)
+      return false
+    }
+
+    addLog('> Rehydrating local gateway from browser OPFS cache...')
+
+    try {
+      for (let idx = 0; idx <= witnessCount; idx++) {
+        const data = idx === 0 ? mdu0 : await readMdu(dealId, idx)
+        if (!data) {
+          throw new Error(`missing local MDU: mdu_${idx}.bin`)
+        }
+        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Mdu-Index': String(idx),
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([data as any]),
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `gateway upload_mdu failed (${res.status})`)
+        }
+      }
+
+      const manifestBlob = await readManifestBlob(dealId)
+      if (manifestBlob && manifestBlob.byteLength > 0) {
+        const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([manifestBlob as any]),
+        })
+        if (!manifestRes.ok) {
+          const txt = await manifestRes.text().catch(() => '')
+          throw new Error(txt || `gateway upload_manifest failed (${manifestRes.status})`)
+        }
+      } else {
+        addLog('> Rehydrate note: local manifest blob missing; continuing with MDUs/shards only.')
+      }
+
+      for (const entry of shardFiles) {
+        const shard = await readShard(dealId, entry.mduIndex, entry.slot)
+        if (!shard) {
+          throw new Error(`missing local shard: mdu_${entry.mduIndex}_slot_${entry.slot}.bin`)
+        }
+        const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Mdu-Index': String(entry.mduIndex),
+            'X-Nil-Slot': String(entry.slot),
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([shard as any]),
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `gateway upload_shard failed (${res.status})`)
+        }
+      }
+
+      addLog(`> Rehydrated local gateway from OPFS cache (${witnessCount + 1} MDUs, ${shardFiles.length} shards).`)
+      return true
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addLog(`> Gateway rehydrate failed: ${msg}`)
+      return false
+    }
+  }, [addLog, dealId])
 
   useEffect(() => {
     if (!processing) return;
@@ -823,23 +1011,82 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         }
 
+        const finalizeGatewaySuccess = (
+          payload: {
+            manifest_root?: string
+            cid?: string
+            size_bytes?: number
+            file_size_bytes?: number
+            total_mdus?: number
+            witness_mdus?: number
+          } | null,
+          statusSnapshot: GatewayUploadJobStatus | null,
+        ): boolean => {
+          const statusRoot = String(statusSnapshot?.result?.manifest_root || '')
+          const statusTotalMdus = Number(statusSnapshot?.result?.total_mdus ?? 0) || 0
+          const statusWitnessMdus = Number(statusSnapshot?.result?.witness_mdus ?? 0) || 0
+          const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
+          if (!root) {
+            setMode2UploadError('gateway upload returned no manifest_root')
+            setShardProgress((p) => ({
+              ...p,
+              phase: 'error',
+              label: 'Gateway upload returned no manifest_root',
+              currentOpStartedAtMs: null,
+              lastOpMs: performance.now() - startTs,
+            }))
+            setProcessing(false)
+            return false
+          }
+
+          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
+          const gatewayTotalMdus = Number(payload?.total_mdus ?? statusTotalMdus) || 0
+          const gatewayWitnessMdus = Number(payload?.witness_mdus ?? statusWitnessMdus) || 0
+          const gatewayUserMdus = gatewayTotalMdus > 0 ? Math.max(0, gatewayTotalMdus - 1 - gatewayWitnessMdus) : 0
+
+          setCurrentManifestRoot(root)
+          setCurrentManifestBlob(null)
+          setCollectedMdus([])
+          setMode2Shards([])
+          setMode2UploadError(null)
+          setMode2UploadComplete(true)
+          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'done',
+            label: 'Gateway Mode 2 ingest complete. Ready to commit.',
+            fileBytesTotal: gatewaySizeBytes,
+            totalUserMdus: gatewayUserMdus,
+            totalWitnessMdus: gatewayWitnessMdus,
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+          setProcessing(false)
+          return true
+        }
+
         let stopPolling = false
         let lastJob: GatewayUploadJobStatus | null = null as GatewayUploadJobStatus | null
 
-        const gatewayBase = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
-        const uploadId =
+        const newUploadId = () =>
           globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
             ? globalThis.crypto.randomUUID()
             : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+        const gatewayBase = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
+        const uploadId = newUploadId()
         const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
         const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
 
-        const form = new FormData()
-        form.append('deal_id', dealId)
-        form.append('file_path', file.name)
-        form.append('upload_id', uploadId)
-        form.append('file_size_bytes', String(file.size))
-        form.append('file', file)
+        const buildUploadForm = (id: string) => {
+          const form = new FormData()
+          form.append('deal_id', dealId)
+          form.append('file_path', file.name)
+          form.append('upload_id', id)
+          form.append('file_size_bytes', String(file.size))
+          form.append('file', file)
+          return form
+        }
 
         const pollStatus = async () => {
           while (!stopPolling) {
@@ -913,7 +1160,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
           const resp = await fetch(url, {
             method: 'POST',
-            body: form,
+            body: buildUploadForm(uploadId),
             signal: AbortSignal.timeout(1_800_000),
           })
 
@@ -936,41 +1183,68 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             witness_mdus?: number
           } | null
 
-          const statusRoot = String(lastJob?.result?.manifest_root || '')
-          const statusTotalMdus = Number(lastJob?.result?.total_mdus ?? 0) || 0
-          const statusWitnessMdus = Number(lastJob?.result?.witness_mdus ?? 0) || 0
-          const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
-          if (!root) throw new Error('gateway upload returned no manifest_root')
-          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
-          const gatewayTotalMdus = Number(payload?.total_mdus ?? statusTotalMdus) || 0
-          const gatewayWitnessMdus = Number(payload?.witness_mdus ?? statusWitnessMdus) || 0
-          const gatewayUserMdus = gatewayTotalMdus > 0 ? Math.max(0, gatewayTotalMdus - 1 - gatewayWitnessMdus) : 0
-
-          setCurrentManifestRoot(root)
-          setCurrentManifestBlob(null)
-          setCollectedMdus([])
-          setMode2Shards([])
-          setMode2UploadError(null)
-          setMode2UploadComplete(true)
-          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
-          setShardProgress((p) => ({
-            ...p,
-            phase: 'done',
-            label: 'Gateway Mode 2 ingest complete. Ready to commit.',
-            fileBytesTotal: gatewaySizeBytes,
-            totalUserMdus: gatewayUserMdus,
-            totalWitnessMdus: gatewayWitnessMdus,
-            currentOpStartedAtMs: null,
-            lastOpMs: performance.now() - startTs,
-          }))
-          setProcessing(false)
-          return
+          if (finalizeGatewaySuccess(payload, lastJob)) return
         } catch (e: unknown) {
           stopPolling = true
           await pollPromise.catch(() => {})
 
-          const msg = e instanceof Error ? e.message : String(e)
+          let msg = e instanceof Error ? e.message : String(e)
           addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
+
+          const missingLocalState =
+            /mode2 append failed/i.test(msg) &&
+            /failed to resolve existing slab dir|failed to read existing MDU #0|failed to copy existing shard|failed to decode witness mdu|existing Mode 2 slab has no user MDUs/i.test(
+              msg,
+            )
+          if (missingLocalState) {
+            addLog('> Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS...')
+            const rehydrated = await rehydrateGatewayFromOpfs()
+            if (rehydrated) {
+              try {
+                addLog('> Retrying Gateway Mode 2 ingest after rehydrate...')
+                setMode2Uploading(true)
+                setShardProgress((p) => ({
+                  ...p,
+                  phase: 'gateway_receiving',
+                  label: 'Gateway rehydrated from browser cache; retrying upload...',
+                  workDone: 0,
+                  workTotal: file.size,
+                  blobsDone: 0,
+                  blobsTotal: file.size,
+                  fileBytesTotal: file.size,
+                  currentOpStartedAtMs: performance.now(),
+                }))
+
+                const retryUploadId = newUploadId()
+                const retryUrl = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(retryUploadId)}`
+                const retryResp = await fetch(retryUrl, {
+                  method: 'POST',
+                  body: buildUploadForm(retryUploadId),
+                  signal: AbortSignal.timeout(1_800_000),
+                })
+                if (!retryResp.ok) {
+                  const txt = await retryResp.text().catch(() => '')
+                  throw new Error(txt || `gateway upload failed (${retryResp.status})`)
+                }
+                const retryPayload = (await retryResp.json().catch(() => null)) as {
+                  manifest_root?: string
+                  cid?: string
+                  size_bytes?: number
+                  file_size_bytes?: number
+                  allocated_length?: number
+                  total_mdus?: number
+                  witness_mdus?: number
+                } | null
+                if (finalizeGatewaySuccess(retryPayload, null)) return
+                msg = 'gateway upload returned no manifest_root'
+              } catch (retryErr: unknown) {
+                msg = retryErr instanceof Error ? retryErr.message : String(retryErr)
+                addLog(`> Gateway retry after rehydrate failed: ${msg}`)
+              } finally {
+                setMode2Uploading(false)
+              }
+            }
+          }
 
           const unreachable = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION_REFUSED')
           if (unreachable) {
