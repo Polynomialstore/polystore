@@ -3,6 +3,8 @@ import { Terminal, Server, Globe, Link as LinkIcon } from 'lucide-react'
 import { appConfig } from '../config'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 
+const PROVIDERS_POLL_MS = 30_000
+
 type Provider = {
   address: string
   capabilities: string
@@ -40,7 +42,7 @@ export function Devnet() {
     }
 
     load()
-    const interval = window.setInterval(load, 5000)
+    const interval = window.setInterval(load, PROVIDERS_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(interval)

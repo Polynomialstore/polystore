@@ -6,6 +6,10 @@ import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { CheckCircle2, Copy, RefreshCw } from 'lucide-react'
 
+const STATUS_POLL_MS = 30_000
+const STATUS_HIDDEN_POLL_MS = 120_000
+const OPTIONAL_HEALTH_PROBE_EVERY_TICKS = 10
+
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -76,11 +80,13 @@ export function StatusBar() {
 
   useEffect(() => {
     let cancelled = false
+    let timer: number | null = null
+    let tick = 0
 
-    const load = async () => {
-      setRefreshing(true)
+    const load = async (opts: { manual?: boolean; probeOptionalHealth?: boolean } = {}) => {
+      if (opts.manual) setRefreshing(true)
       try {
-        const res = await fetchStatus(appConfig.chainId)
+        const res = await fetchStatus(appConfig.chainId, { probeOptionalHealth: Boolean(opts.probeOptionalHealth) })
         if (cancelled) return
         setSummary({
           lcd: res.lcd,
@@ -94,15 +100,47 @@ export function StatusBar() {
         setEvmChainId(res.evmChainId)
         setProviderCount(res.providerCount)
       } finally {
-        if (!cancelled) setRefreshing(false)
+        if (!cancelled && opts.manual) setRefreshing(false)
       }
     }
 
-    load()
-    const interval = window.setInterval(load, 5000)
+    const schedule = (delayMs: number) => {
+      if (cancelled) return
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
+    }
+
+    const runLoop = async () => {
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      const pollMs = hidden ? STATUS_HIDDEN_POLL_MS : STATUS_POLL_MS
+      const probeOptionalHealth = tick === 0 || tick % OPTIONAL_HEALTH_PROBE_EVERY_TICKS === 0
+      await load({ probeOptionalHealth })
+      tick += 1
+      if (!cancelled) {
+        schedule(pollMs)
+      }
+    }
+
+    void runLoop()
+    const handleVisibility = () => {
+      if (cancelled || typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') {
+        void runLoop()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
+
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      if (timer !== null) window.clearTimeout(timer)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
     }
   }, [])
 
@@ -208,19 +246,25 @@ export function StatusBar() {
       </button>
       <button
         type="button"
-        onClick={() => void fetchStatus(appConfig.chainId).then((res) => {
-          setSummary({
-            lcd: res.lcd,
-            evm: res.evm,
-            faucet: res.faucet,
-            gateway: res.gateway,
-            chainIdMatch: res.chainIdMatch,
-          })
-          setHeight(res.height)
-          setChainName(res.networkName)
-          setEvmChainId(res.evmChainId)
-          setProviderCount(res.providerCount)
-        })}
+        onClick={() => {
+          if (refreshing) return
+          setRefreshing(true)
+          void fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
+            .then((res) => {
+              setSummary({
+                lcd: res.lcd,
+                evm: res.evm,
+                faucet: res.faucet,
+                gateway: res.gateway,
+                chainIdMatch: res.chainIdMatch,
+              })
+              setHeight(res.height)
+              setChainName(res.networkName)
+              setEvmChainId(res.evmChainId)
+              setProviderCount(res.providerCount)
+            })
+            .finally(() => setRefreshing(false))
+        }}
         disabled={refreshing}
         className="inline-flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors disabled:opacity-60"
         title="Refresh status"

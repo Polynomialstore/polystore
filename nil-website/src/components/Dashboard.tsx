@@ -64,7 +64,7 @@ const MAX_RECENT_FILES = 6
 const RETRIEVAL_SESSIONS_POLL_MS = 30_000
 const RETRIEVAL_PARAMS_POLL_MS = 120_000
 const PROOFS_POLL_MS = 30_000
-const RPC_HEALTH_POLL_MS = 15_000
+const RPC_HEALTH_POLL_MS = 30_000
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()

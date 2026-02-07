@@ -15,8 +15,58 @@ export interface StatusSummary {
   error?: string
 }
 
-export async function fetchStatus(expectedChainId: number): Promise<StatusSummary> {
-  const summary: StatusSummary = { lcd: 'warn', evm: 'warn', faucet: 'warn', gateway: 'warn', chainIdMatch: 'warn' }
+export interface FetchStatusOptions {
+  // Expensive optional probes (gateway/faucet health). Keep off during routine polling.
+  probeOptionalHealth?: boolean
+}
+
+const GATEWAY_STATUS_PATH = '/status'
+const GATEWAY_HEALTH_PATH = '/health'
+let cachedGatewayPath: '/status' | '/health' = '/status'
+
+async function probeGateway(base: string): Promise<ServiceStatus> {
+  const baseUrl = String(base || '').replace(/\/$/, '')
+  const probe = async (path: typeof GATEWAY_STATUS_PATH | typeof GATEWAY_HEALTH_PATH): Promise<ServiceStatus> => {
+    const res = await fetch(`${baseUrl}${path}`)
+    return res.ok ? 'ok' : 'warn'
+  }
+
+  if (cachedGatewayPath === GATEWAY_STATUS_PATH) {
+    try {
+      return await probe(GATEWAY_STATUS_PATH)
+    } catch {
+      try {
+        const fallback = await probe(GATEWAY_HEALTH_PATH)
+        cachedGatewayPath = GATEWAY_HEALTH_PATH
+        return fallback
+      } catch {
+        return 'error'
+      }
+    }
+  }
+
+  try {
+    const health = await probe(GATEWAY_HEALTH_PATH)
+    return health
+  } catch {
+    try {
+      const status = await probe(GATEWAY_STATUS_PATH)
+      cachedGatewayPath = GATEWAY_STATUS_PATH
+      return status
+    } catch {
+      return 'error'
+    }
+  }
+}
+
+export async function fetchStatus(expectedChainId: number, options: FetchStatusOptions = {}): Promise<StatusSummary> {
+  const summary: StatusSummary = {
+    lcd: 'warn',
+    evm: 'warn',
+    faucet: appConfig.faucetEnabled ? 'ok' : 'warn',
+    gateway: appConfig.gatewayDisabled ? 'warn' : 'ok',
+    chainIdMatch: 'warn',
+  }
   try {
     const res = await fetch(`${appConfig.lcdBase}/cosmos/base/tendermint/v1beta1/blocks/latest`)
     if (res.ok) {
@@ -62,24 +112,21 @@ export async function fetchStatus(expectedChainId: number): Promise<StatusSummar
     summary.evm = 'error'
   }
 
-  if (!appConfig.gatewayDisabled) {
+  if (options.probeOptionalHealth && !appConfig.gatewayDisabled) {
     try {
-      const res = await fetch(`${appConfig.gatewayBase}/health`)
-      summary.gateway = res.ok ? 'ok' : 'warn'
+      summary.gateway = await probeGateway(appConfig.gatewayBase)
     } catch (e) {
       summary.gateway = 'error'
     }
   }
 
-  if (appConfig.faucetEnabled) {
+  if (options.probeOptionalHealth && appConfig.faucetEnabled) {
     try {
       const res = await fetch(`${appConfig.apiBase}/health`)
       summary.faucet = res.ok ? 'ok' : 'warn'
     } catch (e) {
       summary.faucet = 'warn'
     }
-  } else {
-    summary.faucet = 'warn'
   }
 
   return summary

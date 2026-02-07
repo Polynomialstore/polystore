@@ -6,6 +6,8 @@ import { appConfig } from '../config'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useProofs } from '../hooks/useProofs'
 
+const PROOFS_DASHBOARD_POLL_MS = 30_000
+
 type RetrievalSessionStatusKey =
   | 'OPEN'
   | 'PROOF_SUBMITTED'
@@ -142,7 +144,7 @@ async function fetchRetrievalSessionsByProvider(
 }
 
 export const ProofsDashboard = () => {
-  const { proofs: legacyProofs, loading: legacyProofsLoading } = useProofs(15000)
+  const { proofs: legacyProofs, loading: legacyProofsLoading } = useProofs(PROOFS_DASHBOARD_POLL_MS)
 
   const [deals, setDeals] = useState<LcdDeal[]>([])
   const [providers, setProviders] = useState<LcdProvider[]>([])
@@ -187,7 +189,7 @@ export const ProofsDashboard = () => {
     }
 
     refresh()
-    const interval = window.setInterval(refresh, 6000)
+    const interval = window.setInterval(refresh, PROOFS_DASHBOARD_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(interval)

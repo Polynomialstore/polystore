@@ -23,8 +23,10 @@ interface LocalGatewayInfo {
 
 const GATEWAY_STATUS_ENDPOINT = '/status';
 const GATEWAY_HEALTH_ENDPOINT = '/health';
+const DEFAULT_POLL_INTERVAL_MS = 30_000;
+const HIDDEN_POLL_INTERVAL_MS = 120_000;
 
-export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
+export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS): LocalGatewayInfo {
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<LocalGatewayDetails | null>(null);
@@ -66,6 +68,17 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
     };
 
     let inFlight = false;
+    let timer: number | null = null;
+    let probePath: '/status' | '/health' = '/status';
+
+    const schedule = (delayMs: number) => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(() => {
+        void checkGatewayStatus();
+      }, delayMs);
+    };
 
     const checkGatewayStatus = async () => {
       if (inFlight) return;
@@ -76,8 +89,7 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
       updateError(null); // Clear previous errors
       try {
         const baseUrl = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
-        const statusUrl = `${baseUrl}${GATEWAY_STATUS_ENDPOINT}`;
-        const response = await fetch(statusUrl, {
+        const response = await fetch(`${baseUrl}${probePath}`, {
           method: 'GET',
           signal: AbortSignal.timeout(3000),
         });
@@ -100,11 +112,13 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
           return;
         }
 
-        const healthRes = await fetch(`${baseUrl}${GATEWAY_HEALTH_ENDPOINT}`, {
+        const fallbackPath = probePath === GATEWAY_STATUS_ENDPOINT ? GATEWAY_HEALTH_ENDPOINT : GATEWAY_STATUS_ENDPOINT
+        const healthRes = await fetch(`${baseUrl}${fallbackPath}`, {
           method: 'GET',
           signal: AbortSignal.timeout(3000),
         });
         if (healthRes.ok) {
+          probePath = fallbackPath;
           updateStatus('connected');
           updateDetails(null);
         } else {
@@ -125,17 +139,35 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
         updateDetails(null);
       } finally {
         inFlight = false;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          schedule(HIDDEN_POLL_INTERVAL_MS);
+        } else {
+          schedule(pollInterval);
+        }
       }
     };
 
     // Initial check
-    checkGatewayStatus();
+    void checkGatewayStatus();
 
-    // Set up polling
-    const intervalId = setInterval(checkGatewayStatus, pollInterval);
+    const handleVisibility = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        void checkGatewayStatus();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
 
-    // Cleanup
-    return () => clearInterval(intervalId);
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
   }, [pollInterval]); // Re-run effect when poll interval changes
 
   return { status, url: appConfig.gatewayBase, error, details };

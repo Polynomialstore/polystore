@@ -32,7 +32,7 @@ function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId
   }
 }
 
-export function useProofs(pollMs: number = 10000) {
+export function useProofs(pollMs: number = 30000) {
   const [proofs, setProofs] = useState<ProofRow[]>([])
   const [loading, setLoading] = useState(false)
 
