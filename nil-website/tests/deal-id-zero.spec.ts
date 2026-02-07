@@ -356,11 +356,16 @@ test('repro bug: download from commit content widget', async ({
   await page.goto(path)
 
   console.log('Connecting wallet...')
-  if (await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible()) {
+  const walletIdentity = page.locator(
+    '[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]',
+  ).first()
+  if (await walletIdentity.isVisible().catch(() => false)) {
     console.log('Wallet already connected (auto-connect).')
   } else {
-    await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
+    const connectButton = page.getByTestId('connect-wallet').first()
+    await expect(connectButton).toBeVisible({ timeout: 60_000 })
+    await connectButton.click({ force: true })
+    await expect(walletIdentity).toBeVisible({ timeout: 60_000 })
     console.log('Wallet connected.')
   }
 
