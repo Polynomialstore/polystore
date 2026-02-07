@@ -2,11 +2,21 @@ name: Tauri Release
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      tag:
+        description: Release tag (for example `nil-gateway-gui-v0.2.0`)
+        required: true
+        type: string
+  push:
+    tags:
+      - 'nil-gateway-gui-v*'
 
 permissions:
   contents: write
+
+concurrency:
+  group: tauri-release-${{ github.event.inputs.tag || github.ref_name || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -71,8 +81,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: nil_gateway_gui
-          tagName: ${{ github.ref_name }}
-          releaseName: NilGateway GUI ${{ github.ref_name }}
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: NilGateway GUI ${{ github.event.inputs.tag || github.ref_name }}
           releaseBody: "Automated release build."
           releaseDraft: false
           prerelease: false

@@ -6,6 +6,8 @@
 
 - Releases: `https://github.com/Nil-Store/nil-store/releases/latest`
 - CI release workflow: `.github/workflows/tauri_release.yml`
+- Release tags use semver and trigger desktop builds automatically:
+  - `nil-gateway-gui-vMAJOR.MINOR.PATCH` (example: `nil-gateway-gui-v0.2.0`)
 
 ## User Quick Start
 
