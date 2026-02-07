@@ -88,7 +88,7 @@ export default function App() {
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://127.0.0.1:8080");
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
   const [phase, setPhase] = useState<GatewayPhase>("booting");
-  const [phaseMessage, setPhaseMessage] = useState("Initializing local gateway sidecar...");
+  const [phaseMessage, setPhaseMessage] = useState("Initializing local Gateway...");
   const [actionBusy, setActionBusy] = useState(false);
   const [lastStatusAt, setLastStatusAt] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -165,7 +165,7 @@ export default function App() {
         }
 
         setPhase("starting");
-        setPhaseMessage("Starting local gateway sidecar...");
+        setPhaseMessage("Starting local Gateway...");
         try {
           await gatewayStart({
             listen_addr: normalizeListenAddr(normalizedBase),
@@ -176,7 +176,7 @@ export default function App() {
             },
           });
           await attachAndProbe(normalizedBase);
-          addLog("Gateway sidecar started successfully.");
+          addLog("Local Gateway started successfully.");
         } catch (startErr) {
           const msg = errorMessage(startErr, "Failed to start gateway");
           setGateway(null);
@@ -259,13 +259,13 @@ export default function App() {
   const handleStop = async () => {
     setActionBusy(true);
     setPhase("stopping");
-    setPhaseMessage("Stopping local gateway sidecar...");
+    setPhaseMessage("Stopping local Gateway...");
     try {
       await gatewayStop();
       setGateway(null);
       setPhase("offline");
-      setPhaseMessage("Gateway sidecar stopped.");
-      addLog("Gateway sidecar stopped.");
+      setPhaseMessage("Local Gateway stopped.");
+      addLog("Local Gateway stopped.");
     } catch (err) {
       const msg = errorMessage(err, "Failed to stop gateway");
       setPhase("error");
@@ -294,7 +294,7 @@ export default function App() {
 
   const handleUpload = async () => {
     if (!gateway) {
-      setUploadError("Gateway is offline. Start the sidecar first.");
+      setUploadError("Gateway is offline. Start the local Gateway first.");
       return;
     }
     if (!localFilePath) {
@@ -332,7 +332,7 @@ export default function App() {
 
   const handleListFiles = async () => {
     if (!gateway) {
-      setListError("Gateway is offline. Start the sidecar first.");
+      setListError("Gateway is offline. Start the local Gateway first.");
       return;
     }
     if (!listManifestRoot || !listDealId || !listOwner) {
@@ -362,7 +362,7 @@ export default function App() {
 
   const handleDownload = async (entry: GatewayFileEntry) => {
     if (!gateway) {
-      setDownloadError("Gateway is offline. Start the sidecar first.");
+      setDownloadError("Gateway is offline. Start the local Gateway first.");
       return;
     }
     if (!listManifestRoot || !listDealId || !listOwner) {
@@ -433,7 +433,7 @@ export default function App() {
                 </div>
               </div>
               <p className="mt-2 text-sm text-slate-500">
-                Local sidecar manager for `https://nilstore.org/#/dashboard`.
+                Local Gateway manager for `https://nilstore.org/#/dashboard`.
               </p>
             </div>
 
@@ -479,7 +479,7 @@ export default function App() {
 
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Sidecar base URL
+              Local Gateway URL
               <input
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-700"
                 value={gatewayBaseUrl}
@@ -516,7 +516,7 @@ export default function App() {
 
           {!baseIsLoopback ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Non-local endpoint configured. The website expects localhost sidecar routing; use `http://127.0.0.1:8080` unless you are intentionally debugging remote gateway access.
+              Non-local endpoint configured. The website expects local Gateway routing on localhost; use `http://127.0.0.1:8080` unless you are intentionally debugging remote gateway access.
             </div>
           ) : null}
         </header>
@@ -524,7 +524,7 @@ export default function App() {
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="surface-card p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Sidecar health
+              Local Gateway health
             </h2>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -766,7 +766,7 @@ export default function App() {
             >
               {logs.length === 0 ? (
                 <p className="text-slate-400">
-                  Waiting for gateway logs. Start or connect to the local gateway sidecar to stream output.
+                  Waiting for gateway logs. Start or connect to the local Gateway to stream output.
                 </p>
               ) : (
                 logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)

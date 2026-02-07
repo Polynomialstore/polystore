@@ -31,7 +31,7 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
   if (error === 'Gateway disabled') {
     icon = <AlertCircle className="w-4 h-4" />;
     colorClass = 'text-muted-foreground';
-    text = 'Sidecar Off';
+    text = 'Local Gateway Off';
     tooltip = 'Local gateway checks are disabled by configuration.';
   } else switch (status) {
     case 'connected':

@@ -1806,7 +1806,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         gatewayReachable ? (
                           'Local gateway connected (fast path).'
                         ) : (
-                          'No local gateway sidecar detected (in-browser sharding fallback).'
+                          'No local Gateway detected (in-browser sharding fallback).'
                         )
                       ) : wasmStatus === 'initializing' ? (
                         'Preparing in-browser sharding…'
@@ -1844,7 +1844,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     rel="noreferrer"
                     className="inline-flex items-center rounded-md border border-border bg-background/70 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/50"
                   >
-                    Install local gateway sidecar
+                    Install local Gateway app
                   </a>
                 ) : null}
               </div>

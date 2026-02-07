@@ -48,7 +48,7 @@ export const TestnetDocs = () => {
             <Download className="w-6 h-6 text-blue-500" /> Quick Start
           </h2>
           <p className="text-muted-foreground">
-            For chain/provider operators we recommend building from source. Browser users can install the local gateway sidecar from releases.
+            For chain/provider operators we recommend building from source. Browser users can install the local Gateway app from releases.
           </p>
           
           <div className="grid md:grid-cols-2 gap-6">
@@ -110,11 +110,11 @@ export const TestnetDocs = () => {
             <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=0</code>.
           </p>
           <p className="text-sm text-muted-foreground">
-            The browser client can shard and commit using WASM + OPFS. The local gateway is a localhost sidecar (not a shared public service).
+            The browser client can shard and commit using WASM + OPFS. The local Gateway runs on localhost (not a shared public service).
             If no local gateway is running, uploads still work via in-browser sharding and direct provider transport.
           </p>
           <div className="rounded-xl border border-border/60 bg-secondary/10 p-4 text-sm text-muted-foreground">
-            <div className="font-semibold text-foreground">Local Gateway Sidecar (recommended)</div>
+            <div className="font-semibold text-foreground">Local Gateway (recommended)</div>
             <div className="mt-1">
               Install <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway_gui</code>, start it, then refresh this page.
               The website probes <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://localhost:8080</code> only.
