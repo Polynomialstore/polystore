@@ -100,6 +100,11 @@ impl SidecarManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        // Ensure gateway writable state is always under a per-user app data dir.
+        // This avoids macOS app-translocation/read-only bundle paths when the
+        // sidecar would otherwise default to relative "uploads/".
+        configure_sidecar_storage_env(&app, &mut cmd);
+
         // First, derive runtime env from the resolved gateway binary path itself.
         // This makes packaged Linux installs robust even when resource_dir resolution
         // differs across distros/layouts.
@@ -329,6 +334,23 @@ fn configure_sidecar_runtime_env_for_bin_dir(cmd: &mut Command, bin_dir: &Path) 
     if has_any_resource(bin_dir, &["nil_core.dll", "libnil_core.dll"]) {
         extend_env_path_list(cmd, "PATH", bin_dir);
     }
+}
+
+fn configure_sidecar_storage_env(app: &AppHandle, cmd: &mut Command) {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+
+    let gateway_dir = app_data_dir.join("gateway");
+    let uploads_dir = gateway_dir.join("uploads");
+    if fs::create_dir_all(&uploads_dir).is_err() {
+        return;
+    }
+
+    // Keep process cwd in a known writable location for any relative fallback paths.
+    cmd.current_dir(&gateway_dir);
+    cmd.env("NIL_UPLOAD_DIR", &uploads_dir);
+    cmd.env("NIL_SESSION_DB_PATH", uploads_dir.join("sessions.db"));
 }
 
 fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
