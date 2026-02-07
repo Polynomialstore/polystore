@@ -367,7 +367,7 @@ The website is built with Vite.
   - `https://lcd.nilstore.org`
   - `https://evm.nilstore.org`
 - Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user sidecar.
-- Recommended sidecar distribution for collaborators: `nil_gateway_gui` release artifacts.
+- Recommended sidecar distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)

@@ -63,7 +63,7 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 
 Optional but recommended:
 - Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
-- Download from: `https://github.com/Nil-Store/nil-store/releases`.
+- Download from: `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Tip: if you test with a text file, change a line and re-upload to confirm the commit changes the retrieval.
 

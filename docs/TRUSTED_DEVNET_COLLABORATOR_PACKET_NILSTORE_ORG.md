@@ -36,7 +36,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 
 Local sidecar gateway (recommended for gateway-assisted flows):
 - Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
-- Download builds: `https://github.com/Nil-Store/nil-store/releases`.
+- Download builds: `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Notes:
 - This deployment is wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
