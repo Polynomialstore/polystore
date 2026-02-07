@@ -337,11 +337,16 @@ fn configure_sidecar_runtime_env_for_bin_dir(cmd: &mut Command, bin_dir: &Path) 
 }
 
 fn configure_sidecar_storage_env(app: &AppHandle, cmd: &mut Command) {
-    let Ok(app_data_dir) = app.path().app_data_dir() else {
+    let base_dir = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".nilstore")));
+    let Some(base_dir) = base_dir else {
         return;
     };
 
-    let gateway_dir = app_data_dir.join("gateway");
+    let gateway_dir = base_dir.join("gateway");
     let uploads_dir = gateway_dir.join("uploads");
     if fs::create_dir_all(&uploads_dir).is_err() {
         return;
