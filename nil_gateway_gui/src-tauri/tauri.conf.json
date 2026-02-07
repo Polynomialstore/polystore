@@ -32,14 +32,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "bin/nil_gateway",
-      "bin/nil_gateway.exe",
-      "bin/nil_cli",
-      "bin/nil_cli.exe",
-      "bin/libnil_core.so",
-      "bin/libnil_core.dylib",
-      "bin/nil_core.dll",
-      "bin/libnil_core.dll",
+      "bin/*",
       "trusted_setup.txt"
     ]
   }

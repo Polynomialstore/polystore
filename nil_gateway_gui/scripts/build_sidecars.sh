@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN_DIR="$ROOT_DIR/nil_gateway_gui/src-tauri/bin"
 RESOURCE_DIR="$ROOT_DIR/nil_gateway_gui/src-tauri"
 NIL_CORE_RELEASE_DIR="$ROOT_DIR/nil_core/target/release"
+NIL_CORE_TARGET=""
 
 mkdir -p "$BIN_DIR"
 
@@ -17,6 +18,8 @@ case "$(uname -s)" in
     ;;
   MINGW*|MSYS*|CYGWIN*|Windows_NT)
     ext=".exe"
+    NIL_CORE_TARGET="x86_64-pc-windows-gnu"
+    NIL_CORE_RELEASE_DIR="$ROOT_DIR/nil_core/target/$NIL_CORE_TARGET/release"
     nil_core_lib="nil_core.dll"
     nil_core_lib_alt="libnil_core.dll"
     ;;
@@ -28,7 +31,11 @@ esac
 echo "==> Building nil_core shared library"
 (
   cd "$ROOT_DIR/nil_core"
-  cargo build --release
+  if [[ -n "$NIL_CORE_TARGET" ]]; then
+    cargo build --release --target "$NIL_CORE_TARGET"
+  else
+    cargo build --release
+  fi
 )
 
 if [[ ! -f "$NIL_CORE_RELEASE_DIR/$nil_core_lib" ]]; then

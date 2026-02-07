@@ -8,7 +8,11 @@ const rootDir = join(__dirname, "..", "..");
 const binDir = join(rootDir, "nil_gateway_gui", "src-tauri", "bin");
 const resourceDir = join(rootDir, "nil_gateway_gui", "src-tauri");
 const ext = process.platform === "win32" ? ".exe" : "";
-const nilCoreReleaseDir = join(rootDir, "nil_core", "target", "release");
+const nilCoreTarget =
+  process.platform === "win32" ? "x86_64-pc-windows-gnu" : null;
+const nilCoreReleaseDir = nilCoreTarget
+  ? join(rootDir, "nil_core", "target", nilCoreTarget, "release")
+  : join(rootDir, "nil_core", "target", "release");
 
 let nilCoreArtifacts;
 if (process.platform === "win32") {
@@ -22,7 +26,11 @@ if (process.platform === "win32") {
 mkdirSync(binDir, { recursive: true });
 
 console.log("==> Building nil_core shared library");
-execFileSync("cargo", ["build", "--release"], {
+const cargoArgs = ["build", "--release"];
+if (nilCoreTarget) {
+  cargoArgs.push("--target", nilCoreTarget);
+}
+execFileSync("cargo", cargoArgs, {
   cwd: join(rootDir, "nil_core"),
   stdio: "inherit",
 });
