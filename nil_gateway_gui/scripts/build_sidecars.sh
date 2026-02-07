@@ -49,6 +49,9 @@ fi
 cp "$NIL_CORE_RELEASE_DIR/$nil_core_lib" "$BIN_DIR/$nil_core_lib"
 
 echo "==> Building nil_gateway sidecar"
+if [[ -f "$BIN_DIR/nil_gateway$ext" ]]; then
+  rm -f "$BIN_DIR/nil_gateway$ext"
+fi
 (
   cd "$ROOT_DIR/nil_gateway"
   go build -o "$BIN_DIR/nil_gateway$ext" .

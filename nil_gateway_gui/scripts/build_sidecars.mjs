@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,9 +49,13 @@ console.log(`==> Staging ${basename(nilCorePath)}`);
 copyFileSync(nilCorePath, join(binDir, basename(nilCorePath)));
 
 console.log("==> Building nil_gateway sidecar");
+const nilGatewayOutput = join(binDir, `nil_gateway${ext}`);
+if (existsSync(nilGatewayOutput)) {
+  unlinkSync(nilGatewayOutput);
+}
 execFileSync(
   "go",
-  ["build", "-o", join(binDir, `nil_gateway${ext}`), "."],
+  ["build", "-o", nilGatewayOutput, "."],
   {
     cwd: join(rootDir, "nil_gateway"),
     stdio: "inherit",
