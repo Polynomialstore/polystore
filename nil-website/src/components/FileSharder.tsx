@@ -1968,7 +1968,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, resetUpload, stripeParams]);
+  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
