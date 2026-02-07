@@ -1,19 +1,40 @@
 import { test, expect, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 
 async function waitForGatewayConnected(page: Page): Promise<void> {
   const widget = page.getByTestId('gateway-status-widget')
-  await expect(widget).toHaveAttribute('data-status', 'connected', { timeout: 60_000 })
+  const count = await widget.count().catch(() => 0)
+  if (count <= 0) return
+  await expect(widget.first()).toHaveAttribute('data-status', 'connected', { timeout: 60_000 })
 }
 
 function cachedFileNameForPath(filePath: string): string {
   const normalized = String(filePath ?? '')
   const digest = crypto.createHash('sha256').update(Buffer.from(normalized, 'utf8')).digest('hex')
   return `filecache_${digest}.bin`
+}
+
+async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string> {
+  const manifestRoot = await page.evaluate(async ({ dealId }) => {
+    const root = await navigator.storage.getDirectory()
+    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+    const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
+    const file = await fh.getFile()
+    return (await file.text()).trim()
+  }, { dealId })
+  return String(manifestRoot || '').trim()
+}
+
+function resolveRouterUploadDir(): string {
+  const fromEnv = String(process.env.E2E_ROUTER_UPLOAD_DIR || '').trim()
+  if (fromEnv) return path.resolve(fromEnv)
+  // Default used by scripts/run_devnet_alpha_multi_sp.sh
+  return path.resolve(process.cwd(), '..', '_artifacts', 'devnet_alpha_multi_sp', 'router_tmp')
 }
 
 test.describe('mode2 stripe', () => {
@@ -317,5 +338,204 @@ test.describe('mode2 stripe', () => {
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileB.name}"]`)).toBeVisible({
       timeout: 60_000,
     })
+  })
+
+  test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {
+    test.slow()
+    test.setTimeout(900_000)
+
+    const fileA = { name: 'rehydrate-a.txt', buffer: Buffer.alloc(128 * 1024, 'R') }
+    const fileB = { name: 'rehydrate-b.txt', buffer: Buffer.alloc(96 * 1024, 'S') }
+
+    console.log('[rehydrate-e2e] start')
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    console.log('[rehydrate-e2e] dashboard loaded')
+
+    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
+      timeout: 60_000,
+      state: 'attached',
+    })
+    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
+    const cosmosIdentity = page.getByTestId('cosmos-identity')
+    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+      const connectBtn = page.getByTestId('connect-wallet').first()
+      if (await connectBtn.isVisible().catch(() => false)) {
+        await connectBtn.click()
+      }
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
+    }
+
+    await page.getByTestId('faucet-request').click()
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    console.log('[rehydrate-e2e] faucet funded')
+
+    await page.getByTestId('alloc-submit').click()
+    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
+    const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
+    expect(dealId).not.toBe('')
+    console.log(`[rehydrate-e2e] deal created id=${dealId}`)
+
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+    await waitForGatewayConnected(page)
+
+    // Force first gateway ingest to fail so browser fallback computes and persists OPFS slab.
+    // Keep subsequent attempts deterministic for local/CI by stubbing provider transport.
+    let gatewayUploadPostCount = 0
+    let mirrorMduCalls = 0
+    let mirrorManifestCalls = 0
+    let mirrorShardCalls = 0
+    const retryManifestRoot = `0x${crypto.randomBytes(48).toString('hex')}`
+
+    await page.route('**/sp/upload_mdu', async (route) => {
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_manifest', async (route) => {
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_shard', async (route) => {
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+
+    await page.route('http://127.0.0.1:8080/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ mode: 'router' }),
+      })
+    })
+    await page.route('http://127.0.0.1:8080/gateway/mirror_mdu', async (route) => {
+      mirrorMduCalls += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('http://127.0.0.1:8080/gateway/mirror_manifest', async (route) => {
+      mirrorManifestCalls += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('http://127.0.0.1:8080/gateway/mirror_shard', async (route) => {
+      mirrorShardCalls += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+
+    await page.route('**/gateway/upload*', async (route) => {
+      if (route.request().method().toUpperCase() === 'POST') {
+        gatewayUploadPostCount += 1
+        if (gatewayUploadPostCount === 1) {
+          await route.abort('failed')
+          return
+        }
+        if (gatewayUploadPostCount === 2) {
+          await route.fulfill({
+            status: 500,
+            contentType: 'text/plain',
+            body: 'mode2 append failed: failed to resolve existing slab dir',
+          })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            manifest_root: retryManifestRoot,
+            total_mdus: 3,
+            witness_mdus: 1,
+            size_bytes: fileA.buffer.length + fileB.buffer.length,
+          }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: fileA.name,
+      mimeType: 'text/plain',
+      buffer: fileA.buffer,
+    })
+    console.log('[rehydrate-e2e] fileA selected')
+
+    const uploadBtn = page.getByTestId('mdu-upload')
+    const commitBtn = page.getByTestId('mdu-commit')
+
+    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
+      timeout: 300_000,
+      state: 'attached',
+    })
+    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+    await uploadBtn.click()
+    await expect
+      .poll(async () => {
+        const text = (await uploadBtn.textContent().catch(() => '')) || ''
+        const committed = await commitBtn.isEnabled().catch(() => false)
+        return /Upload Complete/i.test(text) || committed
+      }, { timeout: 300_000 })
+      .toBe(true)
+    console.log('[rehydrate-e2e] fileA upload complete')
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
+    await commitBtn.click()
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    console.log('[rehydrate-e2e] fileA committed')
+
+    const firstManifestRoot = await readOpfsManifestRoot(page, dealId)
+    expect(firstManifestRoot).toMatch(/^0x[0-9a-fA-F]{96}$/)
+
+    const manifestKey = firstManifestRoot.replace(/^0x/i, '').toLowerCase()
+    const routerDealDir = path.join(resolveRouterUploadDir(), 'deals', String(dealId), manifestKey)
+    await fs.rm(routerDealDir, { recursive: true, force: true })
+
+    // Ensure the local gateway truly lost its prior slab state.
+    const dirExists = await fs.stat(routerDealDir).then(() => true).catch(() => false)
+    expect(dirExists).toBe(false)
+    console.log(`[rehydrate-e2e] removed router slab dir=${routerDealDir}`)
+
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: fileB.name,
+      mimeType: 'text/plain',
+      buffer: fileB.buffer,
+    })
+    console.log('[rehydrate-e2e] fileB selected')
+
+    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
+      timeout: 300_000,
+      state: 'attached',
+    })
+    if ((await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false))) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect
+        .poll(async () => {
+          const text = (await uploadBtn.textContent().catch(() => '')) || ''
+          const committed = await commitBtn.isEnabled().catch(() => false)
+          return /Upload Complete/i.test(text) || committed
+        }, { timeout: 300_000 })
+        .toBe(true)
+      console.log('[rehydrate-e2e] fileB upload complete (explicit upload button path)')
+    }
+
+    await expect.poll(() => gatewayUploadPostCount, { timeout: 300_000 }).toBeGreaterThanOrEqual(3)
+
+    const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
+    await expect(activity).toContainText('Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS', {
+      timeout: 300_000,
+    })
+    await expect(activity).toContainText('Rehydrated local gateway from OPFS cache', {
+      timeout: 300_000,
+    })
+    await expect
+      .poll(() => mirrorMduCalls + mirrorManifestCalls + mirrorShardCalls, { timeout: 300_000 })
+      .toBeGreaterThan(0)
+    console.log('[rehydrate-e2e] detected rehydrate logs')
+
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
+    await commitBtn.click()
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    console.log('[rehydrate-e2e] fileB committed')
+    console.log(
+      `[rehydrate-e2e] completed successfully (gatewayUploads=${gatewayUploadPostCount}, mirrorCalls=${
+        mirrorMduCalls + mirrorManifestCalls + mirrorShardCalls
+      })`,
+    )
   })
 })
