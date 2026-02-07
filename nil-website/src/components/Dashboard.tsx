@@ -35,11 +35,6 @@ interface Provider {
   endpoints?: string[]
 }
 
-interface DealHeatState {
-  successful_retrievals_total?: string
-  bytes_served_total?: string
-}
-
 type StagedUpload = {
   cid: string
   sizeBytes: number
@@ -66,6 +61,10 @@ type RecentFileEntry = {
 
 const RECENT_FILES_KEY = 'nil_recent_files_v1'
 const MAX_RECENT_FILES = 6
+const RETRIEVAL_SESSIONS_POLL_MS = 30_000
+const RETRIEVAL_PARAMS_POLL_MS = 120_000
+const PROOFS_POLL_MS = 30_000
+const RPC_HEALTH_POLL_MS = 15_000
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()
@@ -205,11 +204,12 @@ export function Dashboard() {
       }
     }
     checkRpc()
-    const timer = setInterval(checkRpc, 5000)
+    const timer = setInterval(checkRpc, RPC_HEALTH_POLL_MS)
     return () => clearInterval(timer)
   }, [])
 
   const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
+  const faucetBusy = faucetLoading || faucetTxStatus === 'pending'
 
   const handleSwitchNetwork = async () => {
     try {
@@ -258,51 +258,15 @@ export function Dashboard() {
   const optimisticCidTtlMs = 2 * 60_000
   const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
-  const { proofs, loading: proofsLoading } = useProofs()
+  const { proofs, loading: proofsLoading } = useProofs(PROOFS_POLL_MS)
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
 
-  const [dealHeatById, setDealHeatById] = useState<Record<string, DealHeatState>>({})
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
   const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
   const [retrievalSessionsError, setRetrievalSessionsError] = useState<string | null>(null)
   const [retrievalParams, setRetrievalParams] = useState<LcdParams | null>(null)
   const [retrievalParamsError, setRetrievalParamsError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (allDeals.length === 0) {
-      setDealHeatById({})
-      return
-    }
-
-    let cancelled = false
-
-    async function refreshHeat() {
-      const next: Record<string, DealHeatState> = {}
-      await Promise.all(
-        allDeals.map(async (deal) => {
-          try {
-            const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(deal.id)}/heat`)
-            if (!res.ok) return
-            const json = await res.json().catch(() => null)
-            const heat = (json as { heat?: DealHeatState } | null)?.heat
-            if (!heat) return
-            next[deal.id] = heat
-          } catch {
-            // ignore
-          }
-        }),
-      )
-      if (!cancelled) setDealHeatById(next)
-    }
-
-    refreshHeat()
-    const interval = window.setInterval(refreshHeat, 2000)
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-    }
-  }, [allDeals])
 
   useEffect(() => {
     if (!nilAddress) {
@@ -338,7 +302,7 @@ export function Dashboard() {
     }
 
     refreshSessions()
-    const interval = window.setInterval(refreshSessions, 4000)
+    const interval = window.setInterval(refreshSessions, RETRIEVAL_SESSIONS_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(interval)
@@ -364,7 +328,7 @@ export function Dashboard() {
     }
 
     refreshParams()
-    const interval = window.setInterval(refreshParams, 30000)
+    const interval = window.setInterval(refreshParams, RETRIEVAL_PARAMS_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(interval)
@@ -373,13 +337,25 @@ export function Dashboard() {
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
-    for (const deal of deals) {
-      const heat = dealHeatById[deal.id]
-      const raw = heat?.successful_retrievals_total
-      counts[deal.id] = raw ? Number(raw) || 0 : 0
+    for (const proof of proofs) {
+      if (!proof.valid) continue
+      const dealId = String(proof.dealId || '').trim()
+      if (!dealId) continue
+      counts[dealId] = (counts[dealId] || 0) + 1
     }
     return counts
-  }, [dealHeatById, deals])
+  }, [proofs])
+
+  const bytesServedByDeal = useMemo(() => {
+    const totals: Record<string, bigint> = {}
+    for (const raw of retrievalSessions) {
+      const session = raw as Record<string, unknown>
+      const dealId = String(session['deal_id'] ?? '').trim()
+      if (!dealId) continue
+      totals[dealId] = (totals[dealId] || 0n) + parseUint64(session['total_bytes'])
+    }
+    return totals
+  }, [retrievalSessions])
 
   const ownedDeals = useMemo(
     () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
@@ -819,15 +795,17 @@ export function Dashboard() {
         }
         entry.assignedDeals += 1
         if (String(deal.cid || '').trim().startsWith('0x')) entry.activeDeals += 1
-        const heat = dealHeatById[deal.id]
-        entry.retrievals += Number(heat?.successful_retrievals_total || 0) || 0
-        entry.bytesServed += Number(heat?.bytes_served_total || 0) || 0
+        const dealRetrievals = retrievalCountsByDeal[deal.id] || 0
+        const dealBytesServed = bytesServedByDeal[deal.id] || 0n
+        entry.retrievals += dealRetrievals
+        entry.bytesServed +=
+          dealBytesServed <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(dealBytesServed) : Number.MAX_SAFE_INTEGER
         byProvider.set(providerAddr, entry)
       }
     }
 
     return byProvider
-  }, [allDeals, dealHeatById])
+  }, [allDeals, bytesServedByDeal, retrievalCountsByDeal])
 
   const retrievalFeeNote = retrievalParams
     ? 'Base fee burned on session open. Variable fee locked until completion or cancel.'
@@ -950,7 +928,11 @@ export function Dashboard() {
       } catch (e) {
           setStatusTone('error')
           const details = e instanceof Error ? e.message : String(e)
-          setStatusMsg(`Faucet request failed: ${details || 'Unknown error'}`)
+          if (/rate limit/i.test(details)) {
+            setStatusMsg('Faucet is rate-limited. A previous request may already be processing; check balance before retrying.')
+          } else {
+            setStatusMsg(`Faucet request failed: ${details || 'Unknown error'}`)
+          }
       }
   }
 
@@ -2160,11 +2142,11 @@ export function Dashboard() {
                 <button
                   data-testid="faucet-request"
                   onClick={handleRequestFunds}
-                  disabled={!address || faucetLoading}
+                  disabled={!address || faucetBusy}
                   className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Coins className="h-4 w-4" />
-                  {faucetLoading ? 'Requesting…' : 'Get Testnet NIL'}
+                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get Testnet NIL'}
                 </button>
               ) : (
                 <div className="text-[11px] text-muted-foreground text-right">
