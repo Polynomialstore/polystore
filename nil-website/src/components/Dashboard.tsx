@@ -191,20 +191,33 @@ export function Dashboard() {
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
+  const [rpcHeight, setRpcHeight] = useState<number | null>(null)
   useEffect(() => {
     const checkRpc = async () => {
       try {
-        const res = await fetch(appConfig.evmRpc, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
-        })
-        const json = await res.json()
-        const raw = typeof json?.result === 'string' ? json.result : ''
-        const id = raw ? parseInt(raw, 16) : NaN
+        const [chainRes, heightRes] = await Promise.all([
+          fetch(appConfig.evmRpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+          }),
+          fetch(appConfig.evmRpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 2 }),
+          }),
+        ])
+        const chainJson = await chainRes.json()
+        const heightJson = await heightRes.json()
+        const chainRaw = typeof chainJson?.result === 'string' ? chainJson.result : ''
+        const id = chainRaw ? parseInt(chainRaw, 16) : NaN
         setRpcChainId(Number.isFinite(id) ? id : null)
+        const heightRaw = typeof heightJson?.result === 'string' ? heightJson.result : ''
+        const height = heightRaw ? parseInt(heightRaw, 16) : NaN
+        setRpcHeight(Number.isFinite(height) ? height : null)
       } catch (e) {
         console.error('RPC Check failed', e)
+        setRpcHeight(null)
       }
     }
     checkRpc()
@@ -392,6 +405,21 @@ export function Dashboard() {
     () => parseServiceHint(targetDeal?.service_hint),
     [targetDeal?.service_hint],
   )
+  const targetDealEndBlock = useMemo(() => {
+    if (!targetDeal?.end_block) return null
+    const n = Number(targetDeal.end_block)
+    return Number.isFinite(n) ? n : null
+  }, [targetDeal?.end_block])
+  const targetDealExpired = useMemo(() => {
+    if (!targetDealEndBlock || rpcHeight === null) return false
+    return rpcHeight > targetDealEndBlock
+  }, [rpcHeight, targetDealEndBlock])
+  const targetDealExpiryMsg = useMemo(() => {
+    if (!targetDealEndBlock) return null
+    if (rpcHeight === null) return `Deal expires at block ${targetDealEndBlock}.`
+    if (!targetDealExpired) return null
+    return `Deal expired at block ${targetDealEndBlock} (current ${rpcHeight}). Create a new deal to continue uploading/committing.`
+  }, [rpcHeight, targetDealEndBlock, targetDealExpired])
   const isTargetDealMode2 = targetDealService.mode === 'mode2' || targetDealService.mode === 'auto'
   const hasSelectedDeal = Boolean(targetDealId)
 
@@ -881,6 +909,11 @@ export function Dashboard() {
       setStatusMsg('Select a target deal before uploading.')
       return
     }
+    if (targetDealExpired) {
+      setStatusTone('error')
+      setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
+      return
+    }
     try {
       let uploadFile = file
       if (compressUploads) {
@@ -1103,6 +1136,13 @@ export function Dashboard() {
       alert('Connect MetaMask to commit content on-chain.')
       return false
     }
+    if (targetDealExpired) {
+      const msg = targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.'
+      setStatusTone('error')
+      setStatusMsg(msg)
+      alert(msg)
+      return false
+    }
 
     const trimmedRoot = manifestRoot.trim()
     const manifestHex = toHexFromBase64OrHex(trimmedRoot) || trimmedRoot
@@ -1158,7 +1198,11 @@ export function Dashboard() {
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setStatusTone('error')
-        setStatusMsg('Content commit failed. Check gateway + chain logs.')
+        if (/expired at end_block/i.test(msg || '')) {
+          setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
+        } else {
+          setStatusMsg('Content commit failed. Check gateway + chain logs.')
+        }
         recordUpload('failed', msg || 'commit failed')
         return false
     }
@@ -1499,12 +1543,17 @@ export function Dashboard() {
                   This is a Mode 2 deal. Use the Upload tab (Mode 2).
                 </div>
               )}
+              {targetDealExpired && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                  {targetDealExpiryMsg}
+                </div>
+              )}
               <label className="space-y-1">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">Select file</span>
                 <input
                   type="file"
                   onChange={handleFileChange}
-                  disabled={!targetDealId || uploadLoading || isTargetDealMode2}
+                  disabled={!targetDealId || uploadLoading || isTargetDealMode2 || targetDealExpired}
                   data-testid="content-file-input"
                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary disabled:opacity-50"
                 />
@@ -1615,7 +1664,7 @@ export function Dashboard() {
                     stagedUpload.witnessMdus,
                   )
                 }}
-                disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
+                disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2 || targetDealExpired}
                 data-testid="content-commit"
                 className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
               >
@@ -1626,7 +1675,14 @@ export function Dashboard() {
         )
       ) : (
         <div ref={mduRef} className="space-y-4">
-          {targetDealId ? (
+          {targetDealId ? targetDealExpired ? (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5">
+              <div className="text-sm font-semibold text-destructive">Deal expired</div>
+              <div className="mt-1 text-xs text-destructive/90">
+                {targetDealExpiryMsg}
+              </div>
+            </div>
+          ) : (
             <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
@@ -2297,6 +2353,9 @@ export function Dashboard() {
                     const sizeNum = Number(deal.size)
                     const sizeLabel =
                       Number.isFinite(sizeNum) && sizeNum > 0 ? formatBytes(sizeNum) : '0 B'
+                    const endBlockNum = Number(deal.end_block)
+                    const dealExpired =
+                      rpcHeight !== null && Number.isFinite(endBlockNum) ? rpcHeight > endBlockNum : false
                     return (
                       <button
                         key={deal.id}
@@ -2328,6 +2387,11 @@ export function Dashboard() {
                               <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
                                 {sizeLabel}
                               </span>
+                              {dealExpired && (
+                                <span className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
+                                  Expired
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="shrink-0 text-[11px] text-muted-foreground">
