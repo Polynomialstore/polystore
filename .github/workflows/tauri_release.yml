@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-13
+          - platform: macos-15-intel
             label: macos-intel
             bundles: dmg
           - platform: macos-15
