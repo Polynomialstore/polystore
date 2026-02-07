@@ -826,7 +826,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         let stopPolling = false
         let lastJob: GatewayUploadJobStatus | null = null as GatewayUploadJobStatus | null
 
-        const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
+        const gatewayBase = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
         const uploadId =
           globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
             ? globalThis.crypto.randomUUID()

@@ -103,7 +103,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       }
       updateError(null); // Clear previous errors
       try {
-        const baseUrl = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
+        const baseUrl = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '');
         const response = await fetch(`${baseUrl}${probePath}`, {
           method: 'GET',
           signal: AbortSignal.timeout(3000),

@@ -68,7 +68,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_PUBLIC_DOMAIN` | *(empty)* | Optional domain override for auto endpoint inference (for example `nilstore.org` → `faucet/lcd/evm` subdomains). |
 | `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL (auto-falls back to `https://faucet.<domain>` when hosted on matching public domain). |
 | `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD URL (auto-falls back to `https://lcd.<domain>` when hosted on matching public domain). |
-| `VITE_GATEWAY_BASE` | `http://localhost:8080` | Local gateway sidecar base URL. Non-loopback values are ignored and normalized back to localhost. |
+| `VITE_GATEWAY_BASE` | `http://127.0.0.1:8080` | Local gateway base URL. Non-loopback values are ignored; loopback values are normalized to `127.0.0.1` for consistent browser connectivity. |
 | `VITE_EXPLORER_BASE` | runtime origin or `http://localhost:5173` | Block-explorer URL shown to wallets (`wallet_addEthereumChain`). |
 | `VITE_SP_BASE` | `http://localhost:8082` | Default Storage Provider base for direct uploads/fetches when provider discovery is unavailable. |
 | `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
@@ -376,7 +376,7 @@ The website depends on the following services (configured in `config.ts`):
 | Service | Config Key | Default |
 |:---|:---|:---|
 | **Cosmos LCD** | `lcdBase` | `http://localhost:1317` |
-| **Storage Gateway (optional)** | `gatewayBase` | `http://localhost:8080` |
+| **Storage Gateway (optional)** | `gatewayBase` | `http://127.0.0.1:8080` |
 | **Storage Provider (direct)** | `spBase` | `http://localhost:8082` |
 | **EVM JSON-RPC** | `evmRpc` | `http://localhost:8545` |
 

@@ -117,7 +117,7 @@ export const TestnetDocs = () => {
             <div className="font-semibold text-foreground">Local Gateway (recommended)</div>
             <div className="mt-1">
               Install <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway_gui</code>, start it, then refresh this page.
-              The website probes <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://localhost:8080</code> only.
+              The website probes <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://127.0.0.1:8080</code> only.
             </div>
             <a
               href={gatewayGuiReleaseUrl}

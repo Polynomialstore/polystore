@@ -45,10 +45,25 @@ function isLoopbackHost(hostname: string): boolean {
   return false
 }
 
+function normalizeLoopbackUrl(url: string): string {
+  const raw = String(url || '').trim()
+  if (!raw) return raw
+  try {
+    const parsed = new URL(raw)
+    if (isLoopbackHost(parsed.hostname.toLowerCase())) {
+      parsed.hostname = '127.0.0.1'
+      return parsed.toString()
+    }
+    return raw
+  } catch {
+    return raw
+  }
+}
+
 function localOnlyGatewayBase(candidate: string, fallback: string): string {
   const host = extractHostname(candidate)
-  if (isLoopbackHost(host)) return candidate
-  return fallback
+  if (isLoopbackHost(host)) return normalizeLoopbackUrl(candidate)
+  return normalizeLoopbackUrl(fallback)
 }
 
 function parsePositiveInt(value: unknown, fallback: number): number {
@@ -64,7 +79,7 @@ const RUNTIME_ORIGIN = detectRuntimeOrigin()
 const PUBLIC_DOMAIN = inferPublicDomain(RUNTIME_HOST)
 const defaultBase = (subdomain: string, localDefault: string): string =>
   PUBLIC_DOMAIN ? `https://${subdomain}.${PUBLIC_DOMAIN}` : localDefault
-const LOCAL_GATEWAY_BASE = 'http://localhost:8080'
+const LOCAL_GATEWAY_BASE = 'http://127.0.0.1:8080'
 
 const API_BASE = envString(import.meta.env.VITE_API_BASE) || defaultBase('faucet', 'http://localhost:8081')
 const LCD_BASE = envString(import.meta.env.VITE_LCD_BASE) || defaultBase('lcd', 'http://localhost:1317')
