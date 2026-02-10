@@ -94,6 +94,9 @@ impl SidecarManager {
             // Local desktop Gateway default: keep libp2p disabled unless explicitly enabled.
             // This avoids startup collisions on hosts already running router/provider daemons.
             .env("NIL_P2P_ENABLED", "0")
+            // Local desktop mode should import directly from user-selected files by default.
+            .env("NIL_LOCAL_IMPORT_ENABLED", "1")
+            .env("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
             // Local desktop Gateway should not run synthetic system-liveness ticks unless
             // explicitly requested. Those ticks need provider key material and create noisy logs.
             .env("NIL_DISABLE_SYSTEM_LIVENESS", "1")

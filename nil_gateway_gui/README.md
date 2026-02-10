@@ -30,7 +30,14 @@ Linux prerequisites (Ubuntu/Debian):
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt-get install -y \
+  pkg-config \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libsoup-3.0-dev \
+  libjavascriptcoregtk-4.1-dev \
+  librsvg2-dev \
+  patchelf
 ```
 
 ```bash
@@ -49,3 +56,5 @@ npm run tauri build
 
 - The website local Gateway model expects gateway access through localhost.
 - Storage provider public endpoints (`sp1/sp2/sp3...`) remain separate and are discovered from on-chain provider records.
+- Linux GUI default sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` when not explicitly provided.
+- Local sidecar default sets `NIL_P2P_ENABLED=0` and `NIL_DISABLE_SYSTEM_LIVENESS=1` (with local import enabled).

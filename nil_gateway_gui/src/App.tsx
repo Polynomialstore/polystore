@@ -188,12 +188,6 @@ export default function App() {
 
       await gatewayStart({
         listen_addr: normalizeListenAddr(baseUrl),
-        env: {
-          NIL_P2P_ENABLED: "0",
-          NIL_DISABLE_SYSTEM_LIVENESS: "1",
-          NIL_LOCAL_IMPORT_ENABLED: "1",
-          NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
-        },
       });
       await probeAfterStart(baseUrl);
       addLog("Local Gateway started successfully.");
