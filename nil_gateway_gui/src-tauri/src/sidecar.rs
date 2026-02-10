@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
@@ -23,6 +23,43 @@ pub struct GatewayConfig {
 pub struct GatewayStartResponse {
     pub base_url: String,
     pub pid: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayStorageFileEntry {
+    pub relative_path: String,
+    pub size_bytes: u64,
+    pub modified_unix: i64,
+    pub deal_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayStorageDealEntry {
+    pub deal_id: String,
+    pub file_count: u64,
+    pub total_bytes: u64,
+    pub manifest_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayStorageSummary {
+    pub gateway_dir: String,
+    pub uploads_dir: String,
+    pub session_db_path: String,
+    pub session_db_exists: bool,
+    pub total_files: u64,
+    pub total_bytes: u64,
+    pub deal_count: u64,
+    pub manifest_count: u64,
+    pub deal_entries: Vec<GatewayStorageDealEntry>,
+    pub recent_files: Vec<GatewayStorageFileEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct GatewayStoragePaths {
+    gateway_dir: PathBuf,
+    uploads_dir: PathBuf,
+    session_db_path: PathBuf,
 }
 
 pub struct SidecarManager {
@@ -340,25 +377,18 @@ fn configure_sidecar_runtime_env_for_bin_dir(cmd: &mut Command, bin_dir: &Path) 
 }
 
 fn configure_sidecar_storage_env(app: &AppHandle, cmd: &mut Command) {
-    let base_dir = app
-        .path()
-        .app_data_dir()
-        .ok()
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".nilstore")));
-    let Some(base_dir) = base_dir else {
+    let Some(paths) = resolve_gateway_storage_paths(app) else {
         return;
     };
 
-    let gateway_dir = base_dir.join("gateway");
-    let uploads_dir = gateway_dir.join("uploads");
-    if fs::create_dir_all(&uploads_dir).is_err() {
+    if fs::create_dir_all(&paths.uploads_dir).is_err() {
         return;
     }
 
     // Keep process cwd in a known writable location for any relative fallback paths.
-    cmd.current_dir(&gateway_dir);
-    cmd.env("NIL_UPLOAD_DIR", &uploads_dir);
-    cmd.env("NIL_SESSION_DB_PATH", uploads_dir.join("sessions.db"));
+    cmd.current_dir(&paths.gateway_dir);
+    cmd.env("NIL_UPLOAD_DIR", &paths.uploads_dir);
+    cmd.env("NIL_SESSION_DB_PATH", &paths.session_db_path);
 }
 
 fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
@@ -384,4 +414,154 @@ fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
     }
 
     configure_sidecar_runtime_env_for_bin_dir(cmd, bin_dir);
+}
+
+fn resolve_gateway_storage_paths(app: &AppHandle) -> Option<GatewayStoragePaths> {
+    let base_dir = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".nilstore")))?;
+
+    let gateway_dir = base_dir.join("gateway");
+    let uploads_dir = gateway_dir.join("uploads");
+    let session_db_path = uploads_dir.join("sessions.db");
+    Some(GatewayStoragePaths {
+        gateway_dir,
+        uploads_dir,
+        session_db_path,
+    })
+}
+
+fn parse_deal_id(parts: &[String]) -> String {
+    if parts.len() >= 2 && parts[0] == "deals" {
+        return parts[1].clone();
+    }
+    "unscoped".to_string()
+}
+
+fn parse_manifest_key(parts: &[String]) -> Option<(String, String)> {
+    if parts.len() >= 3 && parts[0] == "deals" {
+        return Some((parts[1].clone(), parts[2].clone()));
+    }
+    None
+}
+
+pub fn local_storage_summary(app: &AppHandle) -> Result<GatewayStorageSummary, String> {
+    let Some(paths) = resolve_gateway_storage_paths(app) else {
+        return Err("unable to resolve local gateway storage path".to_string());
+    };
+    fs::create_dir_all(&paths.uploads_dir)
+        .map_err(|err| format!("failed to ensure uploads directory exists: {err}"))?;
+
+    #[derive(Default)]
+    struct DealAgg {
+        file_count: u64,
+        total_bytes: u64,
+    }
+
+    let mut total_files: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    let mut deal_aggs: HashMap<String, DealAgg> = HashMap::new();
+    let mut manifest_keys: HashSet<String> = HashSet::new();
+    let mut recent_files: Vec<GatewayStorageFileEntry> = Vec::new();
+
+    let mut stack = vec![paths.uploads_dir.clone()];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
+
+            if meta.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if !meta.is_file() {
+                continue;
+            }
+
+            total_files += 1;
+            let size = meta.len();
+            total_bytes += size;
+
+            let rel = path
+                .strip_prefix(&paths.uploads_dir)
+                .unwrap_or(path.as_path())
+                .to_path_buf();
+            let rel_str = rel.to_string_lossy().to_string();
+            let rel_parts: Vec<String> = rel
+                .iter()
+                .map(|part| part.to_string_lossy().to_string())
+                .collect();
+            let deal_id = parse_deal_id(&rel_parts);
+
+            if let Some((deal, manifest)) = parse_manifest_key(&rel_parts) {
+                manifest_keys.insert(format!("{deal}::{manifest}"));
+            }
+
+            let agg = deal_aggs.entry(deal_id.clone()).or_default();
+            agg.file_count += 1;
+            agg.total_bytes += size;
+
+            let modified_unix = meta
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+                .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+                .unwrap_or(0);
+
+            recent_files.push(GatewayStorageFileEntry {
+                relative_path: rel_str,
+                size_bytes: size,
+                modified_unix,
+                deal_id,
+            });
+        }
+    }
+
+    let mut manifest_count_by_deal: HashMap<String, u64> = HashMap::new();
+    for key in &manifest_keys {
+        if let Some((deal_id, _)) = key.split_once("::") {
+            *manifest_count_by_deal.entry(deal_id.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    let mut deal_entries: Vec<GatewayStorageDealEntry> = deal_aggs
+        .into_iter()
+        .map(|(deal_id, agg)| GatewayStorageDealEntry {
+            manifest_count: manifest_count_by_deal.get(&deal_id).copied().unwrap_or(0),
+            deal_id,
+            file_count: agg.file_count,
+            total_bytes: agg.total_bytes,
+        })
+        .collect();
+    deal_entries.sort_by(|a, b| {
+        b.total_bytes
+            .cmp(&a.total_bytes)
+            .then_with(|| b.file_count.cmp(&a.file_count))
+            .then_with(|| a.deal_id.cmp(&b.deal_id))
+    });
+
+    recent_files.sort_by(|a, b| b.modified_unix.cmp(&a.modified_unix));
+    recent_files.truncate(12);
+
+    Ok(GatewayStorageSummary {
+        gateway_dir: paths.gateway_dir.to_string_lossy().to_string(),
+        uploads_dir: paths.uploads_dir.to_string_lossy().to_string(),
+        session_db_path: paths.session_db_path.to_string_lossy().to_string(),
+        session_db_exists: paths.session_db_path.exists(),
+        total_files,
+        total_bytes,
+        deal_count: u64::try_from(deal_entries.len()).unwrap_or(u64::MAX),
+        manifest_count: u64::try_from(manifest_keys.len()).unwrap_or(u64::MAX),
+        deal_entries,
+        recent_files,
+    })
 }

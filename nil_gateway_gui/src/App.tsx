@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
@@ -7,12 +7,14 @@ import logoDark from "./assets/nilstore-dark.png";
 import {
   fetchFile,
   gatewayAttach,
+  gatewayLocalStorage,
   gatewayStart,
   gatewayStatus,
   gatewayStop,
   listFiles,
   uploadFile,
   type GatewayFileEntry,
+  type GatewayStorageSummary,
   type GatewayStatusResponse,
   type GatewayUploadResponse,
 } from "./lib/gateway";
@@ -28,10 +30,13 @@ type GatewayPhase =
 
 const LOG_BUFFER_LIMIT = 400;
 const STATUS_POLL_MS = 8_000;
+const STORAGE_POLL_MS = 18_000;
 const STARTUP_PROBE_ATTEMPTS = 20;
 const STARTUP_PROBE_DELAY_MS = 250;
 const RECOVERY_FAILURE_THRESHOLD = 2;
 const RECOVERY_COOLDOWN_MS = 20_000;
+const RECENT_DEAL_LIMIT = 6;
+const RECENT_FILE_LIMIT = 8;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -41,6 +46,31 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function normalizeListenAddr(baseUrl: string): string {
   return baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+function parseStatusCounter(extra: Record<string, string> | undefined, key: string): number {
+  const raw = extra?.[key];
+  if (!raw) return 0;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = size >= 100 || unitIndex === 0 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatUnixTime(unixSeconds: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return "n/a";
+  return new Date(unixSeconds * 1000).toLocaleString();
 }
 
 function hostFromBaseUrl(value: string): string {
@@ -118,6 +148,10 @@ export default function App() {
   const [listError, setListError] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [storageSummary, setStorageSummary] = useState<GatewayStorageSummary | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [storageLastAt, setStorageLastAt] = useState<number | null>(null);
+  const [storageBusy, setStorageBusy] = useState(false);
 
   const baseHost = useMemo(() => hostFromBaseUrl(gatewayBaseUrl), [gatewayBaseUrl]);
   const baseIsLoopback = useMemo(() => isLoopbackHost(baseHost), [baseHost]);
@@ -135,6 +169,28 @@ export default function App() {
       return next.slice(next.length - LOG_BUFFER_LIMIT);
     });
   }, []);
+
+  const refreshLocalStorage = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      if (!silent) {
+        setStorageBusy(true);
+      }
+      try {
+        const summary = await gatewayLocalStorage();
+        setStorageSummary(summary);
+        setStorageError(null);
+        setStorageLastAt(Date.now());
+      } catch (err) {
+        setStorageError(errorMessage(err, "Could not read local storage state."));
+      } finally {
+        if (!silent) {
+          setStorageBusy(false);
+        }
+      }
+    },
+    [],
+  );
 
   const applyOnlineStatus = useCallback((status: GatewayStatusResponse) => {
     setGateway(status);
@@ -342,6 +398,22 @@ export default function App() {
     };
   }, [attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshLocalStorage({ silent: true });
+    };
+    void tick();
+    const timer = window.setInterval(() => {
+      void tick();
+    }, STORAGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [refreshLocalStorage]);
+
   const handleAttach = async () => {
     setActionBusy(true);
     try {
@@ -394,6 +466,11 @@ export default function App() {
     await openUrl(`${base}${suffix}`);
   };
 
+  const handleOpenCacheDir = async () => {
+    if (!storageSummary?.uploads_dir) return;
+    await openPath(storageSummary.uploads_dir);
+  };
+
   const handlePickFile = async () => {
     const selected = await open({ multiple: false, directory: false });
     if (typeof selected === "string") {
@@ -430,6 +507,7 @@ export default function App() {
       if (!listDealId) setListDealId(uploadDealId);
       if (!listOwner) setListOwner(uploadOwner);
       addLog(`Uploaded ${response.filename} -> ${response.manifest_root.slice(0, 18)}...`);
+      void refreshLocalStorage({ silent: true });
     } catch (err) {
       const msg = errorMessage(err, "Upload failed");
       setUploadError(msg);
@@ -495,6 +573,7 @@ export default function App() {
         output_path: outputPath,
       });
       addLog(`Downloaded ${entry.path}`);
+      void refreshLocalStorage({ silent: true });
     } catch (err) {
       const msg = errorMessage(err, "Download failed");
       setDownloadError(msg);
@@ -520,6 +599,52 @@ export default function App() {
       .map(([name]) => name);
     return enabled.length > 0 ? enabled.join(", ") : "None enabled";
   }, [gateway]);
+
+  const storageDealEntries = useMemo(
+    () => (storageSummary?.deal_entries ?? []).slice(0, RECENT_DEAL_LIMIT),
+    [storageSummary],
+  );
+
+  const storageRecentFiles = useMemo(
+    () => (storageSummary?.recent_files ?? []).slice(0, RECENT_FILE_LIMIT),
+    [storageSummary],
+  );
+
+  const mode2RepairSummary = useMemo(() => {
+    const extra = gateway?.extra;
+    const assignedAttempts = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_attempts");
+    const assignedFailures = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_failures");
+    const fallbackAttempts = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_attempts");
+    const fallbackSuccesses = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_successes");
+    const fallbackFailures = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_failures");
+    const localHits = parseStatusCounter(extra, "mode2_reconstruct_local_shard_hits");
+    return {
+      assignedAttempts,
+      assignedFailures,
+      fallbackAttempts,
+      fallbackSuccesses,
+      fallbackFailures,
+      localHits,
+      hasSignal:
+        assignedAttempts > 0 ||
+        assignedFailures > 0 ||
+        fallbackAttempts > 0 ||
+        fallbackSuccesses > 0 ||
+        fallbackFailures > 0 ||
+        localHits > 0,
+    };
+  }, [gateway?.extra]);
+
+  const dependencyIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (gateway?.deps?.lcd_reachable === false) {
+      issues.push("LCD unreachable: chain queries and deal checks may fail.");
+    }
+    if (gateway?.deps?.sp_reachable === false) {
+      issues.push("Storage provider unreachable: uploads/retrieval may route to browser fallback.");
+    }
+    return issues;
+  }, [gateway?.deps]);
 
   const formFieldClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
@@ -672,6 +797,166 @@ export default function App() {
               >
                 Open /status
               </button>
+            </div>
+
+            {dependencyIssues.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {dependencyIssues.map((issue) => (
+                  <p key={issue}>{issue}</p>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Local storage snapshot
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    onClick={() => {
+                      void refreshLocalStorage();
+                    }}
+                    disabled={storageBusy}
+                  >
+                    {storageBusy ? "Refreshing..." : "Refresh cache"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    onClick={handleOpenCacheDir}
+                    disabled={!storageSummary?.uploads_dir}
+                  >
+                    Open cache folder
+                  </button>
+                </div>
+              </div>
+
+              {storageError ? (
+                <p className="mt-2 text-xs text-rose-600">{storageError}</p>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Deals cached</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {storageSummary?.deal_count ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Manifests</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {storageSummary?.manifest_count ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Cached files</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {storageSummary?.total_files ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Disk usage</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {formatBytes(storageSummary?.total_bytes ?? 0)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                <p className="break-all">
+                  <span className="font-semibold text-slate-700">Uploads dir:</span>{" "}
+                  {storageSummary?.uploads_dir || "n/a"}
+                </p>
+                <p className="break-all">
+                  <span className="font-semibold text-slate-700">Session DB:</span>{" "}
+                  {storageSummary?.session_db_path || "n/a"}{" "}
+                  {storageSummary?.session_db_exists ? "(present)" : "(not created yet)"}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-700">Last cache scan:</span>{" "}
+                  {storageLastAt ? new Date(storageLastAt).toLocaleTimeString() : "n/a"}
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Cached deals
+                  </div>
+                  {storageDealEntries.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-500">
+                      No deal cache folders yet.
+                    </div>
+                  ) : (
+                    storageDealEntries.map((deal) => (
+                      <div
+                        key={deal.deal_id}
+                        className="grid grid-cols-[0.8fr_0.8fr_0.7fr_0.7fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
+                      >
+                        <span className="font-semibold text-slate-900">{deal.deal_id}</span>
+                        <span>{formatBytes(deal.total_bytes)}</span>
+                        <span>{deal.file_count} files</span>
+                        <span>{deal.manifest_count} manifests</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Recent cached files
+                  </div>
+                  {storageRecentFiles.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-500">
+                      No cached files yet.
+                    </div>
+                  ) : (
+                    storageRecentFiles.map((file) => (
+                      <div
+                        key={`${file.relative_path}-${file.modified_unix}`}
+                        className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
+                      >
+                        <p className="truncate font-medium text-slate-900">{file.relative_path}</p>
+                        <p className="mt-0.5 text-slate-500">
+                          {formatBytes(file.size_bytes)} · deal {file.deal_id} · {formatUnixTime(file.modified_unix)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Retrieval/repair signal
+              </h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Local shard hits</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{mode2RepairSummary.localHits}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Assigned attempts/failures</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {mode2RepairSummary.assignedAttempts} / {mode2RepairSummary.assignedFailures}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Fallback success/fail</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {mode2RepairSummary.fallbackSuccesses} / {mode2RepairSummary.fallbackFailures}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {mode2RepairSummary.hasSignal
+                  ? `Fallback attempts observed: ${mode2RepairSummary.fallbackAttempts}`
+                  : "No reconstruction telemetry yet for this session."}
+              </p>
             </div>
 
             <details className="mt-6 rounded-2xl border border-slate-200 bg-white" open={showAdvanced}>
