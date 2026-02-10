@@ -1,7 +1,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import logoDark from "./assets/nilstore-dark.png";
 import {
@@ -27,9 +27,11 @@ type GatewayPhase =
   | "error";
 
 const LOG_BUFFER_LIMIT = 400;
-const STATUS_POLL_MS = 10_000;
+const STATUS_POLL_MS = 8_000;
 const STARTUP_PROBE_ATTEMPTS = 20;
 const STARTUP_PROBE_DELAY_MS = 250;
+const RECOVERY_FAILURE_THRESHOLD = 2;
+const RECOVERY_COOLDOWN_MS = 20_000;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -90,12 +92,14 @@ export default function App() {
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://127.0.0.1:8080");
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
   const [phase, setPhase] = useState<GatewayPhase>("booting");
-  const [phaseMessage, setPhaseMessage] = useState("Initializing local Gateway...");
+  const [phaseMessage, setPhaseMessage] = useState("Starting local Gateway...");
+  const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [lastStatusAt, setLastStatusAt] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [autoScrollLogs, setAutoScrollLogs] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [autoStartEnabled, setAutoStartEnabled] = useState(true);
 
   const [uploadDealId, setUploadDealId] = useState("");
   const [uploadOwner, setUploadOwner] = useState("");
@@ -117,6 +121,9 @@ export default function App() {
 
   const baseHost = useMemo(() => hostFromBaseUrl(gatewayBaseUrl), [gatewayBaseUrl]);
   const baseIsLoopback = useMemo(() => isLoopbackHost(baseHost), [baseHost]);
+  const recoveryInFlightRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
+  const lastRecoveryAttemptRef = useRef(0);
 
   const addLog = useCallback((line: string) => {
     const trimmed = line.trim();
@@ -129,14 +136,20 @@ export default function App() {
     });
   }, []);
 
-  const probeStatus = useCallback(async () => {
-    const status = await gatewayStatus();
+  const applyOnlineStatus = useCallback((status: GatewayStatusResponse) => {
     setGateway(status);
     setPhase("online");
     setPhaseMessage(`Listening on ${status.listening_addr}`);
+    setStatusDetail(null);
     setLastStatusAt(Date.now());
-    return status;
+    consecutiveFailuresRef.current = 0;
   }, []);
+
+  const probeStatus = useCallback(async () => {
+    const status = await gatewayStatus();
+    applyOnlineStatus(status);
+    return status;
+  }, [applyOnlineStatus]);
 
   const attachAndProbe = useCallback(
     async (baseUrl: string) => {
@@ -165,6 +178,87 @@ export default function App() {
     [probeStatus],
   );
 
+  const startLocalGateway = useCallback(
+    async (baseUrl: string) => {
+      if (!isLoopbackHost(hostFromBaseUrl(baseUrl))) {
+        throw new Error(
+          "Gateway auto-start is only supported for localhost endpoints (127.0.0.1 / localhost).",
+        );
+      }
+
+      await gatewayStart({
+        listen_addr: normalizeListenAddr(baseUrl),
+        env: {
+          NIL_P2P_ENABLED: "0",
+          NIL_DISABLE_SYSTEM_LIVENESS: "1",
+          NIL_LOCAL_IMPORT_ENABLED: "1",
+          NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
+        },
+      });
+      await probeAfterStart(baseUrl);
+      addLog("Local Gateway started successfully.");
+    },
+    [addLog, probeAfterStart],
+  );
+
+  const recoverFromStatusFailure = useCallback(
+    async (err: unknown, opts?: { forceStart?: boolean }) => {
+      const forceStart = opts?.forceStart ?? false;
+      const msg = errorMessage(err, "Gateway status unavailable");
+
+      setGateway(null);
+      setStatusDetail(msg);
+      setLastStatusAt(Date.now());
+      consecutiveFailuresRef.current += 1;
+
+      if (!autoStartEnabled && !forceStart) {
+        setPhase("offline");
+        setPhaseMessage("Local Gateway is stopped. Press Start gateway to run it.");
+        return;
+      }
+
+      if (!isLoopbackHost(hostFromBaseUrl(gatewayBaseUrl)) && !forceStart) {
+        setPhase("offline");
+        setPhaseMessage("Remote Gateway endpoint unreachable. Press Connect to retry.");
+        return;
+      }
+
+      if (consecutiveFailuresRef.current < RECOVERY_FAILURE_THRESHOLD && !forceStart) {
+        setPhase("checking");
+        setPhaseMessage("Reconnecting to local Gateway...");
+        return;
+      }
+
+      if (recoveryInFlightRef.current) return;
+      const now = Date.now();
+      if (!forceStart && now - lastRecoveryAttemptRef.current < RECOVERY_COOLDOWN_MS) {
+        setPhase("checking");
+        setPhaseMessage("Retrying local Gateway in the background...");
+        return;
+      }
+
+      recoveryInFlightRef.current = true;
+      lastRecoveryAttemptRef.current = now;
+      const normalizedBase = gatewayBaseUrl.trim().replace(/\/$/, "");
+
+      setPhase("starting");
+      setPhaseMessage("Starting local Gateway...");
+      try {
+        await startLocalGateway(normalizedBase);
+        setStatusDetail(null);
+      } catch (startErr) {
+        const startMsg = errorMessage(startErr, "Failed to start local Gateway");
+        setPhase("error");
+        setPhaseMessage("Gateway needs attention. Check logs and try Start gateway.");
+        setStatusDetail(startMsg);
+        addLog(`Gateway recovery failed: ${startMsg}`);
+      } finally {
+        recoveryInFlightRef.current = false;
+      }
+    },
+    [addLog, autoStartEnabled, gatewayBaseUrl, startLocalGateway],
+  );
+
   const ensureGateway = useCallback(
     async (opts?: { startIfOffline?: boolean }) => {
       const startIfOffline = opts?.startIfOffline ?? true;
@@ -172,6 +266,7 @@ export default function App() {
 
       setPhase("checking");
       setPhaseMessage(`Checking ${normalizedBase}/status...`);
+      setStatusDetail(null);
       try {
         await attachAndProbe(normalizedBase);
         return;
@@ -180,35 +275,17 @@ export default function App() {
           const msg = errorMessage(firstErr, "Gateway not reachable");
           setGateway(null);
           setPhase("offline");
-          setPhaseMessage(msg);
+          setPhaseMessage("Local Gateway not reachable.");
+          setStatusDetail(msg);
           addLog(`Status probe failed: ${msg}`);
           return;
         }
 
-        setPhase("starting");
-        setPhaseMessage("Starting local Gateway...");
-        try {
-          await gatewayStart({
-            listen_addr: normalizeListenAddr(normalizedBase),
-            env: {
-              NIL_P2P_ENABLED: "0",
-              NIL_DISABLE_SYSTEM_LIVENESS: "1",
-              NIL_LOCAL_IMPORT_ENABLED: "1",
-              NIL_LOCAL_IMPORT_ALLOW_ABS: "1",
-            },
-          });
-          await probeAfterStart(normalizedBase);
-          addLog("Local Gateway started successfully.");
-        } catch (startErr) {
-          const msg = errorMessage(startErr, "Failed to start gateway");
-          setGateway(null);
-          setPhase("error");
-          setPhaseMessage(msg);
-          addLog(`Gateway start failed: ${msg}`);
-        }
+        setAutoStartEnabled(true);
+        await recoverFromStatusFailure(firstErr, { forceStart: true });
       }
     },
-    [addLog, attachAndProbe, gatewayBaseUrl, probeAfterStart],
+    [addLog, attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure],
   );
 
   useEffect(() => {
@@ -248,17 +325,28 @@ export default function App() {
   }, [addLog]);
 
   useEffect(() => {
-    if (phase !== "online") return;
+    let cancelled = false;
+    const normalizedBase = gatewayBaseUrl.trim().replace(/\/$/, "");
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        await attachAndProbe(normalizedBase);
+      } catch (err) {
+        if (cancelled) return;
+        await recoverFromStatusFailure(err);
+      }
+    };
+
+    void tick();
     const timer = window.setInterval(() => {
-      void probeStatus().catch((err) => {
-        const msg = errorMessage(err, "Gateway became unreachable");
-        setGateway(null);
-        setPhase("offline");
-        setPhaseMessage(msg);
-      });
+      void tick();
     }, STATUS_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [phase, probeStatus]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure]);
 
   const handleAttach = async () => {
     setActionBusy(true);
@@ -271,6 +359,7 @@ export default function App() {
 
   const handleStart = async () => {
     setActionBusy(true);
+    setAutoStartEnabled(true);
     try {
       await ensureGateway({ startIfOffline: true });
     } finally {
@@ -280,18 +369,22 @@ export default function App() {
 
   const handleStop = async () => {
     setActionBusy(true);
+    setAutoStartEnabled(false);
     setPhase("stopping");
     setPhaseMessage("Stopping local Gateway...");
+    setStatusDetail(null);
     try {
       await gatewayStop();
       setGateway(null);
+      consecutiveFailuresRef.current = 0;
       setPhase("offline");
-      setPhaseMessage("Local Gateway stopped.");
+      setPhaseMessage("Local Gateway stopped. Press Start gateway to run it again.");
       addLog("Local Gateway stopped.");
     } catch (err) {
       const msg = errorMessage(err, "Failed to stop gateway");
       setPhase("error");
-      setPhaseMessage(msg);
+      setPhaseMessage("Could not stop local Gateway cleanly.");
+      setStatusDetail(msg);
       addLog(`Gateway stop failed: ${msg}`);
     } finally {
       setActionBusy(false);
@@ -492,7 +585,7 @@ export default function App() {
                 type="button"
                 className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 onClick={handleStop}
-                disabled={actionBusy || phase === "offline" || phase === "booting"}
+                disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
               >
                 Stop
               </button>
@@ -513,13 +606,9 @@ export default function App() {
               <button
                 type="button"
                 className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                onClick={() => void probeStatus().catch((err) => {
-                  const msg = errorMessage(err, "Status check failed");
-                  setGateway(null);
-                  setPhase("offline");
-                  setPhaseMessage(msg);
-                  addLog(`Status check failed: ${msg}`);
-                })}
+                onClick={() => {
+                  void ensureGateway({ startIfOffline: false });
+                }}
                 disabled={actionBusy}
               >
                 Refresh status
@@ -529,11 +618,15 @@ export default function App() {
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
             <p className="font-medium">{phaseMessage}</p>
+            {statusDetail ? <p className="mt-1 text-xs text-slate-500">Detail: {statusDetail}</p> : null}
             {lastStatusAt ? (
               <p className="mt-1 text-xs text-slate-500">
                 Last status check: {new Date(lastStatusAt).toLocaleTimeString()}
               </p>
             ) : null}
+            <p className="mt-1 text-xs text-slate-500">
+              Auto-start: {autoStartEnabled ? "enabled" : "paused"}
+            </p>
           </div>
 
           {!baseIsLoopback ? (
