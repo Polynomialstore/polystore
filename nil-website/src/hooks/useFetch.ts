@@ -557,24 +557,31 @@ export function useFetch() {
         receiptsSubmitted,
       }))
 
+      let proofSubmissionError: string | null = null
       for (const group of groups) {
         const provider = group.provider
         const sessionId = sessionsByProvider.get(provider)
         if (!sessionId) {
-          throw new Error(`missing session for provider ${provider}`)
+          proofSubmissionError = proofSubmissionError || `missing session for provider ${provider}`
+          continue
         }
-        // `session-proof` is an internal "user daemon -> provider" forward and requires gateway auth.
-        // Even when `serviceBase` points at the provider (direct fetch flows), proof submission must go
-        // through the local gateway.
-        const proofBase = appConfig.gatewayBase
-        const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, provider }),
-        })
-        if (!proofRes.ok) {
-          const text = await proofRes.text().catch(() => '')
-          throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+        // `session-proof` forwarding currently relies on the local gateway sidecar.
+        // Keep file download successful even when the local gateway is not running.
+        try {
+          const proofBase = appConfig.gatewayBase
+          const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, provider }),
+          })
+          if (!proofRes.ok) {
+            const text = await proofRes.text().catch(() => '')
+            throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (!proofSubmissionError) proofSubmissionError = msg
+          console.warn('session-proof forwarding failed; download still succeeds', { provider, error: msg })
         }
       }
 
@@ -593,11 +600,17 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 
-      setReceiptStatus('submitted')
+      if (proofSubmissionError) {
+        setReceiptStatus('failed')
+        setReceiptError(`Proof forwarding failed (download succeeded): ${proofSubmissionError}`)
+      } else {
+        setReceiptStatus('submitted')
+      }
       setProgress((p) => ({
         ...p,
         phase: 'done',
         receiptsSubmitted: receiptsSubmitted,
+        message: proofSubmissionError ? `Download complete; proof forwarding failed: ${proofSubmissionError}` : p.message,
       }))
 
       return { url, blob }
