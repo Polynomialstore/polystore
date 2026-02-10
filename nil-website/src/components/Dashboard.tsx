@@ -63,10 +63,14 @@ type RecentFileEntry = {
 
 const RECENT_FILES_KEY = 'nil_recent_files_v1'
 const MAX_RECENT_FILES = 6
-const RETRIEVAL_SESSIONS_POLL_MS = 30_000
-const RETRIEVAL_PARAMS_POLL_MS = 120_000
-const PROOFS_POLL_MS = 30_000
-const RPC_HEALTH_POLL_MS = 30_000
+const RETRIEVAL_SESSIONS_POLL_MS = 120_000
+const RETRIEVAL_SESSIONS_HIDDEN_POLL_MS = 600_000
+const RETRIEVAL_PARAMS_POLL_MS = 600_000
+const RETRIEVAL_PARAMS_HIDDEN_POLL_MS = 1_800_000
+const PROOFS_POLL_MS = 120_000
+const PROOFS_HIDDEN_POLL_MS = 600_000
+const RPC_HEALTH_POLL_MS = 60_000
+const RPC_HEALTH_HIDDEN_POLL_MS = 300_000
 
 export function Dashboard() {
   const { address, isConnected } = useAccount()
@@ -90,7 +94,7 @@ export function Dashboard() {
     address,
     chainId: appConfig.chainId,
   })
-  const localGateway = useLocalGateway(45_000)
+  const localGateway = useLocalGateway(60_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
@@ -101,7 +105,11 @@ export function Dashboard() {
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
   const [rpcHeight, setRpcHeight] = useState<number | null>(null)
   useEffect(() => {
+    let cancelled = false
+    let timer: number | null = null
+
     const checkRpc = async () => {
+      if (cancelled) return
       try {
         const [chainRes, heightRes] = await Promise.all([
           fetch(appConfig.evmRpc, {
@@ -125,12 +133,44 @@ export function Dashboard() {
         setRpcHeight(Number.isFinite(height) ? height : null)
       } catch (e) {
         console.error('RPC Check failed', e)
-        setRpcHeight(null)
+        if (!cancelled) setRpcHeight(null)
       }
     }
-    checkRpc()
-    const timer = setInterval(checkRpc, RPC_HEALTH_POLL_MS)
-    return () => clearInterval(timer)
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) return
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
+    }
+
+    const runLoop = async () => {
+      if (cancelled) return
+      await checkRpc()
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      schedule(hidden ? RPC_HEALTH_HIDDEN_POLL_MS : RPC_HEALTH_POLL_MS)
+    }
+
+    void runLoop()
+    const handleVisibility = () => {
+      if (cancelled || typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') {
+        void runLoop()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
+
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
+    }
   }, [])
 
   const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
@@ -184,7 +224,11 @@ export function Dashboard() {
   const optimisticCidTtlMs = 2 * 60_000
   const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
-  const { proofs, loading: proofsLoading } = useProofs(PROOFS_POLL_MS)
+  const { proofs, loading: proofsLoading } = useProofs({
+    enabled: Boolean(nilAddress),
+    pollMs: PROOFS_POLL_MS,
+    hiddenPollMs: PROOFS_HIDDEN_POLL_MS,
+  })
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
 
@@ -265,11 +309,41 @@ export function Dashboard() {
       }
     }
 
-    refreshSessions()
-    const interval = window.setInterval(refreshSessions, RETRIEVAL_SESSIONS_POLL_MS)
+    let timer: number | null = null
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) return
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
+    }
+
+    const runLoop = async () => {
+      if (cancelled) return
+      await refreshSessions()
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      schedule(hidden ? RETRIEVAL_SESSIONS_HIDDEN_POLL_MS : RETRIEVAL_SESSIONS_POLL_MS)
+    }
+
+    void runLoop()
+    const handleVisibility = () => {
+      if (cancelled || typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') {
+        void runLoop()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
+
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      if (timer !== null) window.clearTimeout(timer)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
     }
   }, [nilAddress])
 
@@ -291,11 +365,41 @@ export function Dashboard() {
       }
     }
 
-    refreshParams()
-    const interval = window.setInterval(refreshParams, RETRIEVAL_PARAMS_POLL_MS)
+    let timer: number | null = null
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) return
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
+    }
+
+    const runLoop = async () => {
+      if (cancelled) return
+      await refreshParams()
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      schedule(hidden ? RETRIEVAL_PARAMS_HIDDEN_POLL_MS : RETRIEVAL_PARAMS_POLL_MS)
+    }
+
+    void runLoop()
+    const handleVisibility = () => {
+      if (cancelled || typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') {
+        void runLoop()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
+
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      if (timer !== null) window.clearTimeout(timer)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
     }
   }, [])
 
@@ -1742,7 +1846,7 @@ export function Dashboard() {
                   {localGateway.status === 'connected' ? 'Local gateway connected' : 'Local gateway not detected'}
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  Use the local Gateway app for localhost gateway flows.
+                  Run the local Gateway app for localhost-only gateway routing.
                 </div>
               </div>
               <a
@@ -1752,7 +1856,7 @@ export function Dashboard() {
                 className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
               >
                 <Download className="h-3.5 w-3.5" />
-                Desktop
+                Get App
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>

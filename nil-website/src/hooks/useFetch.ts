@@ -20,6 +20,7 @@ import { classifyWalletError } from '../lib/walletErrors'
 import {
   resolveProviderEndpoint,
   resolveProviderEndpointByAddress,
+  resolveProviderEndpoints,
   resolveProviderP2pEndpoint,
   resolveProviderP2pEndpointByAddress,
 } from '../lib/providerDiscovery'
@@ -27,6 +28,7 @@ import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
 import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
+import { classifyError, isRetryable } from '../lib/transport/errors'
 
 export interface FetchInput {
   dealId: string
@@ -120,6 +122,11 @@ function decodeHttpError(bodyText: string): string {
     void e
   }
   return trimmed
+}
+
+function shouldRetryWithAlternateProvider(err: unknown): boolean {
+  const { errorClass } = classifyError(err)
+  return isRetryable(errorClass) || errorClass === 'provider_mismatch' || errorClass === 'http_4xx'
 }
 
 export function useFetch() {
@@ -234,6 +241,14 @@ export function useFetch() {
       const planP2pTarget = p2pEndpoint?.target || gatewayP2pTarget || undefined
       const providerEndpointCache = new Map<string, Awaited<ReturnType<typeof resolveProviderEndpointByAddress>> | null>()
       const providerP2pCache = new Map<string, Awaited<ReturnType<typeof resolveProviderP2pEndpointByAddress>> | null>()
+      const providerFallbackOrder: string[] = []
+      const seenFallbackProviders = new Set<string>()
+      const rememberFallbackProvider = (provider: string) => {
+        const normalized = String(provider || '').trim()
+        if (!normalized || seenFallbackProviders.has(normalized)) return
+        seenFallbackProviders.add(normalized)
+        providerFallbackOrder.push(normalized)
+      }
 
       const getProviderEndpoint = async (provider: string) => {
         if (providerEndpointCache.has(provider)) return providerEndpointCache.get(provider) ?? null
@@ -246,6 +261,17 @@ export function useFetch() {
         const endpoint = await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
         providerP2pCache.set(provider, endpoint)
         return endpoint
+      }
+
+      const resolvedProviderEndpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId).catch(() => [])
+      for (const endpoint of resolvedProviderEndpoints) {
+        const provider = String(endpoint?.provider || '').trim()
+        if (!provider) continue
+        rememberFallbackProvider(provider)
+        providerEndpointCache.set(provider, endpoint)
+        if (endpoint.p2pTarget) {
+          providerP2pCache.set(provider, { provider, target: endpoint.p2pTarget })
+        }
       }
 
       const parts: Uint8Array[] = []
@@ -287,6 +313,7 @@ export function useFetch() {
         if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
         if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
         if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+        rememberFallbackProvider(provider)
 
         plannedChunks.push({
           rangeStart: c.rangeStart,
@@ -337,7 +364,20 @@ export function useFetch() {
       }))
 
       const groups = Array.from(providerGroups.values())
+      if (groups.length === 0) {
+        throw new Error('retrieval planner returned no provider groups')
+      }
+      const globalRangeStart = groups.reduce(
+        (min, group) => (group.globalStart < min ? group.globalStart : min),
+        groups[0].globalStart,
+      )
+      const globalRangeEnd = groups.reduce(
+        (max, group) => (group.globalEnd > max ? group.globalEnd : max),
+        groups[0].globalEnd,
+      )
+
       const openBaseNonce = BigInt(Date.now())
+      let openNonceOffset = BigInt(groups.length)
       const openRequests = groups.map((group, index) => {
         const groupStartMdu = group.globalStart / leafCount
         const groupStartBlob = Number(group.globalStart % leafCount)
@@ -379,7 +419,6 @@ export function useFetch() {
         }
       }
 
-      const openTxData = encodeOpenRetrievalSessionsData(openRequests)
       const callerNil = ethToNil(signerAddress)
       const isDealOwner = callerNil && callerNil === owner
       const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
@@ -396,27 +435,93 @@ export function useFetch() {
       const voucherRedeemer = voucher?.redeemer ?? ''
       const voucherProvider = voucher?.provider ?? ''
       const voucherSignature = voucher?.signature ?? ('0x' as Hex)
-      const sponsoredOpenRequests = openRequests.map((r) => ({
-        ...r,
-        maxTotalFee: 0n,
-        authType,
-        allowlistLeafIndex,
-        allowlistMerklePath,
-        voucherRedeemer,
-        voucherProvider,
-        voucherExpiresAt,
-        voucherNonce,
-        voucherSignature,
-      }))
-      const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(sponsoredOpenRequests)
-      const openTxHash = await walletClient.sendTransaction({
-        account: signerAddress,
-        to: appConfig.nilstorePrecompile as Hex,
-        data: isDealOwner ? openTxData : sponsoredTxData,
-        gas: 7_000_000n,
-      })
+      const buildSponsoredOpenRequests = <T extends {
+        dealId: bigint
+        provider: string
+        manifestRoot: Hex
+        startMduIndex: bigint
+        startBlobIndex: number
+        blobCount: bigint
+        nonce: bigint
+        expiresAt: bigint
+      }>(requests: T[]) =>
+        requests.map((request) => ({
+          ...request,
+          maxTotalFee: 0n,
+          authType,
+          allowlistLeafIndex,
+          allowlistMerklePath,
+          voucherRedeemer,
+          voucherProvider,
+          voucherExpiresAt,
+          voucherNonce,
+          voucherSignature,
+        }))
 
-      await waitForTransactionReceipt(openTxHash)
+      const openSessionsOnChain = async <T extends {
+        dealId: bigint
+        provider: string
+        manifestRoot: Hex
+        startMduIndex: bigint
+        startBlobIndex: number
+        blobCount: bigint
+        nonce: bigint
+        expiresAt: bigint
+      }>(requests: T[]) => {
+        const openTxData = encodeOpenRetrievalSessionsData(requests)
+        const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(buildSponsoredOpenRequests(requests))
+        const openTxHash = await walletClient.sendTransaction({
+          account: signerAddress,
+          to: appConfig.nilstorePrecompile as Hex,
+          data: isDealOwner ? openTxData : sponsoredTxData,
+          gas: 7_000_000n,
+        })
+        await waitForTransactionReceipt(openTxHash)
+      }
+
+      await openSessionsOnChain(openRequests)
+
+      const ensureSessionForProvider = async (provider: string): Promise<Hex | null> => {
+        const normalized = String(provider || '').trim()
+        if (!normalized) return null
+        const existing = sessionsByProvider.get(normalized)
+        if (existing) return existing
+        if (authType === 2) return null
+
+        const request = {
+          dealId: BigInt(dealId),
+          provider: normalized,
+          manifestRoot,
+          startMduIndex: globalRangeStart / leafCount,
+          startBlobIndex: Number(globalRangeStart % leafCount),
+          blobCount: globalRangeEnd - globalRangeStart + 1n,
+          nonce: openBaseNonce + openNonceOffset,
+          expiresAt: 0n,
+        }
+        openNonceOffset += 1n
+
+        const computeData = encodeComputeRetrievalSessionIdsData([request])
+        const computeCall = await publicClient.call({
+          account: signerAddress,
+          to: appConfig.nilstorePrecompile as Hex,
+          data: computeData,
+        })
+        const computeResult = computeCall.data as Hex
+        if (!computeResult || computeResult === '0x') return null
+        const computed = decodeComputeRetrievalSessionIdsResult(computeResult)
+        let sessionId: Hex | null = null
+        for (let i = 0; i < computed.providers.length; i++) {
+          const computedProvider = String(computed.providers[i] || '').trim()
+          if (computedProvider !== normalized) continue
+          sessionId = computed.sessionIds[i] || null
+          break
+        }
+        if (!sessionId) return null
+
+        await openSessionsOnChain([request])
+        sessionsByProvider.set(normalized, sessionId)
+        return sessionId
+      }
 
       receiptsSubmitted = 1
       setProgress((p) => ({
@@ -491,10 +596,11 @@ export function useFetch() {
         return metaAuth
       }
 
+      const usedSessionsByProvider = new Map<string, Hex>()
       for (const group of groups) {
         const provider = group.provider
-        const sessionId = sessionsByProvider.get(provider)
-        if (!sessionId) {
+        const primarySessionId = sessionsByProvider.get(provider)
+        if (!primarySessionId) {
           throw new Error(`missing session for provider ${provider}`)
         }
 
@@ -515,31 +621,95 @@ export function useFetch() {
         }
 
         for (const c of group.chunks) {
-          const fetchReq = {
-            manifestRoot,
-            owner,
-            dealId,
-            filePath,
-            rangeStart: c.rangeStart,
-            rangeLen: c.rangeLen,
-            sessionId,
-            expectedProvider: provider,
-            directBase: fetchDirectBase,
-            p2pTarget: fetchP2pTarget,
-            preference: preferenceOverride,
+          const candidateProviders = [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
+          let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>> | null = null
+          let selectedProvider = provider
+          let selectedSessionId: Hex | null = primarySessionId
+          let lastFetchError: unknown = null
+
+          for (const candidateProvider of candidateProviders) {
+            const candidateSessionId =
+              candidateProvider === provider
+                ? primarySessionId
+                : await ensureSessionForProvider(candidateProvider)
+            if (!candidateSessionId) continue
+
+            const candidateEndpoint =
+              candidateProvider === provider ? providerEndpoint : await getProviderEndpoint(candidateProvider)
+            const candidateP2pEndpoint =
+              candidateProvider === provider ? providerP2pEndpoint : await getProviderP2pEndpoint(candidateProvider)
+            const candidateDirectBase =
+              candidateEndpoint?.baseUrl ||
+              (candidateProvider === provider
+                ? fetchDirectBase
+                : undefined)
+            const candidateP2pTarget =
+              candidateP2pEndpoint?.target ||
+              (candidateProvider === provider
+                ? fetchP2pTarget
+                : undefined)
+
+            if (candidateProvider !== provider && !candidateDirectBase && !candidateP2pTarget) {
+              continue
+            }
+
+            const fetchReq = {
+              manifestRoot,
+              owner,
+              dealId,
+              filePath,
+              rangeStart: c.rangeStart,
+              rangeLen: c.rangeLen,
+              sessionId: candidateSessionId,
+              expectedProvider: candidateProvider,
+              directBase: candidateDirectBase,
+              p2pTarget: candidateP2pTarget,
+              preference: candidateProvider === provider ? preferenceOverride : ('prefer_direct_sp' as RoutePreference),
+            }
+
+            try {
+              rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
+            } catch (err) {
+              if (!metaAuth && shouldSignMetaAuth(err)) {
+                setProgress((p) => ({ ...p, message: 'Sign the download request to authorize retrieval' }))
+                metaAuth = await signMetaAuth()
+                try {
+                  rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
+                } catch (signedErr) {
+                  lastFetchError = signedErr
+                  if (candidateProvider !== provider || shouldRetryWithAlternateProvider(signedErr)) {
+                    continue
+                  }
+                  throw signedErr
+                }
+              } else {
+                lastFetchError = err
+                if (candidateProvider !== provider || shouldRetryWithAlternateProvider(err)) {
+                  continue
+                }
+                throw err
+              }
+            }
+
+            if (rangeResult) {
+              selectedProvider = candidateProvider
+              selectedSessionId = candidateSessionId
+              break
+            }
           }
 
-          let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>>
-          try {
-            rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
-          } catch (err) {
-            if (!metaAuth && shouldSignMetaAuth(err)) {
-              setProgress((p) => ({ ...p, message: 'Sign the download request to authorize retrieval' }))
-              metaAuth = await signMetaAuth()
-              rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
-            } else {
-              throw err
-            }
+          if (!rangeResult) {
+            throw (lastFetchError instanceof Error ? lastFetchError : new Error('failed to fetch chunk from any provider'))
+          }
+          if (!selectedSessionId) {
+            throw new Error(`missing retrieval session for provider ${selectedProvider}`)
+          }
+          usedSessionsByProvider.set(selectedProvider, selectedSessionId)
+          if (selectedProvider !== provider) {
+            setProgress((p) => ({
+              ...p,
+              message: `Primary provider unavailable; failed over to ${selectedProvider.slice(0, 12)}…`,
+            }))
           }
 
           const buf = rangeResult.data.bytes
@@ -562,7 +732,10 @@ export function useFetch() {
         receiptsSubmitted,
       }))
 
-      const sessionIds = groups.map((group) => sessionsByProvider.get(group.provider) as Hex)
+      const sessionIds = Array.from(usedSessionsByProvider.values())
+      if (sessionIds.length === 0) {
+        throw new Error('no retrieval sessions were used during fetch')
+      }
       const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
       const confirmTxHash = await walletClient.sendTransaction({
         account: signerAddress,
@@ -580,14 +753,8 @@ export function useFetch() {
       }))
 
       let proofSubmissionError: string | null = null
-      for (const group of groups) {
-        const provider = group.provider
-        const sessionId = sessionsByProvider.get(provider)
-        if (!sessionId) {
-          proofSubmissionError = proofSubmissionError || `missing session for provider ${provider}`
-          continue
-        }
-        // `session-proof` forwarding currently relies on the local gateway sidecar.
+      for (const [provider, sessionId] of usedSessionsByProvider.entries()) {
+        // `session-proof` forwarding currently relies on the local Gateway app.
         // Keep file download successful even when the local gateway is not running.
         try {
           const proofBase = appConfig.gatewayBase

@@ -23,8 +23,8 @@ interface LocalGatewayInfo {
 
 const GATEWAY_STATUS_ENDPOINT = '/status';
 const GATEWAY_HEALTH_ENDPOINT = '/health';
-const DEFAULT_POLL_INTERVAL_MS = 30_000;
-const HIDDEN_POLL_INTERVAL_MS = 120_000;
+const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const HIDDEN_POLL_INTERVAL_MS = 300_000;
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected';
 
 function persistLocalGatewayConnected(connected: boolean) {

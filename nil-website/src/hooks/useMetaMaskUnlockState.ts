@@ -32,7 +32,8 @@ async function queryMetaMaskUnlockState(eth: EthereumProvider | null): Promise<M
 
 export function useMetaMaskUnlockState(options?: { enabled?: boolean; pollMs?: number }) {
   const enabled = options?.enabled ?? true
-  const pollMs = options?.pollMs ?? 1500
+  const pollMs = options?.pollMs ?? 15_000
+  const hiddenPollMs = Math.max(pollMs * 4, 60_000)
   const [state, setState] = useState<MetaMaskUnlockState>('unknown')
 
   useEffect(() => {
@@ -46,11 +47,21 @@ export function useMetaMaskUnlockState(options?: { enabled?: boolean; pollMs?: n
       const next = await queryMetaMaskUnlockState(eth)
       if (!cancelled) setState(next)
     }
-
-    refresh()
-    if (pollMs > 0) {
-      timer = window.setInterval(refresh, pollMs)
+    const schedule = (delayMs: number) => {
+      if (cancelled || delayMs <= 0) return
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
     }
+    const runLoop = async () => {
+      if (cancelled) return
+      await refresh()
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      schedule(hidden ? hiddenPollMs : pollMs)
+    }
+    void runLoop()
 
     const handleFocus = () => refresh()
     const handleVis = () => {
@@ -61,12 +72,11 @@ export function useMetaMaskUnlockState(options?: { enabled?: boolean; pollMs?: n
 
     return () => {
       cancelled = true
-      if (timer !== undefined) window.clearInterval(timer)
+      if (timer !== undefined) window.clearTimeout(timer)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVis)
     }
-  }, [enabled, pollMs])
+  }, [enabled, hiddenPollMs, pollMs])
 
   return state
 }
-

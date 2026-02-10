@@ -12,6 +12,14 @@ export interface ProofRow {
   tier?: string
 }
 
+export interface UseProofsOptions {
+  pollMs?: number
+  hiddenPollMs?: number
+  enabled?: boolean
+}
+
+type UseProofsConfig = number | UseProofsOptions
+
 function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId' | 'tier'> {
   try {
     // Expected shape: "deal:<id>/epoch:<epoch>/tier:<tier>"
@@ -32,16 +40,29 @@ function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId
   }
 }
 
-export function useProofs(pollMs: number = 30000) {
+export function useProofs(options: UseProofsConfig = {}) {
+  const normalizedOptions: UseProofsOptions =
+    typeof options === 'number' ? { pollMs: options } : options
+  const pollMs = normalizedOptions.pollMs ?? 120_000
+  const hiddenPollMs = normalizedOptions.hiddenPollMs ?? 600_000
+  const enabled = normalizedOptions.enabled ?? true
   const [proofs, setProofs] = useState<ProofRow[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      setProofs([])
+      return
+    }
+
     let cancelled = false
     let timer: number | undefined
+    let inFlight = false
 
     async function load() {
-      if (cancelled) return
+      if (cancelled || inFlight) return
+      inFlight = true
       setLoading(true)
       try {
         // This endpoint is paginated; without an explicit limit most LCDs default
@@ -67,23 +88,49 @@ export function useProofs(pollMs: number = 30000) {
       } catch {
         // ignore, UI will simply show no proofs
       } finally {
+        inFlight = false
         if (!cancelled) setLoading(false)
       }
     }
-    (async () => {
+
+    const schedule = (delayMs: number) => {
+      if (cancelled || delayMs <= 0) return
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void runLoop()
+      }, delayMs)
+    }
+
+    const runLoop = async () => {
+      if (cancelled) return
       await load()
-      if (pollMs > 0) {
-        timer = window.setInterval(load, pollMs)
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      schedule(hidden ? hiddenPollMs : pollMs)
+    }
+
+    void runLoop()
+
+    const handleVisibility = () => {
+      if (cancelled || typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') {
+        void runLoop()
       }
-    })()
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
 
     return () => {
       cancelled = true
       if (timer !== undefined) {
-        window.clearInterval(timer)
+        window.clearTimeout(timer)
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
       }
     }
-  }, [pollMs])
+  }, [enabled, hiddenPollMs, pollMs])
 
   return { proofs, loading }
 }

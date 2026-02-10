@@ -12,7 +12,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
   const { requestFunds, loading } = useFaucet()
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [unlocking, setUnlocking] = useState(false)
-  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 15_000 })
   const isLocked = isConnected && unlockState === 'locked'
 
   if (!appConfig.faucetEnabled) {

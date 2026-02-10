@@ -6,9 +6,9 @@ import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { CheckCircle2, Copy, RefreshCw } from 'lucide-react'
 
-const STATUS_POLL_MS = 30_000
-const STATUS_HIDDEN_POLL_MS = 120_000
-const OPTIONAL_HEALTH_PROBE_EVERY_TICKS = 10
+const STATUS_POLL_MS = 60_000
+const STATUS_HIDDEN_POLL_MS = 300_000
+const OPTIONAL_HEALTH_PROBE_EVERY_TICKS = 20
 
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -54,7 +54,7 @@ function Badge({ label, status }: { label: string; status: ServiceStatus }) {
 export function StatusBar() {
   const chainId = useChainId()
   const { isConnected } = useAccount()
-  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
+  const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 15_000 })
   const isLocked = isConnected && unlockState === 'locked'
   const { preference, setPreference, lastTrace } = useTransportContext()
   const [height, setHeight] = useState<number | undefined>(undefined)
@@ -231,7 +231,7 @@ export function StatusBar() {
       )}
       <span className={routeDegraded ? 'text-amber-600 dark:text-amber-300' : 'opacity-75'}>
         Route: {lastRoute}{lastReason}
-        {routeDegraded ? ' (gateway available)' : ''}
+        {routeDegraded ? ' (local gateway available)' : ''}
       </span>
       <label className="flex items-center gap-2">
         <span className="opacity-75">Preference</span>
@@ -241,7 +241,7 @@ export function StatusBar() {
           className="bg-background border border-border rounded px-2 py-1 text-xs"
         >
           <option value="auto">Auto</option>
-          <option value="prefer_gateway">Prefer gateway</option>
+          <option value="prefer_gateway">Prefer local gateway</option>
           <option value="prefer_direct_sp">Prefer direct SP</option>
           {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
         </select>
