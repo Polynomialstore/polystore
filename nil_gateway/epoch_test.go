@@ -11,7 +11,8 @@ import (
 )
 
 func TestCurrentEpochID_UsesLCDHeightAndParams(t *testing.T) {
-	t.Parallel()
+	// Uses process-global lcdBase/cache state; keep this test serial to avoid
+	// cross-test interference from other parallel tests that also tweak globals.
 
 	var height atomic.Uint64
 	height.Store(1)
