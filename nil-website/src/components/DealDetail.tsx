@@ -247,7 +247,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     setPolicyStatus(null)
     const evmAddress = String(address || '')
     if (!evmAddress.startsWith('0x')) {
-      setPolicyError('Connect MetaMask to update retrieval policy')
+      setPolicyError('Connect wallet to update retrieval policy')
       return
     }
     const allowlistRoot = policyAllowlistRoot.trim()

@@ -2,14 +2,13 @@ import { useAccount } from 'wagmi'
 import { useFaucet } from '../hooks/useFaucet'
 import { Coins, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
-import { useConnect } from 'wagmi'
-import { injectedConnector } from '../lib/web3Config'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { appConfig } from '../config'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 
 export function FaucetWidget({ className = "" }: { className?: string }) {
   const { address, isConnected } = useAccount()
-  const { connect } = useConnect()
+  const { openConnectModal } = useConnectModal()
   const { requestFunds, loading } = useFaucet()
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [unlocking, setUnlocking] = useState(false)
@@ -48,7 +47,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
   if (!isConnected || isLocked) {
     return (
         <button
-            onClick={() => (isLocked ? handleUnlock() : connect({ connector: injectedConnector }))}
+            onClick={() => (isLocked ? handleUnlock() : openConnectModal?.())}
             disabled={unlocking}
             className={`flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors shadow-lg shadow-indigo-900/20 ${className}`}
         >

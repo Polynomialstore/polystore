@@ -1,7 +1,8 @@
-import { useAccount, useBalance, useConnect, useChainId } from 'wagmi'
+import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink } from 'lucide-react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -9,7 +10,6 @@ import { useUpload } from '../hooks/useUpload'
 import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFetch } from '../hooks/useFetch'
-import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
@@ -17,8 +17,8 @@ import { FileSharder } from './FileSharder'
 import { FaucetAuthTokenInput } from './FaucetAuthTokenInput'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { maybeWrapNilceZstd } from '../lib/nilce'
-import { injectedConnector } from '../lib/web3Config'
 import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
+import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
@@ -71,7 +71,7 @@ const RPC_HEALTH_POLL_MS = 30_000
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
-  const { connectAsync } = useConnect()
+  const { openConnectModal } = useConnectModal()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
@@ -94,100 +94,8 @@ export function Dashboard() {
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
-
-  // Track MetaMask chain ID directly to handle Localhost caching issues where Wagmi might be stale
-  const [metamaskChainId, setMetamaskChainId] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    const getChainId = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const eth = (window as any).ethereum
-        if (eth) {
-            try {
-                const hex = await eth.request({ method: 'eth_chainId' })
-                const parsed = typeof hex === 'string' ? parseInt(hex, 16) : NaN
-                setMetamaskChainId(Number.isFinite(parsed) ? parsed : undefined)
-            } catch (e) {
-                console.error(e)
-            }
-        }
-    }
-    getChainId()
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const eth = (window as any).ethereum
-    if (eth && eth.on) {
-        const handleChainChanged = (hex: string) => {
-          const parsed = typeof hex === 'string' ? parseInt(hex, 16) : NaN
-          setMetamaskChainId(Number.isFinite(parsed) ? parsed : undefined)
-        }
-        eth.on('chainChanged', handleChainChanged)
-        return () => eth.removeListener('chainChanged', handleChainChanged)
-    }
-  }, [])
-
-  // Prefer the direct MetaMask ID if available, otherwise fallback to Wagmi
-  const activeChainId = metamaskChainId ?? chainId
-  const isWrongNetwork = activeChainId !== appConfig.chainId
-  const metaMaskUnlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 1500 })
-  const isWalletLocked = isConnected && metaMaskUnlockState === 'locked'
-
-  const [authorizedAccounts, setAuthorizedAccounts] = useState<string[] | null>(null)
-  useEffect(() => {
-    if (!isConnected) {
-      setAuthorizedAccounts(null)
-      return
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const eth = (window as any).ethereum as
-      | {
-          request?: (args: { method: string }) => Promise<unknown>
-          on?: (event: string, listener: (...args: unknown[]) => void) => void
-          removeListener?: (event: string, listener: (...args: unknown[]) => void) => void
-        }
-      | undefined
-
-    if (!eth || typeof eth.request !== 'function') {
-      setAuthorizedAccounts([])
-      return
-    }
-
-    let cancelled = false
-    const normalize = (accounts: unknown): string[] =>
-      Array.isArray(accounts) ? accounts.filter((a): a is string => typeof a === 'string') : []
-
-    const refresh = async () => {
-      try {
-        const accounts = normalize(await eth.request!({ method: 'eth_accounts' }))
-        if (!cancelled) setAuthorizedAccounts(accounts)
-      } catch {
-        if (!cancelled) setAuthorizedAccounts([])
-      }
-    }
-
-    void refresh()
-    const handleAccountsChanged = (...args: unknown[]) => {
-      const accounts = normalize(args[0])
-      if (!cancelled) setAuthorizedAccounts(accounts)
-    }
-
-    if (typeof eth.on === 'function') {
-      eth.on('accountsChanged', handleAccountsChanged)
-    }
-
-    const handleFocus = () => void refresh()
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      cancelled = true
-      window.removeEventListener('focus', handleFocus)
-      if (typeof eth.removeListener === 'function') {
-        eth.removeListener('accountsChanged', handleAccountsChanged)
-      }
-    }
-  }, [isConnected])
-
-  const hasAuthorizedAccount = authorizedAccounts !== null ? authorizedAccounts.length > 0 : true
+  const activeChainId = chainId
+  const isWrongNetwork = isConnected && activeChainId !== appConfig.chainId
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
@@ -237,25 +145,6 @@ export function Dashboard() {
     }
   }
 
-  const handleEnsureWalletAccess = async () => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
-      if (isWalletLocked || (isConnected && !hasAuthorizedAccount)) {
-        if (!ethereum || typeof ethereum.request !== 'function') {
-          throw new Error('Ethereum provider (MetaMask) not available')
-        }
-        await ethereum.request({ method: 'eth_requestAccounts' })
-      } else if (!isConnected) {
-        await connectAsync({ connector: injectedConnector })
-      }
-      await switchNetwork().catch(() => undefined)
-    } catch (e) {
-      setStatusTone('error')
-      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
-    }
-  }
-
   const handleRefreshSummary = async () => {
     if (!nilAddress) return
     await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders(), refetchEvm?.()])
@@ -282,6 +171,7 @@ export function Dashboard() {
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const [walletReconnectHint, setWalletReconnectHint] = useState(false)
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
   const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
@@ -297,6 +187,44 @@ export function Dashboard() {
   const { proofs, loading: proofsLoading } = useProofs(PROOFS_POLL_MS)
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
+
+  const handleWalletError = useCallback((error: unknown, fallback: string) => {
+    const walletError = classifyWalletError(error, fallback)
+    setStatusTone('error')
+    setStatusMsg(walletError.message)
+    if (walletError.reconnectSuggested) {
+      setWalletReconnectHint(true)
+    }
+  }, [])
+
+  const requestWalletReconnect = useCallback(async () => {
+    try {
+      const ethereum = (window as { ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum
+      if (ethereum?.request) {
+        try {
+          await ethereum.request({
+            method: 'wallet_requestPermissions',
+            params: [{ eth_accounts: {} }],
+          })
+        } catch {
+          await ethereum.request({ method: 'eth_requestAccounts' })
+        }
+      } else {
+        openConnectModal?.()
+      }
+      setStatusTone('neutral')
+      setStatusMsg('Wallet access request sent. Approve in your wallet, then retry.')
+      setWalletReconnectHint(false)
+    } catch (error) {
+      handleWalletError(error, 'Wallet reconnection failed')
+    }
+  }, [handleWalletError, openConnectModal])
+
+  useEffect(() => {
+    if (isConnected && address) {
+      setWalletReconnectHint(false)
+    }
+  }, [isConnected, address])
 
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
   const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
@@ -1062,8 +990,7 @@ export function Dashboard() {
       }
     } catch (e) {
       setTargetDealId(previousTargetDealId)
-      setStatusTone('error')
-      setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
+      handleWalletError(e, 'Deal allocation failed. Check gateway logs.')
     }
   }
 
@@ -1079,47 +1006,18 @@ export function Dashboard() {
     }
 
     try {
-      if (isWalletLocked) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
-        if (!ethereum || typeof ethereum.request !== 'function') {
-          throw new Error('Ethereum provider (MetaMask) not available')
-        }
-        const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
-        const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
-        if (!first || !first.startsWith('0x')) throw new Error('Unlock MetaMask to continue.')
-        await handleCreateDeal(first)
-        return
-      }
-
-      if (isConnected && !hasAuthorizedAccount) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ethereum = (window as any).ethereum as { request?: (args: { method: string }) => Promise<unknown> } | undefined
-        if (!ethereum || typeof ethereum.request !== 'function') {
-          throw new Error('Ethereum provider (MetaMask) not available')
-        }
-        const accounts = (await ethereum.request({ method: 'eth_requestAccounts' })) as unknown
-        const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
-        if (!first || !first.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
-        await handleCreateDeal(first)
-        return
-      }
-
       if (!isConnected || !address) {
-        await switchNetwork().catch(() => undefined)
-        const connected = await connectAsync({ connector: injectedConnector })
-        const first = connected?.accounts?.[0]
-        const creator = typeof first === 'string' && first.startsWith('0x') ? first : address
-        if (!creator || !creator.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
-        await handleCreateDeal(creator)
+        openConnectModal?.()
         return
       }
-
-      if (!address || !address.startsWith('0x')) throw new Error('Connect MetaMask to create a deal.')
+      if (isWrongNetwork) {
+        await switchNetwork().catch(() => undefined)
+        return
+      }
+      if (!address || !address.startsWith('0x')) throw new Error('Connect wallet to create a deal.')
       await handleCreateDeal(address)
     } catch (e) {
-      setStatusTone('error')
-      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
+      handleWalletError(e, 'Failed to connect wallet')
     }
   }
 
@@ -1133,7 +1031,7 @@ export function Dashboard() {
     if (!manifestRoot) { alert('Upload a file first'); return false }
 
     if (!address || !address.startsWith('0x')) {
-      alert('Connect MetaMask to commit content on-chain.')
+      alert('Connect wallet to commit content on-chain.')
       return false
     }
     if (targetDealExpired) {
@@ -1196,15 +1094,15 @@ export function Dashboard() {
         recordUpload('success')
         return true
     } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/expired at end_block/i.test(msg || '')) {
         setStatusTone('error')
-        if (/expired at end_block/i.test(msg || '')) {
-          setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
-        } else {
-          setStatusMsg('Content commit failed. Check gateway + chain logs.')
-        }
-        recordUpload('failed', msg || 'commit failed')
-        return false
+        setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
+      } else {
+        handleWalletError(e, 'Content commit failed. Check gateway + chain logs.')
+      }
+      recordUpload('failed', msg || 'commit failed')
+      return false
     }
   }
 
@@ -1465,18 +1363,18 @@ export function Dashboard() {
   }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm])
 
   if (!isConnected) return (
-    <div className="p-12 text-center">
-        <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
-        <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
-        <button
-          onClick={() => connectAsync({ connector: injectedConnector })}
+      <div className="p-12 text-center">
+          <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
+          <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
+          <button
+          onClick={() => openConnectModal?.()}
           data-testid="connect-wallet"
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md shadow transition-colors"
         >
           <Wallet className="w-4 h-4" />
-          Connect MetaMask
+          Connect Wallet
         </button>
-    </div>
+      </div>
   )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
@@ -1750,6 +1648,24 @@ export function Dashboard() {
         </div>
       )}
 
+      {walletReconnectHint && (
+        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="font-semibold">Wallet access needs refresh</div>
+            <div className="text-xs text-yellow-700/90 dark:text-yellow-200/90">
+              If you switched accounts in MetaMask, reconnect and approve access for the active account.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void requestWalletReconnect()}
+            className="inline-flex items-center justify-center rounded-md border border-yellow-600/40 bg-yellow-500/15 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/25 dark:text-yellow-200"
+          >
+            Reconnect Wallet
+          </button>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
         <div className="grid gap-3 p-4 lg:grid-cols-3">
           <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
@@ -1791,23 +1707,26 @@ export function Dashboard() {
                   {walletAddressShort}
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {isWalletLocked
-                    ? 'Wallet locked'
-                    : !hasAuthorizedAccount
-                      ? 'Wallet authorization required'
-                      : isWrongNetwork
-                        ? `Wrong chain (${activeChainId})`
-                        : `Chain ${activeChainId}`}
+                  {isWrongNetwork ? `Wrong chain (${activeChainId})` : `Chain ${activeChainId}`}
                 </div>
               </div>
-              {(isWalletLocked || !hasAuthorizedAccount || isWrongNetwork) ? (
+              {walletReconnectHint ? (
                 <button
                   type="button"
-                  onClick={isWrongNetwork ? handleSwitchNetwork : () => void handleEnsureWalletAccess()}
+                  onClick={() => void requestWalletReconnect()}
+                  className="inline-flex items-center gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-200"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Reconnect
+                </button>
+              ) : isWrongNetwork ? (
+                <button
+                  type="button"
+                  onClick={handleSwitchNetwork}
                   className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
                 >
                   <Wallet className="h-3.5 w-3.5" />
-                  {isWrongNetwork ? 'Switch' : isWalletLocked ? 'Unlock' : 'Authorize'}
+                  Switch
                 </button>
               ) : (
                 <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">Ready</span>
@@ -2541,9 +2460,7 @@ export function Dashboard() {
                     ? 'Creating...'
                     : isWrongNetwork
                       ? 'Switch network'
-                      : isWalletLocked
-                        ? 'Unlock wallet'
-                        : !isConnected || !address || !hasAuthorizedAccount
+                      : !isConnected || !address
                           ? 'Connect wallet'
                           : 'Create deal'}
                 </button>

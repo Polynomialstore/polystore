@@ -23,6 +23,8 @@ function inferPublicDomain(runtimeHost: string): string {
 
   if (!runtimeHost) return ''
   if (runtimeHost === 'nilstore.org' || runtimeHost.endsWith('.nilstore.org')) return 'nilstore.org'
+  // Cloudflare preview hosts should resolve to production public service subdomains.
+  if (runtimeHost.endsWith('.workers.dev') || runtimeHost.endsWith('.pages.dev')) return 'nilstore.org'
   if (runtimeHost.startsWith('web.') && runtimeHost.split('.').length >= 3) {
     return runtimeHost.slice(4)
   }
@@ -121,6 +123,7 @@ const BRIDGE_ADDRESS = envString(ENV.VITE_BRIDGE_ADDRESS) || '0x0000000000000000
 const NILSTORE_PRECOMPILE =
   envString(ENV.VITE_NILSTORE_PRECOMPILE) || '0x0000000000000000000000000000000000000900'
 const EVM_RPC = envString(ENV.VITE_EVM_RPC) || defaultBase('evm', 'http://localhost:8545')
+const WALLETCONNECT_PROJECT_ID = envString(ENV.VITE_WALLETCONNECT_PROJECT_ID) || '00000000000000000000000000000000'
 const DEFAULT_RS_K = parsePositiveInt(envString(ENV.VITE_DEFAULT_RS_K), 2)
 const DEFAULT_RS_M = parsePositiveInt(envString(ENV.VITE_DEFAULT_RS_M), 1)
 
@@ -128,6 +131,7 @@ export const appConfig = {
   apiBase: API_BASE.replace(/\/$/, ''),
   lcdBase: LCD_BASE.replace(/\/$/, ''),
   evmRpc: EVM_RPC.replace(/\/$/, ''),
+  walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
   chainId: Number(ENV.VITE_CHAIN_ID || 31337),
   gatewayBase: GATEWAY_BASE.replace(/\/$/, ''),
   spBase: SP_BASE.replace(/\/$/, ''),

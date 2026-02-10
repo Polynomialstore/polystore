@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { useAccount, useConnect } from 'wagmi';
-import { injectedConnector } from '../lib/web3Config';
+import { useAccount } from 'wagmi';
 import { FileJson, Cpu, Wallet } from 'lucide-react';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
@@ -89,7 +89,7 @@ function formatDuration(ms: number) {
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
-  const { connectAsync } = useConnect();
+  const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
   const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   
@@ -2034,7 +2034,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     <div className="w-full space-y-4">
       {!isConnected ? (
         <button
-          onClick={() => connectAsync({ connector: injectedConnector })}
+          onClick={() => openConnectModal?.()}
           className="w-full rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
         >
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary/60">

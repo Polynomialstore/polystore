@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   useAccount,
   useBalance,
-  useConnect,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi'
 import { createPublicClient, formatUnits, http } from 'viem'
 import { ArrowUpRight, Loader2, PlugZap } from 'lucide-react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { appConfig } from '../config'
-import { injectedConnector, nilChain } from '../lib/web3Config'
+import { nilChain } from '../lib/web3Config'
 import { nilBridgeAbi } from '../abi/nilBridge'
 
 function randomBytes32(): `0x${string}` {
@@ -37,7 +37,7 @@ export function BridgeActions() {
       : null
 
   const { address, isConnected } = useAccount()
-  const { connectAsync } = useConnect()
+  const { openConnectModal } = useConnectModal()
   const { data: balance } = useBalance({
     address,
     chainId: nilChain.id,
@@ -109,7 +109,8 @@ export function BridgeActions() {
     setStatus(null)
     try {
       if (!isConnected) {
-        await connectAsync({ connector: injectedConnector })
+        openConnectModal?.()
+        return
       }
       const height = nextHeight ? BigInt(nextHeight) : BigInt(Date.now())
       const root = normalizeBytes32(stateRoot)

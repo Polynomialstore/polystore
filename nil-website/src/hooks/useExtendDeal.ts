@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { encodeFunctionData, numberToHex, type Hex } from 'viem'
+import { useAccount, useWalletClient } from 'wagmi'
+import { encodeFunctionData, type Hex } from 'viem'
 import { appConfig } from '../config'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
+import { resolveActiveEvmAddress } from '../lib/walletAddress'
+import { classifyWalletError } from '../lib/walletErrors'
 
 export interface ExtendDealInput {
   creator: string
@@ -11,6 +14,8 @@ export interface ExtendDealInput {
 }
 
 export function useExtendDeal() {
+  const { address: connectedAddress } = useAccount()
+  const { data: walletClient } = useWalletClient()
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
 
@@ -18,12 +23,8 @@ export function useExtendDeal() {
     setLoading(true)
     setLastTx(null)
     try {
-      const evmAddress = String(input.creator || '')
-      if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
+      if (!walletClient) throw new Error('Wallet not connected')
+      const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
       const additional = Math.max(0, Number(input.additionalDurationBlocks || 0))
       if (!Number.isFinite(additional) || additional <= 0) {
         throw new Error('additionalDurationBlocks must be > 0')
@@ -35,13 +36,21 @@ export function useExtendDeal() {
         args: [BigInt(input.dealId), BigInt(additional)],
       })
 
-      const txHash = (await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(2_000_000) }],
-      })) as Hex
+      const txHash = await walletClient.sendTransaction({
+        account: evmAddress as Hex,
+        to: appConfig.nilstorePrecompile as Hex,
+        data,
+        gas: 2_000_000n,
+      })
       setLastTx(txHash)
       await waitForTransactionReceipt(txHash)
       return { status: 'success', tx_hash: txHash }
+    } catch (error) {
+      const walletError = classifyWalletError(error)
+      if (walletError.reconnectSuggested) {
+        throw new Error(walletError.message)
+      }
+      throw error
     } finally {
       setLoading(false)
     }

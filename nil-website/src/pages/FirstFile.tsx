@@ -17,6 +17,7 @@ import { useFetch } from '../hooks/useFetch'
 import { ethToNil } from '../lib/address'
 import { buildServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
+import { classifyWalletError } from '../lib/walletErrors'
 
 function bytesToHex(bytes: Uint8Array): string {
   let out = ''
@@ -133,7 +134,7 @@ export function FirstFile() {
     setError(null)
     setNotice(null)
     if (!address) {
-      setError('Connect MetaMask first')
+      setError('Connect wallet first')
       return
     }
     if (!address.startsWith('0x')) {
@@ -154,7 +155,8 @@ export function FirstFile() {
       })
       setDealId(String(res.deal_id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Create deal failed')
+      const walletError = classifyWalletError(e, 'Create deal failed')
+      setError(walletError.message)
     }
   }
 
@@ -190,7 +192,7 @@ export function FirstFile() {
       return
     }
     if (!address?.startsWith('0x')) {
-      setError('Connect MetaMask to commit on-chain')
+      setError('Connect wallet to commit on-chain')
       return
     }
 
@@ -225,7 +227,8 @@ export function FirstFile() {
       })
       setCommitOk(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Commit failed')
+      const walletError = classifyWalletError(e, 'Commit failed')
+      setError(walletError.message)
     }
   }
 

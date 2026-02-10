@@ -1,6 +1,7 @@
-import { createConfig, http } from 'wagmi'
+import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { injectedWallet } from '@rainbow-me/rainbowkit/wallets'
+import { http } from 'wagmi'
 import { defineChain } from 'viem'
-import { injected } from 'wagmi/connectors'
 import { appConfig } from '../config'
 import { installE2eWallet } from './e2eWallet'
 
@@ -23,11 +24,18 @@ export const nilChain = defineChain({
 
 installE2eWallet()
 
-export const injectedConnector = injected()
+const walletConnectProjectId = appConfig.walletConnectProjectId || '00000000000000000000000000000000'
 
-export const config = createConfig({
+export const config = getDefaultConfig({
+  appName: 'NilStore',
+  projectId: walletConnectProjectId,
   chains: [nilChain],
-  connectors: [injectedConnector],
+  wallets: [
+    {
+      groupName: 'Wallets',
+      wallets: [injectedWallet],
+    },
+  ],
   transports: {
     [nilChain.id]: http(appConfig.evmRpc),
   },

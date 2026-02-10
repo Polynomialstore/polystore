@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { useAccount, useWalletClient } from 'wagmi'
 import { appConfig } from '../config'
-import { encodeFunctionData, decodeEventLog, numberToHex, type Hex } from 'viem'
+import { decodeEventLog, encodeFunctionData, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { buildServiceHint } from '../lib/serviceHint'
+import { resolveActiveEvmAddress } from '../lib/walletAddress'
+import { classifyWalletError } from '../lib/walletErrors'
 
 export interface CreateDealInput {
   creator: string
@@ -14,6 +17,8 @@ export interface CreateDealInput {
 }
 
 export function useCreateDeal() {
+  const { address: connectedAddress } = useAccount()
+  const { data: walletClient } = useWalletClient()
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
 
@@ -21,16 +26,11 @@ export function useCreateDeal() {
     setLoading(true)
     setLastTx(null)
     try {
-      const evmAddress = String(input.creator || '')
-      if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
+      if (!walletClient) throw new Error('Wallet not connected')
+      const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
       const serviceHint = input.serviceHint && input.serviceHint.trim().length > 0
         ? input.serviceHint.trim()
         : buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
-
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
 
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
@@ -43,10 +43,12 @@ export function useCreateDeal() {
         ],
       })
 
-      const txHash = (await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(5_000_000) }],
-      })) as Hex
+      const txHash = await walletClient.sendTransaction({
+        account: evmAddress as Hex,
+        to: appConfig.nilstorePrecompile as Hex,
+        data,
+        gas: 5_000_000n,
+      })
       setLastTx(txHash)
 
       const receipt = await waitForTransactionReceipt(txHash)
@@ -67,6 +69,12 @@ export function useCreateDeal() {
         }
       }
       throw new Error('createDeal tx confirmed but DealCreated event not found')
+    } catch (error) {
+      const walletError = classifyWalletError(error)
+      if (walletError.reconnectSuggested) {
+        throw new Error(walletError.message)
+      }
+      throw error
     } finally {
       setLoading(false)
     }
