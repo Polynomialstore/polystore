@@ -136,6 +136,64 @@ func testRouter() *mux.Router {
 	return r
 }
 
+func csvHeaderContains(value string, token string) bool {
+	want := strings.ToLower(strings.TrimSpace(token))
+	for _, part := range strings.Split(value, ",") {
+		if strings.ToLower(strings.TrimSpace(part)) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGlobalCORSPreflight_AllowsUnknownPathAndRequestedHeaders(t *testing.T) {
+	h := withGlobalCORS(testRouter())
+
+	req := httptest.NewRequest(http.MethodOptions, "/sp/not-registered", nil)
+	req.Header.Set("Origin", "https://nilstore.org")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-slot,x-nil-custom-header,content-type")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 preflight, got %d", w.Code)
+	}
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+		t.Fatalf("expected Access-Control-Allow-Origin to echo request origin, got %q", got)
+	}
+	allowHeaders := w.Header().Get("Access-Control-Allow-Headers")
+	for _, needed := range []string{"x-nil-deal-id", "x-nil-slot", "x-nil-custom-header", "content-type"} {
+		if !csvHeaderContains(allowHeaders, needed) {
+			t.Fatalf("expected Access-Control-Allow-Headers to include %q, got %q", needed, allowHeaders)
+		}
+	}
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Private-Network")); got != "true" {
+		t.Fatalf("expected Access-Control-Allow-Private-Network=true, got %q", got)
+	}
+}
+
+func TestGlobalCORS_MethodNotAllowedStillReturnsCORSHeaders(t *testing.T) {
+	h := withGlobalCORS(testRouter())
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/shard?deal_id=1&mdu_index=0&slot=0&manifest_root=0x00", nil)
+	req.Header.Set("Origin", "https://nilstore.org")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for POST /sp/shard, got %d", w.Code)
+	}
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+		t.Fatalf("expected Access-Control-Allow-Origin to be present on 405, got %q", got)
+	}
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Methods")); got == "" {
+		t.Fatalf("expected Access-Control-Allow-Methods on 405 response")
+	}
+}
+
 func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(SpUploadMdu))
 	defer srv.Close()

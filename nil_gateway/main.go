@@ -456,7 +456,7 @@ func main() {
 	}
 
 	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
-	log.Fatal(http.ListenAndServe(listenAddr, r))
+	log.Fatal(http.ListenAndServe(listenAddr, withGlobalCORS(r)))
 }
 
 func PutObject(w http.ResponseWriter, r *http.Request) {
@@ -3721,12 +3721,103 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 	return cid, size, allocated, nil
 }
 
+const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+
+const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Gateway-Auth, X-Nil-Deputy"
+
+const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS"
+
+func withGlobalCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setCORSForRequest(w, r)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func setCORS(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, Origin, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Gateway-Auth")
-	w.Header().Set("Access-Control-Allow-Private-Network", "true")
-	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS")
+	setCORSForRequest(w, nil)
+}
+
+func setCORSForRequest(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+
+	origin := "*"
+	if r != nil {
+		if reqOrigin := strings.TrimSpace(r.Header.Get("Origin")); reqOrigin != "" {
+			origin = reqOrigin
+			appendVaryHeader(h, "Origin")
+		}
+	}
+	if strings.TrimSpace(h.Get("Access-Control-Allow-Origin")) == "" {
+		h.Set("Access-Control-Allow-Origin", origin)
+	}
+
+	allowMethods := strings.TrimSpace(h.Get("Access-Control-Allow-Methods"))
+	if allowMethods == "" {
+		allowMethods = defaultCORSAllowMethods
+	}
+	if r != nil {
+		if reqMethod := strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")); reqMethod != "" {
+			allowMethods = mergeCSVHeaders(allowMethods, reqMethod)
+			appendVaryHeader(h, "Access-Control-Request-Method")
+		}
+	}
+	h.Set("Access-Control-Allow-Methods", allowMethods)
+
+	allowHeaders := strings.TrimSpace(h.Get("Access-Control-Allow-Headers"))
+	if allowHeaders == "" {
+		allowHeaders = defaultCORSAllowHeaders
+	}
+	if r != nil {
+		if reqHeaders := strings.TrimSpace(r.Header.Get("Access-Control-Request-Headers")); reqHeaders != "" {
+			allowHeaders = mergeCSVHeaders(allowHeaders, reqHeaders)
+			appendVaryHeader(h, "Access-Control-Request-Headers")
+		}
+	}
+	h.Set("Access-Control-Allow-Headers", allowHeaders)
+
+	if strings.TrimSpace(h.Get("Access-Control-Allow-Private-Network")) == "" {
+		h.Set("Access-Control-Allow-Private-Network", "true")
+	}
+	if strings.TrimSpace(h.Get("Access-Control-Max-Age")) == "" {
+		h.Set("Access-Control-Max-Age", "7200")
+	}
+
+	expose := strings.TrimSpace(h.Get("Access-Control-Expose-Headers"))
+	if expose == "" {
+		expose = defaultCORSExposeHeaders
+	} else {
+		expose = mergeCSVHeaders(expose, defaultCORSExposeHeaders)
+	}
+	h.Set("Access-Control-Expose-Headers", expose)
+}
+
+func appendVaryHeader(h http.Header, value string) {
+	h.Set("Vary", mergeCSVHeaders(h.Get("Vary"), value))
+}
+
+func mergeCSVHeaders(values ...string) string {
+	seen := make(map[string]struct{})
+	merged := make([]string, 0, 16)
+	for _, raw := range values {
+		for _, token := range strings.Split(raw, ",") {
+			clean := strings.TrimSpace(token)
+			if clean == "" {
+				continue
+			}
+			key := strings.ToLower(clean)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, clean)
+		}
+	}
+	return strings.Join(merged, ", ")
 }
 
 func extractTxHash(out string) string {
