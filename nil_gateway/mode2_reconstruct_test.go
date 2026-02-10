@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"reflect"
+	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"nilchain/x/crypto_ffi"
@@ -68,5 +70,42 @@ func TestMode2FallbackProviders_OrderAndDedup(t *testing.T) {
 	want := []string{"p2", "p1", "p3"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected provider order: got=%v want=%v", got, want)
+	}
+}
+
+func TestMode2ReconstructSnapshotForStatus(t *testing.T) {
+	resetMode2ReconstructStatsForTest()
+
+	atomic.AddUint64(&mode2ReconstructStats.localShardHits, 3)
+	atomic.AddUint64(&mode2ReconstructStats.assignedProviderAttempts, 4)
+	atomic.AddUint64(&mode2ReconstructStats.assignedProviderFailures, 1)
+	atomic.AddUint64(&mode2ReconstructStats.fallbackProviderAttempts, 2)
+	atomic.AddUint64(&mode2ReconstructStats.fallbackProviderSuccesses, 1)
+	atomic.AddUint64(&mode2ReconstructStats.fallbackProviderFailures, 1)
+	atomic.AddUint64(&mode2ReconstructStats.notEnoughShardsFailures, 5)
+
+	snapshot := mode2ReconstructSnapshotForStatus()
+	expect := map[string]uint64{
+		"mode2_reconstruct_local_shard_hits":            3,
+		"mode2_reconstruct_assigned_provider_attempts":  4,
+		"mode2_reconstruct_assigned_provider_failures":  1,
+		"mode2_reconstruct_fallback_provider_attempts":  2,
+		"mode2_reconstruct_fallback_provider_successes": 1,
+		"mode2_reconstruct_fallback_provider_failures":  1,
+		"mode2_reconstruct_not_enough_shards_failures":  5,
+	}
+
+	for key, want := range expect {
+		gotRaw, ok := snapshot[key]
+		if !ok {
+			t.Fatalf("missing snapshot key %q", key)
+		}
+		got, err := strconv.ParseUint(gotRaw, 10, 64)
+		if err != nil {
+			t.Fatalf("snapshot value %q is not uint: %v", key, err)
+		}
+		if got != want {
+			t.Fatalf("snapshot mismatch for %q: got=%d want=%d", key, got, want)
+		}
 	}
 }

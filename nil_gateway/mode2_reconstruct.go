@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"nilchain/x/crypto_ffi"
@@ -31,6 +33,38 @@ var mode2ShardHTTPClient = &http.Client{
 		MaxIdleConnsPerHost:   16,
 	},
 	Timeout: 30 * time.Second,
+}
+
+var mode2ReconstructStats struct {
+	localShardHits            uint64
+	assignedProviderAttempts  uint64
+	assignedProviderFailures  uint64
+	fallbackProviderAttempts  uint64
+	fallbackProviderSuccesses uint64
+	fallbackProviderFailures  uint64
+	notEnoughShardsFailures   uint64
+}
+
+func mode2ReconstructSnapshotForStatus() map[string]string {
+	return map[string]string{
+		"mode2_reconstruct_local_shard_hits":            strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.localShardHits), 10),
+		"mode2_reconstruct_assigned_provider_attempts":  strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.assignedProviderAttempts), 10),
+		"mode2_reconstruct_assigned_provider_failures":  strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.assignedProviderFailures), 10),
+		"mode2_reconstruct_fallback_provider_attempts":  strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.fallbackProviderAttempts), 10),
+		"mode2_reconstruct_fallback_provider_successes": strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.fallbackProviderSuccesses), 10),
+		"mode2_reconstruct_fallback_provider_failures":  strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.fallbackProviderFailures), 10),
+		"mode2_reconstruct_not_enough_shards_failures":  strconv.FormatUint(atomic.LoadUint64(&mode2ReconstructStats.notEnoughShardsFailures), 10),
+	}
+}
+
+func resetMode2ReconstructStatsForTest() {
+	atomic.StoreUint64(&mode2ReconstructStats.localShardHits, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.assignedProviderAttempts, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.assignedProviderFailures, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.fallbackProviderAttempts, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.fallbackProviderSuccesses, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.fallbackProviderFailures, 0)
+	atomic.StoreUint64(&mode2ReconstructStats.notEnoughShardsFailures, 0)
 }
 
 func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams, sessionID string) (string, error) {
@@ -106,6 +140,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 				present[slot] = true
 				presentCount++
 			}
+			atomic.AddUint64(&mode2ReconstructStats.localShardHits, 1)
 			return nil
 		} else if err != nil && !os.IsNotExist(err) {
 			return err
@@ -130,8 +165,9 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		var shardBytes []byte
 		var lastErr error
 		tried := make(map[string]struct{}, len(providers)+len(allKnownProviders))
+		usedFallbackProvider := false
 
-		tryProvider := func(provider string) {
+		tryProvider := func(provider string, fallback bool) {
 			provider = strings.TrimSpace(provider)
 			if provider == "" {
 				return
@@ -140,26 +176,50 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 				return
 			}
 			tried[provider] = struct{}{}
+			if fallback {
+				atomic.AddUint64(&mode2ReconstructStats.fallbackProviderAttempts, 1)
+			} else {
+				atomic.AddUint64(&mode2ReconstructStats.assignedProviderAttempts, 1)
+			}
 			base, err := resolveProviderHTTPBaseURL(ctx, provider)
 			if err != nil {
 				lastErr = err
+				if fallback {
+					atomic.AddUint64(&mode2ReconstructStats.fallbackProviderFailures, 1)
+				} else {
+					atomic.AddUint64(&mode2ReconstructStats.assignedProviderFailures, 1)
+				}
 				return
 			}
 			shardBytes, err = fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot, sessionID)
 			if err != nil {
 				lastErr = err
 				shardBytes = nil
+				if fallback {
+					atomic.AddUint64(&mode2ReconstructStats.fallbackProviderFailures, 1)
+				} else {
+					atomic.AddUint64(&mode2ReconstructStats.assignedProviderFailures, 1)
+				}
 				return
 			}
 			if uint64(len(shardBytes)) != expectedShardSize {
 				lastErr = fmt.Errorf("shard %d has invalid size: %d", slot, len(shardBytes))
 				shardBytes = nil
+				if fallback {
+					atomic.AddUint64(&mode2ReconstructStats.fallbackProviderFailures, 1)
+				} else {
+					atomic.AddUint64(&mode2ReconstructStats.assignedProviderFailures, 1)
+				}
 				return
+			}
+			if fallback {
+				atomic.AddUint64(&mode2ReconstructStats.fallbackProviderSuccesses, 1)
+				usedFallbackProvider = true
 			}
 		}
 
 		for _, provider := range providers {
-			tryProvider(provider)
+			tryProvider(provider, false)
 			if shardBytes != nil {
 				break
 			}
@@ -169,7 +229,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		// the current slot assignment. Probe all known deal providers before failing.
 		if shardBytes == nil {
 			for _, provider := range allKnownProviders {
-				tryProvider(provider)
+				tryProvider(provider, true)
 				if shardBytes != nil {
 					break
 				}
@@ -186,6 +246,9 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		if !present[slot] {
 			present[slot] = true
 			presentCount++
+		}
+		if usedFallbackProvider {
+			log.Printf("mode2 reconstruct fallback: deal=%d mdu=%d slot=%d used_non_assigned_provider=true", dealID, mduIndex, slot)
 		}
 		_ = os.WriteFile(localPath, shardBytes, 0o644)
 		return nil
@@ -211,6 +274,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		}
 	}
 	if presentCount < stripe.k {
+		atomic.AddUint64(&mode2ReconstructStats.notEnoughShardsFailures, 1)
 		return "", fmt.Errorf("not enough shards available for reconstruction (need %d, got %d)", stripe.k, presentCount)
 	}
 
