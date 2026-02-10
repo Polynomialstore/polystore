@@ -21,7 +21,7 @@ You should receive:
 - Chain ID: `<chain-id>` (e.g. `31337`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
 - Faucet auth token (optional): a secret string you paste into the website UI (do **not** share publicly)
-- Local gateway sidecar endpoint (optional): `http://localhost:8080`
+- Local gateway endpoint (optional): `http://localhost:8080`
 
 If you are running an SP, you also need:
 - Hub RPC: `https://rpc.<domain>`
@@ -170,7 +170,7 @@ Please capture:
 - For retrieval failures:
   - request headers you used (notably `X-Nil-Session-Id`, if you were using curl)
   - hub response header `X-Nil-Provider` (who served the bytes)
-  - whether you were using a local sidecar gateway (`http://localhost:8080`) and timestamp
+  - whether you were using a local gateway (`http://localhost:8080`) and timestamp
 - A screenshot + browser console log (website), or command output (CLI)
 
 If you can reproduce reliably, that’s gold: include “steps to reproduce” from a fresh page load or fresh process start.

@@ -34,13 +34,13 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 4) Run the flow:
 - create deal → upload → commit → retrieve.
 
-Local sidecar gateway (recommended for gateway-assisted flows):
+Local gateway app (recommended for localhost gateway-assisted flows):
 - Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
 - Download builds: `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Notes:
 - This deployment is wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
-- The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost gateway sidecar.
+- The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost local-gateway mode.
 
 ## SP Operator Quickstart
 

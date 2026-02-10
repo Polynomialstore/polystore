@@ -20,7 +20,7 @@ Related:
   - `nil_gateway` in **provider** mode (one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
-  - Optional local gateway sidecar (`nil_gateway_gui` / `nil_gateway`) on `http://localhost:8080`
+  - Optional local Gateway app (`nil_gateway_gui` / `nil_gateway`) on `http://localhost:8080`
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).
@@ -39,7 +39,7 @@ Use HTTPS subdomains (reverse-proxied to localhost ports):
 Gateway policy for this soft launch:
 - Do **not** publish a shared `gateway.<domain>` endpoint.
 - Keep router gateway local-only on the hub (`127.0.0.1:<router-port>`).
-- Website users should run a local sidecar gateway when they want gateway-assisted flows.
+- Website users should run a local Gateway when they want localhost gateway-assisted flows.
 
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
@@ -366,8 +366,8 @@ The website is built with Vite.
   - `https://faucet.nilstore.org`
   - `https://lcd.nilstore.org`
   - `https://evm.nilstore.org`
-- Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user sidecar.
-- Recommended sidecar distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Nil-Store/nil-store/releases/latest`.
+- Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user-local app.
+- Recommended local Gateway distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
@@ -603,7 +603,7 @@ Use this flow instead:
 2) Submit intents directly on-chain:
    - `nilchaind tx nilchain create-deal-from-evm <create_payload.json> ...`
    - `nilchaind tx nilchain update-deal-content-from-evm <update_payload.json> ...`
-3) Use local sidecar gateway data path:
+3) Use local gateway data path:
    - upload: `POST http://127.0.0.1:8080/gateway/upload?deal_id=<id>`
    - plan session: `GET http://127.0.0.1:8080/gateway/plan-retrieval-session/<manifest_root>?...`
 4) Open retrieval session with `nil-website/scripts/open_retrieval_session.ts`.
@@ -636,6 +636,11 @@ Use this flow instead:
   - in the current gateway build, system liveness now auto-skips expired deals (`height >= end_block`) and applies per-challenge retry backoff for expected local-data misses
   - inspect counters via provider `/status`:
     - `curl -sf http://127.0.0.1:8091/status | jq '.extra | with_entries(select(.key|startswith("system_liveness_")))'`
+  - inspect Mode2 reconstruction counters (assigned-provider vs fallback-provider behavior):
+    - `curl -sf http://127.0.0.1:8091/status | jq '.extra | with_entries(select(.key|startswith("mode2_reconstruct_")))'`
+    - key signals:
+      - `mode2_reconstruct_fallback_provider_successes` rising means repair-aware fallback is actively serving chunks.
+      - `mode2_reconstruct_not_enough_shards_failures` rising means RS quorum is not available for reconstruction.
   - if counters keep climbing for stale/old deals, run cleanup in dry-run first:
     - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317`
     - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317 --apply`
@@ -672,6 +677,7 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 - Web build points at the correct HTTPS endpoints (`VITE_*` vars) and loads without console errors.
 - “Connect wallet” works and MetaMask is on the correct network (RPC + chain id).
+- Mode2 retrieval succeeds with temporary SP outage (website retries alternate providers when a primary fetch path fails).
 - If faucet UI is enabled (`VITE_ENABLE_FAUCET=1`), the token flow works (paste token → fund → clear token works).
   - If using `VITE_FAUCET_AUTH_TOKEN`, verify faucet requests succeed without manual token entry.
 
