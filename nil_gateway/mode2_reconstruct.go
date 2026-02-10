@@ -56,6 +56,25 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		return "", fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
 	}
 
+	allKnownProviders := mode2FallbackProviders(slots)
+	if legacyProviders, lerr := fetchDealProvidersFromLCD(ctx, dealID); lerr == nil {
+		seen := make(map[string]struct{}, len(allKnownProviders))
+		for _, p := range allKnownProviders {
+			seen[p] = struct{}{}
+		}
+		for _, p := range legacyProviders {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
+			allKnownProviders = append(allKnownProviders, p)
+		}
+	}
+
 	activeSlots := make([]uint64, 0, stripe.slotCount)
 	unknownSlots := make([]uint64, 0, stripe.slotCount)
 	repairingSlots := make([]uint64, 0, stripe.slotCount)
@@ -110,24 +129,53 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 
 		var shardBytes []byte
 		var lastErr error
-		for _, provider := range providers {
+		tried := make(map[string]struct{}, len(providers)+len(allKnownProviders))
+
+		tryProvider := func(provider string) {
+			provider = strings.TrimSpace(provider)
+			if provider == "" {
+				return
+			}
+			if _, ok := tried[provider]; ok {
+				return
+			}
+			tried[provider] = struct{}{}
 			base, err := resolveProviderHTTPBaseURL(ctx, provider)
 			if err != nil {
 				lastErr = err
-				continue
+				return
 			}
 			shardBytes, err = fetchShardFromProvider(ctx, base, dealID, manifestRoot.Canonical, mduIndex, slot, sessionID)
 			if err != nil {
 				lastErr = err
-				continue
+				shardBytes = nil
+				return
 			}
 			if uint64(len(shardBytes)) != expectedShardSize {
 				lastErr = fmt.Errorf("shard %d has invalid size: %d", slot, len(shardBytes))
 				shardBytes = nil
-				continue
+				return
 			}
-			break
 		}
+
+		for _, provider := range providers {
+			tryProvider(provider)
+			if shardBytes != nil {
+				break
+			}
+		}
+
+		// Recovery fallback: during repairing/migration windows, shard placement can lag
+		// the current slot assignment. Probe all known deal providers before failing.
+		if shardBytes == nil {
+			for _, provider := range allKnownProviders {
+				tryProvider(provider)
+				if shardBytes != nil {
+					break
+				}
+			}
+		}
+
 		if shardBytes == nil {
 			if lastErr != nil {
 				return lastErr
@@ -239,4 +287,31 @@ func reconstructMduFromDataShards(shards [][]byte, dataShards uint64, rows uint6
 		}
 	}
 	return mdu, nil
+}
+
+func mode2FallbackProviders(slots []mode2SlotAssignment) []string {
+	out := make([]string, 0, len(slots)*2)
+	seen := make(map[string]struct{}, len(slots)*2)
+	appendProvider := func(provider string) {
+		provider = strings.TrimSpace(provider)
+		if provider == "" {
+			return
+		}
+		if _, ok := seen[provider]; ok {
+			return
+		}
+		seen[provider] = struct{}{}
+		out = append(out, provider)
+	}
+
+	for _, slot := range slots {
+		if slot.Status == 2 {
+			appendProvider(slot.PendingProvider)
+			appendProvider(slot.Provider)
+			continue
+		}
+		appendProvider(slot.Provider)
+		appendProvider(slot.PendingProvider)
+	}
+	return out
 }

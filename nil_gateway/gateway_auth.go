@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"os"
 	"strings"
@@ -10,6 +8,7 @@ import (
 )
 
 const gatewayAuthHeader = "X-Nil-Gateway-Auth"
+const defaultGatewayToProviderAuthToken = "nilstore-devnet-shared-gateway-auth"
 
 var (
 	gatewayAuthToken string
@@ -22,13 +21,10 @@ func gatewayToProviderAuthToken() string {
 			gatewayAuthToken = v
 			return
 		}
-		var b [32]byte
-		if _, err := rand.Read(b[:]); err != nil {
-			// Last resort: empty token disables auth, but is better than crashing devnet.
-			gatewayAuthToken = ""
-			return
-		}
-		gatewayAuthToken = hex.EncodeToString(b[:])
+		// Devnet default: shared deterministic token so multi-process gateways/providers
+		// can authenticate each other without per-host manual provisioning.
+		// Production deployments should override with NIL_GATEWAY_SP_AUTH.
+		gatewayAuthToken = defaultGatewayToProviderAuthToken
 	})
 	return gatewayAuthToken
 }
