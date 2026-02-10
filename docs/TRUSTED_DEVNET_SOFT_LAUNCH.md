@@ -632,6 +632,13 @@ Use this flow instead:
   - set a free port in `/var/lib/nilstore/nilchaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 - Multiple providers on one host fail to start (port bind errors):
   - either disable provider libp2p for the soft launch (`NIL_P2P_ENABLED=0`) or assign unique `NIL_P2P_LISTEN_ADDRS` per provider
+- Provider logs are noisy with repeated `system liveness` proof failures (for example `no such file or directory` on old shard paths):
+  - in the current gateway build, system liveness now auto-skips expired deals (`height >= end_block`) and applies per-challenge retry backoff for expected local-data misses
+  - inspect counters via provider `/status`:
+    - `curl -sf http://127.0.0.1:8091/status | jq '.extra | with_entries(select(.key|startswith("system_liveness_")))'`
+  - if counters keep climbing for stale/old deals, run cleanup in dry-run first:
+    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317`
+    - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317 --apply`
 
 ## Go/No-Go checklist (before inviting collaborators)
 

@@ -95,6 +95,9 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"rs_default":    "8+4",
 		},
 	}
+	for k, v := range systemLivenessSnapshotForStatus() {
+		status.Extra[k] = v
+	}
 	p2pAddrs := getP2PAnnounceAddrs()
 	if len(p2pAddrs) == 0 {
 		p2pAddrs = parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))

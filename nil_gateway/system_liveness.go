@@ -48,9 +48,11 @@ var (
 )
 
 type systemLivenessState struct {
-	mu    sync.Mutex
-	epoch uint64
-	done  map[systemLivenessKey]struct{}
+	mu       sync.Mutex
+	epoch    uint64
+	done     map[systemLivenessKey]struct{}
+	failures map[systemLivenessKey]systemLivenessFailure
+	snapshot systemLivenessSnapshot
 }
 
 type systemLivenessKey struct {
@@ -59,6 +61,45 @@ type systemLivenessKey struct {
 	ordinal uint64
 }
 
+type systemLivenessFailureReason string
+
+const (
+	systemLivenessFailureUnknown          systemLivenessFailureReason = "unknown"
+	systemLivenessFailureMissingLocalData systemLivenessFailureReason = "missing_local_data"
+	systemLivenessFailureDealExpired      systemLivenessFailureReason = "deal_expired"
+	systemLivenessFailureChainRejected    systemLivenessFailureReason = "chain_rejected"
+)
+
+type systemLivenessFailure struct {
+	attempt    uint32
+	nextRetry  time.Time
+	reason     systemLivenessFailureReason
+	lastErr    string
+	lastUpdate time.Time
+}
+
+type systemLivenessSnapshot struct {
+	LastRun              time.Time
+	LastError            string
+	DealsScanned         uint64
+	DealsExpired         uint64
+	ProofsSubmitted      uint64
+	ProofsAlreadyDone    uint64
+	ProofsBackoffSkipped uint64
+	ProofGenFailures     uint64
+	TxFailures           uint64
+	MissingDataSkips     uint64
+}
+
+const (
+	systemLivenessDefaultBackoff       = 30 * time.Second
+	systemLivenessMissingDataBackoff   = 3 * time.Minute
+	systemLivenessExpiredDealBackoff   = 30 * time.Minute
+	systemLivenessChainRejectedBackoff = 2 * time.Minute
+	systemLivenessMaxBackoff           = 30 * time.Minute
+	systemLivenessFailureGCInterval    = 6 * time.Hour
+)
+
 var systemProverState systemLivenessState
 
 func shouldRunSystemLiveness() bool {
@@ -66,6 +107,170 @@ func shouldRunSystemLiveness() bool {
 		return false
 	}
 	return envDefault("NIL_SYSTEM_LIVENESS", "1") == "1"
+}
+
+func (s *systemLivenessState) ensureEpoch(epochID uint64, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.epoch != epochID {
+		s.epoch = epochID
+		s.done = make(map[systemLivenessKey]struct{})
+	}
+	if s.done == nil {
+		s.done = make(map[systemLivenessKey]struct{})
+	}
+	if s.failures == nil {
+		s.failures = make(map[systemLivenessKey]systemLivenessFailure)
+	}
+	s.gcFailuresLocked(now)
+}
+
+func (s *systemLivenessState) gcFailuresLocked(now time.Time) {
+	for k, st := range s.failures {
+		if st.lastUpdate.IsZero() {
+			delete(s.failures, k)
+			continue
+		}
+		if now.Sub(st.lastUpdate) > systemLivenessFailureGCInterval {
+			delete(s.failures, k)
+		}
+	}
+}
+
+func (s *systemLivenessState) isDone(key systemLivenessKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.done[key]
+	return ok
+}
+
+func (s *systemLivenessState) markDone(key systemLivenessKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.done == nil {
+		s.done = make(map[systemLivenessKey]struct{})
+	}
+	s.done[key] = struct{}{}
+	delete(s.failures, key)
+}
+
+func (s *systemLivenessState) shouldBackoff(key systemLivenessKey, now time.Time) (bool, time.Duration, systemLivenessFailureReason) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failures == nil {
+		return false, 0, systemLivenessFailureUnknown
+	}
+	st, ok := s.failures[key]
+	if !ok {
+		return false, 0, systemLivenessFailureUnknown
+	}
+	if !st.nextRetry.After(now) {
+		return false, 0, st.reason
+	}
+	return true, st.nextRetry.Sub(now), st.reason
+}
+
+func nextSystemLivenessBackoff(base time.Duration, attempt uint32) time.Duration {
+	if base <= 0 {
+		base = systemLivenessDefaultBackoff
+	}
+	if attempt == 0 {
+		attempt = 1
+	}
+	delay := base
+	for i := uint32(1); i < attempt; i++ {
+		if delay >= systemLivenessMaxBackoff/2 {
+			delay = systemLivenessMaxBackoff
+			break
+		}
+		delay *= 2
+	}
+	if delay > systemLivenessMaxBackoff {
+		delay = systemLivenessMaxBackoff
+	}
+	return delay
+}
+
+func classifySystemLivenessError(err error) (systemLivenessFailureReason, time.Duration, bool) {
+	if err == nil {
+		return systemLivenessFailureUnknown, systemLivenessDefaultBackoff, false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case errors.Is(err, os.ErrNotExist),
+		strings.Contains(msg, "no such file or directory"),
+		strings.Contains(msg, "short read"),
+		strings.Contains(msg, "nil_compute_blob_proof failed with code: -3"),
+		strings.Contains(msg, "invalid witness commitments length"),
+		strings.Contains(msg, "invalid mdu index"):
+		return systemLivenessFailureMissingLocalData, systemLivenessMissingDataBackoff, true
+	case strings.Contains(msg, "expired at end_block="),
+		strings.Contains(msg, "deal expired"):
+		return systemLivenessFailureDealExpired, systemLivenessExpiredDealBackoff, true
+	case strings.Contains(msg, "invalid request"),
+		strings.Contains(msg, "failed to execute message"):
+		return systemLivenessFailureChainRejected, systemLivenessChainRejectedBackoff, true
+	default:
+		return systemLivenessFailureUnknown, systemLivenessDefaultBackoff, false
+	}
+}
+
+func (s *systemLivenessState) recordFailure(key systemLivenessKey, now time.Time, err error) (systemLivenessFailureReason, time.Duration, uint32, bool) {
+	reason, base, expected := classifySystemLivenessError(err)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failures == nil {
+		s.failures = make(map[systemLivenessKey]systemLivenessFailure)
+	}
+	st := s.failures[key]
+	st.attempt++
+	delay := nextSystemLivenessBackoff(base, st.attempt)
+	st.nextRetry = now.Add(delay)
+	st.reason = reason
+	st.lastErr = strings.TrimSpace(err.Error())
+	st.lastUpdate = now
+	s.failures[key] = st
+	return reason, delay, st.attempt, expected
+}
+
+func (s *systemLivenessState) setSnapshot(snapshot systemLivenessSnapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.snapshot = snapshot
+}
+
+func systemLivenessSnapshotForStatus() map[string]string {
+	systemProverState.mu.Lock()
+	s := systemProverState.snapshot
+	systemProverState.mu.Unlock()
+
+	out := map[string]string{
+		"system_liveness_last_run_unix":          strconv.FormatInt(s.LastRun.Unix(), 10),
+		"system_liveness_deals_scanned":          strconv.FormatUint(s.DealsScanned, 10),
+		"system_liveness_deals_expired_skipped":  strconv.FormatUint(s.DealsExpired, 10),
+		"system_liveness_proofs_submitted":       strconv.FormatUint(s.ProofsSubmitted, 10),
+		"system_liveness_proofs_already_done":    strconv.FormatUint(s.ProofsAlreadyDone, 10),
+		"system_liveness_proofs_backoff_skipped": strconv.FormatUint(s.ProofsBackoffSkipped, 10),
+		"system_liveness_proof_gen_failures":     strconv.FormatUint(s.ProofGenFailures, 10),
+		"system_liveness_tx_failures":            strconv.FormatUint(s.TxFailures, 10),
+		"system_liveness_missing_data_skips":     strconv.FormatUint(s.MissingDataSkips, 10),
+	}
+	if s.LastRun.IsZero() {
+		out["system_liveness_last_run_unix"] = "0"
+	}
+	if strings.TrimSpace(s.LastError) != "" {
+		out["system_liveness_last_error"] = s.LastError
+	}
+	return out
+}
+
+func isDealExpiredAtHeight(endBlock uint64, currentHeight uint64) bool {
+	if endBlock == 0 || currentHeight == 0 {
+		return false
+	}
+	// end_block is exclusive on-chain.
+	return currentHeight >= endBlock
 }
 
 func startSystemLivenessProver() {
@@ -100,7 +305,16 @@ func startSystemLivenessProver() {
 	}()
 }
 
-func runSystemLivenessOnce(ctx context.Context, epochID uint64) error {
+func runSystemLivenessOnce(ctx context.Context, epochID uint64) (retErr error) {
+	now := time.Now()
+	snapshot := systemLivenessSnapshot{LastRun: now}
+	defer func() {
+		if retErr != nil {
+			snapshot.LastError = retErr.Error()
+		}
+		systemProverState.setSnapshot(snapshot)
+	}()
+
 	providerAddr := strings.TrimSpace(cachedProviderAddress(ctx))
 	if providerAddr == "" {
 		return fmt.Errorf("provider address unavailable")
@@ -127,13 +341,15 @@ func runSystemLivenessOnce(ctx context.Context, epochID uint64) error {
 		return nil
 	}
 
-	systemProverState.mu.Lock()
-	if systemProverState.epoch != epochID {
-		systemProverState.epoch = epochID
-		systemProverState.done = make(map[systemLivenessKey]struct{})
-	}
-	systemProverState.mu.Unlock()
+	systemProverState.ensureEpoch(epochID, now)
 
+	currentHeight, err := cachedLatestHeight(ctx)
+	if err != nil {
+		log.Printf("system liveness: latest height unavailable: %v", err)
+		currentHeight = 0
+	}
+
+dealLoop:
 	for _, dealID := range ids {
 		deal, err := fetchDealStateForSystemLiveness(ctx, dealID)
 		if err != nil {
@@ -141,6 +357,11 @@ func runSystemLivenessOnce(ctx context.Context, epochID uint64) error {
 				continue
 			}
 			log.Printf("system liveness: failed to fetch deal %d: %v", dealID, err)
+			continue
+		}
+		snapshot.DealsScanned++
+		if isDealExpiredAtHeight(deal.endBlock, currentHeight) {
+			snapshot.DealsExpired++
 			continue
 		}
 
@@ -191,17 +412,35 @@ func runSystemLivenessOnce(ctx context.Context, epochID uint64) error {
 
 			for ordinal := uint64(0); ordinal < quota; ordinal++ {
 				key := systemLivenessKey{dealID: deal.dealID, slot: slotU, ordinal: ordinal}
-				systemProverState.mu.Lock()
-				_, already := systemProverState.done[key]
-				systemProverState.mu.Unlock()
-				if already {
+				if systemProverState.isDone(key) {
+					snapshot.ProofsAlreadyDone++
+					continue
+				}
+				if blocked, _, reason := systemProverState.shouldBackoff(key, now); blocked {
+					snapshot.ProofsBackoffSkipped++
+					if reason == systemLivenessFailureMissingLocalData {
+						snapshot.MissingDataSkips++
+					}
 					continue
 				}
 
 				mduIndex, blobIndex := deriveMode2ChallengeLocal(epochSeed, deal.dealID, deal.currentGen, uint64(slotU), ordinal, metaMdus, userMdus, stripe.rows)
 				proof, err := generateSystemChainedProof(ctx, epochSeed, deal.dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
 				if err != nil {
-					log.Printf("system liveness: proof gen failed deal=%d slot=%d ord=%d: %v", deal.dealID, slotU, ordinal, err)
+					reason, retryIn, attempt, expected := systemProverState.recordFailure(key, now, err)
+					snapshot.ProofGenFailures++
+					if reason == systemLivenessFailureMissingLocalData {
+						snapshot.MissingDataSkips++
+					}
+					if reason == systemLivenessFailureDealExpired {
+						snapshot.DealsExpired++
+						continue dealLoop
+					}
+					if expected {
+						log.Printf("system liveness: expected skip deal=%d slot=%d ord=%d reason=%s attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, reason, attempt, retryIn.Round(time.Second), err)
+					} else {
+						log.Printf("system liveness: proof gen failed deal=%d slot=%d ord=%d attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, attempt, retryIn.Round(time.Second), err)
+					}
 					continue
 				}
 
@@ -236,13 +475,22 @@ func runSystemLivenessOnce(ctx context.Context, epochID uint64) error {
 				cancel()
 				_ = os.Remove(tmpPath)
 				if err != nil {
-					log.Printf("system liveness: tx failed deal=%d slot=%d ord=%d: %v", deal.dealID, slotU, ordinal, err)
+					reason, retryIn, attempt, expected := systemProverState.recordFailure(key, now, err)
+					snapshot.TxFailures++
+					if reason == systemLivenessFailureDealExpired {
+						snapshot.DealsExpired++
+						continue dealLoop
+					}
+					if expected {
+						log.Printf("system liveness: expected tx skip deal=%d slot=%d ord=%d reason=%s attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, reason, attempt, retryIn.Round(time.Second), err)
+					} else {
+						log.Printf("system liveness: tx failed deal=%d slot=%d ord=%d attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, attempt, retryIn.Round(time.Second), err)
+					}
 					continue
 				}
 
-				systemProverState.mu.Lock()
-				systemProverState.done[key] = struct{}{}
-				systemProverState.mu.Unlock()
+				systemProverState.markDone(key)
+				snapshot.ProofsSubmitted++
 			}
 		}
 	}
@@ -393,6 +641,7 @@ type dealStateForSystemLiveness struct {
 	manifestRoot    ManifestRoot
 	serviceHint     string
 	redundancyMode  uint32
+	endBlock        uint64
 	currentGen      uint64
 	totalMdus       uint64
 	witnessMdus     uint64
@@ -418,7 +667,7 @@ func fetchDealStateForSystemLiveness(ctx context.Context, dealID uint64) (*dealS
 	}
 
 	type dealSlot struct {
-		Slot           json.RawMessage `json:"slot"`
+		Slot            json.RawMessage `json:"slot"`
 		Provider        string          `json:"provider"`
 		PendingProvider string          `json:"pending_provider"`
 		Status          json.RawMessage `json:"status"`
@@ -428,6 +677,8 @@ func fetchDealStateForSystemLiveness(ctx context.Context, dealID uint64) (*dealS
 		Deal struct {
 			ServiceHint    string          `json:"service_hint"`
 			RedundancyMode json.RawMessage `json:"redundancy_mode"`
+			EndBlock       json.RawMessage `json:"end_block"`
+			EndBlockAlt    json.RawMessage `json:"endBlock"`
 			CurrentGen     json.RawMessage `json:"current_gen"`
 			TotalMdus      json.RawMessage `json:"total_mdus"`
 			WitnessMdus    json.RawMessage `json:"witness_mdus"`
@@ -442,6 +693,10 @@ func fetchDealStateForSystemLiveness(ctx context.Context, dealID uint64) (*dealS
 	out := &dealStateForSystemLiveness{dealID: dealID}
 	out.serviceHint = strings.TrimSpace(payload.Deal.ServiceHint)
 	out.redundancyMode = uint32(mustParseUint64Raw(payload.Deal.RedundancyMode))
+	out.endBlock = mustParseUint64Raw(payload.Deal.EndBlock)
+	if out.endBlock == 0 {
+		out.endBlock = mustParseUint64Raw(payload.Deal.EndBlockAlt)
+	}
 	out.currentGen = mustParseUint64Raw(payload.Deal.CurrentGen)
 	out.totalMdus = mustParseUint64Raw(payload.Deal.TotalMdus)
 	out.witnessMdus = mustParseUint64Raw(payload.Deal.WitnessMdus)

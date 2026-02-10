@@ -47,6 +47,11 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - Active providers are using public endpoints (no accidental localhost endpoint leakage):
   - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\"), (.draining // false)] | @tsv'`
   - Ensure active entries resolve to `/dns4/<public-host>/tcp/443/https`.
+- System liveness is progressing (and not thrashing on stale local shards):
+  - `curl -sf http://127.0.0.1:<PORT>/status | jq '.extra | with_entries(select(.key|startswith("system_liveness_")))'`
+  - Watch `system_liveness_proofs_backoff_skipped` and `system_liveness_missing_data_skips`; if they climb continuously for old deals, dry-run cleanup:
+    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317`
+    - then `--apply` and restart the provider service.
 
 ## When something breaks (quick triage)
 
