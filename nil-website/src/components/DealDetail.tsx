@@ -1390,7 +1390,52 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const res = await fetch(url)
                                             if (!res.ok) {
                                               const txt = await res.text().catch(() => '')
-                                              throw new Error(txt || `gateway raw fetch failed (${res.status})`)
+                                              const normalized = txt.toLowerCase()
+                                              const missingSessionHeader = normalized.includes('x-nil-session-id')
+                                              if (!missingSessionHeader) {
+                                                throw new Error(txt || `gateway raw fetch failed (${res.status})`)
+                                              }
+
+                                              // Newer gateway paths may require session headers even for debug fetches.
+                                              // Fall back to the session-aware retrieval flow while forcing gateway base.
+                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                              const dealId = String(deal.id)
+                                              onFileActivity?.({
+                                                dealId,
+                                                filePath: f.path,
+                                                sizeBytes: f.size_bytes,
+                                                manifestRoot: manifestHex,
+                                                action: 'download',
+                                                status: 'pending',
+                                              })
+                                              const result = await fetchFile({
+                                                dealId,
+                                                manifestRoot: manifestHex,
+                                                owner: nilAddress,
+                                                filePath: f.path,
+                                                serviceBase: appConfig.gatewayBase,
+                                                rangeStart: safeStart,
+                                                rangeLen: safeLen,
+                                                fileStartOffset: f.start_offset,
+                                                fileSizeBytes: f.size_bytes,
+                                                mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                                blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                                sponsoredAuth,
+                                              })
+                                              if (!result) throw new Error('download failed')
+                                              const fallbackBytes = new Uint8Array(await result.blob.arrayBuffer())
+                                              await writeCachedFile(dealId, f.path, fallbackBytes)
+                                              setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                              downloadBlobAsFile(result.blob, f.path)
+                                              onFileActivity?.({
+                                                dealId,
+                                                filePath: f.path,
+                                                sizeBytes: f.size_bytes,
+                                                manifestRoot: manifestHex,
+                                                action: 'download',
+                                                status: 'success',
+                                              })
+                                              return
                                             }
                                             const bytes = new Uint8Array(await res.arrayBuffer())
                                             await writeCachedFile(String(deal.id), f.path, bytes)
@@ -1407,7 +1452,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download-gateway"
                                         data-file-path={f.path}
                                         className="order-4 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Debug: raw fetch via gateway (requires slab present)"
+                                        title="Download through local gateway path"
                                       >
                                         Gateway
                                       </button>
