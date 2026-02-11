@@ -39,7 +39,7 @@ const RECOVERY_FAILURE_THRESHOLD = 2;
 const RECOVERY_COOLDOWN_MS = 20_000;
 const RECENT_DEAL_LIMIT = 6;
 const RECENT_FILE_LIMIT = 8;
-const RECENT_ACTIVITY_LIMIT = 7;
+const RECENT_ACTIVITY_LIMIT = 5;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -49,13 +49,6 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function normalizeListenAddr(baseUrl: string): string {
   return baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
-}
-
-function parseStatusCounter(extra: Record<string, string> | undefined, key: string): number {
-  const raw = extra?.[key];
-  if (!raw) return 0;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function formatBytes(value: number): string {
@@ -196,6 +189,9 @@ export default function App() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageLastAt, setStorageLastAt] = useState<number | null>(null);
   const [storageBusy, setStorageBusy] = useState(false);
+  const [storageDealFilter, setStorageDealFilter] = useState<string>("all");
+  const [storageFileQuery, setStorageFileQuery] = useState("");
+  const [activePanel, setActivePanel] = useState<"overview" | "storage" | "diagnostics">("overview");
 
   const baseHost = useMemo(() => hostFromBaseUrl(gatewayBaseUrl), [gatewayBaseUrl]);
   const baseIsLoopback = useMemo(() => isLoopbackHost(baseHost), [baseHost]);
@@ -670,30 +666,24 @@ export default function App() {
     [storageSummary],
   );
 
-  const mode2RepairSummary = useMemo(() => {
-    const extra = gateway?.extra;
-    const assignedAttempts = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_attempts");
-    const assignedFailures = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_failures");
-    const fallbackAttempts = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_attempts");
-    const fallbackSuccesses = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_successes");
-    const fallbackFailures = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_failures");
-    const localHits = parseStatusCounter(extra, "mode2_reconstruct_local_shard_hits");
-    return {
-      assignedAttempts,
-      assignedFailures,
-      fallbackAttempts,
-      fallbackSuccesses,
-      fallbackFailures,
-      localHits,
-      hasSignal:
-        assignedAttempts > 0 ||
-        assignedFailures > 0 ||
-        fallbackAttempts > 0 ||
-        fallbackSuccesses > 0 ||
-        fallbackFailures > 0 ||
-        localHits > 0,
-    };
-  }, [gateway?.extra]);
+  const filteredStorageDealEntries = useMemo(
+    () =>
+      storageDealFilter === "all"
+        ? storageDealEntries
+        : storageDealEntries.filter((deal) => deal.deal_id === storageDealFilter),
+    [storageDealEntries, storageDealFilter],
+  );
+
+  const filteredStorageRecentFiles = useMemo(() => {
+    const query = storageFileQuery.trim().toLowerCase();
+    return storageRecentFiles.filter((file) => {
+      if (storageDealFilter !== "all" && file.deal_id !== storageDealFilter) {
+        return false;
+      }
+      if (!query) return true;
+      return file.relative_path.toLowerCase().includes(query);
+    });
+  }, [storageDealFilter, storageFileQuery, storageRecentFiles]);
 
   const dependencyIssues = useMemo(() => {
     const issues: string[] = [];
@@ -771,7 +761,7 @@ export default function App() {
   const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);
 
   const formFieldClass =
-    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]";
 
   const handleCopyDiagnostics = useCallback(async () => {
     setDiagCopyBusy(true);
@@ -818,269 +808,248 @@ export default function App() {
     storageSummary,
   ]);
 
+  const isConnecting =
+    phase === "booting" || phase === "checking" || phase === "starting" || phase === "stopping";
+
+  const tabButtonClass = (panel: "overview" | "storage" | "diagnostics") =>
+    [
+      "panel-tab",
+      activePanel === panel ? "panel-tab-active" : "",
+    ].join(" ");
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-100">
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
-        <header className="surface-card p-6">
+    <div className="gateway-app min-h-screen">
+      <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
+        <header className="surface-card surface-hero p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
                 <img
                   src={logoDark}
                   alt="NilStore"
-                  className="h-10 w-10 rounded-full border border-slate-200 bg-white/80 p-1"
+                  className="h-10 w-10 rounded-full border border-slate-200 bg-white p-1 shadow-sm"
                 />
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">NilStore</p>
-                  <h1 className="text-2xl font-semibold text-slate-900">NilGateway GUI</h1>
+                  <p className="soft-label">NilStore</p>
+                  <h1 className="text-[34px] font-semibold leading-none text-slate-900">Local Gateway</h1>
                 </div>
               </div>
-              <p className="mt-2 text-sm text-slate-500">
-                Local Gateway manager for `https://nilstore.org/#/dashboard`.
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Keep your local Gateway ready for uploads and retrievals in the NilStore dashboard.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(phase)}`}
-              >
+              <span className={`status-pill rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(phase)}`}>
+                <span className="status-dot" />
                 {statusLabel(phase)}
               </span>
               <button
                 type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                onClick={handleOpenDashboard}
-              >
-                Open NilStore Dashboard
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                onClick={handleAttach}
-                disabled={actionBusy}
-              >
-                Reconnect
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                onClick={handleStart}
-                disabled={actionBusy || phase === "online" || phase === "starting"}
-              >
-                Start gateway
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                onClick={handleStop}
-                disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
-              >
-                Stop
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                onClick={() => {
-                  void handleCopyDiagnostics();
-                }}
-                disabled={diagCopyBusy}
-              >
-                {diagCopyBusy ? "Copying..." : "Copy diagnostics"}
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Local Gateway URL
-              <input
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-700"
-                value={gatewayBaseUrl}
-                onChange={(event) => setGatewayBaseUrl(event.target.value)}
-              />
-            </label>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                onClick={() => {
-                  void ensureGateway({ startIfOffline: false });
-                }}
-                disabled={actionBusy}
-              >
-                Refresh status
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <p className="font-medium">{phaseMessage}</p>
-            {statusDetail ? <p className="mt-1 text-xs text-slate-500">Detail: {statusDetail}</p> : null}
-            {lastStatusAt ? (
-              <p className="mt-1 text-xs text-slate-500">
-                Last status check: {new Date(lastStatusAt).toLocaleTimeString()}
-              </p>
-            ) : null}
-            <p className="mt-1 text-xs text-slate-500">
-              Auto-start: {autoStartEnabled ? "enabled" : "paused"}
-            </p>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Readiness checklist
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {readinessCounts.ready}/3 ready
-                  {readinessCounts.blocked > 0
-                    ? ` · ${readinessCounts.blocked} needs attention`
-                    : readinessCounts.pending > 0
-                      ? ` · ${readinessCounts.pending} in progress`
-                      : " · dashboard flow should be ready"}
-                </p>
-              </div>
-              {diagCopyMessage ? (
-                <span className="rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700">
-                  {diagCopyMessage}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              {readinessItems.map((item) => (
-                <div
-                  key={item.key}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {item.title}
-                    </p>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${readinessBadgeClass(item.state)}`}
-                    >
-                      {readinessLabel(item.state)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-700">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                className="control-btn control-btn-primary"
                 onClick={() => {
                   if (phase === "online") {
-                    void ensureGateway({ startIfOffline: false });
-                  } else {
-                    void handleStart();
+                    void handleOpenDashboard();
+                    return;
                   }
+                  void handleStart();
                 }}
-                disabled={actionBusy}
+                disabled={actionBusy || isConnecting}
               >
-                {phase === "online" ? "Verify readiness" : "Start local Gateway"}
+                {phase === "online"
+                  ? "Open NilStore Dashboard"
+                  : isConnecting
+                    ? "Connecting..."
+                    : "Start local Gateway"}
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                onClick={handleOpenDashboard}
+                className="control-btn"
+                onClick={() => setActivePanel("diagnostics")}
               >
-                Open dashboard
+                Diagnostics
               </button>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border subtle-divider bg-white/90 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-800">{phaseMessage}</p>
+            {statusDetail ? <p className="mt-1 text-xs text-slate-500">{statusDetail}</p> : null}
+            <p className="mt-1 text-xs text-slate-500">
+              {readinessCounts.ready}/3 checks ready
+              {readinessCounts.blocked > 0
+                ? ` · ${readinessCounts.blocked} needs attention`
+                : readinessCounts.pending > 0
+                  ? ` · ${readinessCounts.pending} in progress`
+                  : " · system healthy"}
+              {lastStatusAt ? ` · checked ${new Date(lastStatusAt).toLocaleTimeString()}` : ""}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="meta-chip">
+                <strong>Endpoint</strong> {gatewayBaseUrl}
+              </span>
+              <span className="meta-chip">
+                <strong>Mode</strong> {gateway?.mode || "standalone"}
+              </span>
+              <span className="meta-chip">
+                <strong>Auto-start</strong> {autoStartEnabled ? "enabled" : "paused"}
+              </span>
+            </div>
+            {diagCopyMessage ? (
+              <p className="mt-1 text-xs font-semibold text-emerald-700">{diagCopyMessage}</p>
+            ) : null}
           </div>
 
           {!baseIsLoopback ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Non-local endpoint configured. The website expects local Gateway routing on localhost; use `http://127.0.0.1:8080` unless you are intentionally debugging remote gateway access.
+              Non-local endpoint configured. Use `http://127.0.0.1:8080` for normal local Gateway flows.
             </div>
           ) : null}
         </header>
 
-        <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-          <div className="surface-card p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Local Gateway health
-            </h2>
+        <section className="surface-card p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={tabButtonClass("overview")}
+              onClick={() => setActivePanel("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={tabButtonClass("storage")}
+              onClick={() => setActivePanel("storage")}
+            >
+              Storage
+            </button>
+            <button
+              type="button"
+              className={tabButtonClass("diagnostics")}
+              onClick={() => setActivePanel("diagnostics")}
+            >
+              Diagnostics
+            </button>
+          </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Listening</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {gateway?.listening_addr || "—"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Mode</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{gateway?.mode || "—"}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Dependencies</p>
-                <p className="mt-1 text-xs text-slate-700 break-all">{depsSummary}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Capabilities</p>
-                <p className="mt-1 text-xs text-slate-700 break-all">{capabilitiesSummary}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                onClick={() => void handleOpenEndpoint("/health")}
-              >
-                Open /health
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                onClick={() => void handleOpenEndpoint("/status")}
-              >
-                Open /status
-              </button>
-            </div>
-
-            {dependencyIssues.length > 0 ? (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {dependencyIssues.map((issue) => (
-                  <p key={issue}>{issue}</p>
+          {activePanel === "overview" ? (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                {readinessItems.map((item) => (
+                  <div key={item.key} className="metric-card px-3 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="soft-label">{item.title}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${readinessBadgeClass(item.state)}`}>
+                        {readinessLabel(item.state)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-700">{item.detail}</p>
+                  </div>
                 ))}
               </div>
-            ) : null}
 
-            <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
-              <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Local storage snapshot
-              </summary>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              {dependencyIssues.length > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {dependencyIssues.map((issue) => (
+                    <p key={issue}>{issue}</p>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="metric-card">
+                <div className="border-b subtle-divider px-3 py-2 soft-label">
+                  Recent activity
+                </div>
+                {recentActivity.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-slate-500">
+                    No recent activity yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 px-3 py-3">
+                    {recentActivity.map((line, index) => (
+                      <li
+                        key={`activity-${index}-${line}`}
+                        className="list-disc pl-1 text-xs text-slate-600 marker:text-slate-300"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <details className="metric-card bg-slate-50/70 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                  Connection controls
+                </summary>
+                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Gateway URL
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                      value={gatewayBaseUrl}
+                      onChange={(event) => setGatewayBaseUrl(event.target.value)}
+                    />
+                  </label>
+                  <div className="flex items-end gap-2">
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={() => void ensureGateway({ startIfOffline: false })}
+                      disabled={actionBusy}
+                    >
+                      Refresh status
+                    </button>
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={handleAttach}
+                      disabled={actionBusy}
+                    >
+                      Reconnect
+                    </button>
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={handleStop}
+                      disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
+                    >
+                      Stop
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Auto-start: {autoStartEnabled ? "enabled" : "paused"}
+                </p>
+              </details>
+            </div>
+          ) : null}
+
+          {activePanel === "storage" ? (
+            <div className="mt-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Deals</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Deals</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.deal_count ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Manifests</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Manifests</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.manifest_count ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Files</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Files</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.total_files ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Disk</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Disk</p>
                     <p className="text-sm font-semibold text-slate-900">{formatBytes(storageSummary?.total_bytes ?? 0)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    className="control-btn control-btn-inline"
                     onClick={() => {
                       void refreshLocalStorage();
                     }}
@@ -1090,7 +1059,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    className="control-btn control-btn-inline"
                     onClick={() => {
                       void handleOpenCacheDir();
                     }}
@@ -1101,11 +1070,51 @@ export default function App() {
                 </div>
               </div>
 
-              {storageError ? (
-                <p className="mt-2 text-xs text-rose-600">{storageError}</p>
+              <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+                <label className="text-xs font-semibold text-slate-500">
+                  Deal filter
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-700"
+                    value={storageDealFilter}
+                    onChange={(event) => setStorageDealFilter(event.target.value)}
+                  >
+                    <option value="all">All deals</option>
+                    {storageDealEntries.map((deal) => (
+                      <option key={deal.deal_id} value={deal.deal_id}>
+                        Deal {deal.deal_id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  File search
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                    placeholder="Filter cached files by path..."
+                    value={storageFileQuery}
+                    onChange={(event) => setStorageFileQuery(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              {(storageDealFilter !== "all" || storageFileQuery.trim() !== "") ? (
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => {
+                    setStorageDealFilter("all");
+                    setStorageFileQuery("");
+                  }}
+                >
+                  Reset filters
+                </button>
               ) : null}
 
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+              {storageError ? (
+                <p className="text-xs text-rose-600">{storageError}</p>
+              ) : null}
+
+              <div className="metric-card px-3 py-2 text-xs text-slate-600">
                 <p className="break-all">
                   <span className="font-semibold text-slate-700">Uploads dir:</span>{" "}
                   {storageSummary?.uploads_dir || "n/a"}
@@ -1121,40 +1130,51 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="metric-card">
+                  <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Cached deals
                   </div>
-                  {storageDealEntries.length === 0 ? (
+                  {filteredStorageDealEntries.length === 0 ? (
                     <div className="px-3 py-3 text-xs text-slate-500">
-                      No deal cache folders yet.
+                      {storageDealEntries.length === 0
+                        ? "No deal cache folders yet."
+                        : "No deals match the current filter."}
                     </div>
                   ) : (
-                    storageDealEntries.map((deal) => (
+                    filteredStorageDealEntries.map((deal) => (
                       <div
                         key={deal.deal_id}
-                        className="grid grid-cols-[0.8fr_0.8fr_0.7fr_0.7fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
+                        className="grid grid-cols-[0.7fr_0.7fr_0.7fr_0.7fr_auto] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
                       >
                         <span className="font-semibold text-slate-900">{deal.deal_id}</span>
                         <span>{formatBytes(deal.total_bytes)}</span>
                         <span>{deal.file_count} files</span>
                         <span>{deal.manifest_count} manifests</span>
+                        <button
+                          type="button"
+                          className="control-btn control-btn-inline px-2 py-1 text-[10px]"
+                          onClick={() => setStorageDealFilter(deal.deal_id)}
+                        >
+                          Focus
+                        </button>
                       </div>
                     ))
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <div className="metric-card">
+                  <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Recent cached files
                   </div>
-                  {storageRecentFiles.length === 0 ? (
+                  {filteredStorageRecentFiles.length === 0 ? (
                     <div className="px-3 py-3 text-xs text-slate-500">
-                      No cached files yet.
+                      {storageRecentFiles.length === 0 && storageDealFilter === "all" && !storageFileQuery
+                        ? "No cached files yet."
+                        : "No cached files match this filter/search."}
                     </div>
                   ) : (
-                    storageRecentFiles.map((file) => (
+                    filteredStorageRecentFiles.map((file) => (
                       <div
                         key={`${file.relative_path}-${file.modified_unix}`}
                         className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
@@ -1168,267 +1188,265 @@ export default function App() {
                   )}
                 </div>
               </div>
-            </details>
+            </div>
+          ) : null}
 
-            <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Retrieval/repair signal
-              </summary>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Local shard hits</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{mode2RepairSummary.localHits}</p>
+          {activePanel === "diagnostics" ? (
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="metric-card p-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="soft-label text-slate-600">Live gateway logs</h2>
+                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={autoScrollLogs}
+                        onChange={(event) => setAutoScrollLogs(event.target.checked)}
+                      />
+                      Auto-scroll
+                    </label>
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline px-2 py-1"
+                      onClick={() => setLogs([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Assigned attempts/failures</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {mode2RepairSummary.assignedAttempts} / {mode2RepairSummary.assignedFailures}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Fallback success/fail</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {mode2RepairSummary.fallbackSuccesses} / {mode2RepairSummary.fallbackFailures}
-                  </p>
+                <div
+                  className="log-panel mt-3 h-[340px] overflow-auto p-3 font-mono text-xs leading-relaxed text-emerald-200"
+                  ref={(node) => {
+                    if (node && autoScrollLogs) {
+                      node.scrollTop = node.scrollHeight;
+                    }
+                  }}
+                >
+                  {logs.length === 0 ? (
+                    <p className="text-slate-400">
+                      Waiting for gateway logs. Start or connect to the local Gateway to stream output.
+                    </p>
+                  ) : (
+                    logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
+                  )}
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-500">
-                {mode2RepairSummary.hasSignal
-                  ? `Fallback attempts observed: ${mode2RepairSummary.fallbackAttempts}`
-                  : "No reconstruction telemetry yet for this session."}
-              </p>
-            </details>
 
-            <details className="mt-6 rounded-2xl border border-slate-200 bg-white" open={showAdvanced}>
-              <summary
-                className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-800"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setShowAdvanced((prev) => !prev);
-                }}
-              >
-                Advanced (experimental): gateway API smoke actions
-              </summary>
-              {showAdvanced ? (
-                <div className="space-y-6 border-t border-slate-100 p-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                      Upload (gateway/upload)
+              <div className="space-y-3">
+                <div className="metric-card p-3">
+                  <p className="soft-label">Gateway internals</p>
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                    <p>
+                      <span className="font-semibold text-slate-700">Listening:</span>{" "}
+                      {gateway?.listening_addr || "—"}
                     </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="text-sm text-slate-600">
-                        Deal ID
-                        <input
-                          className={formFieldClass}
-                          value={uploadDealId}
-                          onChange={(event) => setUploadDealId(event.target.value)}
-                        />
-                      </label>
-                      <label className="text-sm text-slate-600">
-                        Owner
-                        <input
-                          className={formFieldClass}
-                          value={uploadOwner}
-                          onChange={(event) => setUploadOwner(event.target.value)}
-                          placeholder="nil1..."
-                        />
-                      </label>
-                      <label className="text-sm text-slate-600">
-                        NilFS path
-                        <input
-                          className={formFieldClass}
-                          value={uploadFilePath}
-                          onChange={(event) => setUploadFilePath(event.target.value)}
-                        />
-                      </label>
-                      <div className="text-sm text-slate-600">
-                        Local file
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
-                            onClick={handlePickFile}
-                          >
-                            Choose file
-                          </button>
-                          <span className="text-xs text-slate-500 break-all">
-                            {localFilePath || "No file selected"}
-                          </span>
+                    <p>
+                      <span className="font-semibold text-slate-700">Mode:</span> {gateway?.mode || "—"}
+                    </p>
+                    <p className="break-all">
+                      <span className="font-semibold text-slate-700">Dependencies:</span> {depsSummary}
+                    </p>
+                    <p className="break-all">
+                      <span className="font-semibold text-slate-700">Capabilities:</span> {capabilitiesSummary}
+                    </p>
+                    <p className="break-all">
+                      <span className="font-semibold text-slate-700">Provider base:</span>{" "}
+                      {gateway?.provider_base || "Not reported"}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={() => void handleOpenEndpoint("/health")}
+                    >
+                      Open /health
+                    </button>
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={() => void handleOpenEndpoint("/status")}
+                    >
+                      Open /status
+                    </button>
+                    <button
+                      type="button"
+                      className="control-btn control-btn-inline"
+                      onClick={() => {
+                        void handleCopyDiagnostics();
+                      }}
+                      disabled={diagCopyBusy}
+                    >
+                      {diagCopyBusy ? "Copying..." : "Copy diagnostics"}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              <details className="metric-card bg-slate-50/70 p-3 lg:col-span-2" open={showAdvanced}>
+                <summary
+                  className="cursor-pointer text-sm font-semibold text-slate-700"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowAdvanced((prev) => !prev);
+                  }}
+                >
+                  Advanced API smoke actions
+                </summary>
+                {showAdvanced ? (
+                  <div className="mt-3 space-y-6 border-t subtle-divider pt-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">Upload (`/gateway/upload`)</p>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        <label className="text-sm text-slate-600">
+                          Deal ID
+                          <input
+                            className={formFieldClass}
+                            value={uploadDealId}
+                            onChange={(event) => setUploadDealId(event.target.value)}
+                          />
+                        </label>
+                        <label className="text-sm text-slate-600">
+                          Owner
+                          <input
+                            className={formFieldClass}
+                            value={uploadOwner}
+                            onChange={(event) => setUploadOwner(event.target.value)}
+                            placeholder="nil1..."
+                          />
+                        </label>
+                        <label className="text-sm text-slate-600">
+                          NilFS path
+                          <input
+                            className={formFieldClass}
+                            value={uploadFilePath}
+                            onChange={(event) => setUploadFilePath(event.target.value)}
+                          />
+                        </label>
+                        <div className="text-sm text-slate-600">
+                          Local file
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              className="control-btn control-btn-inline"
+                              onClick={handlePickFile}
+                            >
+                              Choose file
+                            </button>
+                            <span className="text-xs text-slate-500 break-all">
+                              {localFilePath || "No file selected"}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                        onClick={handleUpload}
-                        disabled={uploadBusy || phase !== "online"}
-                      >
-                        {uploadBusy ? "Uploading..." : "Upload file"}
-                      </button>
-                      {uploadError ? <span className="text-xs text-rose-600">{uploadError}</span> : null}
-                    </div>
-                    {uploadResponse ? (
-                      <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                        Manifest root: {uploadResponse.manifest_root}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className="control-btn control-btn-primary control-btn-inline"
+                          onClick={handleUpload}
+                          disabled={uploadBusy || phase !== "online"}
+                        >
+                          {uploadBusy ? "Uploading..." : "Upload file"}
+                        </button>
+                        {uploadError ? <span className="text-xs text-rose-600">{uploadError}</span> : null}
                       </div>
-                    ) : null}
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-5">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                      List & download (gateway/list-files + gateway/fetch)
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <label className="text-sm text-slate-600">
-                        Manifest root
-                        <input
-                          className={formFieldClass}
-                          value={listManifestRoot}
-                          onChange={(event) => setListManifestRoot(event.target.value)}
-                        />
-                      </label>
-                      <label className="text-sm text-slate-600">
-                        Deal ID
-                        <input
-                          className={formFieldClass}
-                          value={listDealId}
-                          onChange={(event) => setListDealId(event.target.value)}
-                        />
-                      </label>
-                      <label className="text-sm text-slate-600">
-                        Owner
-                        <input
-                          className={formFieldClass}
-                          value={listOwner}
-                          onChange={(event) => setListOwner(event.target.value)}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                        onClick={handleListFiles}
-                        disabled={listBusy || phase !== "online"}
-                      >
-                        {listBusy ? "Listing..." : "List files"}
-                      </button>
-                      {listError ? <span className="text-xs text-rose-600">{listError}</span> : null}
-                      {downloadError ? (
-                        <span className="text-xs text-rose-600">{downloadError}</span>
+                      {uploadResponse ? (
+                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                          Manifest root: {uploadResponse.manifest_root}
+                        </div>
                       ) : null}
                     </div>
 
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-white">
-                      <div className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b border-slate-200 px-3 py-2 text-[11px] uppercase tracking-wide text-slate-500">
-                        <span>Path</span>
-                        <span>Bytes</span>
-                        <span>Action</span>
+                    <div className="border-t subtle-divider pt-5">
+                      <p className="text-xs font-semibold text-slate-500">
+                        List and download (`/gateway/list-files` + `/gateway/fetch`)
+                      </p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <label className="text-sm text-slate-600">
+                          Manifest root
+                          <input
+                            className={formFieldClass}
+                            value={listManifestRoot}
+                            onChange={(event) => setListManifestRoot(event.target.value)}
+                          />
+                        </label>
+                        <label className="text-sm text-slate-600">
+                          Deal ID
+                          <input
+                            className={formFieldClass}
+                            value={listDealId}
+                            onChange={(event) => setListDealId(event.target.value)}
+                          />
+                        </label>
+                        <label className="text-sm text-slate-600">
+                          Owner
+                          <input
+                            className={formFieldClass}
+                            value={listOwner}
+                            onChange={(event) => setListOwner(event.target.value)}
+                          />
+                        </label>
                       </div>
-                      {files.length === 0 ? (
-                        <div className="px-3 py-4 text-sm text-slate-500">No files listed yet.</div>
-                      ) : (
-                        files.map((entry) => (
-                          <div
-                            key={entry.path}
-                            className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b border-slate-100 px-3 py-2 text-sm text-slate-700 last:border-b-0"
-                          >
-                            <span className="truncate">{entry.path}</span>
-                            <span>{entry.size_bytes}</span>
-                            <button
-                              type="button"
-                              className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
-                              onClick={() => void handleDownload(entry)}
-                              disabled={downloadBusy === entry.path}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className="control-btn control-btn-inline"
+                          onClick={handleListFiles}
+                          disabled={listBusy || phase !== "online"}
+                        >
+                          {listBusy ? "Listing..." : "List files"}
+                        </button>
+                        {listError ? <span className="text-xs text-rose-600">{listError}</span> : null}
+                        {downloadError ? <span className="text-xs text-rose-600">{downloadError}</span> : null}
+                      </div>
+
+                      <div className="metric-card mt-3">
+                        <div className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-500">
+                          <span>Path</span>
+                          <span>Bytes</span>
+                          <span>Action</span>
+                        </div>
+                        {files.length === 0 ? (
+                          <div className="px-3 py-4 text-sm text-slate-500">No files listed yet.</div>
+                        ) : (
+                          files.map((entry) => (
+                            <div
+                              key={entry.path}
+                              className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b border-slate-100 px-3 py-2 text-sm text-slate-700 last:border-b-0"
                             >
-                              {downloadBusy === entry.path ? "Saving..." : "Download"}
-                            </button>
-                          </div>
-                        ))
-                      )}
+                              <span className="truncate">{entry.path}</span>
+                              <span>{entry.size_bytes}</span>
+                              <button
+                                type="button"
+                                className="control-btn control-btn-inline px-2 py-1"
+                                onClick={() => void handleDownload(entry)}
+                                disabled={downloadBusy === entry.path}
+                              >
+                                {downloadBusy === entry.path ? "Saving..." : "Download"}
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
+
+                    {gateway ? (
+                      <details className="metric-card bg-slate-50/70 p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+                          Raw /status payload
+                        </summary>
+                        <pre className="mt-2 overflow-auto text-[11px] text-slate-700">
+                          {JSON.stringify(gateway, null, 2)}
+                        </pre>
+                      </details>
+                    ) : null}
                   </div>
-
-                  {gateway ? (
-                    <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Raw /status payload
-                      </summary>
-                      <pre className="mt-2 overflow-auto text-[11px] text-slate-700">
-                        {JSON.stringify(gateway, null, 2)}
-                      </pre>
-                    </details>
-                  ) : null}
-                </div>
-              ) : null}
-            </details>
-          </div>
-
-          <div className="surface-card flex min-h-[380px] flex-col p-6">
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Recent activity
-              </h2>
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white">
-                {recentActivity.length === 0 ? (
-                  <p className="px-3 py-3 text-xs text-slate-500">
-                    No activity yet. Start the local Gateway and perform an action in the dashboard.
-                  </p>
-                ) : (
-                  recentActivity.map((line, index) => (
-                    <p
-                      key={`activity-${index}-${line}`}
-                      className="border-b border-slate-100 px-3 py-2 text-xs text-slate-600 last:border-b-0"
-                    >
-                      {line}
-                    </p>
-                  ))
-                )}
-              </div>
+                ) : null}
+              </details>
             </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Live gateway logs
-              </h2>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoScrollLogs}
-                    onChange={(event) => setAutoScrollLogs(event.target.checked)}
-                  />
-                  Auto-scroll
-                </label>
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
-                  onClick={() => setLogs([])}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div
-              className="mt-3 h-[280px] overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
-              ref={(node) => {
-                if (node && autoScrollLogs) {
-                  node.scrollTop = node.scrollHeight;
-                }
-              }}
-            >
-              {logs.length === 0 ? (
-                <p className="text-slate-400">
-                  Waiting for gateway logs. Start or connect to the local Gateway to stream output.
-                </p>
-              ) : (
-                logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
-              )}
-            </div>
-          </div>
+          ) : null}
         </section>
       </div>
     </div>
