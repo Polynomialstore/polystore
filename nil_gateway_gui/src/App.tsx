@@ -196,6 +196,8 @@ export default function App() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageLastAt, setStorageLastAt] = useState<number | null>(null);
   const [storageBusy, setStorageBusy] = useState(false);
+  const [storageDealFilter, setStorageDealFilter] = useState<string>("all");
+  const [storageFileQuery, setStorageFileQuery] = useState("");
 
   const baseHost = useMemo(() => hostFromBaseUrl(gatewayBaseUrl), [gatewayBaseUrl]);
   const baseIsLoopback = useMemo(() => isLoopbackHost(baseHost), [baseHost]);
@@ -670,6 +672,25 @@ export default function App() {
     [storageSummary],
   );
 
+  const filteredStorageDealEntries = useMemo(
+    () =>
+      storageDealFilter === "all"
+        ? storageDealEntries
+        : storageDealEntries.filter((deal) => deal.deal_id === storageDealFilter),
+    [storageDealEntries, storageDealFilter],
+  );
+
+  const filteredStorageRecentFiles = useMemo(() => {
+    const query = storageFileQuery.trim().toLowerCase();
+    return storageRecentFiles.filter((file) => {
+      if (storageDealFilter !== "all" && file.deal_id !== storageDealFilter) {
+        return false;
+      }
+      if (!query) return true;
+      return file.relative_path.toLowerCase().includes(query);
+    });
+  }, [storageDealFilter, storageFileQuery, storageRecentFiles]);
+
   const mode2RepairSummary = useMemo(() => {
     const extra = gateway?.extra;
     const assignedAttempts = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_attempts");
@@ -1027,6 +1048,20 @@ export default function App() {
                 <p className="text-xs uppercase tracking-wide text-slate-500">Capabilities</p>
                 <p className="mt-1 text-xs text-slate-700 break-all">{capabilitiesSummary}</p>
               </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Provider base</p>
+                <p className="mt-1 text-xs text-slate-700 break-all">
+                  {gateway?.provider_base || "Not reported"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">P2P announce addrs</p>
+                <p className="mt-1 text-xs text-slate-700">
+                  {gateway?.p2p_addrs && gateway.p2p_addrs.length > 0
+                    ? `${gateway.p2p_addrs.length} reported`
+                    : "None (desktop default keeps P2P disabled)"}
+                </p>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -1101,6 +1136,45 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="mt-3 grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Deal filter
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium normal-case tracking-normal text-slate-700"
+                    value={storageDealFilter}
+                    onChange={(event) => setStorageDealFilter(event.target.value)}
+                  >
+                    <option value="all">All deals</option>
+                    {storageDealEntries.map((deal) => (
+                      <option key={deal.deal_id} value={deal.deal_id}>
+                        Deal {deal.deal_id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  File search
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs normal-case tracking-normal text-slate-700"
+                    placeholder="Filter cached files by path..."
+                    value={storageFileQuery}
+                    onChange={(event) => setStorageFileQuery(event.target.value)}
+                  />
+                </label>
+              </div>
+              {(storageDealFilter !== "all" || storageFileQuery.trim() !== "") ? (
+                <button
+                  type="button"
+                  className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                  onClick={() => {
+                    setStorageDealFilter("all");
+                    setStorageFileQuery("");
+                  }}
+                >
+                  Reset filters
+                </button>
+              ) : null}
+
               {storageError ? (
                 <p className="mt-2 text-xs text-rose-600">{storageError}</p>
               ) : null}
@@ -1126,20 +1200,29 @@ export default function App() {
                   <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Cached deals
                   </div>
-                  {storageDealEntries.length === 0 ? (
+                  {filteredStorageDealEntries.length === 0 ? (
                     <div className="px-3 py-3 text-xs text-slate-500">
-                      No deal cache folders yet.
+                      {storageDealEntries.length === 0
+                        ? "No deal cache folders yet."
+                        : "No deals match the current filter."}
                     </div>
                   ) : (
-                    storageDealEntries.map((deal) => (
+                    filteredStorageDealEntries.map((deal) => (
                       <div
                         key={deal.deal_id}
-                        className="grid grid-cols-[0.8fr_0.8fr_0.7fr_0.7fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
+                        className="grid grid-cols-[0.7fr_0.7fr_0.7fr_0.7fr_auto] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
                       >
                         <span className="font-semibold text-slate-900">{deal.deal_id}</span>
                         <span>{formatBytes(deal.total_bytes)}</span>
                         <span>{deal.file_count} files</span>
                         <span>{deal.manifest_count} manifests</span>
+                        <button
+                          type="button"
+                          className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                          onClick={() => setStorageDealFilter(deal.deal_id)}
+                        >
+                          Focus
+                        </button>
                       </div>
                     ))
                   )}
@@ -1149,12 +1232,14 @@ export default function App() {
                   <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Recent cached files
                   </div>
-                  {storageRecentFiles.length === 0 ? (
+                  {filteredStorageRecentFiles.length === 0 ? (
                     <div className="px-3 py-3 text-xs text-slate-500">
-                      No cached files yet.
+                      {(storageRecentFiles.length === 0 && storageDealFilter === "all" && !storageFileQuery)
+                        ? "No cached files yet."
+                        : "No cached files match this filter/search."}
                     </div>
                   ) : (
-                    storageRecentFiles.map((file) => (
+                    filteredStorageRecentFiles.map((file) => (
                       <div
                         key={`${file.relative_path}-${file.modified_unix}`}
                         className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
