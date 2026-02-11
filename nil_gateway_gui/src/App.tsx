@@ -73,6 +73,11 @@ function formatUnixTime(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
+function toFileUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `file://${encodeURI(normalized)}`;
+}
+
 function hostFromBaseUrl(value: string): string {
   try {
     return new URL(value).hostname.toLowerCase();
@@ -468,7 +473,23 @@ export default function App() {
 
   const handleOpenCacheDir = async () => {
     if (!storageSummary?.uploads_dir) return;
-    await openPath(storageSummary.uploads_dir);
+    try {
+      await openPath(storageSummary.uploads_dir);
+      addLog(`Opened cache folder: ${storageSummary.uploads_dir}`);
+      return;
+    } catch (err) {
+      const firstError = errorMessage(err, "openPath failed");
+      addLog(`Open cache folder failed (path): ${firstError}`);
+      try {
+        await openUrl(toFileUrl(storageSummary.uploads_dir));
+        addLog(`Opened cache folder via file URL: ${storageSummary.uploads_dir}`);
+        return;
+      } catch (fallbackErr) {
+        const secondError = errorMessage(fallbackErr, "openUrl fallback failed");
+        setStatusDetail(`Could not open cache folder: ${secondError}`);
+        addLog(`Open cache folder failed (url): ${secondError}`);
+      }
+    }
   };
 
   const handlePickFile = async () => {
@@ -755,7 +776,7 @@ export default function App() {
           ) : null}
         </header>
 
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div className="surface-card p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
               Local Gateway health
@@ -807,11 +828,29 @@ export default function App() {
               </div>
             ) : null}
 
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Local storage snapshot
-                </h3>
+            <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+              <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Local storage snapshot
+              </summary>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Deals</p>
+                    <p className="text-sm font-semibold text-slate-900">{storageSummary?.deal_count ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Manifests</p>
+                    <p className="text-sm font-semibold text-slate-900">{storageSummary?.manifest_count ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Files</p>
+                    <p className="text-sm font-semibold text-slate-900">{storageSummary?.total_files ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Disk</p>
+                    <p className="text-sm font-semibold text-slate-900">{formatBytes(storageSummary?.total_bytes ?? 0)}</p>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -826,7 +865,9 @@ export default function App() {
                   <button
                     type="button"
                     className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
-                    onClick={handleOpenCacheDir}
+                    onClick={() => {
+                      void handleOpenCacheDir();
+                    }}
                     disabled={!storageSummary?.uploads_dir}
                   >
                     Open cache folder
@@ -836,34 +877,7 @@ export default function App() {
 
               {storageError ? (
                 <p className="mt-2 text-xs text-rose-600">{storageError}</p>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Deals cached</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {storageSummary?.deal_count ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Manifests</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {storageSummary?.manifest_count ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Cached files</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {storageSummary?.total_files ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Disk usage</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {formatBytes(storageSummary?.total_bytes ?? 0)}
-                    </p>
-                  </div>
-                </div>
-              )}
+              ) : null}
 
               <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
                 <p className="break-all">
@@ -881,7 +895,7 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-white">
                   <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Cached deals
@@ -928,12 +942,12 @@ export default function App() {
                   )}
                 </div>
               </div>
-            </div>
+            </details>
 
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                 Retrieval/repair signal
-              </h3>
+              </summary>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Local shard hits</p>
@@ -957,7 +971,7 @@ export default function App() {
                   ? `Fallback attempts observed: ${mode2RepairSummary.fallbackAttempts}`
                   : "No reconstruction telemetry yet for this session."}
               </p>
-            </div>
+            </details>
 
             <details className="mt-6 rounded-2xl border border-slate-200 bg-white" open={showAdvanced}>
               <summary
@@ -1126,7 +1140,7 @@ export default function App() {
             </details>
           </div>
 
-          <div className="surface-card flex min-h-[480px] flex-col p-6">
+          <div className="surface-card flex min-h-[380px] flex-col p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
                 Live gateway logs
@@ -1151,7 +1165,7 @@ export default function App() {
             </div>
 
             <div
-              className="mt-3 flex-1 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
+              className="mt-3 h-[360px] overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
               ref={(node) => {
                 if (node && autoScrollLogs) {
                   node.scrollTop = node.scrollHeight;
