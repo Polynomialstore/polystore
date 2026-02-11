@@ -793,7 +793,7 @@ export default function App() {
   const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);
 
   const formFieldClass =
-    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]";
 
   const handleCopyDiagnostics = useCallback(async () => {
     setDiagCopyBusy(true);
@@ -845,41 +845,40 @@ export default function App() {
 
   const tabButtonClass = (panel: "overview" | "storage" | "diagnostics") =>
     [
-      "rounded-lg px-3 py-2 text-sm font-semibold transition",
-      activePanel === panel
-        ? "bg-slate-900 text-white shadow-sm"
-        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+      "panel-tab",
+      activePanel === panel ? "panel-tab-active" : "",
     ].join(" ");
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-100">
-      <div className="mx-auto max-w-5xl space-y-4 p-5">
-        <header className="surface-card p-5">
+    <div className="gateway-app min-h-screen">
+      <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
+        <header className="surface-card surface-hero p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
                 <img
                   src={logoDark}
                   alt="NilStore"
-                  className="h-9 w-9 rounded-full border border-slate-200 bg-white p-1"
+                  className="h-10 w-10 rounded-full border border-slate-200 bg-white p-1 shadow-sm"
                 />
                 <div>
-                  <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">NILSTORE</p>
-                  <h1 className="text-3xl font-semibold text-slate-900">Local Gateway</h1>
+                  <p className="soft-label">NilStore</p>
+                  <h1 className="text-[34px] font-semibold leading-none text-slate-900">Local Gateway</h1>
                 </div>
               </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
                 Keep your local Gateway ready for uploads and retrievals in the NilStore dashboard.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(phase)}`}>
+              <span className={`status-pill rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(phase)}`}>
+                <span className="status-dot" />
                 {statusLabel(phase)}
               </span>
               <button
                 type="button"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                className="control-btn control-btn-primary"
                 onClick={() => {
                   if (phase === "online") {
                     void handleOpenDashboard();
@@ -897,7 +896,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="control-btn"
                 onClick={() => setActivePanel("diagnostics")}
               >
                 Diagnostics
@@ -905,8 +904,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <p className="text-sm font-medium text-slate-800">{phaseMessage}</p>
+          <div className="mt-4 rounded-xl border subtle-divider bg-white/90 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-800">{phaseMessage}</p>
             {statusDetail ? <p className="mt-1 text-xs text-slate-500">{statusDetail}</p> : null}
             <p className="mt-1 text-xs text-slate-500">
               {readinessCounts.ready}/3 checks ready
@@ -917,6 +916,17 @@ export default function App() {
                   : " · system healthy"}
               {lastStatusAt ? ` · checked ${new Date(lastStatusAt).toLocaleTimeString()}` : ""}
             </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="meta-chip">
+                <strong>Endpoint</strong> {gatewayBaseUrl}
+              </span>
+              <span className="meta-chip">
+                <strong>Mode</strong> {gateway?.mode || "standalone"}
+              </span>
+              <span className="meta-chip">
+                <strong>Auto-start</strong> {autoStartEnabled ? "enabled" : "paused"}
+              </span>
+            </div>
             {diagCopyMessage ? (
               <p className="mt-1 text-xs font-semibold text-emerald-700">{diagCopyMessage}</p>
             ) : null}
@@ -929,7 +939,7 @@ export default function App() {
           ) : null}
         </header>
 
-        <section className="surface-card p-4">
+        <section className="surface-card p-5">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -958,9 +968,9 @@ export default function App() {
             <div className="mt-4 space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 {readinessItems.map((item) => (
-                  <div key={item.key} className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <div key={item.key} className="metric-card px-3 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-500">{item.title}</p>
+                      <p className="soft-label">{item.title}</p>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${readinessBadgeClass(item.state)}`}>
                         {readinessLabel(item.state)}
                       </span>
@@ -978,8 +988,8 @@ export default function App() {
                 </div>
               ) : null}
 
-              <div className="rounded-xl border border-slate-200 bg-white">
-                <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">
+              <div className="metric-card">
+                <div className="border-b subtle-divider px-3 py-2 soft-label">
                   Recent activity
                 </div>
                 {recentActivity.length === 0 ? (
@@ -998,7 +1008,7 @@ export default function App() {
                 )}
               </div>
 
-              <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <details className="metric-card bg-slate-50/70 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-slate-700">
                   Connection controls
                 </summary>
@@ -1014,7 +1024,7 @@ export default function App() {
                   <div className="flex items-end gap-2">
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      className="control-btn control-btn-inline"
                       onClick={() => void ensureGateway({ startIfOffline: false })}
                       disabled={actionBusy}
                     >
@@ -1022,7 +1032,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      className="control-btn control-btn-inline"
                       onClick={handleAttach}
                       disabled={actionBusy}
                     >
@@ -1030,7 +1040,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      className="control-btn control-btn-inline"
                       onClick={handleStop}
                       disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
                     >
@@ -1049,27 +1059,27 @@ export default function App() {
             <div className="mt-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[11px] font-semibold text-slate-500">Deals</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Deals</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.deal_count ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[11px] font-semibold text-slate-500">Manifests</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Manifests</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.manifest_count ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[11px] font-semibold text-slate-500">Files</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Files</p>
                     <p className="text-sm font-semibold text-slate-900">{storageSummary?.total_files ?? 0}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[11px] font-semibold text-slate-500">Disk</p>
+                  <div className="metric-card px-3 py-2">
+                  <p className="soft-label">Disk</p>
                     <p className="text-sm font-semibold text-slate-900">{formatBytes(storageSummary?.total_bytes ?? 0)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    className="control-btn control-btn-inline"
                     onClick={() => {
                       void refreshLocalStorage();
                     }}
@@ -1079,7 +1089,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    className="control-btn control-btn-inline"
                     onClick={() => {
                       void handleOpenCacheDir();
                     }}
@@ -1120,7 +1130,7 @@ export default function App() {
               {(storageDealFilter !== "all" || storageFileQuery.trim() !== "") ? (
                 <button
                   type="button"
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="control-btn control-btn-inline"
                   onClick={() => {
                     setStorageDealFilter("all");
                     setStorageFileQuery("");
@@ -1134,7 +1144,7 @@ export default function App() {
                 <p className="text-xs text-rose-600">{storageError}</p>
               ) : null}
 
-              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+              <div className="metric-card px-3 py-2 text-xs text-slate-600">
                 <p className="break-all">
                   <span className="font-semibold text-slate-700">Uploads dir:</span>{" "}
                   {storageSummary?.uploads_dir || "n/a"}
@@ -1151,8 +1161,8 @@ export default function App() {
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">
+                <div className="metric-card">
+                  <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Cached deals
                   </div>
                   {filteredStorageDealEntries.length === 0 ? (
@@ -1173,7 +1183,7 @@ export default function App() {
                         <span>{deal.manifest_count} manifests</span>
                         <button
                           type="button"
-                          className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                          className="control-btn control-btn-inline px-2 py-1 text-[10px]"
                           onClick={() => setStorageDealFilter(deal.deal_id)}
                         >
                           Focus
@@ -1183,8 +1193,8 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">
+                <div className="metric-card">
+                  <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Recent cached files
                   </div>
                   {filteredStorageRecentFiles.length === 0 ? (
@@ -1213,9 +1223,9 @@ export default function App() {
 
           {activePanel === "diagnostics" ? (
             <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="metric-card p-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-slate-700">Live gateway logs</h2>
+                  <h2 className="soft-label text-slate-600">Live gateway logs</h2>
                   <div className="flex items-center gap-3 text-xs text-slate-500">
                     <label className="flex items-center gap-2">
                       <input
@@ -1227,7 +1237,7 @@ export default function App() {
                     </label>
                     <button
                       type="button"
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
+                      className="control-btn control-btn-inline px-2 py-1"
                       onClick={() => setLogs([])}
                     >
                       Clear
@@ -1235,7 +1245,7 @@ export default function App() {
                   </div>
                 </div>
                 <div
-                  className="mt-3 h-[340px] overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
+                  className="log-panel mt-3 h-[340px] overflow-auto p-3 font-mono text-xs leading-relaxed text-emerald-200"
                   ref={(node) => {
                     if (node && autoScrollLogs) {
                       node.scrollTop = node.scrollHeight;
@@ -1253,8 +1263,8 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs font-semibold text-slate-500">Gateway internals</p>
+                <div className="metric-card p-3">
+                  <p className="soft-label">Gateway internals</p>
                   <div className="mt-2 space-y-1 text-xs text-slate-600">
                     <p>
                       <span className="font-semibold text-slate-700">Listening:</span>{" "}
@@ -1277,21 +1287,21 @@ export default function App() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="control-btn control-btn-inline"
                       onClick={() => void handleOpenEndpoint("/health")}
                     >
                       Open /health
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="control-btn control-btn-inline"
                       onClick={() => void handleOpenEndpoint("/status")}
                     >
                       Open /status
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      className="control-btn control-btn-inline"
                       onClick={() => {
                         void handleCopyDiagnostics();
                       }}
@@ -1302,8 +1312,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs font-semibold text-slate-500">Retrieval / repair signal</p>
+                <div className="metric-card p-3">
+                  <p className="soft-label">Retrieval / repair signal</p>
                   <div className="mt-2 space-y-1 text-xs text-slate-600">
                     <p>
                       <span className="font-semibold text-slate-700">Local shard hits:</span>{" "}
@@ -1321,7 +1331,7 @@ export default function App() {
                 </div>
               </div>
 
-              <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-2" open={showAdvanced}>
+              <details className="metric-card bg-slate-50/70 p-3 lg:col-span-2" open={showAdvanced}>
                 <summary
                   className="cursor-pointer text-sm font-semibold text-slate-700"
                   onClick={(e) => {
@@ -1332,7 +1342,7 @@ export default function App() {
                   Advanced API smoke actions
                 </summary>
                 {showAdvanced ? (
-                  <div className="mt-3 space-y-6 border-t border-slate-100 pt-3">
+                  <div className="mt-3 space-y-6 border-t subtle-divider pt-3">
                     <div>
                       <p className="text-xs font-semibold text-slate-500">Upload (`/gateway/upload`)</p>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -1366,7 +1376,7 @@ export default function App() {
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <button
                               type="button"
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+                              className="control-btn control-btn-inline"
                               onClick={handlePickFile}
                             >
                               Choose file
@@ -1380,7 +1390,7 @@ export default function App() {
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                          className="control-btn control-btn-primary control-btn-inline"
                           onClick={handleUpload}
                           disabled={uploadBusy || phase !== "online"}
                         >
@@ -1395,7 +1405,7 @@ export default function App() {
                       ) : null}
                     </div>
 
-                    <div className="border-t border-slate-100 pt-5">
+                    <div className="border-t subtle-divider pt-5">
                       <p className="text-xs font-semibold text-slate-500">
                         List and download (`/gateway/list-files` + `/gateway/fetch`)
                       </p>
@@ -1429,7 +1439,7 @@ export default function App() {
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                          className="control-btn control-btn-inline"
                           onClick={handleListFiles}
                           disabled={listBusy || phase !== "online"}
                         >
@@ -1439,8 +1449,8 @@ export default function App() {
                         {downloadError ? <span className="text-xs text-rose-600">{downloadError}</span> : null}
                       </div>
 
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-white">
-                        <div className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                      <div className="metric-card mt-3">
+                        <div className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-500">
                           <span>Path</span>
                           <span>Bytes</span>
                           <span>Action</span>
@@ -1457,7 +1467,7 @@ export default function App() {
                               <span>{entry.size_bytes}</span>
                               <button
                                 type="button"
-                                className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                                className="control-btn control-btn-inline px-2 py-1"
                                 onClick={() => void handleDownload(entry)}
                                 disabled={downloadBusy === entry.path}
                               >
@@ -1470,7 +1480,7 @@ export default function App() {
                     </div>
 
                     {gateway ? (
-                      <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <details className="metric-card bg-slate-50/70 p-3">
                         <summary className="cursor-pointer text-xs font-semibold text-slate-600">
                           Raw /status payload
                         </summary>
