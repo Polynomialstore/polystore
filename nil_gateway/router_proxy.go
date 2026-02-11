@@ -33,6 +33,20 @@ var routerHTTPClient = &http.Client{
 	},
 }
 
+func copyUpstreamResponseHeaders(dst http.Header, src http.Header) {
+	for k, vals := range src {
+		// Router handlers apply canonical CORS headers at the edge.
+		// Avoid duplicating provider Access-Control-* headers, which can produce
+		// invalid values such as "origin, origin" and break browser fetches.
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(k)), "access-control-") {
+			continue
+		}
+		for _, v := range vals {
+			dst.Add(k, v)
+		}
+	}
+}
+
 func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -66,11 +80,7 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 	}
 	defer resp.Body.Close()
 
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			w.Header().Add(k, v)
-		}
-	}
+	copyUpstreamResponseHeaders(w.Header(), resp.Header)
 	// Ensure CORS headers are always present on responses returned via the router.
 	setCORS(w)
 	w.WriteHeader(resp.StatusCode)
@@ -121,11 +131,7 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 		}
 
 		// Not a routing miss: forward the 400 response to the client.
-		for k, vals := range resp.Header {
-			for _, v := range vals {
-				w.Header().Add(k, v)
-			}
-		}
+		copyUpstreamResponseHeaders(w.Header(), resp.Header)
 		setCORS(w)
 		w.WriteHeader(resp.StatusCode)
 		_, copyErr := w.Write(bodyBytes)
@@ -145,11 +151,7 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 			return false, fmt.Errorf("session provider mismatch: %s", body)
 		}
 
-		for k, vals := range resp.Header {
-			for _, v := range vals {
-				w.Header().Add(k, v)
-			}
-		}
+		copyUpstreamResponseHeaders(w.Header(), resp.Header)
 		setCORS(w)
 		w.WriteHeader(resp.StatusCode)
 		_, copyErr := w.Write(bodyBytes)
@@ -169,11 +171,7 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 		return false, fmt.Errorf("provider returned %d: %s", resp.StatusCode, body)
 	}
 
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			w.Header().Add(k, v)
-		}
-	}
+	copyUpstreamResponseHeaders(w.Header(), resp.Header)
 	setCORS(w)
 	w.WriteHeader(resp.StatusCode)
 
@@ -254,11 +252,7 @@ func tryProxyUploadToProviderBaseURL(w http.ResponseWriter, r *http.Request, pro
 		return false, fmt.Errorf("provider returned %d: %s", resp.StatusCode, body)
 	}
 
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			w.Header().Add(k, v)
-		}
-	}
+	copyUpstreamResponseHeaders(w.Header(), resp.Header)
 	setCORS(w)
 	w.WriteHeader(resp.StatusCode)
 
