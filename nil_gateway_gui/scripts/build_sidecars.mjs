@@ -53,9 +53,16 @@ const nilGatewayOutput = join(binDir, `nil_gateway${ext}`);
 if (existsSync(nilGatewayOutput)) {
   unlinkSync(nilGatewayOutput);
 }
+const goBuildArgs = ["build"];
+if (process.platform === "linux") {
+  goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,$ORIGIN");
+} else if (process.platform === "darwin") {
+  goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,@loader_path");
+}
+goBuildArgs.push("-o", nilGatewayOutput, ".");
 execFileSync(
   "go",
-  ["build", "-o", nilGatewayOutput, "."],
+  goBuildArgs,
   {
     cwd: join(rootDir, "nil_gateway"),
     stdio: "inherit",

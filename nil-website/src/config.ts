@@ -58,7 +58,7 @@ function normalizeLoopbackUrl(url: string): string {
   try {
     const parsed = new URL(raw)
     if (isLoopbackHost(parsed.hostname.toLowerCase())) {
-      parsed.hostname = '127.0.0.1'
+      parsed.hostname = 'localhost'
       return parsed.toString()
     }
     return raw
@@ -86,7 +86,7 @@ const RUNTIME_ORIGIN = detectRuntimeOrigin()
 const PUBLIC_DOMAIN = inferPublicDomain(RUNTIME_HOST)
 const defaultBase = (subdomain: string, localDefault: string): string =>
   PUBLIC_DOMAIN ? `https://${subdomain}.${PUBLIC_DOMAIN}` : localDefault
-const LOCAL_GATEWAY_BASE = 'http://127.0.0.1:8080'
+const LOCAL_GATEWAY_BASE = 'http://localhost:8080'
 
 const API_BASE = envString(ENV.VITE_API_BASE) || defaultBase('faucet', 'http://localhost:8081')
 const LCD_BASE = envString(ENV.VITE_LCD_BASE) || defaultBase('lcd', 'http://localhost:1317')

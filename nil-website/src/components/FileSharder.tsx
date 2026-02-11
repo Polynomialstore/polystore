@@ -87,6 +87,46 @@ function formatDuration(ms: number) {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function alternateLoopbackBase(baseUrl: string): string | null {
+  const raw = String(baseUrl || '').trim()
+  if (!raw) return null
+  try {
+    const parsed = new URL(raw)
+    const host = parsed.hostname.toLowerCase()
+    if (host === 'localhost') {
+      parsed.hostname = '127.0.0.1'
+      return parsed.toString().replace(/\/$/, '')
+    }
+    if (host === '127.0.0.1') {
+      parsed.hostname = 'localhost'
+      return parsed.toString().replace(/\/$/, '')
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function localGatewayCandidates(baseUrl: string): string[] {
+  const seed = String(baseUrl || '').trim().replace(/\/$/, '')
+  const candidates: string[] = []
+  const push = (value: string | null | undefined) => {
+    const clean = String(value || '').trim().replace(/\/$/, '')
+    if (!clean) return
+    if (!candidates.includes(clean)) candidates.push(clean)
+  }
+  push(seed)
+  push(alternateLoopbackBase(seed))
+  push('http://localhost:8080')
+  push('http://127.0.0.1:8080')
+  return candidates
+}
+
+function isGatewayNetworkError(msg: string): boolean {
+  const text = String(msg || '')
+  return text.includes('Failed to fetch') || text.includes('NetworkError') || text.includes('ERR_CONNECTION_REFUSED')
+}
+
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
@@ -1065,18 +1105,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           return true
         }
 
-        let stopPolling = false
-        let lastJob: GatewayUploadJobStatus | null = null as GatewayUploadJobStatus | null
-
         const newUploadId = () =>
           globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
             ? globalThis.crypto.randomUUID()
             : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
-        const gatewayBase = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
-        const uploadId = newUploadId()
-        const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
-        const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+        type GatewayUploadPayload = {
+          manifest_root?: string
+          cid?: string
+          size_bytes?: number
+          file_size_bytes?: number
+          allocated_length?: number
+          total_mdus?: number
+          witness_mdus?: number
+        } | null
 
         const buildUploadForm = (id: string) => {
           const form = new FormData()
@@ -1088,190 +1130,178 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           return form
         }
 
-        const pollStatus = async () => {
-          while (!stopPolling) {
-            try {
-              const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(2500) })
-              if (res.ok) {
-                const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
-                if (job) {
-                  lastJob = job
-                  const phase = String(job.phase || '').trim()
-                  const status = String(job.status || '').trim()
-                  const message = String(job.message || '').trim()
-                  const bytesDone = Number(job.bytes_done || 0) || 0
-                  const bytesTotal = Number(job.bytes_total || 0) || 0
-                  const stepsDone = Number(job.steps_done || 0) || 0
-                  const stepsTotal = Number(job.steps_total || 0) || 0
+        const runGatewayUpload = async (
+          gatewayBase: string,
+          initialLabel: string,
+        ): Promise<{ payload: GatewayUploadPayload; lastJob: GatewayUploadJobStatus | null }> => {
+          let stopPolling = false
+          let lastJob: GatewayUploadJobStatus | null = null
+          const uploadId = newUploadId()
+          const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+          const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
 
-                  const phaseLabel = message || phase || status || 'working'
-                  const label = `Gateway Mode 2: ${phaseLabel}`
+          const pollStatus = async () => {
+            while (!stopPolling) {
+              try {
+                const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(2500) })
+                if (res.ok) {
+                  const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
+                  if (job) {
+                    lastJob = job
+                    const phase = String(job.phase || '').trim()
+                    const status = String(job.status || '').trim()
+                    const message = String(job.message || '').trim()
+                    const bytesDone = Number(job.bytes_done || 0) || 0
+                    const bytesTotal = Number(job.bytes_total || 0) || 0
+                    const stepsDone = Number(job.steps_done || 0) || 0
+                    const stepsTotal = Number(job.steps_total || 0) || 0
 
-                  const phaseState: ShardPhase =
-                    phase === 'receiving'
-                      ? 'gateway_receiving'
-                      : phase === 'encoding'
-                        ? 'gateway_encoding'
-                        : phase === 'uploading'
-                          ? 'gateway_uploading'
-                          : phase === 'done'
-                            ? 'done'
-                            : 'planning'
+                    const phaseLabel = message || phase || status || 'working'
+                    const label = `Gateway Mode 2: ${phaseLabel}`
 
-                  const useBytes = phaseState === 'gateway_receiving' && bytesTotal > 0
-                  const workDone = useBytes ? bytesDone : stepsDone
-                  const workTotal = useBytes ? bytesTotal : stepsTotal
+                    const phaseState: ShardPhase =
+                      phase === 'receiving'
+                        ? 'gateway_receiving'
+                        : phase === 'encoding'
+                          ? 'gateway_encoding'
+                          : phase === 'uploading'
+                            ? 'gateway_uploading'
+                            : phase === 'done'
+                              ? 'done'
+                              : 'planning'
 
-                  setShardProgress((p) => ({
-                    ...p,
-                    phase: phaseState,
-                    label,
-                    workDone,
-                    workTotal,
-                    blobsDone: workDone,
-                    blobsTotal: workTotal,
-                    fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
-                  }))
+                    const useBytes = phaseState === 'gateway_receiving' && bytesTotal > 0
+                    const workDone = useBytes ? bytesDone : stepsDone
+                    const workTotal = useBytes ? bytesTotal : stepsTotal
+
+                    setShardProgress((p) => ({
+                      ...p,
+                      phase: phaseState,
+                      label,
+                      workDone,
+                      workTotal,
+                      blobsDone: workDone,
+                      blobsTotal: workTotal,
+                      fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
+                    }))
+                  }
                 }
+              } catch {
+                // Ignore polling errors; the primary upload request is the source of truth.
               }
-            } catch {
-              // Ignore polling errors; the primary upload request is the source of truth.
+              await new Promise((r) => setTimeout(r, 1000))
+            }
+          }
+
+          const pollPromise = pollStatus()
+          try {
+            setMode2Uploading(true)
+            setShardProgress((p) => ({
+              ...p,
+              phase: 'gateway_receiving',
+              label: initialLabel,
+              workDone: 0,
+              workTotal: file.size,
+              blobsDone: 0,
+              blobsTotal: file.size,
+              fileBytesTotal: file.size,
+              currentOpStartedAtMs: performance.now(),
+            }))
+
+            const resp = await fetch(url, {
+              method: 'POST',
+              body: buildUploadForm(uploadId),
+              signal: AbortSignal.timeout(1_800_000),
+            })
+
+            if (!resp.ok) {
+              const txt = await resp.text().catch(() => '')
+              const statusErr = String((lastJob as GatewayUploadJobStatus | null)?.error || '')
+              throw new Error(txt || statusErr || `gateway upload failed (${resp.status})`)
             }
 
-            await new Promise((r) => setTimeout(r, 1000))
+            const payload = (await resp.json().catch(() => null)) as GatewayUploadPayload
+            return { payload, lastJob }
+          } finally {
+            stopPolling = true
+            await pollPromise.catch(() => {})
+            setMode2Uploading(false)
           }
         }
 
-        const pollPromise = pollStatus()
+        const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
+        const gatewayBases = localGatewayCandidates(gatewaySeed)
+        let gatewayErrorMessage = ''
+        let gatewayUnreachable = false
 
-        try {
-          setMode2Uploading(true)
-          setShardProgress((p) => ({
-            ...p,
-            phase: 'gateway_receiving',
-            label: 'Gateway Mode 2: starting upload...',
-            workDone: 0,
-            workTotal: file.size,
-            blobsDone: 0,
-            blobsTotal: file.size,
-            fileBytesTotal: file.size,
-            currentOpStartedAtMs: performance.now(),
-          }))
+        for (let i = 0; i < gatewayBases.length; i++) {
+          const gatewayBase = gatewayBases[i]
+          try {
+            const { payload, lastJob } = await runGatewayUpload(gatewayBase, 'Gateway Mode 2: starting upload...')
+            if (finalizeGatewaySuccess(payload, lastJob)) return
+            gatewayErrorMessage = 'gateway upload returned no manifest_root'
+            gatewayUnreachable = false
+            break
+          } catch (e: unknown) {
+            let msg = e instanceof Error ? e.message : String(e)
+            addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
 
-          const resp = await fetch(url, {
-            method: 'POST',
-            body: buildUploadForm(uploadId),
-            signal: AbortSignal.timeout(1_800_000),
-          })
-
-          stopPolling = true
-          await pollPromise.catch(() => {})
-
-          if (!resp.ok) {
-            const txt = await resp.text().catch(() => '')
-            const statusErr = String(lastJob?.error || '')
-            throw new Error(txt || statusErr || `gateway upload failed (${resp.status})`)
-          }
-
-          const payload = (await resp.json().catch(() => null)) as {
-            manifest_root?: string
-            cid?: string
-            size_bytes?: number
-            file_size_bytes?: number
-            allocated_length?: number
-            total_mdus?: number
-            witness_mdus?: number
-          } | null
-
-          if (finalizeGatewaySuccess(payload, lastJob)) return
-        } catch (e: unknown) {
-          stopPolling = true
-          await pollPromise.catch(() => {})
-
-          let msg = e instanceof Error ? e.message : String(e)
-          addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
-
-          const missingLocalState =
-            /mode2 append failed/i.test(msg) &&
-            /failed to resolve existing slab dir|failed to read existing MDU #0|failed to copy existing shard|failed to decode witness mdu|existing Mode 2 slab has no user MDUs/i.test(
-              msg,
-            )
-          if (missingLocalState) {
-            addLog('> Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS...')
-            const rehydrated = await rehydrateGatewayFromOpfs()
-            if (rehydrated) {
-              try {
-                addLog('> Retrying Gateway Mode 2 ingest after rehydrate...')
-                setMode2Uploading(true)
-                setShardProgress((p) => ({
-                  ...p,
-                  phase: 'gateway_receiving',
-                  label: 'Gateway rehydrated from browser cache; retrying upload...',
-                  workDone: 0,
-                  workTotal: file.size,
-                  blobsDone: 0,
-                  blobsTotal: file.size,
-                  fileBytesTotal: file.size,
-                  currentOpStartedAtMs: performance.now(),
-                }))
-
-                const retryUploadId = newUploadId()
-                const retryUrl = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(retryUploadId)}`
-                const retryResp = await fetch(retryUrl, {
-                  method: 'POST',
-                  body: buildUploadForm(retryUploadId),
-                  signal: AbortSignal.timeout(1_800_000),
-                })
-                if (!retryResp.ok) {
-                  const txt = await retryResp.text().catch(() => '')
-                  throw new Error(txt || `gateway upload failed (${retryResp.status})`)
+            const missingLocalState =
+              /mode2 append failed/i.test(msg) &&
+              /failed to resolve existing slab dir|failed to read existing MDU #0|failed to copy existing shard|failed to decode witness mdu|existing Mode 2 slab has no user MDUs/i.test(
+                msg,
+              )
+            if (missingLocalState) {
+              addLog('> Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS...')
+              const rehydrated = await rehydrateGatewayFromOpfs()
+              if (rehydrated) {
+                try {
+                  addLog('> Retrying Gateway Mode 2 ingest after rehydrate...')
+                  const { payload } = await runGatewayUpload(
+                    gatewayBase,
+                    'Gateway rehydrated from browser cache; retrying upload...',
+                  )
+                  if (finalizeGatewaySuccess(payload, null)) return
+                  msg = 'gateway upload returned no manifest_root'
+                } catch (retryErr: unknown) {
+                  msg = retryErr instanceof Error ? retryErr.message : String(retryErr)
+                  addLog(`> Gateway retry after rehydrate failed: ${msg}`)
                 }
-                const retryPayload = (await retryResp.json().catch(() => null)) as {
-                  manifest_root?: string
-                  cid?: string
-                  size_bytes?: number
-                  file_size_bytes?: number
-                  allocated_length?: number
-                  total_mdus?: number
-                  witness_mdus?: number
-                } | null
-                if (finalizeGatewaySuccess(retryPayload, null)) return
-                msg = 'gateway upload returned no manifest_root'
-              } catch (retryErr: unknown) {
-                msg = retryErr instanceof Error ? retryErr.message : String(retryErr)
-                addLog(`> Gateway retry after rehydrate failed: ${msg}`)
-              } finally {
-                setMode2Uploading(false)
               }
             }
-          }
 
-          const unreachable = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION_REFUSED')
-          if (unreachable) {
-            addLog('> Gateway unavailable; falling back to in-browser Mode 2 sharding + stripe upload.')
-
-            setMode2UploadError(null)
-            setShardProgress((p) => ({
-              ...p,
-              phase: 'planning',
-              label: 'Gateway unavailable; falling back to in-browser sharding...',
-              currentOpStartedAtMs: null,
-              lastOpMs: performance.now() - startTs,
-            }))
-          } else {
-            setMode2UploadError(msg)
-            setShardProgress((p) => ({
-              ...p,
-              phase: 'error',
-              label: `Gateway Mode 2 ingest failed: ${msg}`,
-              currentOpStartedAtMs: null,
-              lastOpMs: performance.now() - startTs,
-            }))
-            setProcessing(false)
-            return
+            const unreachable = isGatewayNetworkError(msg)
+            gatewayErrorMessage = msg
+            gatewayUnreachable = unreachable
+            if (unreachable && i < gatewayBases.length - 1) {
+              addLog(`> Gateway unavailable at ${gatewayBase}; retrying via ${gatewayBases[i + 1]}...`)
+              continue
+            }
+            break
           }
-        } finally {
-          setMode2Uploading(false)
+        }
+
+        if (gatewayUnreachable) {
+          addLog('> Gateway unavailable; falling back to in-browser Mode 2 sharding + stripe upload.')
+          setMode2UploadError(null)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'planning',
+            label: 'Gateway unavailable; falling back to in-browser sharding...',
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+        } else if (gatewayErrorMessage) {
+          setMode2UploadError(gatewayErrorMessage)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'error',
+            label: `Gateway Mode 2 ingest failed: ${gatewayErrorMessage}`,
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+          setProcessing(false)
+          return
         }
       }
 
@@ -1968,7 +1998,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
+  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {

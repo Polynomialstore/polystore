@@ -54,7 +54,13 @@ if [[ -f "$BIN_DIR/nil_gateway$ext" ]]; then
 fi
 (
   cd "$ROOT_DIR/nil_gateway"
-  go build -o "$BIN_DIR/nil_gateway$ext" .
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    go build -ldflags '-extldflags=-Wl,-rpath,$ORIGIN' -o "$BIN_DIR/nil_gateway$ext" .
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    go build -ldflags '-extldflags=-Wl,-rpath,@loader_path' -o "$BIN_DIR/nil_gateway$ext" .
+  else
+    go build -o "$BIN_DIR/nil_gateway$ext" .
+  fi
 )
 
 echo "==> Building nil_cli sidecar"

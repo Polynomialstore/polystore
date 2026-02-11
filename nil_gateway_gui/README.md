@@ -37,8 +37,7 @@ sudo apt-get install -y \
   libwebkit2gtk-4.1-dev \
   libsoup-3.0-dev \
   libjavascriptcoregtk-4.1-dev \
-  librsvg2-dev \
-  patchelf
+  librsvg2-dev
 ```
 
 ```bash
@@ -52,6 +51,10 @@ npm run tauri build
 - `nil_cli`
 - `nil_core` shared library (`.so`/`.dylib`/`.dll`)
 - `trusted_setup.txt`
+
+On Linux and macOS, the sidecar build stamps a runtime library search path
+(`$ORIGIN` / `@loader_path`) into `nil_gateway` so it can find `libnil_core`
+next to the binary without manual `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`.
 
 ## Notes
 

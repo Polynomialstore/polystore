@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -276,6 +277,169 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func nilCliBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "nil_cli.exe"
+	}
+	return "nil_cli"
+}
+
+func resolveTrustedSetupPath(configured string) string {
+	if fileExists(configured) {
+		return configured
+	}
+
+	seen := map[string]struct{}{}
+	var candidates []string
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	if exePath, err := os.Executable(); err == nil {
+		if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = realExePath
+		}
+		binDir := filepath.Dir(exePath)
+		add(filepath.Join(binDir, "trusted_setup.txt"))
+		add(filepath.Join(filepath.Dir(binDir), "trusted_setup.txt"))
+
+		dir := binDir
+		for i := 0; i < 8; i++ {
+			add(filepath.Join(dir, "nilchain", "trusted_setup.txt"))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	if root := deriveNilchaindDir(); root != "" {
+		add(filepath.Join(root, "nilchain", "trusted_setup.txt"))
+	}
+
+	for _, candidate := range candidates {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return configured
+}
+
+func resolveNilCliPath(configured string) string {
+	if fileExists(configured) {
+		return configured
+	}
+
+	seen := map[string]struct{}{}
+	var candidates []string
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	binaryName := nilCliBinaryName()
+
+	if exePath, err := os.Executable(); err == nil {
+		if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = realExePath
+		}
+		binDir := filepath.Dir(exePath)
+		add(filepath.Join(binDir, binaryName))
+	}
+
+	if root := deriveNilchaindDir(); root != "" {
+		add(filepath.Join(root, "nil_cli", "target", "release", binaryName))
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		dir := wd
+		for i := 0; i < 8; i++ {
+			add(filepath.Join(dir, "nil_cli", "target", "release", binaryName))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	for _, candidate := range candidates {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return configured
+}
+
+func looksLikeDesktopSidecarLayout() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+		exePath = realExePath
+	}
+
+	binDir := filepath.Dir(exePath)
+	rootDir := filepath.Dir(binDir)
+
+	// Typical desktop app layout:
+	//   .../nil_gateway_gui/bin/nil_gateway
+	//   .../nil_gateway_gui/bin/nil_cli
+	//   .../nil_gateway_gui/trusted_setup.txt
+	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {
+		return false
+	}
+	if !fileExists(filepath.Join(rootDir, "trusted_setup.txt")) {
+		return false
+	}
+
+	rootBase := strings.ToLower(filepath.Base(rootDir))
+	exeLower := strings.ToLower(exePath)
+	return rootBase == "nil_gateway_gui" || rootBase == "src-tauri" || strings.Contains(exeLower, "nil_gateway_gui")
+}
+
+func applyDesktopSidecarDefaults() {
+	if !looksLikeDesktopSidecarLayout() {
+		return
+	}
+
+	applyIfUnset := func(key, value string) {
+		if _, ok := os.LookupEnv(key); ok {
+			return
+		}
+		_ = os.Setenv(key, value)
+		log.Printf("Desktop sidecar default applied: %s=%s", key, value)
+	}
+
+	applyIfUnset("NIL_P2P_ENABLED", "0")
+	applyIfUnset("NIL_DISABLE_SYSTEM_LIVENESS", "1")
+	applyIfUnset("NIL_LOCAL_IMPORT_ENABLED", "1")
+	applyIfUnset("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
+}
+
 // execNilchaind runs a nilchaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
@@ -353,10 +517,23 @@ func main() {
 		return
 	}
 
+	// Make direct execution of desktop sidecar binary behave like GUI-launched mode.
+	// Explicit env vars still take precedence.
+	applyDesktopSidecarDefaults()
+
 	routerMode := isGatewayRouterMode()
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 
 	configureDefaultUploadDir(routerMode, listenAddr)
+
+	if resolvedTrustedSetup := resolveTrustedSetupPath(trustedSetup); resolvedTrustedSetup != trustedSetup {
+		log.Printf("Resolved trusted setup path: %s", resolvedTrustedSetup)
+		trustedSetup = resolvedTrustedSetup
+	}
+	if resolvedNilCliPath := resolveNilCliPath(nilCliPath); resolvedNilCliPath != nilCliPath {
+		log.Printf("Resolved nil_cli path: %s", resolvedNilCliPath)
+		nilCliPath = resolvedNilCliPath
+	}
 
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
