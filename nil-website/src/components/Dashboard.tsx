@@ -26,6 +26,7 @@ import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useLocalGateway } from '../hooks/useLocalGateway'
+import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 
 interface Provider {
   address: string
@@ -81,6 +82,13 @@ export function Dashboard() {
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
   const { switchNetwork } = useNetwork()
+  const {
+    walletChainId,
+    isWrongNetwork: walletIsWrongNetwork,
+    genesisMismatch,
+    accountPermissionMismatch,
+    refresh: refreshWalletNetwork,
+  } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
   const [deals, setDeals] = useState<Deal[]>([])
   const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
@@ -98,8 +106,8 @@ export function Dashboard() {
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
-  const activeChainId = chainId
-  const isWrongNetwork = isConnected && activeChainId !== appConfig.chainId
+  const activeChainId = walletChainId ?? chainId
+  const isWrongNetwork = isConnected && walletIsWrongNetwork
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
@@ -176,14 +184,15 @@ export function Dashboard() {
   const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
   const faucetBusy = faucetLoading || faucetTxStatus === 'pending'
 
-  const handleSwitchNetwork = async () => {
+  const handleSwitchNetwork = useCallback(async (options?: { forceAdd?: boolean }) => {
     try {
-      await switchNetwork()
+      await switchNetwork({ forceAdd: options?.forceAdd })
+      await refreshWalletNetwork()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
     }
-  }
+  }, [refreshWalletNetwork, switchNetwork])
 
   const handleRefreshSummary = async () => {
     if (!nilAddress) return
@@ -217,6 +226,7 @@ export function Dashboard() {
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
   const toastTimerRef = useRef<number | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const autoSwitchMismatchKeyRef = useRef<string | null>(null)
   const allocRef = useRef<HTMLDivElement | null>(null)
   const mduRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -265,10 +275,38 @@ export function Dashboard() {
   }, [handleWalletError, openConnectModal])
 
   useEffect(() => {
+    if (accountPermissionMismatch) {
+      setWalletReconnectHint(true)
+      return
+    }
     if (isConnected && address) {
       setWalletReconnectHint(false)
     }
-  }, [isConnected, address])
+  }, [accountPermissionMismatch, address, isConnected])
+
+  useEffect(() => {
+    if (!accountPermissionMismatch) return
+    setStatusTone('error')
+    setStatusMsg('MetaMask account changed. Reconnect and approve access for the active account.')
+  }, [accountPermissionMismatch])
+
+  useEffect(() => {
+    if (!isConnected || !isWrongNetwork) {
+      autoSwitchMismatchKeyRef.current = null
+      return
+    }
+    const mismatchKind = genesisMismatch ? 'genesis' : 'chain'
+    const key = `${String(activeChainId ?? 'unknown')}:${mismatchKind}`
+    if (autoSwitchMismatchKeyRef.current === key) return
+    autoSwitchMismatchKeyRef.current = key
+    void handleSwitchNetwork({ forceAdd: genesisMismatch })
+  }, [
+    activeChainId,
+    genesisMismatch,
+    handleSwitchNetwork,
+    isConnected,
+    isWrongNetwork,
+  ])
 
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
   const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
@@ -1727,15 +1765,24 @@ export function Dashboard() {
             <div>
               <h3 className="font-bold text-yellow-700 dark:text-yellow-200">Wrong Network</h3>
               <p className="text-sm text-yellow-600 dark:text-yellow-300">
-                Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilChain Local).
+                {genesisMismatch ? (
+                  <>
+                    Connected to Chain ID <strong>{activeChainId}</strong>, but this is a different network than the NilStore RPC.
+                    We will reconfigure MetaMask to use the NilStore Devnet endpoint.
+                  </>
+                ) : (
+                  <>
+                    Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilStore Devnet).
+                  </>
+                )}
               </p>
             </div>
           </div>
           <button
-            onClick={handleSwitchNetwork}
+            onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
             className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors"
           >
-            Switch Network
+            {genesisMismatch ? 'Repair MetaMask Network' : 'Switch Network'}
           </button>
         </div>
       )}
@@ -1826,7 +1873,7 @@ export function Dashboard() {
               ) : isWrongNetwork ? (
                 <button
                   type="button"
-                  onClick={handleSwitchNetwork}
+                  onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
                   className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
                 >
                   <Wallet className="h-3.5 w-3.5" />
@@ -2555,7 +2602,7 @@ export function Dashboard() {
                   )}
                 </div>
                 <button
-                  onClick={isWrongNetwork ? handleSwitchNetwork : handleCreateDealClick}
+                  onClick={isWrongNetwork ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch }) : handleCreateDealClick}
                   disabled={dealLoading || (placementProfile === 'custom' && Boolean(mode2Config.error))}
                   data-testid="alloc-submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"

@@ -7,7 +7,7 @@ use api::{
     SignedIntentRequest,
 };
 use bridge::{BridgeManager, BridgeStartResponse};
-use sidecar::{GatewayConfig, SidecarManager};
+use sidecar::{GatewayConfig, GatewayStorageSummary, SidecarManager};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
@@ -158,6 +158,14 @@ async fn deal_fetch_file(
         .await
 }
 
+#[tauri::command]
+async fn gateway_local_storage(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+) -> Result<GatewayStorageSummary, String> {
+    sidecar::local_storage_summary(&app)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // On some Linux GPU stacks (notably mixed/transitioning NVIDIA setups),
@@ -179,6 +187,7 @@ pub fn run() {
             gateway_stop,
             gateway_status,
             gateway_attach,
+            gateway_local_storage,
             wallet_bridge_start,
             wallet_bridge_wait,
             deal_upload_file,

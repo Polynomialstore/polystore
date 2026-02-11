@@ -22,6 +22,7 @@
 
 - Default base URL is `http://127.0.0.1:8080` (website-compatible localhost flow).
 - The GUI shows live logs from the embedded local Gateway process.
+- The GUI shows a local storage snapshot (cached deals/files/bytes) from the sidecar uploads directory.
 - Main actions manage the local Gateway lifecycle (`Connect`, `Start gateway`, `Stop`), with API smoke actions behind **Advanced (experimental)**.
 
 ## Build From Source
