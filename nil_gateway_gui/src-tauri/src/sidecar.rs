@@ -529,7 +529,9 @@ pub fn local_storage_summary(app: &AppHandle) -> Result<GatewayStorageSummary, S
     let mut manifest_count_by_deal: HashMap<String, u64> = HashMap::new();
     for key in &manifest_keys {
         if let Some((deal_id, _)) = key.split_once("::") {
-            *manifest_count_by_deal.entry(deal_id.to_string()).or_insert(0) += 1;
+            *manifest_count_by_deal
+                .entry(deal_id.to_string())
+                .or_insert(0) += 1;
         }
     }
 

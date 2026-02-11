@@ -736,41 +736,49 @@ export function useFetch() {
       if (sessionIds.length === 0) {
         throw new Error('no retrieval sessions were used during fetch')
       }
-      const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
-      const confirmTxHash = await walletClient.sendTransaction({
-        account: signerAddress,
-        to: appConfig.nilstorePrecompile as Hex,
-        data: confirmTxData,
-        gas: 3_000_000n,
-      })
-      await waitForTransactionReceipt(confirmTxHash)
-      receiptsSubmitted = 2
+      let confirmError: string | null = null
+      try {
+        const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
+        const confirmTxHash = await walletClient.sendTransaction({
+          account: signerAddress,
+          to: appConfig.nilstorePrecompile as Hex,
+          data: confirmTxData,
+          gas: 3_000_000n,
+        })
+        await waitForTransactionReceipt(confirmTxHash)
+        receiptsSubmitted = 2
+      } catch (err) {
+        confirmError = classifyWalletError(err, 'Confirm retrieval failed').message
+      }
 
       setProgress((p) => ({
         ...p,
         phase: 'submitting_proof_request',
         receiptsSubmitted,
+        message: confirmError ? `Receipt confirmation failed: ${confirmError}` : p.message,
       }))
 
       let proofSubmissionError: string | null = null
-      for (const [provider, sessionId] of usedSessionsByProvider.entries()) {
-        // `session-proof` forwarding currently relies on the local Gateway app.
-        // Keep file download successful even when the local gateway is not running.
-        try {
-          const proofBase = appConfig.gatewayBase
-          const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, provider }),
-          })
-          if (!proofRes.ok) {
-            const text = await proofRes.text().catch(() => '')
-            throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+      if (!confirmError) {
+        for (const [provider, sessionId] of usedSessionsByProvider.entries()) {
+          // `session-proof` forwarding currently relies on the local Gateway app.
+          // Keep file download successful even when the local gateway is not running.
+          try {
+            const proofBase = appConfig.gatewayBase
+            const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sessionId, provider }),
+            })
+            if (!proofRes.ok) {
+              const text = await proofRes.text().catch(() => '')
+              throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            if (!proofSubmissionError) proofSubmissionError = msg
+            console.warn('session-proof forwarding failed; download still succeeds', { provider, error: msg })
           }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          if (!proofSubmissionError) proofSubmissionError = msg
-          console.warn('session-proof forwarding failed; download still succeeds', { provider, error: msg })
         }
       }
 
@@ -789,9 +797,10 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 
-      if (proofSubmissionError) {
+      const receiptPipelineError = [confirmError, proofSubmissionError].filter(Boolean).join('; ')
+      if (receiptPipelineError) {
         setReceiptStatus('failed')
-        setReceiptError(`Proof forwarding failed (download succeeded): ${proofSubmissionError}`)
+        setReceiptError(`Receipt pipeline failed (download succeeded): ${receiptPipelineError}`)
       } else {
         setReceiptStatus('submitted')
       }
@@ -799,7 +808,7 @@ export function useFetch() {
         ...p,
         phase: 'done',
         receiptsSubmitted: receiptsSubmitted,
-        message: proofSubmissionError ? `Download complete; proof forwarding failed: ${proofSubmissionError}` : p.message,
+        message: receiptPipelineError ? `Download complete; receipt pipeline failed: ${receiptPipelineError}` : p.message,
       }))
 
       return { url, blob }
