@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -276,6 +277,122 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func nilCliBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "nil_cli.exe"
+	}
+	return "nil_cli"
+}
+
+func resolveTrustedSetupPath(configured string) string {
+	if fileExists(configured) {
+		return configured
+	}
+
+	seen := map[string]struct{}{}
+	var candidates []string
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	if exePath, err := os.Executable(); err == nil {
+		if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = realExePath
+		}
+		binDir := filepath.Dir(exePath)
+		add(filepath.Join(binDir, "trusted_setup.txt"))
+		add(filepath.Join(filepath.Dir(binDir), "trusted_setup.txt"))
+
+		dir := binDir
+		for i := 0; i < 8; i++ {
+			add(filepath.Join(dir, "nilchain", "trusted_setup.txt"))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	if root := deriveNilchaindDir(); root != "" {
+		add(filepath.Join(root, "nilchain", "trusted_setup.txt"))
+	}
+
+	for _, candidate := range candidates {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return configured
+}
+
+func resolveNilCliPath(configured string) string {
+	if fileExists(configured) {
+		return configured
+	}
+
+	seen := map[string]struct{}{}
+	var candidates []string
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	binaryName := nilCliBinaryName()
+
+	if exePath, err := os.Executable(); err == nil {
+		if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = realExePath
+		}
+		binDir := filepath.Dir(exePath)
+		add(filepath.Join(binDir, binaryName))
+	}
+
+	if root := deriveNilchaindDir(); root != "" {
+		add(filepath.Join(root, "nil_cli", "target", "release", binaryName))
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		dir := wd
+		for i := 0; i < 8; i++ {
+			add(filepath.Join(dir, "nil_cli", "target", "release", binaryName))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	for _, candidate := range candidates {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return configured
+}
+
 // execNilchaind runs a nilchaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
@@ -357,6 +474,15 @@ func main() {
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 
 	configureDefaultUploadDir(routerMode, listenAddr)
+
+	if resolvedTrustedSetup := resolveTrustedSetupPath(trustedSetup); resolvedTrustedSetup != trustedSetup {
+		log.Printf("Resolved trusted setup path: %s", resolvedTrustedSetup)
+		trustedSetup = resolvedTrustedSetup
+	}
+	if resolvedNilCliPath := resolveNilCliPath(nilCliPath); resolvedNilCliPath != nilCliPath {
+		log.Printf("Resolved nil_cli path: %s", resolvedNilCliPath)
+		nilCliPath = resolvedNilCliPath
+	}
 
 	// Ensure upload dir
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
