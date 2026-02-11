@@ -27,6 +27,42 @@ const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const HIDDEN_POLL_INTERVAL_MS = 300_000;
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected';
 
+function swapLoopbackHost(baseUrl: string): string | null {
+  const raw = String(baseUrl || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'localhost') {
+      parsed.hostname = '127.0.0.1';
+      return parsed.toString().replace(/\/$/, '');
+    }
+    if (host === '127.0.0.1') {
+      parsed.hostname = 'localhost';
+      return parsed.toString().replace(/\/$/, '');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function buildGatewayBaseCandidates(primary: string): string[] {
+  const seed = String(primary || '').trim().replace(/\/$/, '');
+  const candidates: string[] = [];
+  const push = (value: string | null | undefined) => {
+    const clean = String(value || '').trim().replace(/\/$/, '');
+    if (!clean) return;
+    if (!candidates.includes(clean)) candidates.push(clean);
+  };
+
+  push(seed);
+  push(swapLoopbackHost(seed));
+  push('http://localhost:8080');
+  push('http://127.0.0.1:8080');
+  return candidates;
+}
+
 function persistLocalGatewayConnected(connected: boolean) {
   if (typeof window === 'undefined') return;
   try {
@@ -40,6 +76,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<LocalGatewayDetails | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string>(appConfig.gatewayBase);
+  const activeUrlRef = useRef<string>(appConfig.gatewayBase);
   const statusRef = useRef<GatewayStatus>('disconnected');
   const errorRef = useRef<string | null>(null);
   const detailsRef = useRef<LocalGatewayDetails | null>(null);
@@ -49,6 +87,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       setStatus('disconnected');
       setError('Gateway disabled');
       setDetails(null);
+      setActiveUrl(appConfig.gatewayBase);
+      activeUrlRef.current = appConfig.gatewayBase;
       statusRef.current = 'disconnected';
       errorRef.current = 'Gateway disabled';
       detailsRef.current = null;
@@ -81,6 +121,12 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       detailsRef.current = next;
       setDetails(next);
     };
+    const updateActiveUrl = (next: string) => {
+      const clean = String(next || '').trim().replace(/\/$/, '');
+      if (!clean || activeUrlRef.current === clean) return;
+      activeUrlRef.current = clean;
+      setActiveUrl(clean);
+    };
 
     let inFlight = false;
     let timer: number | null = null;
@@ -102,56 +148,79 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
         updateStatus('connecting');
       }
       updateError(null); // Clear previous errors
+      let lastHttpStatus: number | null = null;
+      let lastErr: unknown = null;
+
       try {
-        const baseUrl = (appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '');
-        const response = await fetch(`${baseUrl}${probePath}`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(3000),
-        });
+        const preferred = (activeUrlRef.current || appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
+        const baseCandidates = buildGatewayBaseCandidates(preferred);
+        for (const baseUrl of baseCandidates) {
+          try {
+            const response = await fetch(`${baseUrl}${probePath}`, {
+              method: 'GET',
+              signal: AbortSignal.timeout(3000),
+            });
 
-        if (response.ok) {
-          const payload = await response.json().catch(() => null);
-          if (payload && typeof payload === 'object') {
-            updateDetails(payload as LocalGatewayDetails);
-          } else {
-            updateDetails(null);
+            if (response.ok) {
+              const payload = await response.json().catch(() => null);
+              if (payload && typeof payload === 'object') {
+                updateDetails(payload as LocalGatewayDetails);
+              } else {
+                updateDetails(null);
+              }
+              updateActiveUrl(baseUrl);
+              updateStatus('connected');
+              return;
+            }
+
+            if (response.status !== 404) {
+              lastHttpStatus = response.status;
+              continue;
+            }
+
+            const fallbackPath = probePath === GATEWAY_STATUS_ENDPOINT ? GATEWAY_HEALTH_ENDPOINT : GATEWAY_STATUS_ENDPOINT;
+            const healthRes = await fetch(`${baseUrl}${fallbackPath}`, {
+              method: 'GET',
+              signal: AbortSignal.timeout(3000),
+            });
+            if (healthRes.ok) {
+              probePath = fallbackPath;
+              updateActiveUrl(baseUrl);
+              updateStatus('connected');
+              updateDetails(null);
+              return;
+            }
+
+            if (healthRes.status !== 404) {
+              lastHttpStatus = healthRes.status;
+            }
+          } catch (candidateErr: unknown) {
+            lastErr = candidateErr;
+            continue;
           }
-          updateStatus('connected');
-          return;
         }
 
-        if (response.status !== 404) {
-          updateStatus('disconnected');
-          updateError(`Gateway responded with status: ${response.status}`);
-          updateDetails(null);
-          return;
-        }
-
-        const fallbackPath = probePath === GATEWAY_STATUS_ENDPOINT ? GATEWAY_HEALTH_ENDPOINT : GATEWAY_STATUS_ENDPOINT
-        const healthRes = await fetch(`${baseUrl}${fallbackPath}`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(3000),
-        });
-        if (healthRes.ok) {
-          probePath = fallbackPath;
-          updateStatus('connected');
-          updateDetails(null);
-        } else {
-          updateStatus('disconnected');
-          updateError(`Gateway responded with status: ${healthRes.status}`);
-          updateDetails(null);
-        }
-      } catch (e: unknown) {
         updateStatus('disconnected');
-        const err = e as Error;
-        if (err.name === 'AbortError') {
-          updateError('Connection timed out');
-        } else if (err.message && err.message.includes('Failed to fetch')) { // Common error for connection refused/unreachable
-          updateError('Could not connect to local gateway');
-        } else {
-          updateError(err.message || 'Unknown error during connection');
-        }
         updateDetails(null);
+        if (lastHttpStatus !== null) {
+          updateError(`Gateway responded with status: ${lastHttpStatus}`);
+          return;
+        }
+        if (lastErr) {
+          const err = lastErr as Error;
+          if (err.name === 'AbortError') {
+            updateError('Connection timed out');
+          } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+            updateError('Could not connect to local gateway');
+          } else {
+            updateError(err.message || 'Unknown error during connection');
+          }
+          updateActiveUrl(appConfig.gatewayBase);
+          return;
+        }
+
+        updateError('Could not connect to local gateway');
+        updateActiveUrl(appConfig.gatewayBase);
       } finally {
         inFlight = false;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -185,5 +254,5 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
     };
   }, [pollInterval]); // Re-run effect when poll interval changes
 
-  return { status, url: appConfig.gatewayBase, error, details };
+  return { status, url: activeUrl, error, details };
 }
