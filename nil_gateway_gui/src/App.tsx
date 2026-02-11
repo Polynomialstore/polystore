@@ -28,6 +28,8 @@ type GatewayPhase =
   | "stopping"
   | "error";
 
+type ReadinessState = "ready" | "pending" | "blocked";
+
 const LOG_BUFFER_LIMIT = 400;
 const STATUS_POLL_MS = 8_000;
 const STORAGE_POLL_MS = 18_000;
@@ -37,6 +39,7 @@ const RECOVERY_FAILURE_THRESHOLD = 2;
 const RECOVERY_COOLDOWN_MS = 20_000;
 const RECENT_DEAL_LIMIT = 6;
 const RECENT_FILE_LIMIT = 8;
+const RECENT_ACTIVITY_LIMIT = 7;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -123,6 +126,40 @@ function statusLabel(phase: GatewayPhase): string {
   }
 }
 
+function readinessBadgeClass(state: ReadinessState): string {
+  if (state === "ready") return "bg-emerald-100 text-emerald-700";
+  if (state === "pending") return "bg-amber-100 text-amber-700";
+  return "bg-rose-100 text-rose-700";
+}
+
+function readinessLabel(state: ReadinessState): string {
+  if (state === "ready") return "Ready";
+  if (state === "pending") return "In progress";
+  return "Needs attention";
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.top = "-9999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("copy command returned false");
+    }
+  } finally {
+    document.body.removeChild(textArea);
+  }
+}
+
 export default function App() {
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://127.0.0.1:8080");
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
@@ -131,6 +168,8 @@ export default function App() {
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [lastStatusAt, setLastStatusAt] = useState<number | null>(null);
+  const [diagCopyBusy, setDiagCopyBusy] = useState(false);
+  const [diagCopyMessage, setDiagCopyMessage] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [autoScrollLogs, setAutoScrollLogs] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -667,8 +706,117 @@ export default function App() {
     return issues;
   }, [gateway?.deps]);
 
+  const readinessItems = useMemo(
+    () =>
+      [
+        {
+          key: "gateway",
+          title: "Gateway process",
+          state:
+            phase === "online"
+              ? "ready"
+              : phase === "booting" || phase === "starting" || phase === "checking"
+                ? "pending"
+                : "blocked",
+          detail:
+            phase === "online"
+              ? gateway?.listening_addr || "Listening"
+              : "Start or reconnect the local Gateway process",
+        },
+        {
+          key: "chain",
+          title: "Chain connectivity",
+          state:
+            gateway?.deps?.lcd_reachable === true
+              ? "ready"
+              : gateway?.deps?.lcd_reachable === false
+                ? "blocked"
+                : phase === "online"
+                  ? "pending"
+                  : "blocked",
+          detail:
+            gateway?.deps?.lcd_reachable === true
+              ? "LCD reachable"
+              : "Gateway cannot reach LCD endpoint",
+        },
+        {
+          key: "providers",
+          title: "Storage providers",
+          state:
+            gateway?.deps?.sp_reachable === true
+              ? "ready"
+              : gateway?.deps?.sp_reachable === false
+                ? "blocked"
+                : phase === "online"
+                  ? "pending"
+                  : "blocked",
+          detail:
+            gateway?.deps?.sp_reachable === true
+              ? "Provider paths reachable"
+              : "Provider path check failed",
+        },
+      ] as Array<{ key: string; title: string; state: ReadinessState; detail: string }>,
+    [gateway?.deps?.lcd_reachable, gateway?.deps?.sp_reachable, gateway?.listening_addr, phase],
+  );
+
+  const readinessCounts = useMemo(
+    () => ({
+      ready: readinessItems.filter((item) => item.state === "ready").length,
+      pending: readinessItems.filter((item) => item.state === "pending").length,
+      blocked: readinessItems.filter((item) => item.state === "blocked").length,
+    }),
+    [readinessItems],
+  );
+
+  const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);
+
   const formFieldClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
+
+  const handleCopyDiagnostics = useCallback(async () => {
+    setDiagCopyBusy(true);
+    try {
+      const payload = {
+        generated_at: new Date().toISOString(),
+        ui: {
+          phase,
+          phase_message: phaseMessage,
+          status_detail: statusDetail,
+          auto_start: autoStartEnabled,
+          gateway_base_url: gatewayBaseUrl,
+          last_status_at: lastStatusAt,
+          storage_last_at: storageLastAt,
+        },
+        readiness: readinessItems,
+        gateway_status: gateway,
+        storage_summary: storageSummary,
+        tail_logs: logs.slice(-40),
+      };
+      await copyToClipboard(JSON.stringify(payload, null, 2));
+      setDiagCopyMessage("Diagnostics copied.");
+      addLog("Copied diagnostics snapshot to clipboard.");
+    } catch (err) {
+      const msg = errorMessage(err, "Failed to copy diagnostics.");
+      setDiagCopyMessage(msg);
+      addLog(`Diagnostics copy failed: ${msg}`);
+    } finally {
+      setDiagCopyBusy(false);
+      window.setTimeout(() => setDiagCopyMessage(null), 3000);
+    }
+  }, [
+    addLog,
+    autoStartEnabled,
+    gateway,
+    gatewayBaseUrl,
+    lastStatusAt,
+    logs,
+    phase,
+    phaseMessage,
+    readinessItems,
+    statusDetail,
+    storageLastAt,
+    storageSummary,
+  ]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-100">
@@ -711,7 +859,7 @@ export default function App() {
                 onClick={handleAttach}
                 disabled={actionBusy}
               >
-                Connect
+                Reconnect
               </button>
               <button
                 type="button"
@@ -728,6 +876,16 @@ export default function App() {
                 disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
               >
                 Stop
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                onClick={() => {
+                  void handleCopyDiagnostics();
+                }}
+                disabled={diagCopyBusy}
+              >
+                {diagCopyBusy ? "Copying..." : "Copy diagnostics"}
               </button>
             </div>
           </div>
@@ -767,6 +925,74 @@ export default function App() {
             <p className="mt-1 text-xs text-slate-500">
               Auto-start: {autoStartEnabled ? "enabled" : "paused"}
             </p>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Readiness checklist
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {readinessCounts.ready}/3 ready
+                  {readinessCounts.blocked > 0
+                    ? ` · ${readinessCounts.blocked} needs attention`
+                    : readinessCounts.pending > 0
+                      ? ` · ${readinessCounts.pending} in progress`
+                      : " · dashboard flow should be ready"}
+                </p>
+              </div>
+              {diagCopyMessage ? (
+                <span className="rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                  {diagCopyMessage}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {readinessItems.map((item) => (
+                <div
+                  key={item.key}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {item.title}
+                    </p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${readinessBadgeClass(item.state)}`}
+                    >
+                      {readinessLabel(item.state)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-700">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                onClick={() => {
+                  if (phase === "online") {
+                    void ensureGateway({ startIfOffline: false });
+                  } else {
+                    void handleStart();
+                  }
+                }}
+                disabled={actionBusy}
+              >
+                {phase === "online" ? "Verify readiness" : "Start local Gateway"}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                onClick={handleOpenDashboard}
+              >
+                Open dashboard
+              </button>
+            </div>
           </div>
 
           {!baseIsLoopback ? (
@@ -1141,7 +1367,29 @@ export default function App() {
           </div>
 
           <div className="surface-card flex min-h-[380px] flex-col p-6">
-            <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Recent activity
+              </h2>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white">
+                {recentActivity.length === 0 ? (
+                  <p className="px-3 py-3 text-xs text-slate-500">
+                    No activity yet. Start the local Gateway and perform an action in the dashboard.
+                  </p>
+                ) : (
+                  recentActivity.map((line, index) => (
+                    <p
+                      key={`activity-${index}-${line}`}
+                      className="border-b border-slate-100 px-3 py-2 text-xs text-slate-600 last:border-b-0"
+                    >
+                      {line}
+                    </p>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
                 Live gateway logs
               </h2>
@@ -1165,7 +1413,7 @@ export default function App() {
             </div>
 
             <div
-              className="mt-3 h-[360px] overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
+              className="mt-3 h-[280px] overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200"
               ref={(node) => {
                 if (node && autoScrollLogs) {
                   node.scrollTop = node.scrollHeight;
