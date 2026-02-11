@@ -73,7 +73,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_SP_BASE` | `http://localhost:8082` | Default Storage Provider base for direct uploads/fetches when provider discovery is unavailable. |
 | `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
 | `VITE_EVM_RPC` | `http://localhost:8545` | EVM JSON-RPC endpoint (auto-falls back to `https://evm.<domain>` when hosted on matching public domain). |
-| `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
+| `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer. **For shared/public devnets, set a NilStore-specific value (do not reuse `31337`) to avoid collisions with other local chains in MetaMask.** |
 | `VITE_ENABLE_FAUCET` | auto (`1` on `*.nilstore.org`, else `0`) | Faucet UI/actions override (`1` force on, `0` force off). |
 | `VITE_FAUCET_AUTH_TOKEN` | *(empty)* | Optional build-time faucet auth token. When set, the website sends this token automatically on faucet requests. |
 | `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |

@@ -64,6 +64,33 @@ export type GatewayFileEntry = {
   flags: number;
 };
 
+export type GatewayStorageFileEntry = {
+  relative_path: string;
+  size_bytes: number;
+  modified_unix: number;
+  deal_id: string;
+};
+
+export type GatewayStorageDealEntry = {
+  deal_id: string;
+  file_count: number;
+  total_bytes: number;
+  manifest_count: number;
+};
+
+export type GatewayStorageSummary = {
+  gateway_dir: string;
+  uploads_dir: string;
+  session_db_path: string;
+  session_db_exists: boolean;
+  total_files: number;
+  total_bytes: number;
+  deal_count: number;
+  manifest_count: number;
+  deal_entries: GatewayStorageDealEntry[];
+  recent_files: GatewayStorageFileEntry[];
+};
+
 export type GatewayListFilesResponse = {
   manifest_root: string;
   total_size_bytes: number;
@@ -89,6 +116,10 @@ export async function gatewayStart(config?: {
 
 export async function gatewayStatus(): Promise<GatewayStatusResponse> {
   return invoke("gateway_status");
+}
+
+export async function gatewayLocalStorage(): Promise<GatewayStorageSummary> {
+  return invoke("gateway_local_storage");
 }
 
 export async function gatewayStop(): Promise<void> {
