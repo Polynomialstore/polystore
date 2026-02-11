@@ -98,6 +98,73 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	}
 }
 
+func TestRouterGatewayUploadStatus_DeduplicatesCORSHeaders(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	dealProviderCache = sync.Map{}
+	dealProvidersCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	providerAddr := "nil1provider"
+	providerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin == "" {
+			origin = "*"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"state":"done"}`))
+	}))
+	defer providerSrv.Close()
+
+	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"providers": []string{providerAddr},
+				},
+			})
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"provider": map[string]any{
+					"endpoints": []string{maddr},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := mux.NewRouter()
+	r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
+	handler := withGlobalCORS(r)
+
+	const origin = "http://localhost:5173"
+	req := httptest.NewRequest(http.MethodGet, "/gateway/upload-status?deal_id=1&upload_id=u1", nil)
+	req.Header.Set("Origin", origin)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	values := w.Header().Values("Access-Control-Allow-Origin")
+	if len(values) != 1 {
+		t.Fatalf("expected single Access-Control-Allow-Origin header, got %v", values)
+	}
+	if got := strings.TrimSpace(values[0]); got != origin {
+		t.Fatalf("expected Access-Control-Allow-Origin=%q, got %q", origin, got)
+	}
+}
+
 func TestRouterGatewayFetch_FailsOverWhenPrimaryUnavailable(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	dealProviderCache = sync.Map{}
