@@ -382,8 +382,8 @@ npm ci
 VITE_API_BASE=https://faucet.<domain> \
 VITE_LCD_BASE=https://lcd.<domain> \
 VITE_EVM_RPC=https://evm.<domain> \
-VITE_COSMOS_CHAIN_ID=31337 \
-VITE_CHAIN_ID=31337 \
+VITE_COSMOS_CHAIN_ID=20260211 \
+VITE_CHAIN_ID=20260211 \
 VITE_ENABLE_FAUCET=1 \
 # Optional (public/demo convenience): embed faucet auth token in web build.
 # WARNING: anyone with browser access can extract and use this token.
@@ -406,7 +406,7 @@ Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
 In MetaMask → **Add network manually**:
 - Network name: `NilStore Devnet`
 - New RPC URL: `https://evm.<domain>`
-- Chain ID: `31337` (`0x7a69`)
+- Chain ID: `20260211` (`0x1352573`)
 - Currency symbol: `ATOM` (EVM gas denom is `aatom` in the current devnet profile)
 - Block explorer URL: (leave blank)
 

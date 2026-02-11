@@ -16,7 +16,6 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
-	gogogrpc "github.com/cosmos/gogoproto/grpc"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -45,6 +44,7 @@ import (
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
+	gogogrpc "github.com/cosmos/gogoproto/grpc"
 	icacontrollerkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/keeper"
 	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
 	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
@@ -56,6 +56,7 @@ import (
 	// EVM Imports
 	codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
 	evmante "github.com/cosmos/evm/ante"
+	evmsrvflags "github.com/cosmos/evm/server/flags"
 	feemarket "github.com/cosmos/evm/x/feemarket"
 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
@@ -63,6 +64,7 @@ import (
 	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/spf13/cast"
 
 	"nilchain/docs"
 	nilstoreprecompile "nilchain/precompiles/nilstore"
@@ -161,7 +163,7 @@ func New(
 	baseAppOptions ...func(*baseapp.BaseApp),
 ) *App {
 	var (
-		app        = &App{
+		app = &App{
 			appOpts: appOpts,
 			logger:  logger,
 		}
@@ -262,6 +264,13 @@ func New(
 	)
 	app.FeeMarketKeeper = &fmKeeper
 
+	// Read EIP-155 chain ID from app options (CLI flag / app.toml).
+	// Keep 31337 fallback for legacy localhost behavior when unset.
+	evmChainID := cast.ToUint64(appOpts.Get(evmsrvflags.EVMChainID))
+	if evmChainID == 0 {
+		evmChainID = 31337
+	}
+
 	evmKeeper := evmkeeper.NewKeeper(
 		app.appCodec,
 		evmKey,
@@ -274,7 +283,7 @@ func New(
 		app.FeeMarketKeeper,
 		app.ConsensusParamsKeeper,
 		nil, // Erc20Keeper
-		31337,
+		evmChainID,
 		"",
 	)
 	app.EVMKeeper = evmKeeper.WithDefaultEvmCoinInfo(
@@ -297,12 +306,12 @@ func New(
 
 	// Set EVM ante handler using the DI-provided keepers.
 	options := evmante.HandlerOptions{
-		Cdc:               app.appCodec,
-		AccountKeeper:     app.AuthKeeper,
-		BankKeeper:        app.BankKeeper,
-		IBCKeeper:         app.IBCKeeper,
-		FeeMarketKeeper:   app.FeeMarketKeeper,
-		EvmKeeper:         app.EVMKeeper,
+		Cdc:             app.appCodec,
+		AccountKeeper:   app.AuthKeeper,
+		BankKeeper:      app.BankKeeper,
+		IBCKeeper:       app.IBCKeeper,
+		FeeMarketKeeper: app.FeeMarketKeeper,
+		EvmKeeper:       app.EVMKeeper,
 		FeegrantKeeper:  app.FeegrantKeeper,
 		SignModeHandler: app.txConfig.SignModeHandler(),
 		SigGasConsumer:  sdkante.DefaultSigVerificationGasConsumer,

@@ -18,7 +18,7 @@ If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 You should receive:
 - Website URL: `https://web.<domain>`
 - EVM RPC: `https://evm.<domain>`
-- Chain ID: `<chain-id>` (e.g. `31337`)
+- Chain ID: `<chain-id>` (e.g. `20260211`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
 - Faucet auth token (optional): a secret string you paste into the website UI (do **not** share publicly)
 - Local gateway endpoint (optional): `http://localhost:8080`

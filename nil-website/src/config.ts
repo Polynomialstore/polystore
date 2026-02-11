@@ -118,7 +118,8 @@ const FAUCET_ENABLED = (() => {
   // Keep local/dev default off unless explicitly enabled.
   return PUBLIC_DOMAIN !== ''
 })()
-const COSMOS_CHAIN_ID = envString(ENV.VITE_COSMOS_CHAIN_ID) || '31337'
+// Trusted devnet default (Feb 2026 soft launch).
+const COSMOS_CHAIN_ID = envString(ENV.VITE_COSMOS_CHAIN_ID) || '20260211'
 const BRIDGE_ADDRESS = envString(ENV.VITE_BRIDGE_ADDRESS) || '0x0000000000000000000000000000000000000000'
 const NILSTORE_PRECOMPILE =
   envString(ENV.VITE_NILSTORE_PRECOMPILE) || '0x0000000000000000000000000000000000000900'
@@ -132,7 +133,7 @@ export const appConfig = {
   lcdBase: LCD_BASE.replace(/\/$/, ''),
   evmRpc: EVM_RPC.replace(/\/$/, ''),
   walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
-  chainId: Number(ENV.VITE_CHAIN_ID || 31337),
+  chainId: Number(ENV.VITE_CHAIN_ID || 20260211),
   gatewayBase: GATEWAY_BASE.replace(/\/$/, ''),
   spBase: SP_BASE.replace(/\/$/, ''),
   gatewayDisabled: GATEWAY_DISABLED,

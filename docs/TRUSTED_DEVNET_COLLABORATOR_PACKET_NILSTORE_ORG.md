@@ -9,12 +9,12 @@ This is the concrete collaborator packet for the current trusted devnet hub depl
 - Hub RPC: `https://rpc.nilstore.org`
 - Hub LCD: `https://lcd.nilstore.org`
 - Faucet: `https://faucet.nilstore.org/faucet`
-- Chain ID: `31337` (`0x7a69`)
+- Chain ID: `20260211` (`0x1352573`)
 
 Provider public endpoints (Mode 2 `2+1` baseline):
-- `https://sp1.nilstore.org` → provider `nil1tw3q590k5uphtsk9k5ts0vfjynjpep0glx3cqx`
-- `https://sp2.nilstore.org` → provider `nil1989447ygkvh96e2ua2mmmlnmz4q2zv96sh94mq`
-- `https://sp3.nilstore.org` → provider `nil13z0nyrtuwj25eh3zeah75eukagc2epjrqt35ne`
+- `https://sp1.nilstore.org` → provider `nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0`
+- `https://sp2.nilstore.org` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
+- `https://sp3.nilstore.org` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`
 
 ## What Collaborators Need From Hub Operator
 
@@ -26,7 +26,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 1) Open `https://web.nilstore.org`.
 2) Connect MetaMask and switch to:
 - RPC URL: `https://evm.nilstore.org`
-- Chain ID: `31337`
+- Chain ID: `20260211`
 - Currency: `ATOM`
 3) Fund test address:
 - Use website faucet flow (this deployment may include a preconfigured faucet token), or
@@ -53,7 +53,7 @@ Recommended env bootstrap:
 ```bash
 export HUB_NODE="https://rpc.nilstore.org"
 export HUB_LCD="https://lcd.nilstore.org"
-export CHAIN_ID="31337"
+export CHAIN_ID="20260211"
 export PROVIDER_KEY="provider1"
 export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 ```
@@ -69,7 +69,7 @@ scripts/devnet_healthcheck.sh hub \
   --rpc https://rpc.nilstore.org \
   --lcd https://lcd.nilstore.org \
   --evm https://evm.nilstore.org \
-  --gateway http://127.0.0.1:8080 \
+  --gateway http://127.0.0.1:18080 \
   --faucet https://faucet.nilstore.org
 ```
 
@@ -79,7 +79,7 @@ Provider operator baseline:
 scripts/devnet_healthcheck.sh provider \
   --provider https://sp1.nilstore.org \
   --hub-lcd https://lcd.nilstore.org \
-  --provider-addr nil1tw3q590k5uphtsk9k5ts0vfjynjpep0glx3cqx
+  --provider-addr nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0
 ```
 
 ## Reporting Template For Issues

@@ -16,7 +16,8 @@ DOMAIN="$1"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$ROOT_DIR/nil-website"
 
-CHAIN_ID="${CHAIN_ID:-31337}"
+# Trusted devnet default (Feb 2026 soft launch).
+CHAIN_ID="${CHAIN_ID:-20260211}"
 ENABLE_FAUCET="${ENABLE_FAUCET:-1}"
 FAUCET_AUTH_TOKEN="${FAUCET_AUTH_TOKEN:-${VITE_FAUCET_AUTH_TOKEN:-}}"
 
