@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { formatUnits, numberToHex } from 'viem'
@@ -18,6 +18,7 @@ import { ethToNil } from '../lib/address'
 import { buildServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { classifyWalletError } from '../lib/walletErrors'
+import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 
 function bytesToHex(bytes: Uint8Array): string {
   let out = ''
@@ -40,6 +41,13 @@ export function FirstFile() {
   const { upload, loading: uploadLoading } = useUpload()
   const { submitUpdate, loading: commitLoading, lastTx: commitTx } = useUpdateDealContent()
   const { fetchFile, loading: fetchLoading, progress, receiptStatus, receiptError } = useFetch()
+  const {
+    walletChainId,
+    isWrongNetwork: walletIsWrongNetwork,
+    genesisMismatch,
+    accountPermissionMismatch,
+    refresh: refreshWalletNetwork,
+  } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
 
   const [duration, setDuration] = useState('100')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
@@ -54,8 +62,10 @@ export function FirstFile() {
   const [downloadHash, setDownloadHash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const autoSwitchKeyRef = useRef<string | null>(null)
 
-  const isWrongNetwork = isConnected && chainId !== appConfig.chainId
+  const activeChainId = walletChainId ?? chainId
+  const isWrongNetwork = isConnected && walletIsWrongNetwork
   const nilAddress = useMemo(() => {
     if (!address) return ''
     return address.startsWith('0x') ? ethToNil(address) : address
@@ -82,6 +92,32 @@ export function FirstFile() {
     const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
     return `${trimmed} ${balance.symbol || 'NIL'}`
   }, [balance])
+
+  useEffect(() => {
+    if (!accountPermissionMismatch) return
+    setError('MetaMask account changed. Reconnect wallet and approve access for the active account.')
+  }, [accountPermissionMismatch])
+
+  useEffect(() => {
+    if (!isConnected || !isWrongNetwork) {
+      autoSwitchKeyRef.current = null
+      return
+    }
+    const mismatchKind = genesisMismatch ? 'genesis' : 'chain'
+    const key = `${String(activeChainId ?? 'unknown')}:${mismatchKind}`
+    if (autoSwitchKeyRef.current === key) return
+    autoSwitchKeyRef.current = key
+    void switchNetwork({ forceAdd: genesisMismatch })
+      .then(() => refreshWalletNetwork())
+      .catch(() => undefined)
+  }, [
+    activeChainId,
+    genesisMismatch,
+    isConnected,
+    isWrongNetwork,
+    refreshWalletNetwork,
+    switchNetwork,
+  ])
 
   const handleUseSampleFile = async () => {
     setError(null)
@@ -141,8 +177,16 @@ export function FirstFile() {
       setError('EVM 0x address required')
       return
     }
+    if (accountPermissionMismatch) {
+      setError('MetaMask account changed. Reconnect wallet before creating a deal.')
+      return
+    }
     if (isWrongNetwork) {
-      setError(`Wrong network (wallet chainId=${chainId}). Switch to ${appConfig.chainId}.`)
+      setError(
+        genesisMismatch
+          ? `Wrong network identity for chainId ${activeChainId}. Repair MetaMask network settings and retry.`
+          : `Wrong network (wallet chainId=${activeChainId}). Switch to ${appConfig.chainId}.`,
+      )
       return
     }
     try {
@@ -367,10 +411,10 @@ export function FirstFile() {
           {isWrongNetwork && (
             <button
               type="button"
-              onClick={() => void switchNetwork()}
+              onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
               className="inline-flex items-center justify-center rounded-lg bg-yellow-600 hover:bg-yellow-500 px-4 py-2 text-sm font-bold text-white transition-colors"
             >
-              Switch to {numberToHex(appConfig.chainId)}
+              {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
             </button>
           )}
         </div>
