@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "nil_gateway_gui",
-        "width": 1120,
-        "height": 760,
-        "minWidth": 960,
-        "minHeight": 660,
+        "width": 1320,
+        "height": 820,
+        "minWidth": 1120,
+        "minHeight": 700,
         "center": true
       }
     ],

@@ -39,7 +39,7 @@ const RECOVERY_FAILURE_THRESHOLD = 2;
 const RECOVERY_COOLDOWN_MS = 20_000;
 const RECENT_DEAL_LIMIT = 6;
 const RECENT_FILE_LIMIT = 8;
-const RECENT_ACTIVITY_LIMIT = 7;
+const RECENT_ACTIVITY_LIMIT = 5;
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -49,13 +49,6 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function normalizeListenAddr(baseUrl: string): string {
   return baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
-}
-
-function parseStatusCounter(extra: Record<string, string> | undefined, key: string): number {
-  const raw = extra?.[key];
-  if (!raw) return 0;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function formatBytes(value: number): string {
@@ -692,31 +685,6 @@ export default function App() {
     });
   }, [storageDealFilter, storageFileQuery, storageRecentFiles]);
 
-  const mode2RepairSummary = useMemo(() => {
-    const extra = gateway?.extra;
-    const assignedAttempts = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_attempts");
-    const assignedFailures = parseStatusCounter(extra, "mode2_reconstruct_assigned_provider_failures");
-    const fallbackAttempts = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_attempts");
-    const fallbackSuccesses = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_successes");
-    const fallbackFailures = parseStatusCounter(extra, "mode2_reconstruct_fallback_provider_failures");
-    const localHits = parseStatusCounter(extra, "mode2_reconstruct_local_shard_hits");
-    return {
-      assignedAttempts,
-      assignedFailures,
-      fallbackAttempts,
-      fallbackSuccesses,
-      fallbackFailures,
-      localHits,
-      hasSignal:
-        assignedAttempts > 0 ||
-        assignedFailures > 0 ||
-        fallbackAttempts > 0 ||
-        fallbackSuccesses > 0 ||
-        fallbackFailures > 0 ||
-        localHits > 0,
-    };
-  }, [gateway?.extra]);
-
   const dependencyIssues = useMemo(() => {
     const issues: string[] = [];
     if (gateway?.deps?.lcd_reachable === false) {
@@ -997,14 +965,16 @@ export default function App() {
                     No recent activity yet.
                   </p>
                 ) : (
-                  recentActivity.map((line, index) => (
-                    <p
-                      key={`activity-${index}-${line}`}
-                      className="border-b border-slate-100 px-3 py-2 text-xs text-slate-600 last:border-b-0"
-                    >
-                      {line}
-                    </p>
-                  ))
+                  <ul className="space-y-1.5 px-3 py-3">
+                    {recentActivity.map((line, index) => (
+                      <li
+                        key={`activity-${index}-${line}`}
+                        className="list-disc pl-1 text-xs text-slate-600 marker:text-slate-300"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
 
@@ -1222,7 +1192,7 @@ export default function App() {
           ) : null}
 
           {activePanel === "diagnostics" ? (
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="metric-card p-3">
                 <div className="flex items-center justify-between">
                   <h2 className="soft-label text-slate-600">Live gateway logs</h2>
@@ -1312,23 +1282,6 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="metric-card p-3">
-                  <p className="soft-label">Retrieval / repair signal</p>
-                  <div className="mt-2 space-y-1 text-xs text-slate-600">
-                    <p>
-                      <span className="font-semibold text-slate-700">Local shard hits:</span>{" "}
-                      {mode2RepairSummary.localHits}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-slate-700">Assigned attempts/failures:</span>{" "}
-                      {mode2RepairSummary.assignedAttempts} / {mode2RepairSummary.assignedFailures}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-slate-700">Fallback success/fail:</span>{" "}
-                      {mode2RepairSummary.fallbackSuccesses} / {mode2RepairSummary.fallbackFailures}
-                    </p>
-                  </div>
-                </div>
               </div>
 
               <details className="metric-card bg-slate-50/70 p-3 lg:col-span-2" open={showAdvanced}>
