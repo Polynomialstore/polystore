@@ -393,6 +393,53 @@ func resolveNilCliPath(configured string) string {
 	return configured
 }
 
+func looksLikeDesktopSidecarLayout() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
+		exePath = realExePath
+	}
+
+	binDir := filepath.Dir(exePath)
+	rootDir := filepath.Dir(binDir)
+
+	// Typical desktop app layout:
+	//   .../nil_gateway_gui/bin/nil_gateway
+	//   .../nil_gateway_gui/bin/nil_cli
+	//   .../nil_gateway_gui/trusted_setup.txt
+	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {
+		return false
+	}
+	if !fileExists(filepath.Join(rootDir, "trusted_setup.txt")) {
+		return false
+	}
+
+	rootBase := strings.ToLower(filepath.Base(rootDir))
+	exeLower := strings.ToLower(exePath)
+	return rootBase == "nil_gateway_gui" || rootBase == "src-tauri" || strings.Contains(exeLower, "nil_gateway_gui")
+}
+
+func applyDesktopSidecarDefaults() {
+	if !looksLikeDesktopSidecarLayout() {
+		return
+	}
+
+	applyIfUnset := func(key, value string) {
+		if _, ok := os.LookupEnv(key); ok {
+			return
+		}
+		_ = os.Setenv(key, value)
+		log.Printf("Desktop sidecar default applied: %s=%s", key, value)
+	}
+
+	applyIfUnset("NIL_P2P_ENABLED", "0")
+	applyIfUnset("NIL_DISABLE_SYSTEM_LIVENESS", "1")
+	applyIfUnset("NIL_LOCAL_IMPORT_ENABLED", "1")
+	applyIfUnset("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
+}
+
 // execNilchaind runs a nilchaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
@@ -469,6 +516,10 @@ func main() {
 	if maybePrintProviderEndpoints(os.Args[1:]) {
 		return
 	}
+
+	// Make direct execution of desktop sidecar binary behave like GUI-launched mode.
+	// Explicit env vars still take precedence.
+	applyDesktopSidecarDefaults()
 
 	routerMode := isGatewayRouterMode()
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
