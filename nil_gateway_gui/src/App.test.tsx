@@ -4,6 +4,6 @@ import App from "./App";
 describe("App shell", () => {
   it("renders the main title", () => {
     render(<App />);
-    expect(screen.getByText("NilGateway GUI")).toBeInTheDocument();
+    expect(screen.getByText("Local Gateway")).toBeInTheDocument();
   });
 });
