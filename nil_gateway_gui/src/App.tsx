@@ -548,6 +548,9 @@ export default function App() {
       return;
     }
 
+    addLog(
+      `Starting upload for "${uploadFilePath}" to deal ${uploadDealId} (owner ${uploadOwner})`,
+    );
     setUploadBusy(true);
     setUploadError(null);
     setUploadResponse(null);
@@ -562,7 +565,13 @@ export default function App() {
       setListManifestRoot(response.manifest_root);
       if (!listDealId) setListDealId(uploadDealId);
       if (!listOwner) setListOwner(uploadOwner);
-      addLog(`Uploaded ${response.filename} -> ${response.manifest_root.slice(0, 18)}...`);
+      const shortUploadId =
+        response.upload_id && response.upload_id.trim().length > 0
+          ? response.upload_id
+          : "n/a";
+      addLog(
+        `Upload request accepted: ${response.filename} -> ${response.manifest_root.slice(0, 18)}... (id=${shortUploadId})`,
+      );
       void refreshLocalStorage({ silent: true });
     } catch (err) {
       const msg = errorMessage(err, "Upload failed");

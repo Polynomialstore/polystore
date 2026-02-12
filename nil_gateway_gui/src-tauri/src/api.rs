@@ -253,7 +253,7 @@ impl GatewayClient {
             .map_err(|err| format!("invalid upload payload: {err}"))?;
         if response.upload_id.is_empty() {
             return Ok(GatewayUploadResponse {
-                upload_id: upload_id,
+                upload_id,
                 ..response
             });
         }
