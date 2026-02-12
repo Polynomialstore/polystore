@@ -42,3 +42,19 @@ Simulations will be run locally. "Scale" refers to the volume of state (Provider
 *   **Tooling:** A simplified Bash/Go load generator (`load_gen.sh`) utilizing the `nilchaind` CLI with `async` broadcasting for throughput.
 *   **Environment:** Local dev machine.
 *   **Verification:** Log parsing to confirm state updates.
+
+## Gateway mode-2 benchmark
+
+For Mode-2 KZG + stripe ingest profiling and throughput tuning, use:
+
+```bash
+./performance/gateway_mode2_benchmark.sh --sizes "64,128,256"
+```
+
+The harness writes:
+
+- `CSV` rows with end-to-end timing (`mode2_*`) and throughput
+- `JSONL` detailed per-run payload responses
+- A compact run summary JSON
+
+See [`gateway_mode2_benchmark.md`](./gateway_mode2_benchmark.md) for usage details and field guidance.
