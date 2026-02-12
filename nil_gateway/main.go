@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -635,7 +636,7 @@ func main() {
 	}
 
 	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
-	log.Fatal(http.ListenAndServe(listenAddr, withGlobalCORS(r)))
+	log.Fatal(http.ListenAndServe(listenAddr, withPanicRecovery(withGlobalCORS(r))))
 }
 
 func PutObject(w http.ResponseWriter, r *http.Request) {
@@ -3946,6 +3947,20 @@ func withGlobalCORS(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func withPanicRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				setCORSForRequest(w, r)
+				recoveryHint := fmt.Sprintf("%v", rec)
+				log.Printf("panic in gateway handler %s %s: %s\n%s", r.Method, r.URL.RequestURI(), recoveryHint, debug.Stack())
+				writeJSONError(w, http.StatusInternalServerError, "internal server error", recoveryHint)
+			}
+		}()
 		next.ServeHTTP(w, r)
 	})
 }

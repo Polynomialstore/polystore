@@ -194,6 +194,36 @@ func TestGlobalCORS_MethodNotAllowedStillReturnsCORSHeaders(t *testing.T) {
 	}
 }
 
+func TestPanicRecovery_ReturnsJSONAndCORSHeaders(t *testing.T) {
+	h := withPanicRecovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("upload worker crashed")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	req.Header.Set("Origin", "https://nilstore.org")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on panic, got %d", w.Code)
+	}
+
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+		t.Fatalf("expected Access-Control-Allow-Origin to mirror request origin, got %q", got)
+	}
+
+	var payload jsonErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("expected JSON error response: %v", err)
+	}
+	if payload.Error != "internal server error" {
+		t.Fatalf("expected internal server error message, got %q", payload.Error)
+	}
+	if payload.Hint != "upload worker crashed" {
+		t.Fatalf("expected recovery hint, got %q", payload.Hint)
+	}
+}
+
 func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(SpUploadMdu))
 	defer srv.Close()
