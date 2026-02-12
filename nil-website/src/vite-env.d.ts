@@ -9,3 +9,5 @@ interface Window {
     selectedAddress?: string
   }
 }
+
+declare const __NIL_BUILD_COMMIT__: string

@@ -9,6 +9,8 @@ export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const location = useLocation();
+  const buildCommit = String(__NIL_BUILD_COMMIT__ || '').trim();
+  const shortCommit = buildCommit ? buildCommit.slice(0, 8) : '';
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -239,6 +241,9 @@ export const Layout = () => {
             </div>
           </div>
           <p className="opacity-60">© 2025 NilStore Network. Open Source.</p>
+          {shortCommit ? (
+            <p className="mt-2 font-mono text-xs opacity-60">Build {shortCommit}</p>
+          ) : null}
         </div>
       </footer>
     </div>
