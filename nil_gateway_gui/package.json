@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build-sidecars": "node ./scripts/build_sidecars.mjs",
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "preview": "vite preview",
-    "desktop": "tauri dev",
+    "desktop": "npm run build-sidecars && npm run tauri dev",
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest"
