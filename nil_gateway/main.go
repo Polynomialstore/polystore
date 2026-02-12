@@ -740,6 +740,26 @@ func (e uploadFailure) Error() string {
 	return e.message
 }
 
+func buildStatusURL(r *http.Request, dealID uint64, uploadID string) string {
+	scheme := "http"
+	if r != nil && r.TLS != nil {
+		scheme = "https"
+	}
+	if r != nil {
+		if hdr := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); hdr != "" && strings.EqualFold(hdr, "https") {
+			scheme = "https"
+		}
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		host = "localhost:8080"
+	}
+	values := url.Values{}
+	values.Set("deal_id", strconv.FormatUint(dealID, 10))
+	values.Set("upload_id", strings.TrimSpace(uploadID))
+	return (&url.URL{Scheme: scheme, Host: host, Path: "/gateway/upload-status", RawQuery: values.Encode()}).String()
+}
+
 // GatewayUpload is used by the web UI to upload a file and derive a Root CID + size.
 // It does NOT create a deal; it just returns metadata.
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
@@ -875,7 +895,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			"status":     dupStatus,
 			"deal_id":    dealIDStr,
 			"upload_id":  uploadID,
-			"status_url": buildStatusURL(dealIDQuery, uploadID),
+			"status_url": buildStatusURL(r, dealIDQuery, uploadID),
 		}
 		if dupStatus == "" {
 			resp["status"] = "accepted"
@@ -909,7 +929,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			"witness_mdus":     reuseSnap.Result.WitnessMdus,
 			"upload_id":        uploadID,
 			"deal_id":          reuseSnap.DealID,
-			"status_url":       buildStatusURL(dealIDQuery, uploadID),
+			"status_url":       buildStatusURL(r, dealIDQuery, uploadID),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -1176,24 +1196,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		witnessMdus     uint64
 	}
 
-	buildStatusURL := func(dealID uint64, id string) string {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		if hdr := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); hdr != "" && strings.EqualFold(hdr, "https") {
-			scheme = "https"
-		}
-		host := strings.TrimSpace(r.Host)
-		if host == "" {
-			host = "localhost:8080"
-		}
-		values := url.Values{}
-		values.Set("deal_id", strconv.FormatUint(dealID, 10))
-		values.Set("upload_id", id)
-		return (&url.URL{Scheme: scheme, Host: host, Path: "/gateway/upload-status", RawQuery: values.Encode()}).String()
-	}
-
 	runIngest := func(ctx context.Context, fileName string, maxUserMdusSpec, normalizedDealID string) (*gatewayUploadResult, error) {
 		ctx = withMode2UploadProfile(ctx, profile)
 		if ctx == nil {
@@ -1249,8 +1251,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					}
 					res, err := mode2IngestAndUploadNewDeal(withUploadJob(ctx, job), ingestPath, dealID, serviceHint, fileRecordPath, fileFlags)
 					if err != nil {
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							return nil, uploadFailure{status: http.StatusRequestTimeout, message: err.Error()}
+						if isUploadCanceledErr(err) {
+							return nil, uploadFailure{status: http.StatusRequestTimeout, message: fmt.Sprintf("mode2 ingest was canceled: %v", err)}
 						}
 						return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("mode2 ingest failed: %v", err)}
 					}
@@ -1317,8 +1319,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				if stripe.mode == 2 {
 					res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ctx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath, fileFlags)
 					if err != nil {
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							return nil, uploadFailure{status: http.StatusRequestTimeout, message: err.Error()}
+						if isUploadCanceledErr(err) {
+							return nil, uploadFailure{status: http.StatusRequestTimeout, message: fmt.Sprintf("mode2 append ingest was canceled: %v", err)}
 						}
 						return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("mode2 append failed: %v", err)}
 					}
@@ -1489,14 +1491,14 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			"status":     "accepted",
 			"deal_id":    dealIDStr,
 			"upload_id":  uploadID,
-			"status_url": buildStatusURL(dealIDQuery, uploadID),
+			"status_url": buildStatusURL(r, dealIDQuery, uploadID),
 		}
 		log.Printf(
 			"GatewayUpload async accepted: file=%s deal_id=%s upload_id=%s status_url=%s",
 			filename,
 			dealIDStr,
 			uploadID,
-			buildStatusURL(dealIDQuery, uploadID),
+			buildStatusURL(r, dealIDQuery, uploadID),
 		)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)

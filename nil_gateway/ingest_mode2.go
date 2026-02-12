@@ -51,6 +51,21 @@ func (e *providerUploadHTTPError) Error() string {
 	return fmt.Sprintf("upload failed: %s (%s)", e.status, msg)
 }
 
+func isUploadCanceledErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func captureFirstNonContextError(err error, first *error, mu *sync.Mutex) {
+	if err == nil || isUploadCanceledErr(err) {
+		return
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if *first == nil {
+		*first = err
+	}
+}
+
 const mode2SlabCompleteMarker = ".slab_complete"
 
 func mode2DirLooksComplete(dir string) bool {
@@ -183,6 +198,8 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		eg.SetLimit(parallelism)
 
 		var completed atomic.Uint64
+		var firstEncodeErr error
+		var firstEncodeErrMu sync.Mutex
 
 		for i := uint64(0); i < userMdus; i++ {
 			if err := egctx.Err(); err != nil {
@@ -215,10 +232,12 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 					chunk := buf[:n]
 					witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 					if err != nil {
+						captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 						return fmt.Errorf("expand mdu %d: %w", i, err)
 					}
 					root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 					if err != nil {
+						captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 						return fmt.Errorf("compute mdu root %d: %w", i, err)
 					}
 					userRoots[i] = root
@@ -227,10 +246,13 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 					slabIndex := uint64(1) + witnessCount + i
 					for slot := uint64(0); slot < stripe.slotCount; slot++ {
 						if int(slot) >= len(shards) {
-							return fmt.Errorf("missing shard for slot %d", slot)
+							err := fmt.Errorf("missing shard for slot %d", slot)
+							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
+							return err
 						}
 						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
 						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 							return err
 						}
 					}
@@ -246,7 +268,16 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 
 		if err := eg.Wait(); err != nil {
-			return nil, "", err
+			firstEncodeErrMu.Lock()
+			errFromWorker := firstEncodeErr
+			firstEncodeErrMu.Unlock()
+			if errFromWorker != nil {
+				return nil, "", fmt.Errorf("mode2 encoding failed: %w", errFromWorker)
+			}
+			if isUploadCanceledErr(err) {
+				return nil, "", fmt.Errorf("mode2 encoding canceled: %w", err)
+			}
+			return nil, "", fmt.Errorf("mode2 encoding failed: %w", err)
 		}
 	}
 	if profile != nil {
@@ -871,6 +902,8 @@ func mode2BuildArtifactsAppend(
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(parallelism)
 		var completed atomic.Uint64
+		var firstEncodeErr error
+		var firstEncodeErrMu sync.Mutex
 
 		for i := uint64(0); i < newUserMdus; i++ {
 			if err := egctx.Err(); err != nil {
@@ -903,13 +936,17 @@ func mode2BuildArtifactsAppend(
 					chunk := buf[:n]
 					witnessFlat, shards, err := crypto_ffi.ExpandPayloadRs(chunk, stripe.k, stripe.m)
 					if err != nil {
+						captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 						return fmt.Errorf("expand new mdu %d: %w", i, err)
 					}
 					if uint64(len(witnessFlat)) != witnessBytesPerUser {
-						return fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
+						err := fmt.Errorf("unexpected witness_flat length (want %d, got %d)", witnessBytesPerUser, len(witnessFlat))
+						captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
+						return err
 					}
 					root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 					if err != nil {
+						captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 						return fmt.Errorf("compute new mdu root %d: %w", i, err)
 					}
 					newUserRoots[i] = root
@@ -919,10 +956,13 @@ func mode2BuildArtifactsAppend(
 					slabIndex := uint64(1) + witnessCount + userIdx
 					for slot := uint64(0); slot < stripe.slotCount; slot++ {
 						if int(slot) >= len(shards) {
-							return fmt.Errorf("missing shard for slot %d", slot)
+							err := fmt.Errorf("missing shard for slot %d", slot)
+							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
+							return err
 						}
 						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
 						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 							return err
 						}
 					}
@@ -937,7 +977,16 @@ func mode2BuildArtifactsAppend(
 		}
 
 		if err := eg.Wait(); err != nil {
-			return nil, "", err
+			firstEncodeErrMu.Lock()
+			errFromWorker := firstEncodeErr
+			firstEncodeErrMu.Unlock()
+			if errFromWorker != nil {
+				return nil, "", fmt.Errorf("mode2 append encoding failed: %w", errFromWorker)
+			}
+			if isUploadCanceledErr(err) {
+				return nil, "", fmt.Errorf("mode2 append encoding canceled: %w", err)
+			}
+			return nil, "", fmt.Errorf("mode2 append encoding failed: %w", err)
 		}
 	}
 	if profile != nil {
@@ -1194,12 +1243,15 @@ func mode2UploadArtifactsToProviders(
 		eg.SetLimit(int(stripe.slotCount))
 
 		var mu sync.Mutex
+		var firstProviderErr error
+		var firstProviderErrMu sync.Mutex
 		for _, providerAddr := range metadataProviders {
 			providerAddrLocal := providerAddr
 
 			eg.Go(func() error {
 				base, err := resolveProviderHTTPBaseURL(egctx, providerAddrLocal)
 				if err != nil {
+					captureFirstNonContextError(err, &firstProviderErr, &firstProviderErrMu)
 					return err
 				}
 				mu.Lock()
@@ -1209,7 +1261,16 @@ func mode2UploadArtifactsToProviders(
 			})
 		}
 		if err := eg.Wait(); err != nil {
-			return err
+			firstProviderErrMu.Lock()
+			errFromProvider := firstProviderErr
+			firstProviderErrMu.Unlock()
+			if errFromProvider != nil {
+				return fmt.Errorf("provider endpoint resolve failed: %w", errFromProvider)
+			}
+			if isUploadCanceledErr(err) {
+				return fmt.Errorf("provider endpoint resolve canceled: %w", err)
+			}
+			return fmt.Errorf("provider endpoint resolve failed: %w", err)
 		}
 	}
 	if profile != nil {
@@ -1508,10 +1569,13 @@ func mode2UploadArtifactsToProviders(
 	uploadStarted := time.Now()
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(uploadParallelism)
+	var firstUploadErr error
+	var firstUploadErrMu sync.Mutex
 	for _, task := range tasks {
 		task := task
 		eg.Go(func() error {
 			if err := uploadBlob(egctx, task); err != nil {
+				captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
 				return err
 			}
 			bump()
@@ -1519,7 +1583,16 @@ func mode2UploadArtifactsToProviders(
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		return err
+		firstUploadErrMu.Lock()
+		errFromUpload := firstUploadErr
+		firstUploadErrMu.Unlock()
+		if errFromUpload != nil {
+			return fmt.Errorf("mode2 provider upload failed: %w", errFromUpload)
+		}
+		if isUploadCanceledErr(err) {
+			return fmt.Errorf("mode2 provider upload canceled: %w", err)
+		}
+		return fmt.Errorf("mode2 provider upload failed: %w", err)
 	}
 	if profile != nil {
 		profile.addDuration("mode2_upload_requests_ms", time.Since(uploadStarted))
@@ -1532,10 +1605,10 @@ func mode2UploadArtifactsToProviders(
 func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
 	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath, fileFlags)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mode2 new-deal build failed: %w", err)
 	}
 	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mode2 new-deal upload failed: %w", err)
 	}
 	return res, nil
 }
@@ -1543,10 +1616,10 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, dealID uint64, hint string, existingManifestRoot string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
 	res, finalDir, err := mode2BuildArtifactsAppend(ctx, filePath, dealID, hint, existingManifestRoot, fileRecordPath, fileFlags)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mode2 append build failed: %w", err)
 	}
 	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mode2 append upload failed: %w", err)
 	}
 	return res, nil
 }

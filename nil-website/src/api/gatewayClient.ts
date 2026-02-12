@@ -55,6 +55,13 @@ function asNumber(value: unknown): number | undefined {
   return undefined
 }
 
+function createUploadId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `gw-${Math.random().toString(16).slice(2)}-${Date.now()}`
+}
+
 function normalizeGatewayUploadResult(value: unknown): UploadResult {
   const obj = isRecord(value) ? value : {}
   const sizeBytesRaw = obj.size_bytes ?? obj.sizeBytes ?? obj['size-bytes'] ?? 0
@@ -174,14 +181,17 @@ export async function gatewayUpload(
   gatewayBase: string,
   input: { file: File; owner: string; dealId?: string; maxUserMdus?: number },
 ): Promise<UploadResult> {
+  const uploadId = createUploadId()
   const form = new FormData()
   form.append('file', input.file)
   form.append('owner', input.owner)
   if (input.dealId) form.append('deal_id', String(input.dealId))
+  form.append('upload_id', uploadId)
   if (input.maxUserMdus) form.append('max_user_mdus', String(input.maxUserMdus))
 
   const q = new URLSearchParams()
   if (input.dealId) q.set('deal_id', String(input.dealId))
+  q.set('upload_id', uploadId)
   const url = q.size > 0 ? `${gatewayBase}/gateway/upload?${q.toString()}` : `${gatewayBase}/gateway/upload`
 
   const res = await fetchWithTimeout(

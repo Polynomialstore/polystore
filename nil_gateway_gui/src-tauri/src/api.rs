@@ -1,7 +1,10 @@
-use reqwest::multipart;
+use reqwest::{multipart, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::time::sleep;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayStatusResponse {
@@ -28,6 +31,87 @@ pub struct GatewayUploadResponse {
     pub witness_mdus: u64,
     pub filename: String,
     pub upload_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GatewayUploadAcceptedResponse {
+    status: String,
+    deal_id: Option<String>,
+    upload_id: Option<String>,
+    status_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GatewayUploadJobResult {
+    manifest_root: Option<String>,
+    size_bytes: Option<u64>,
+    file_size_bytes: Option<u64>,
+    allocated_length: Option<u64>,
+    total_mdus: Option<u64>,
+    witness_mdus: Option<u64>,
+    upload_id: Option<String>,
+    file_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GatewayUploadJobStatus {
+    status: Option<String>,
+    result: Option<GatewayUploadJobResult>,
+    error: Option<String>,
+    message: Option<String>,
+}
+
+const GATEWAY_UPLOAD_POLL_INTERVAL: Duration = Duration::from_millis(750);
+const GATEWAY_UPLOAD_POLL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+static GATEWAY_UPLOAD_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn now_upload_id_prefix() -> u64 {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis() as u64,
+        Err(_) => 0,
+    }
+}
+
+fn next_upload_id() -> String {
+    let seq = GATEWAY_UPLOAD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("gw-{:x}-{}", now_upload_id_prefix(), seq)
+}
+
+fn map_job_outcome(
+    upload_id: &str,
+    fallback_name: &str,
+    result: GatewayUploadJobResult,
+) -> Result<GatewayUploadResponse, String> {
+    let manifest_root = result
+        .manifest_root
+        .ok_or_else(|| "missing manifest_root in upload status".to_string())?;
+    Ok(GatewayUploadResponse {
+        cid: manifest_root.clone(),
+        manifest_root,
+        size_bytes: result.size_bytes.unwrap_or(0),
+        file_size_bytes: result.file_size_bytes.unwrap_or(0),
+        allocated_length: result.allocated_length.unwrap_or(0),
+        total_mdus: result.total_mdus.unwrap_or(0),
+        witness_mdus: result.witness_mdus.unwrap_or(0),
+        filename: result
+            .file_name
+            .unwrap_or_else(|| fallback_name.to_string()),
+        upload_id: result.upload_id.unwrap_or_else(|| upload_id.to_string()),
+    })
+}
+
+fn normalize_status_url(base_url: &str, default_deal_id: u64, upload_id: &str) -> String {
+    format!(
+        "{}/gateway/upload-status?deal_id={}&upload_id={}",
+        base_url.trim_end_matches('/'),
+        default_deal_id,
+        upload_id
+    )
+}
+
+fn map_upload_error_message(status: GatewayUploadJobStatus) -> Option<String> {
+    status.error.or(status.message)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +179,13 @@ impl GatewayClient {
         file_path: String,
         local_path: String,
     ) -> Result<GatewayUploadResponse, String> {
-        let url = format!("{}/gateway/upload", self.base_url.trim_end_matches('/'));
+        let upload_id = next_upload_id();
+        let url = format!(
+            "{}/gateway/upload?deal_id={}&upload_id={}",
+            self.base_url.trim_end_matches('/'),
+            deal_id,
+            upload_id,
+        );
         let data = tokio::fs::read(&local_path)
             .await
             .map_err(|err| format!("failed to read file: {err}"))?;
@@ -104,6 +194,7 @@ impl GatewayClient {
             .and_then(|v| v.to_str())
             .unwrap_or("upload.bin")
             .to_string();
+        let file_name_for_result = filename.clone();
         let part = multipart::Part::bytes(data)
             .file_name(filename)
             .mime_str("application/octet-stream")
@@ -112,7 +203,8 @@ impl GatewayClient {
             .part("file", part)
             .text("owner", owner)
             .text("deal_id", deal_id.to_string())
-            .text("file_path", file_path);
+            .text("file_path", file_path)
+            .text("upload_id", upload_id.clone());
 
         let resp = self
             .client
@@ -124,9 +216,119 @@ impl GatewayClient {
         if !resp.status().is_success() {
             return Err(format!("upload failed: {}", resp.status()));
         }
-        resp.json::<GatewayUploadResponse>()
+
+        if resp.status() == StatusCode::ACCEPTED {
+            let accepted = resp
+                .json::<GatewayUploadAcceptedResponse>()
+                .await
+                .map_err(|err| format!("invalid async upload payload: {err}"))?;
+            if accepted.status.to_lowercase() != "accepted" {
+                return Err("gateway did not return accepted status".to_string());
+            }
+            let status_id = accepted
+                .upload_id
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or(upload_id.clone());
+            let status_url = accepted
+                .status_url
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| {
+                    let deal_id_value = accepted
+                        .deal_id
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .unwrap_or(deal_id);
+                    normalize_status_url(&self.base_url, deal_id_value, &status_id)
+                });
+            let outcome = self
+                .wait_for_upload_status(&status_url, deal_id, &status_id)
+                .await?;
+            let mut response = map_job_outcome(&status_id, &file_name_for_result, outcome)?;
+            response.upload_id = status_id;
+            return Ok(response);
+        }
+
+        let response = resp
+            .json::<GatewayUploadResponse>()
             .await
-            .map_err(|err| format!("invalid upload payload: {err}"))
+            .map_err(|err| format!("invalid upload payload: {err}"))?;
+        if response.upload_id.is_empty() {
+            return Ok(GatewayUploadResponse {
+                upload_id: upload_id,
+                ..response
+            });
+        }
+        Ok(response)
+    }
+
+    async fn wait_for_upload_status(
+        &self,
+        status_url: &str,
+        deal_id: u64,
+        upload_id: &str,
+    ) -> Result<GatewayUploadJobResult, String> {
+        let deadline = Instant::now() + GATEWAY_UPLOAD_POLL_TIMEOUT;
+        let mut last_error: Option<String> = None;
+        loop {
+            let status = self.fetch_upload_status(status_url).await.or_else(|err| {
+                last_error = Some(err);
+                Ok(GatewayUploadJobStatus {
+                    status: None,
+                    result: None,
+                    error: None,
+                    message: None,
+                })
+            })?;
+            let stage = status
+                .status
+                .unwrap_or_else(|| "running".to_string())
+                .to_lowercase();
+            match stage.as_str() {
+                "success" => {
+                    if let Some(result) = status.result {
+                        return Ok(result);
+                    }
+                    return Err("gateway upload succeeded without result payload".to_string());
+                }
+                "error" => {
+                    return Err(map_upload_error_message(status)
+                        .unwrap_or_else(|| "gateway upload failed".to_string()));
+                }
+                "accepted" | "queued" | "running" | "receiving" | "encoding" | "uploading"
+                | "done" => {}
+                other => {
+                    return Err(format!(
+                        "gateway upload returned unsupported status '{other}'"
+                    ));
+                }
+            }
+            if Instant::now() >= deadline {
+                let err = last_error
+                    .clone()
+                    .unwrap_or_else(|| "gateway upload status timed out".to_string());
+                return Err(format!(
+                    "gateway upload timed out for deal_id={deal_id} upload_id={upload_id}: {err}"
+                ));
+            }
+            sleep(GATEWAY_UPLOAD_POLL_INTERVAL).await;
+        }
+    }
+
+    async fn fetch_upload_status(
+        &self,
+        status_url: &str,
+    ) -> Result<GatewayUploadJobStatus, String> {
+        let resp = self
+            .client
+            .get(status_url)
+            .send()
+            .await
+            .map_err(|err| format!("upload status request failed: {err}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("upload status failed: {}", resp.status()));
+        }
+        resp.json::<GatewayUploadJobStatus>()
+            .await
+            .map_err(|err| format!("invalid upload status payload: {err}"))
     }
 
     pub async fn list_files(
