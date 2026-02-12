@@ -37,6 +37,57 @@ function resolveRouterUploadDir(): string {
   return path.resolve(process.cwd(), '..', '_artifacts', 'devnet_alpha_multi_sp', 'router_tmp')
 }
 
+async function ensureWalletConnected(page: Page): Promise<void> {
+  const connectedSelector =
+    '[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]'
+  const connected = page.locator(connectedSelector)
+  const connectBtn = page.getByTestId('connect-wallet').first()
+
+  await page.waitForSelector(`${connectedSelector}, [data-testid="connect-wallet"]`, {
+    timeout: 60_000,
+    state: 'attached',
+  })
+
+  if (await connected.first().isVisible().catch(() => false)) return
+
+  if (await connectBtn.isVisible().catch(() => false)) {
+    await connectBtn.click({ force: true })
+  }
+
+  const browserWalletBtn = page.getByRole('button', { name: /Browser Wallet/i })
+  const fallbackWalletBtns = [
+    page.getByRole('button', { name: /^MetaMask$/i }),
+    page.getByRole('button', { name: /^WalletConnect$/i }),
+  ]
+
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    if (await connected.first().isVisible().catch(() => false)) return
+
+    if (await browserWalletBtn.isVisible().catch(() => false)) {
+      await browserWalletBtn.click({ force: true })
+      await expect(connected.first()).toBeVisible({ timeout: 20_000 })
+      return
+    }
+
+    for (const candidate of fallbackWalletBtns) {
+      if (await candidate.isVisible().catch(() => false)) {
+        await candidate.click({ force: true })
+        await expect(connected.first()).toBeVisible({ timeout: 20_000 })
+        return
+      }
+    }
+
+    await page.waitForTimeout(500)
+
+    if (await connectBtn.isVisible().catch(() => false)) {
+      await connectBtn.click({ force: true })
+    }
+  }
+
+  await expect(connected.first()).toBeVisible({ timeout: 5_000 })
+}
+
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
   test.use({ acceptDownloads: true })
@@ -51,19 +102,7 @@ test.describe('mode2 stripe', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
 
-    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
-      timeout: 60_000,
-      state: 'attached',
-    })
-    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    const cosmosIdentity = page.getByTestId('cosmos-identity')
-    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
-      const connectBtn = page.getByTestId('connect-wallet').first()
-      if (await connectBtn.isVisible().catch(() => false)) {
-        await connectBtn.click()
-      }
-      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
-    }
+    await ensureWalletConnected(page)
 
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
@@ -262,19 +301,7 @@ test.describe('mode2 stripe', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
 
-    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
-      timeout: 60_000,
-      state: 'attached',
-    })
-    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    const cosmosIdentity = page.getByTestId('cosmos-identity')
-    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
-      const connectBtn = page.getByTestId('connect-wallet').first()
-      if (await connectBtn.isVisible().catch(() => false)) {
-        await connectBtn.click()
-      }
-      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
-    }
+    await ensureWalletConnected(page)
 
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
@@ -352,19 +379,7 @@ test.describe('mode2 stripe', () => {
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
     console.log('[rehydrate-e2e] dashboard loaded')
 
-    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
-      timeout: 60_000,
-      state: 'attached',
-    })
-    const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    const cosmosIdentity = page.getByTestId('cosmos-identity')
-    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
-      const connectBtn = page.getByTestId('connect-wallet').first()
-      if (await connectBtn.isVisible().catch(() => false)) {
-        await connectBtn.click()
-      }
-      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
-    }
+    await ensureWalletConnected(page)
 
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
