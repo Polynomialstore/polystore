@@ -1167,7 +1167,11 @@ func mode2UploadArtifactsToProviders(
 	totalUploads := metadataUploads + shardUploads
 	if job != nil {
 		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
-		job.setSteps(0, totalUploads)
+		if totalUploads == 0 {
+			job.setSteps(1, 1)
+		} else {
+			job.setSteps(0, totalUploads)
+		}
 	}
 	if profile != nil {
 		profile.setCount("mode2_upload_tasks_metadata", metadataUploads)
@@ -1223,7 +1227,7 @@ func mode2UploadArtifactsToProviders(
 		ExpectContinueTimeout: expectContinueTimeout,
 		IdleConnTimeout:       90 * time.Second,
 	}
-	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
+	client := &http.Client{Timeout: mode2UploadTaskTimeout, Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	sparseUploads := mode2SparseUploadEnabled()
@@ -1290,18 +1294,18 @@ func mode2UploadArtifactsToProviders(
 		if err != nil {
 			return err
 		}
-	const maxAttempts = 3
-	currentSendSize := sendSize
-	targetKey := mode2UploadTargetMetricKey(task.url)
-	targetDurationLabel := "mode2_upload_target_" + targetKey + "_ms"
-	targetRequestsLabel := "mode2_upload_target_" + targetKey + "_requests"
-	targetBytesLabel := "mode2_upload_target_" + targetKey + "_bytes"
-	taskStarted := time.Now()
-	defer func() {
-		if profile != nil {
-			profile.addDuration(targetDurationLabel, time.Since(taskStarted))
-		}
-	}()
+		const maxAttempts = 3
+		currentSendSize := sendSize
+		targetKey := mode2UploadTargetMetricKey(task.url)
+		targetDurationLabel := "mode2_upload_target_" + targetKey + "_ms"
+		targetRequestsLabel := "mode2_upload_target_" + targetKey + "_requests"
+		targetBytesLabel := "mode2_upload_target_" + targetKey + "_bytes"
+		taskStarted := time.Now()
+		defer func() {
+			if profile != nil {
+				profile.addDuration(targetDurationLabel, time.Since(taskStarted))
+			}
+		}()
 		openBody := func() (io.ReadCloser, error) {
 			f, err := os.Open(task.path)
 			if err != nil {

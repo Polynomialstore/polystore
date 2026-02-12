@@ -221,9 +221,13 @@ func (j *uploadJob) setBytes(bytesDone uint64, bytesTotal uint64) {
 		return
 	}
 	j.mu.Lock()
-	j.bytesDone = bytesDone
+	if bytesDone > j.bytesDone {
+		j.bytesDone = bytesDone
+	}
 	if bytesTotal > 0 {
-		j.bytesTotal = bytesTotal
+		if bytesTotal >= j.bytesTotal {
+			j.bytesTotal = bytesTotal
+		}
 	}
 	j.touchLocked()
 	j.mu.Unlock()
@@ -234,8 +238,16 @@ func (j *uploadJob) setSteps(done uint64, total uint64) {
 		return
 	}
 	j.mu.Lock()
-	j.stepsDone = done
-	j.stepsTotal = total
+	if total > 0 {
+		j.stepsTotal = total
+	}
+	if done > j.stepsDone {
+		if j.stepsTotal > 0 && done > j.stepsTotal {
+			j.stepsDone = j.stepsTotal
+		} else {
+			j.stepsDone = done
+		}
+	}
 	j.touchLocked()
 	j.mu.Unlock()
 }

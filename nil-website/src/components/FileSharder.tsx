@@ -124,8 +124,25 @@ function localGatewayCandidates(baseUrl: string): string[] {
 
 function isGatewayNetworkError(msg: string): boolean {
   const text = String(msg || '')
-  return text.includes('Failed to fetch') || text.includes('NetworkError') || text.includes('ERR_CONNECTION_REFUSED')
+  const lower = text.toLowerCase()
+  return (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('err_connection_refused') ||
+    lower.includes('econnrefused') ||
+    lower.includes('connection refused') ||
+    lower.includes('connect refused') ||
+    lower.includes('network is down') ||
+    lower.includes('offline') ||
+    lower.includes('timeout') ||
+    lower.includes('could not connect') ||
+    lower.includes('name resolution')
+  )
 }
+
+const gatewayUploadPollIntervalMs = 1000
+const gatewayUploadPollTimeoutMs = 2500
+const gatewayUploadHeartbeatStaleMs = 15_000
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
@@ -187,6 +204,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const persistInFlightRef = useRef<Promise<void> | null>(null)
   const lastPersistedManifestRootRef = useRef<string | null>(null)
+  const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
+    phase: '',
+    workDone: 0,
+    workTotal: 0,
+  })
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -1008,6 +1030,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           phase?: string
           message?: string
           error?: string
+          updated_at?: string
+          started_at?: string
           bytes_done?: number
           bytes_total?: number
           steps_done?: number
@@ -1016,6 +1040,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             manifest_root?: string
             total_mdus?: number
             witness_mdus?: number
+            allocated_length?: number
           }
         }
 
@@ -1035,18 +1060,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const manifestRoot = resultObj && typeof resultObj.manifest_root === 'string' ? resultObj.manifest_root : undefined
           const totalMdus = resultObj ? asNumber(resultObj.total_mdus) : undefined
           const witnessMdus = resultObj ? asNumber(resultObj.witness_mdus) : undefined
+          const allocatedLength = resultObj ? asNumber(resultObj.allocated_length) : undefined
 
           return {
             status: typeof obj.status === 'string' ? obj.status : undefined,
             phase: typeof obj.phase === 'string' ? obj.phase : undefined,
             message: typeof obj.message === 'string' ? obj.message : undefined,
             error: typeof obj.error === 'string' ? obj.error : undefined,
+            updated_at: typeof obj.updated_at === 'string' ? obj.updated_at : undefined,
+            started_at: typeof obj.started_at === 'string' ? obj.started_at : undefined,
             bytes_done: asNumber(obj.bytes_done),
             bytes_total: asNumber(obj.bytes_total),
             steps_done: asNumber(obj.steps_done),
             steps_total: asNumber(obj.steps_total),
-            result: manifestRoot || totalMdus !== undefined || witnessMdus !== undefined
-              ? { manifest_root: manifestRoot, total_mdus: totalMdus, witness_mdus: witnessMdus }
+            result: manifestRoot || totalMdus !== undefined || witnessMdus !== undefined || allocatedLength !== undefined
+              ? { manifest_root: manifestRoot, total_mdus: totalMdus, witness_mdus: witnessMdus, allocated_length: allocatedLength }
               : undefined,
           }
         }
@@ -1057,6 +1085,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             cid?: string
             size_bytes?: number
             file_size_bytes?: number
+            allocated_length?: number
             total_mdus?: number
             witness_mdus?: number
           } | null,
@@ -1065,6 +1094,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const statusRoot = String(statusSnapshot?.result?.manifest_root || '')
           const statusTotalMdus = Number(statusSnapshot?.result?.total_mdus ?? 0) || 0
           const statusWitnessMdus = Number(statusSnapshot?.result?.witness_mdus ?? 0) || 0
+          const statusAllocatedLength = Number(statusSnapshot?.result?.allocated_length ?? 0) || 0
           const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
           if (!root) {
             setMode2UploadError('gateway upload returned no manifest_root')
@@ -1080,9 +1110,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
 
           const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
-          const gatewayTotalMdus = Number(payload?.total_mdus ?? statusTotalMdus) || 0
+          const gatewayTotalMdus = Number(
+            payload?.total_mdus ?? statusTotalMdus ?? payload?.allocated_length ?? statusAllocatedLength,
+          ) || 0
           const gatewayWitnessMdus = Number(payload?.witness_mdus ?? statusWitnessMdus) || 0
           const gatewayUserMdus = gatewayTotalMdus > 0 ? Math.max(0, gatewayTotalMdus - 1 - gatewayWitnessMdus) : 0
+          const gatewayUserMdusFromAllocated = gatewayUserMdus === 0
+            ? Math.max(0, (Number(payload?.allocated_length ?? statusAllocatedLength) || 0) - 1 - gatewayWitnessMdus)
+            : gatewayUserMdus
+          const gatewayUserMdusFinal = gatewayUserMdusFromAllocated || gatewayUserMdus
 
           setCurrentManifestRoot(root)
           setCurrentManifestBlob(null)
@@ -1096,7 +1132,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             phase: 'done',
             label: 'Gateway Mode 2 ingest complete. Ready to commit.',
             fileBytesTotal: gatewaySizeBytes,
-            totalUserMdus: gatewayUserMdus,
+            totalUserMdus: gatewayUserMdusFinal,
             totalWitnessMdus: gatewayWitnessMdus,
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
@@ -1133,69 +1169,113 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const runGatewayUpload = async (
           gatewayBase: string,
           initialLabel: string,
-        ): Promise<{ payload: GatewayUploadPayload; lastJob: GatewayUploadJobStatus | null }> => {
+          uploadId: string,
+        ): Promise<{ payload: GatewayUploadPayload; lastJob: GatewayUploadJobStatus | null; hadStatus: boolean }> => {
           let stopPolling = false
           let lastJob: GatewayUploadJobStatus | null = null
-          const uploadId = newUploadId()
+          let hadStatus = false
+          let staleWarned = false
+          let lastStatusTs = 0
           const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
           const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+          const phaseToDisplay = (phaseRaw: string): ShardPhase => {
+            const phase = String(phaseRaw || '').trim()
+            switch (phase) {
+              case 'receiving':
+                return 'gateway_receiving'
+              case 'encoding':
+                return 'gateway_encoding'
+              case 'uploading':
+                return 'gateway_uploading'
+              case 'done':
+                return 'done'
+              default:
+                return 'planning'
+            }
+          }
+          const applyProgress = (job: GatewayUploadJobStatus) => {
+            const phase = phaseToDisplay(String(job.phase || '').trim())
+            const status = String(job.status || '').trim()
+            const message = String(job.message || '').trim()
+            const bytesDone = Number(job.bytes_done || 0) || 0
+            const bytesTotal = Number(job.bytes_total || 0) || 0
+            const stepsDone = Number(job.steps_done || 0) || 0
+            const stepsTotal = Number(job.steps_total || 0) || 0
+
+            const useBytes = phase === 'gateway_receiving' && bytesTotal > 0
+            const candidateDone = useBytes ? bytesDone : stepsDone
+            const candidateTotal = useBytes ? bytesTotal : stepsTotal
+
+            const shouldIgnoreZero = phase === 'gateway_encoding' || phase === 'gateway_uploading'
+            if (!candidateTotal && !candidateDone && shouldIgnoreZero) {
+              return
+            }
+
+            const lastByPhase = gatewayUploadProgressRef.current
+            const samePhase = lastByPhase.phase === phase
+
+            const normalizedTotal = samePhase ? Math.max(lastByPhase.workTotal, candidateTotal) : candidateTotal
+            let normalizedDone = samePhase ? Math.max(lastByPhase.workDone, candidateDone) : candidateDone
+
+            if (normalizedTotal > 0 && normalizedDone > normalizedTotal) {
+              normalizedDone = normalizedTotal
+            }
+
+            gatewayUploadProgressRef.current = {
+              phase: phase,
+              workDone: normalizedDone,
+              workTotal: normalizedTotal,
+            }
+
+            setShardProgress((p) => ({
+              ...p,
+              phase,
+              label: `Gateway Mode 2: ${message || phase || status || 'working'}`,
+              workDone: normalizedDone,
+              workTotal: normalizedTotal,
+              blobsDone: normalizedDone,
+              blobsTotal: normalizedTotal,
+              fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
+            }))
+          }
 
           const pollStatus = async () => {
             while (!stopPolling) {
               try {
-                const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(2500) })
+                const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
                 if (res.ok) {
                   const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
                   if (job) {
                     lastJob = job
-                    const phase = String(job.phase || '').trim()
-                    const status = String(job.status || '').trim()
-                    const message = String(job.message || '').trim()
-                    const bytesDone = Number(job.bytes_done || 0) || 0
-                    const bytesTotal = Number(job.bytes_total || 0) || 0
-                    const stepsDone = Number(job.steps_done || 0) || 0
-                    const stepsTotal = Number(job.steps_total || 0) || 0
-
-                    const phaseLabel = message || phase || status || 'working'
-                    const label = `Gateway Mode 2: ${phaseLabel}`
-
-                    const phaseState: ShardPhase =
-                      phase === 'receiving'
-                        ? 'gateway_receiving'
-                        : phase === 'encoding'
-                          ? 'gateway_encoding'
-                          : phase === 'uploading'
-                            ? 'gateway_uploading'
-                            : phase === 'done'
-                              ? 'done'
-                              : 'planning'
-
-                    const useBytes = phaseState === 'gateway_receiving' && bytesTotal > 0
-                    const workDone = useBytes ? bytesDone : stepsDone
-                    const workTotal = useBytes ? bytesTotal : stepsTotal
-
-                    setShardProgress((p) => ({
-                      ...p,
-                      phase: phaseState,
-                      label,
-                      workDone,
-                      workTotal,
-                      blobsDone: workDone,
-                      blobsTotal: workTotal,
-                      fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
-                    }))
+                    hadStatus = true
+                    lastStatusTs = performance.now()
+                    staleWarned = false
+                    applyProgress(job)
                   }
                 }
               } catch {
                 // Ignore polling errors; the primary upload request is the source of truth.
               }
-              await new Promise((r) => setTimeout(r, 1000))
+
+              if (hadStatus && lastStatusTs > 0 && performance.now() - lastStatusTs >= gatewayUploadHeartbeatStaleMs && !staleWarned) {
+                staleWarned = true
+                setShardProgress((p) => ({
+                  ...p,
+                  label: 'Gateway Mode 2: upload heartbeat stalled; waiting for provider status...',
+                }))
+              }
+              await new Promise((r) => setTimeout(r, gatewayUploadPollIntervalMs))
             }
           }
 
           const pollPromise = pollStatus()
           try {
             setMode2Uploading(true)
+            gatewayUploadProgressRef.current = {
+              phase: 'gateway_receiving',
+              workDone: 0,
+              workTotal: 0,
+            }
             setShardProgress((p) => ({
               ...p,
               phase: 'gateway_receiving',
@@ -1221,13 +1301,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             }
 
             const payload = (await resp.json().catch(() => null)) as GatewayUploadPayload
-            return { payload, lastJob }
+            return { payload, lastJob, hadStatus }
           } finally {
             stopPolling = true
             await pollPromise.catch(() => {})
             setMode2Uploading(false)
           }
         }
+        const uploadId = newUploadId()
 
         const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
         const gatewayBases = localGatewayCandidates(gatewaySeed)
@@ -1237,7 +1318,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         for (let i = 0; i < gatewayBases.length; i++) {
           const gatewayBase = gatewayBases[i]
           try {
-            const { payload, lastJob } = await runGatewayUpload(gatewayBase, 'Gateway Mode 2: starting upload...')
+            const { payload, lastJob } = await runGatewayUpload(gatewayBase, 'Gateway Mode 2: starting upload...', uploadId)
             if (finalizeGatewaySuccess(payload, lastJob)) return
             gatewayErrorMessage = 'gateway upload returned no manifest_root'
             gatewayUnreachable = false
@@ -1260,6 +1341,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   const { payload } = await runGatewayUpload(
                     gatewayBase,
                     'Gateway rehydrated from browser cache; retrying upload...',
+                    uploadId,
                   )
                   if (finalizeGatewaySuccess(payload, null)) return
                   msg = 'gateway upload returned no manifest_root'

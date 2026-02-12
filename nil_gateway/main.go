@@ -54,6 +54,8 @@ var (
 	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
 	// This is enforced per request so clients never see an infinite hang.
 	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 1800))) * time.Second
+	// Per-provider artifact upload timeout (Mode 2 metadata + shard uploads).
+	mode2UploadTaskTimeout = time.Duration(envInt("NIL_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS", 60)) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
 	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
 	// Devnet UX: allow unsigned range fetches (MetaMask-only txs) by default.
@@ -836,6 +838,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				maxUserMdusStr = val
 			case "file_size_bytes":
 				fileSizeStr = val
+			case "upload_id":
+				if uploadID == "" {
+					uploadID = val
+				}
 			}
 			continue
 		}
@@ -974,7 +980,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
 	}
 
-	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s", filename, owner, dealIDStr)
+	log.Printf("GatewayUpload: file=%s owner=%s deal_id=%s upload_id=%s", filename, owner, dealIDStr, uploadID)
 
 	rawPath := path
 	ingestPath := path
