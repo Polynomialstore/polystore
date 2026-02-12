@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -426,6 +427,40 @@ func mode2ExpectContinueTimeout() time.Duration {
 	// Keep a short pause for early 4xx/5xx rejects without paying a multi-second
 	// RTT penalty per upload request.
 	return 250 * time.Millisecond
+}
+
+func mode2UploadTargetMetricKey(rawURL string) string {
+	host := strings.TrimSpace(rawURL)
+	if parsed, err := url.Parse(rawURL); err == nil {
+		if parsed.Host != "" {
+			host = parsed.Host
+		}
+	}
+	host = strings.ToLower(host)
+	if host == "" {
+		return "unknown"
+	}
+
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range host {
+		ok := (r >= 'a' && r <= 'z') ||
+			(r >= '0' && r <= '9')
+		if ok {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	key := strings.Trim(b.String(), "_")
+	if key == "" {
+		return "unknown"
+	}
+	return key
 }
 
 func mode2SparseUploadEnabled() bool {
@@ -1255,8 +1290,18 @@ func mode2UploadArtifactsToProviders(
 		if err != nil {
 			return err
 		}
-		const maxAttempts = 3
-		currentSendSize := sendSize
+	const maxAttempts = 3
+	currentSendSize := sendSize
+	targetKey := mode2UploadTargetMetricKey(task.url)
+	targetDurationLabel := "mode2_upload_target_" + targetKey + "_ms"
+	targetRequestsLabel := "mode2_upload_target_" + targetKey + "_requests"
+	targetBytesLabel := "mode2_upload_target_" + targetKey + "_bytes"
+	taskStarted := time.Now()
+	defer func() {
+		if profile != nil {
+			profile.addDuration(targetDurationLabel, time.Since(taskStarted))
+		}
+	}()
 		openBody := func() (io.ReadCloser, error) {
 			f, err := os.Open(task.path)
 			if err != nil {
@@ -1330,6 +1375,12 @@ func mode2UploadArtifactsToProviders(
 			}
 			err := uploadOnce(ctx)
 			if err == nil {
+				if profile != nil {
+					profile.addCount(targetRequestsLabel, 1)
+					if task.sizeBytes > 0 {
+						profile.addCount(targetBytesLabel, uint64(task.sizeBytes))
+					}
+				}
 				return nil
 			}
 			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {

@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +65,75 @@ var (
 	dealHintTTL         = 10 * time.Second
 	errNoHTTPMultiaddr  = errors.New("no supported http multiaddr")
 )
+
+func providerHTTPBaseOverrides() map[string]string {
+	raw := strings.TrimSpace(os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES"))
+	if raw == "" {
+		return nil
+	}
+
+	overrides := make(map[string]string)
+	for _, entry := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	}) {
+		pair := strings.TrimSpace(entry)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := normalizeProviderOverrideKey(parts[0])
+		base := normalizeProviderOverrideBase(parts[1])
+		if key == "" || base == "" {
+			continue
+		}
+		overrides[key] = base
+	}
+	if len(overrides) == 0 {
+		return nil
+	}
+	return overrides
+}
+
+func normalizeProviderOverrideKey(raw string) string {
+	key := strings.ToLower(strings.TrimSpace(raw))
+	key = strings.TrimRight(key, "/")
+	return key
+}
+
+func normalizeProviderOverrideBase(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	path := strings.TrimRight(parsed.EscapedPath(), "/")
+	if path == "" || path == "." {
+		return fmt.Sprintf("%s://%s", scheme, parsed.Host)
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, parsed.Host, path)
+}
+
+func lookupProviderOverride(overrides map[string]string, key string) (string, bool) {
+	if len(overrides) == 0 {
+		return "", false
+	}
+	normalized := normalizeProviderOverrideKey(key)
+	if normalized == "" {
+		return "", false
+	}
+	base, ok := overrides[normalized]
+	return base, ok && base != ""
+}
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
@@ -601,21 +672,71 @@ func resolveProviderHTTPBaseURL(ctx context.Context, providerAddr string) (strin
 		}
 	}
 
+	overrides := providerHTTPBaseOverrides()
+	if override, ok := lookupProviderOverride(overrides, key); ok {
+		providerBaseCache.Store(key, &providerBaseCacheEntry{
+			baseURL: override,
+			expires: time.Now().Add(providerCacheTTL),
+		})
+		return override, nil
+	}
+
 	endpoints, err := fetchProviderEndpointsFromLCD(ctx, key)
 	if err != nil {
 		return "", err
 	}
 
+	firstDiscovered := ""
 	for _, ep := range endpoints {
+		if override, ok := lookupProviderOverride(overrides, ep); ok {
+			providerBaseCache.Store(key, &providerBaseCacheEntry{
+				baseURL: override,
+				expires: time.Now().Add(providerCacheTTL),
+			})
+			return override, nil
+		}
+
 		baseURL, err := httpBaseURLFromMultiaddr(ep)
 		if err != nil {
 			continue
 		}
+		if firstDiscovered == "" {
+			firstDiscovered = baseURL
+		}
+
+		if override, ok := lookupProviderOverride(overrides, baseURL); ok {
+			providerBaseCache.Store(key, &providerBaseCacheEntry{
+				baseURL: override,
+				expires: time.Now().Add(providerCacheTTL),
+			})
+			return override, nil
+		}
+		if parsed, err := url.Parse(baseURL); err == nil {
+			if override, ok := lookupProviderOverride(overrides, parsed.Host); ok {
+				providerBaseCache.Store(key, &providerBaseCacheEntry{
+					baseURL: override,
+					expires: time.Now().Add(providerCacheTTL),
+				})
+				return override, nil
+			}
+			if host := strings.TrimSpace(parsed.Hostname()); host != "" {
+				if override, ok := lookupProviderOverride(overrides, host); ok {
+					providerBaseCache.Store(key, &providerBaseCacheEntry{
+						baseURL: override,
+						expires: time.Now().Add(providerCacheTTL),
+					})
+					return override, nil
+				}
+			}
+		}
+	}
+
+	if firstDiscovered != "" {
 		providerBaseCache.Store(key, &providerBaseCacheEntry{
-			baseURL: baseURL,
+			baseURL: firstDiscovered,
 			expires: time.Now().Add(providerCacheTTL),
 		})
-		return baseURL, nil
+		return firstDiscovered, nil
 	}
 
 	return "", fmt.Errorf("%w for provider %s", errNoHTTPMultiaddr, key)

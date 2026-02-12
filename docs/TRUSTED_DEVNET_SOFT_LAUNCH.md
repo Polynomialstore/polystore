@@ -355,6 +355,19 @@ Then register provider endpoints on-chain as:
 - `/dns4/sp2.<domain>/tcp/443/https`
 - `/dns4/sp3.<domain>/tcp/443/https`
 
+If the router/local Gateway runs on the same host as those provider processes, set a local upload fast-path override so Mode2 uploads avoid Cloudflare round-trips:
+
+```bash
+export NIL_PROVIDER_HTTP_BASE_OVERRIDES="sp1.<domain>=http://127.0.0.1:8091,sp2.<domain>=http://127.0.0.1:8092,sp3.<domain>=http://127.0.0.1:8093"
+```
+
+- Supported keys in `NIL_PROVIDER_HTTP_BASE_OVERRIDES` are:
+  - provider address (`nil1...`)
+  - endpoint hostname (`sp1.<domain>`)
+  - full endpoint multiaddr (`/dns4/sp1.<domain>/tcp/443/https`)
+- Value must be an `http://` or `https://` base URL.
+- Keep this override only on hosts that can directly reach provider processes; do not enable it for remote collaborators.
+
 ### 5) Website build (static, served at `web.<domain>`)
 
 Skip this section if your website is already hosted elsewhere (for example a GitHub-integrated deploy).
