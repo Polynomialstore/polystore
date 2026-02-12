@@ -1190,14 +1190,15 @@ func mode2UploadArtifactsToProviders(
 			return err
 		}
 		const maxAttempts = 3
+		currentSendSize := sendSize
 		openBody := func() (io.ReadCloser, error) {
 			f, err := os.Open(task.path)
 			if err != nil {
 				return nil, err
 			}
-			if sparseUploads && sendSize > 0 && sendSize < fullSize {
+			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
 				return &limitedReadCloser{
-					Reader: io.LimitReader(f, sendSize),
+					Reader: io.LimitReader(f, currentSendSize),
 					Closer: f,
 				}, nil
 			}
@@ -1216,14 +1217,14 @@ func mode2UploadArtifactsToProviders(
 			}
 			defer req.Body.Close()
 			req.GetBody = openBody
-			req.ContentLength = sendSize
+			req.ContentLength = currentSendSize
 			req.Header.Set("Content-Type", "application/octet-stream")
 			// Avoid sending large bodies when the SP would reject early (deal validation,
 			// missing headers, etc). This prevents spurious client-side "ContentLength ...
 			// with Body length ..." transport errors when the server responds before
 			// reading the full payload.
 			req.Header.Set("Expect", "100-continue")
-			if sparseUploads && sendSize > 0 && sendSize < fullSize {
+			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
 				req.Header.Set("X-Nil-Full-Size", strconv.FormatInt(fullSize, 10))
 			}
 			if task.dealID != "" {
@@ -1263,6 +1264,16 @@ func mode2UploadArtifactsToProviders(
 			err := uploadOnce(ctx)
 			if err == nil {
 				return nil
+			}
+			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
+				var httpErr *providerUploadHTTPError
+				if errors.As(err, &httpErr) && (httpErr.statusCode == http.StatusBadRequest || httpErr.statusCode == http.StatusLengthRequired) {
+					// Mixed-version rollout safety: older providers can reject sparse bodies.
+					// Retry the same task once with full payload before surfacing failure.
+					currentSendSize = fullSize
+					attempt--
+					continue
+				}
 			}
 			lastErr = err
 			if attempt == maxAttempts || !isRetryableUploadErr(err) {
