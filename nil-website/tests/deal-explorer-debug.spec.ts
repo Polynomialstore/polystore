@@ -342,7 +342,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   expect(await streamToBuffer(await dl3.createReadStream())).toEqual(fileBytes)
   expect(fetchCalls).toBeGreaterThan(fetchCallsAfterFirst)
 
-  // Gateway raw fetch path should not require a plan call.
+  // Gateway download should use session-aware fetch through the local gateway (not debug raw fetch).
   const fetchCallsBeforeGateway = fetchCalls
   const rawDownloadButton = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
   await expect(rawDownloadButton).toBeVisible({ timeout: 60_000 })
@@ -350,8 +350,8 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
   await rawDownloadButton.click()
   const dl4 = await download4
   expect(await streamToBuffer(await dl4.createReadStream())).toEqual(fileBytes)
-  expect(gatewayRawCalls).toBe(1)
-  expect(fetchCalls).toBe(fetchCallsBeforeGateway)
+  expect(gatewayRawCalls).toBe(0)
+  expect(fetchCalls).toBeGreaterThan(fetchCallsBeforeGateway)
   expect(gatewayProofCalls).toBeGreaterThan(0)
   expect(spProofCalls).toBe(0)
 })

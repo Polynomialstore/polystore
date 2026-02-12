@@ -1374,75 +1374,61 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         onClick={async () => {
                                           setFileActionError(null)
                                           setBusyFilePath(f.path)
+                                          const dealId = String(deal.id)
+                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                           try {
                                             if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-                                            const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                            const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-                                            const q = new URLSearchParams()
-                                            q.set('deal_id', String(deal.id))
-                                            q.set('owner', String(nilAddress))
-                                            q.set('file_path', f.path)
-                                            q.set('range_start', String(safeStart))
-                                            q.set('range_len', String(safeLen))
-                                            const url = `${appConfig.gatewayBase}/gateway/debug/raw-fetch/${encodeURIComponent(
-                                              deal.cid,
-                                            )}?${q.toString()}`
-                                            const res = await fetch(url)
-                                            if (!res.ok) {
-                                              const txt = await res.text().catch(() => '')
-                                              const normalized = txt.toLowerCase()
-                                              const missingSessionHeader = normalized.includes('x-nil-session-id')
-                                              if (!missingSessionHeader) {
-                                                throw new Error(txt || `gateway raw fetch failed (${res.status})`)
-                                              }
-
-                                              // Newer gateway paths may require session headers even for debug fetches.
-                                              // Fall back to the session-aware retrieval flow while forcing gateway base.
-                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                              const dealId = String(deal.id)
-                                              onFileActivity?.({
-                                                dealId,
-                                                filePath: f.path,
-                                                sizeBytes: f.size_bytes,
-                                                manifestRoot: manifestHex,
-                                                action: 'download',
-                                                status: 'pending',
-                                              })
-                                              const result = await fetchFile({
-                                                dealId,
-                                                manifestRoot: manifestHex,
-                                                owner: nilAddress,
-                                                filePath: f.path,
-                                                serviceBase: appConfig.gatewayBase,
-                                                rangeStart: safeStart,
-                                                rangeLen: safeLen,
-                                                fileStartOffset: f.start_offset,
-                                                fileSizeBytes: f.size_bytes,
-                                                mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                                blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                                sponsoredAuth,
-                                              })
-                                              if (!result) throw new Error('download failed')
-                                              const fallbackBytes = new Uint8Array(await result.blob.arrayBuffer())
-                                              await writeCachedFile(dealId, f.path, fallbackBytes)
-                                              setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                              downloadBlobAsFile(result.blob, f.path)
-                                              onFileActivity?.({
-                                                dealId,
-                                                filePath: f.path,
-                                                sizeBytes: f.size_bytes,
-                                                manifestRoot: manifestHex,
-                                                action: 'download',
-                                                status: 'success',
-                                              })
-                                              return
-                                            }
-                                            const bytes = new Uint8Array(await res.arrayBuffer())
-                                            await writeCachedFile(String(deal.id), f.path, bytes)
+                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'pending',
+                                            })
+                                            const result = await fetchFile({
+                                              dealId,
+                                              manifestRoot: manifestHex,
+                                              owner: nilAddress,
+                                              filePath: f.path,
+                                              serviceBase: appConfig.gatewayBase,
+                                              rangeStart: safeStart,
+                                              rangeLen: safeLen,
+                                              fileStartOffset: f.start_offset,
+                                              fileSizeBytes: f.size_bytes,
+                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+                                              sponsoredAuth,
+                                            })
+                                            if (!result) throw new Error('download failed')
+                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
+                                            await writeCachedFile(dealId, f.path, bytes)
                                             setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBytesAsFile(bytes, f.path)
+                                            downloadBlobAsFile(result.blob, f.path)
+                                            onFileActivity?.({
+                                              dealId,
+                                              filePath: f.path,
+                                              sizeBytes: f.size_bytes,
+                                              manifestRoot: manifestHex,
+                                              action: 'download',
+                                              status: 'success',
+                                            })
                                           } catch (e: unknown) {
                                             const msg = e instanceof Error ? e.message : String(e)
+                                            if (deal.cid) {
+                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                              onFileActivity?.({
+                                                dealId,
+                                                filePath: f.path,
+                                                sizeBytes: f.size_bytes,
+                                                manifestRoot: manifestHex,
+                                                action: 'download',
+                                                status: 'failed',
+                                                error: msg,
+                                              })
+                                            }
                                             setFileActionError(msg)
                                           } finally {
                                             setBusyFilePath(null)
