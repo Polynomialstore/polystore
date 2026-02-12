@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::time::sleep;
 use tauri::{AppHandle, Emitter};
+use tokio::time::sleep;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayStatusResponse {
@@ -344,13 +344,25 @@ impl GatewayClient {
         }
     }
 
-    fn emit_upload_status_log(
-        upload_id: &str,
-        status: &GatewayUploadJobStatus,
-    ) -> Option<String> {
-        let phase = status.phase.as_deref().unwrap_or("planning").trim().to_string();
-        let state = status.status.as_deref().unwrap_or("running").trim().to_string();
-        let message = status.message.as_deref().unwrap_or("working").trim().to_string();
+    fn emit_upload_status_log(upload_id: &str, status: &GatewayUploadJobStatus) -> Option<String> {
+        let phase = status
+            .phase
+            .as_deref()
+            .unwrap_or("planning")
+            .trim()
+            .to_string();
+        let state = status
+            .status
+            .as_deref()
+            .unwrap_or("running")
+            .trim()
+            .to_string();
+        let message = status
+            .message
+            .as_deref()
+            .unwrap_or("working")
+            .trim()
+            .to_string();
 
         let mut line = format!(
             "> Gateway upload status: upload_id={upload_id} status={state} phase={phase} message={message}"

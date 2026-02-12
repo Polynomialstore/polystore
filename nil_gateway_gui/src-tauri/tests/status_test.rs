@@ -18,6 +18,7 @@ fn spawn_status_server() -> String {
                 build_time: "2026-01-16".to_string(),
                 mode: "standalone".to_string(),
                 listening_addr: addr.to_string(),
+                managed: Some(false),
                 provider_base: None,
                 p2p_addrs: None,
                 capabilities: [("upload".to_string(), true)].into_iter().collect(),

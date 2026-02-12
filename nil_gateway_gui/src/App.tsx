@@ -199,6 +199,7 @@ export default function App() {
   const recoveryInFlightRef = useRef(false);
   const consecutiveFailuresRef = useRef(0);
   const lastRecoveryAttemptRef = useRef(0);
+  const externalGatewayNoticeRef = useRef(false);
 
   const addLog = useCallback((line: string) => {
     const trimmed = line.trim();
@@ -235,13 +236,25 @@ export default function App() {
 
   const applyOnlineStatus = useCallback((status: GatewayStatusResponse) => {
     setGateway(status);
-    setGatewayManaged(status.managed ?? null);
+    const managed = status.managed ?? null;
+    setGatewayManaged(managed);
     setPhase("online");
     setPhaseMessage(`Listening on ${status.listening_addr}`);
     setStatusDetail(null);
     setLastStatusAt(Date.now());
     consecutiveFailuresRef.current = 0;
-  }, []);
+
+    if (managed === false && isLoopbackHost(hostFromBaseUrl(gatewayBaseUrl))) {
+      if (!externalGatewayNoticeRef.current) {
+        externalGatewayNoticeRef.current = true;
+        addLog(
+          "Connected to an external Gateway endpoint. This GUI cannot stream detailed upload lifecycle logs from it.",
+        );
+      }
+    } else {
+      externalGatewayNoticeRef.current = false;
+    }
+  }, [addLog, gatewayBaseUrl]);
 
   const probeStatus = useCallback(async () => {
     const status = await gatewayStatus();
@@ -557,6 +570,11 @@ export default function App() {
     addLog(
       `Starting upload for "${uploadFilePath}" to deal ${uploadDealId} (owner ${uploadOwner})`,
     );
+    if (gatewayManaged === false && isLoopbackHost(hostFromBaseUrl(gatewayBaseUrl))) {
+      addLog(
+        "Upload is being handled by an external Gateway endpoint; GUI-managed upload lifecycle logs are not available.",
+      );
+    }
     setUploadBusy(true);
     setUploadError(null);
     setUploadResponse(null);

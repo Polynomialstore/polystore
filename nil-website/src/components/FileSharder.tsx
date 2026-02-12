@@ -1276,11 +1276,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const candidateDone = useBytes ? bytesDone : stepsDone
             const candidateTotal = useBytes ? bytesTotal : stepsTotal
 
-            const shouldIgnoreZero = phase === 'gateway_encoding' || phase === 'gateway_uploading'
-            if (!candidateTotal && !candidateDone && shouldIgnoreZero) {
-              return
-            }
-
             const logKey = `${status}|${phase}|${message}`
             if (logKey && logKey !== lastStatusLogKey) {
               addLog(`> Gateway upload status: status=${status || 'working'} phase=${phase || 'planning'} message=${message || 'working'}`)
@@ -1289,9 +1284,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             const lastByPhase = gatewayUploadProgressRef.current
             const samePhase = lastByPhase.phase === phase
+            const fallbackTotal = samePhase ? lastByPhase.workTotal : candidateTotal
+            const fallbackDone = samePhase ? lastByPhase.workDone : candidateDone
 
-            const normalizedTotal = samePhase ? Math.max(lastByPhase.workTotal, candidateTotal) : candidateTotal
-            let normalizedDone = samePhase ? Math.max(lastByPhase.workDone, candidateDone) : candidateDone
+            const normalizedTotal = candidateTotal > 0 ? candidateTotal : fallbackTotal
+            let normalizedDone = candidateDone > 0 ? candidateDone : fallbackDone
 
             if (normalizedTotal > 0 && normalizedDone > normalizedTotal) {
               normalizedDone = normalizedTotal
