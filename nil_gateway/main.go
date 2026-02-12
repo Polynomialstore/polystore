@@ -3900,7 +3900,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 
 const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
 
-const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Gateway-Auth, X-Nil-Deputy"
+const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Full-Size, X-Nil-Gateway-Auth, X-Nil-Deputy"
 
 const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS"
 
@@ -5435,6 +5435,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
 
 	if dealIDStr == "" || mduIndexStr == "" {
 		http.Error(w, "X-Nil-Deal-ID and X-Nil-Mdu-Index headers are required", http.StatusBadRequest)
@@ -5462,6 +5463,17 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	if clientManifestRoot == "" {
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
 		return
+	}
+	declaredFullSize := int64(0)
+	hasDeclaredFullSize := false
+	if fullSizeHeader != "" {
+		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
+		if err != nil || n <= 0 {
+			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			return
+		}
+		declaredFullSize = n
+		hasDeclaredFullSize = true
 	}
 
 	// Canonicalize Root
@@ -5507,14 +5519,36 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	storedSize := n
+	if hasDeclaredFullSize {
+		if declaredFullSize != int64(types.MDU_SIZE) {
+			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.MDU_SIZE), http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize < n {
+			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize > (10 << 20) {
+			http.Error(w, "X-Nil-Full-Size exceeds max allowed size", http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize > n {
+			if err := tmp.Truncate(declaredFullSize); err != nil {
+				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
+				return
+			}
+		}
+		storedSize = declaredFullSize
+	}
 
 	if err := tmp.Close(); err != nil {
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
 		return
 	}
 
-	if n != int64(types.MDU_SIZE) {
-		http.Error(w, fmt.Sprintf("invalid mdu size: got %d bytes (want %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+	if storedSize != int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid mdu size: got %d bytes (want %d)", storedSize, types.MDU_SIZE), http.StatusBadRequest)
 		return
 	}
 
@@ -5530,7 +5564,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	}
 	committed = true
 
-	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, n, dealID)
+	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -5556,6 +5590,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 	slotStr := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
 
 	if dealIDStr == "" || mduIndexStr == "" || slotStr == "" {
 		http.Error(w, "X-Nil-Deal-ID, X-Nil-Mdu-Index, and X-Nil-Slot headers are required", http.StatusBadRequest)
@@ -5589,6 +5624,21 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
+	declaredFullSize := int64(0)
+	hasDeclaredFullSize := false
+	if fullSizeHeader != "" {
+		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
+		if err != nil || n <= 0 {
+			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			return
+		}
+		if n > int64(types.MDU_SIZE) {
+			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+			return
+		}
+		declaredFullSize = n
+		hasDeclaredFullSize = true
+	}
 
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
@@ -5605,7 +5655,11 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Join(rootDir, filename)
 
 	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
-		if r.ContentLength <= 0 || info.Size() == r.ContentLength {
+		expectedSize := r.ContentLength
+		if hasDeclaredFullSize {
+			expectedSize = declaredFullSize
+		}
+		if expectedSize <= 0 || info.Size() == expectedSize {
 			log.Printf("SpUploadShard: already present %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -5631,6 +5685,20 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	storedSize := n
+	if hasDeclaredFullSize {
+		if declaredFullSize < n {
+			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize > n {
+			if err := tmp.Truncate(declaredFullSize); err != nil {
+				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
+				return
+			}
+		}
+		storedSize = declaredFullSize
+	}
 
 	if err := tmp.Close(); err != nil {
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
@@ -5638,14 +5706,18 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Shard size depends on the RS params (K), so enforce only an upper bound here.
-	if n <= 0 || n > int64(types.MDU_SIZE) {
-		http.Error(w, fmt.Sprintf("invalid shard size: got %d bytes (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+	if storedSize <= 0 || storedSize > int64(types.MDU_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid shard size: got %d bytes (max %d)", storedSize, types.MDU_SIZE), http.StatusBadRequest)
 		return
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
-			if r.ContentLength <= 0 || info.Size() == r.ContentLength {
+			expectedSize := r.ContentLength
+			if hasDeclaredFullSize {
+				expectedSize = declaredFullSize
+			}
+			if expectedSize <= 0 || info.Size() == expectedSize {
 				log.Printf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
 				w.WriteHeader(http.StatusOK)
 				return
@@ -5656,7 +5728,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 	committed = true
 
-	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, n, dealID, slot)
+	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, storedSize, dealID, slot)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -5745,10 +5817,22 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
 
 	if dealIDStr == "" || clientManifestRoot == "" {
 		http.Error(w, "X-Nil-Deal-ID and X-Nil-Manifest-Root headers are required", http.StatusBadRequest)
 		return
+	}
+	declaredFullSize := int64(0)
+	hasDeclaredFullSize := false
+	if fullSizeHeader != "" {
+		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
+		if err != nil || n <= 0 {
+			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			return
+		}
+		declaredFullSize = n
+		hasDeclaredFullSize = true
 	}
 
 	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
@@ -5806,14 +5890,32 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	storedSize := n
+	if hasDeclaredFullSize {
+		if declaredFullSize != int64(types.BLOB_SIZE) {
+			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.BLOB_SIZE), http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize < n {
+			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			return
+		}
+		if declaredFullSize > n {
+			if err := tmp.Truncate(declaredFullSize); err != nil {
+				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
+				return
+			}
+		}
+		storedSize = declaredFullSize
+	}
 
 	if err := tmp.Close(); err != nil {
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
 		return
 	}
 
-	if n != int64(types.BLOB_SIZE) {
-		http.Error(w, fmt.Sprintf("invalid manifest size: got %d bytes (want %d)", n, types.BLOB_SIZE), http.StatusBadRequest)
+	if storedSize != int64(types.BLOB_SIZE) {
+		http.Error(w, fmt.Sprintf("invalid manifest size: got %d bytes (want %d)", storedSize, types.BLOB_SIZE), http.StatusBadRequest)
 		return
 	}
 
@@ -5828,6 +5930,6 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	committed = true
 
-	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, n, dealID)
+	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }

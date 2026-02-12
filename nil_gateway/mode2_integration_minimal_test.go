@@ -97,6 +97,24 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 			mduIdx := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 			slot := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
 			body, _ := ioReadAllLimit(r, 12<<20)
+			if fullHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size")); fullHeader != "" {
+				fullSize, err := strconv.ParseInt(fullHeader, 10, 64)
+				if err != nil || fullSize <= 0 {
+					t.Errorf("invalid X-Nil-Full-Size header %q", fullHeader)
+					http.Error(w, "invalid X-Nil-Full-Size", http.StatusBadRequest)
+					return
+				}
+				if int64(len(body)) > fullSize {
+					t.Errorf("body larger than X-Nil-Full-Size: body=%d full=%d", len(body), fullSize)
+					http.Error(w, "body larger than X-Nil-Full-Size", http.StatusBadRequest)
+					return
+				}
+				if int64(len(body)) < fullSize {
+					padded := make([]byte, fullSize)
+					copy(padded, body)
+					body = padded
+				}
+			}
 			shards.Store(manifest+"|"+mduIdx+"|"+slot, body)
 			w.WriteHeader(http.StatusOK)
 			return

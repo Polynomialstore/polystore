@@ -622,6 +622,10 @@ Use this flow instead:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
   - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
+- Mode2 upload feels unexpectedly slow for small files:
+  - ensure router + providers are on a build that supports sparse upload transport (`X-Nil-Full-Size`)
+  - sparse transport is enabled by default; verify it wasn't disabled via `NIL_MODE2_SPARSE_UPLOAD=0`
+  - restart router + providers after updating binaries/config so the optimization applies end-to-end
 - Fetch fails with “missing X-Nil-Session-Id”:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
 - systemd service exits with `203/EXEC`:

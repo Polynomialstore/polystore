@@ -78,3 +78,49 @@ func TestSpUploadManifest_RequiresHeaders(t *testing.T) {
 	var payload map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &payload)
 }
+
+func TestSpUploadManifest_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
+	useTempUploadDir(t)
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-manifest-sparse")
+	dealID := uint64(1)
+	owner := "nil1owner"
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	body := bytes.Repeat([]byte{0xAC}, 1024)
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_manifest", bytes.NewReader(body))
+	req.Header.Set("X-Nil-Deal-ID", "1")
+	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set("X-Nil-Full-Size", "131072")
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	w := httptest.NewRecorder()
+	r := testRouter()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	path := filepath.Join(uploadDir, "deals", "1", manifestRoot.Key, "manifest.bin")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read manifest.bin: %v", err)
+	}
+	if len(got) != 131072 {
+		t.Fatalf("unexpected manifest length: got=%d want=%d", len(got), 131072)
+	}
+	if !bytes.Equal(got[:len(body)], body) {
+		t.Fatalf("stored manifest prefix mismatch")
+	}
+}

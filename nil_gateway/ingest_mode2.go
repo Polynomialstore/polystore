@@ -409,6 +409,53 @@ func mode2UploadParallelism(slotCount uint64) int {
 	return target
 }
 
+func mode2SparseUploadEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_SPARSE_UPLOAD"))
+	if raw == "" {
+		return true
+	}
+	switch strings.ToLower(raw) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+func mode2SparsePayloadLength(path string, maxBytes int64) (fullSize int64, sendSize int64, err error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	fullSize = fi.Size()
+	if maxBytes > 0 && fullSize > maxBytes {
+		return 0, 0, fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), fullSize)
+	}
+	if fullSize <= 0 {
+		return fullSize, fullSize, nil
+	}
+
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	send := len(buf)
+	for send > 0 && buf[send-1] == 0 {
+		send--
+	}
+	// Preserve a non-empty upload body so existing transport/server logic keeps working.
+	if send == 0 && fullSize > 0 {
+		send = 1
+	}
+
+	return fullSize, int64(send), nil
+}
+
+type limitedReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
 func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 	lockPath := filepath.Join(filepath.Dir(finalDir), "."+filepath.Base(finalDir)+".lock")
 	lockHeld := false
@@ -1075,12 +1122,13 @@ func mode2UploadArtifactsToProviders(
 		// Providers validate deal state via LCD before reading bodies; keep a generous
 		// wait window so we don't start streaming 8 MiB payloads only to be rejected
 		// a moment later (which also triggers client-side ContentLength mismatch errors).
-		ExpectContinueTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1200 * time.Millisecond,
 		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
+	sparseUploads := mode2SparseUploadEnabled()
 
 	type uploadTask struct {
 		url          string
@@ -1137,16 +1185,23 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	uploadBlob := func(ctx context.Context, task uploadTask) error {
-		fi, err := os.Stat(task.path)
+		fullSize, sendSize, err := mode2SparsePayloadLength(task.path, task.maxBytes)
 		if err != nil {
 			return err
 		}
 		const maxAttempts = 3
-		if task.maxBytes > 0 && fi.Size() > task.maxBytes {
-			return fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(task.path), fi.Size())
-		}
 		openBody := func() (io.ReadCloser, error) {
-			return os.Open(task.path)
+			f, err := os.Open(task.path)
+			if err != nil {
+				return nil, err
+			}
+			if sparseUploads && sendSize > 0 && sendSize < fullSize {
+				return &limitedReadCloser{
+					Reader: io.LimitReader(f, sendSize),
+					Closer: f,
+				}, nil
+			}
+			return f, nil
 		}
 
 		uploadOnce := func(ctx context.Context) error {
@@ -1161,13 +1216,16 @@ func mode2UploadArtifactsToProviders(
 			}
 			defer req.Body.Close()
 			req.GetBody = openBody
-			req.ContentLength = fi.Size()
+			req.ContentLength = sendSize
 			req.Header.Set("Content-Type", "application/octet-stream")
 			// Avoid sending large bodies when the SP would reject early (deal validation,
 			// missing headers, etc). This prevents spurious client-side "ContentLength ...
 			// with Body length ..." transport errors when the server responds before
 			// reading the full payload.
 			req.Header.Set("Expect", "100-continue")
+			if sparseUploads && sendSize > 0 && sendSize < fullSize {
+				req.Header.Set("X-Nil-Full-Size", strconv.FormatInt(fullSize, 10))
+			}
 			if task.dealID != "" {
 				req.Header.Set("X-Nil-Deal-ID", task.dealID)
 			}

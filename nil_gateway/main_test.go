@@ -215,6 +215,102 @@ func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 	}
 }
 
+func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
+	useTempUploadDir(t)
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-mdu-sparse")
+	dealID := uint64(1)
+	owner := "nil1owner"
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	body := bytes.Repeat([]byte{0xAB}, 2048)
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_mdu", bytes.NewReader(body))
+	req.Header.Set("X-Nil-Deal-ID", "1")
+	req.Header.Set("X-Nil-Mdu-Index", "0")
+	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(types.MDU_SIZE))
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	w := httptest.NewRecorder()
+	r := testRouter()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	path := filepath.Join(uploadDir, "deals", "1", manifestRoot.Key, "mdu_0.bin")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read mdu_0.bin: %v", err)
+	}
+	if len(got) != types.MDU_SIZE {
+		t.Fatalf("unexpected mdu size: got=%d want=%d", len(got), types.MDU_SIZE)
+	}
+	if !bytes.Equal(got[:len(body)], body) {
+		t.Fatalf("stored MDU prefix mismatch")
+	}
+}
+
+func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
+	useTempUploadDir(t)
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-shard-sparse")
+	dealID := uint64(1)
+	owner := "nil1owner"
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	body := bytes.Repeat([]byte{0xCD}, 1024)
+	fullSize := 4096
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_shard", bytes.NewReader(body))
+	req.Header.Set("X-Nil-Deal-ID", "1")
+	req.Header.Set("X-Nil-Mdu-Index", "2")
+	req.Header.Set("X-Nil-Slot", "1")
+	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(fullSize))
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	w := httptest.NewRecorder()
+	handler := http.HandlerFunc(SpUploadShard)
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	path := filepath.Join(uploadDir, "deals", "1", manifestRoot.Key, "mdu_2_slot_1.bin")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read shard: %v", err)
+	}
+	if len(got) != fullSize {
+		t.Fatalf("unexpected shard size: got=%d want=%d", len(got), fullSize)
+	}
+	if !bytes.Equal(got[:len(body)], body) {
+		t.Fatalf("stored shard prefix mismatch")
+	}
+}
+
 func TestGatewayFetch_MissingParams(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	r := testRouter()
