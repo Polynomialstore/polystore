@@ -37,6 +37,8 @@ type uploadJobResult struct {
 	SizeBytes       uint64 `json:"size_bytes"`
 	FileSizeBytes   uint64 `json:"file_size_bytes"`
 	AllocatedLength uint64 `json:"allocated_length"`
+	TotalMdus       uint64 `json:"total_mdus"`
+	WitnessMdus     uint64 `json:"witness_mdus"`
 }
 
 type uploadJob struct {
@@ -263,18 +265,23 @@ func (j *uploadJob) setResult(res uploadJobResult) {
 	j.err = ""
 	j.touchLocked()
 	j.mu.Unlock()
+	log.Printf("GatewayUpload job success: deal_id=%d upload_id=%s manifest_root=%s size=%d total_mdus=%d witness_mdus=%d", j.dealID, j.uploadID, res.ManifestRoot, res.SizeBytes, res.TotalMdus, res.WitnessMdus)
 }
 
 func (j *uploadJob) setError(msg string) {
 	if j == nil {
 		return
 	}
+	msg = strings.TrimSpace(msg)
 	j.mu.Lock()
 	j.status = uploadJobError
 	j.phase = uploadJobPhaseDone
-	j.err = strings.TrimSpace(msg)
+	j.err = msg
 	j.touchLocked()
 	j.mu.Unlock()
+	if msg != "" {
+		log.Printf("GatewayUpload job error: deal_id=%d upload_id=%s reason=%s", j.dealID, j.uploadID, msg)
+	}
 }
 
 func (j *uploadJob) setMetrics(metricsMS map[string]uint64, counts map[string]uint64) {
@@ -344,6 +351,7 @@ func GatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
 
 	job := lookupUploadJob(dealID, uploadID)
 	if job == nil {
+		log.Printf("GatewayUploadStatus: upload not found deal_id=%d upload_id=%s", dealID, uploadID)
 		writeJSONError(w, http.StatusNotFound, "upload not found", "")
 		return
 	}

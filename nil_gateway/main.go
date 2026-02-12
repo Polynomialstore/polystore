@@ -764,16 +764,49 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		dealIDQuery = parsed
 		dealIDQueryOK = true
 	}
+	dealIDStr := ""
+	if dealIDQueryOK {
+		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
+	}
 	uploadID := strings.TrimSpace(r.URL.Query().Get("upload_id"))
 
 	asyncUpload := false
 	var job *uploadJob
+	skipExistingAsyncRun := false
+	ownsAsyncUploadJob := false
 	if dealIDQueryOK && uploadID != "" {
-		job = newUploadJob(dealIDQuery, uploadID)
-		asyncUpload = true
-		job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
-		storeUploadJob(job)
-		log.Printf("GatewayUpload: created async job deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+		existing := lookupUploadJob(dealIDQuery, uploadID)
+		if existing != nil {
+			snapshot := existing.snapshot()
+			switch snapshot.Status {
+			case string(uploadJobRunning):
+				job = existing
+				asyncUpload = true
+				skipExistingAsyncRun = true
+				log.Printf("GatewayUpload: deduped async upload (running) deal_id=%d upload_id=%s phase=%s", dealIDQuery, uploadID, snapshot.Phase)
+			case string(uploadJobSuccess):
+				job = existing
+				asyncUpload = true
+				skipExistingAsyncRun = true
+				log.Printf("GatewayUpload: deduped async upload (success) deal_id=%d upload_id=%s manifest_root=%s", dealIDQuery, uploadID, snapshot.Result.ManifestRoot)
+			default:
+				job = newUploadJob(dealIDQuery, uploadID)
+				asyncUpload = true
+				ownsAsyncUploadJob = true
+				job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
+				storeUploadJob(job)
+				log.Printf("GatewayUpload: replacing terminal async job deal_id=%d upload_id=%s status=%s", dealIDQuery, uploadID, snapshot.Status)
+			}
+		} else {
+			job = newUploadJob(dealIDQuery, uploadID)
+			asyncUpload = true
+			ownsAsyncUploadJob = true
+			job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
+			storeUploadJob(job)
+			log.Printf("GatewayUpload: created async job deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+		}
+	} else if uploadID != "" {
+		log.Printf("GatewayUpload: upload_id provided but async job disabled (deal_id missing/invalid), processing synchronously upload_id=%s", uploadID)
 	}
 
 	cleanupTmpFiles := []string{}
@@ -796,6 +829,9 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if asyncUpload && rec.status == http.StatusAccepted {
+			return
+		}
+		if !ownsAsyncUploadJob {
 			return
 		}
 		snap := job.snapshot()
@@ -830,6 +866,71 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, code)
 	}
 
+	writeUploadAcceptedResponse := func(dupStatus string) {
+		if job == nil {
+			writeUploadError(uploadFailure{status: http.StatusInternalServerError, message: "internal upload state missing"})
+			return
+		}
+		resp := map[string]any{
+			"status":     dupStatus,
+			"deal_id":    dealIDStr,
+			"upload_id":  uploadID,
+			"status_url": buildStatusURL(dealIDQuery, uploadID),
+		}
+		if dupStatus == "" {
+			resp["status"] = "accepted"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("GatewayUpload accepted encode error: %v", err)
+		}
+	}
+
+	writeUploadFromJob := func(reuse *uploadJob) {
+		if reuse == nil {
+			writeUploadError(uploadFailure{status: http.StatusInternalServerError, message: "upload job not found"})
+			return
+		}
+		reuseSnap := reuse.snapshot()
+		if reuseSnap.Status != string(uploadJobSuccess) || reuseSnap.Result == nil {
+			writeUploadError(uploadFailure{status: http.StatusTooManyRequests, message: "upload job has not completed"})
+			return
+		}
+		log.Printf("GatewayUpload: replaying cached result for upload_id=%s deal_id=%d", uploadID, dealIDQuery)
+		resp := map[string]any{
+			"status":           "success",
+			"cid":              reuseSnap.Result.ManifestRoot,
+			"manifest_root":    reuseSnap.Result.ManifestRoot,
+			"size_bytes":       reuseSnap.Result.SizeBytes,
+			"file_size_bytes":  reuseSnap.Result.FileSizeBytes,
+			"allocated_length": reuseSnap.Result.AllocatedLength,
+			"total_mdus":       reuseSnap.Result.TotalMdus,
+			"witness_mdus":     reuseSnap.Result.WitnessMdus,
+			"upload_id":        uploadID,
+			"deal_id":          reuseSnap.DealID,
+			"status_url":       buildStatusURL(dealIDQuery, uploadID),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("GatewayUpload replay encode error: %v", err)
+		}
+	}
+
+	if asyncUpload && skipExistingAsyncRun {
+		current := job.snapshot()
+		switch current.Status {
+		case string(uploadJobRunning):
+			log.Printf("GatewayUpload: deduped async upload (running) short-circuit deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+			writeUploadAcceptedResponse("accepted")
+			return
+		case string(uploadJobSuccess):
+			log.Printf("GatewayUpload: deduped async upload (success) short-circuit deal_id=%d upload_id=%s manifest_root=%s", dealIDQuery, uploadID, current.Result.ManifestRoot)
+			writeUploadFromJob(job)
+			return
+		}
+	}
+
 	receiveCtx, receiveCancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
 	receiveCtx = withMode2UploadProfile(receiveCtx, profile)
 	defer receiveCancel()
@@ -842,7 +943,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		owner          string
-		dealIDStr      string
 		recordPath     string
 		maxUserMdusStr string
 		fileSizeStr    string
@@ -1321,7 +1421,14 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		profile.setCount("witness_mdus", witnessMdus)
 		profileMS, profileCounts := profile.snapshots()
 		if job != nil {
-			job.setResult(uploadJobResult{ManifestRoot: cid, SizeBytes: size, FileSizeBytes: fileSize, AllocatedLength: allocatedLength})
+			job.setResult(uploadJobResult{
+				ManifestRoot:    cid,
+				SizeBytes:       size,
+				FileSizeBytes:   fileSize,
+				AllocatedLength: allocatedLength,
+				TotalMdus:       totalMdus,
+				WitnessMdus:     witnessMdus,
+			})
 			job.setMetrics(profileMS, profileCounts)
 		}
 		log.Printf("GatewayUpload profile: file=%s deal_id=%s manifest_root=%s metrics_ms=%v counts=%v", fileName, normalizedDealID, cid, profileMS, profileCounts)
@@ -1330,6 +1437,25 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if asyncUpload {
+		current := job.snapshot()
+		if current.Status == string(uploadJobSuccess) {
+			writeUploadFromJob(job)
+			return
+		}
+		if current.Status == string(uploadJobRunning) && skipExistingAsyncRun {
+			log.Printf("GatewayUpload: skipping async ingest replay for in-flight upload deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+			writeUploadAcceptedResponse("accepted")
+			return
+		}
+		if current.Status != string(uploadJobRunning) && skipExistingAsyncRun {
+			log.Printf("GatewayUpload: duplicate async upload status changed; re-starting async ingest deal_id=%d upload_id=%s status=%s", dealIDQuery, uploadID, current.Status)
+			skipExistingAsyncRun = false
+			job = newUploadJob(dealIDQuery, uploadID)
+			ownsAsyncUploadJob = true
+			job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
+			storeUploadJob(job)
+		}
+
 		log.Printf("GatewayUpload async accepted: file=%s deal_id=%s upload_id=%s", filename, dealIDStr, uploadID)
 		ingestCtx, ingestCancel := context.WithTimeout(context.Background(), uploadIngestTimeout)
 		ingestCtx = withUploadJob(ingestCtx, job)
@@ -1365,6 +1491,13 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			"upload_id":  uploadID,
 			"status_url": buildStatusURL(dealIDQuery, uploadID),
 		}
+		log.Printf(
+			"GatewayUpload async accepted: file=%s deal_id=%s upload_id=%s status_url=%s",
+			filename,
+			dealIDStr,
+			uploadID,
+			buildStatusURL(dealIDQuery, uploadID),
+		)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {

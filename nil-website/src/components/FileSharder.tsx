@@ -1204,13 +1204,49 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           gatewayBase: string,
           initialLabel: string,
           uploadId: string,
+          allGatewayBases: string[],
         ): Promise<{ payload: GatewayUploadPayload; lastJob: GatewayUploadJobStatus | null; hadStatus: boolean }> => {
           let lastJob: GatewayUploadJobStatus | null = null
           let hadStatus = false
           let staleWarned = false
           let lastStatusTs = 0
-          const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
-          let pollUrl = statusUrl
+          let lastStatusLogKey = ''
+          const buildStatusBaseCandidates = () => {
+            const seen = new Set<string>()
+            const candidates: string[] = []
+            const pushStatusCandidate = (candidateBase: string) => {
+              const base = String(candidateBase || '').trim().replace(/\/$/, '')
+              if (!base) return
+              if (seen.has(base)) return
+              seen.add(base)
+              const statusUrl = `${base}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+              candidates.push(statusUrl)
+            }
+
+            const dedupe = allGatewayBases.length ? allGatewayBases : [gatewayBase]
+            for (const base of dedupe) {
+              pushStatusCandidate(base)
+            }
+            return candidates
+          }
+
+          const normalizeStatusUrl = (raw: string): string | null => {
+            if (!raw) return null
+            try {
+              const parsed = new URL(raw, gatewayBase)
+              if (!/^https?:$/.test(parsed.protocol)) return null
+              if (String(parsed.pathname || '').trim() !== '/gateway/upload-status') {
+                parsed.pathname = '/gateway/upload-status'
+              }
+              parsed.searchParams.set('deal_id', String(dealId).trim())
+              parsed.searchParams.set('upload_id', uploadId)
+              return parsed.toString()
+            } catch {
+              return null
+            }
+          }
+
+          let statusPollCandidates = buildStatusBaseCandidates()
           const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
           const phaseToDisplay = (phaseRaw: string): ShardPhase => {
             const phase = String(phaseRaw || '').trim()
@@ -1243,6 +1279,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const shouldIgnoreZero = phase === 'gateway_encoding' || phase === 'gateway_uploading'
             if (!candidateTotal && !candidateDone && shouldIgnoreZero) {
               return
+            }
+
+            const logKey = `${status}|${phase}|${message}`
+            if (logKey && logKey !== lastStatusLogKey) {
+              addLog(`> Gateway upload status: status=${status || 'working'} phase=${phase || 'planning'} message=${message || 'working'}`)
+              lastStatusLogKey = logKey
             }
 
             const lastByPhase = gatewayUploadProgressRef.current
@@ -1320,21 +1362,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
 
           const pollStatusOnce = async (): Promise<GatewayUploadJobStatus | null> => {
-            try {
-              const res = await fetch(pollUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
-              if (res.ok) {
-                const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
-                if (job) {
-                  lastJob = job
-                  hadStatus = true
-                  lastStatusTs = performance.now()
-                  staleWarned = false
-                  applyProgress(job)
-                  return job
+            for (const pollUrl of statusPollCandidates) {
+              try {
+                const res = await fetch(pollUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
+                if (res.ok) {
+                  const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
+                  if (job) {
+                    lastJob = job
+                    hadStatus = true
+                    lastStatusTs = performance.now()
+                    staleWarned = false
+                    applyProgress(job)
+                    return job
+                  }
                 }
+              } catch {
+                // Ignore polling errors; the primary upload request is the source of truth.
               }
-            } catch {
-              // Ignore polling errors; the primary upload request is the source of truth.
             }
             return null
           }
@@ -1347,6 +1391,53 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 label: 'Gateway Mode 2: upload heartbeat stalled; waiting for provider status...',
               }))
             }
+          }
+
+          const waitForUploadCompletion = async (): Promise<{
+            payload: GatewayUploadPayload
+            lastJob: GatewayUploadJobStatus | null
+            hadStatus: boolean
+          }> => {
+            const deadline = performance.now() + 10 * 60_000
+            while (performance.now() < deadline) {
+              const job = await pollStatusOnce()
+              updateHeartbeat()
+              if (job?.status === 'error') {
+                throw new Error(job.error || 'gateway upload failed')
+              }
+              if (job?.status === 'success') {
+                if (!job.result?.manifest_root) {
+                  throw new Error('gateway upload completed without manifest_root')
+                }
+                return {
+                  payload: {
+                    manifest_root: job.result?.manifest_root,
+                    cid: undefined,
+                    size_bytes: job.result?.size_bytes,
+                    file_size_bytes: job.result?.file_size_bytes,
+                    allocated_length: job.result?.allocated_length,
+                    total_mdus: job.result?.total_mdus,
+                    witness_mdus: job.result?.witness_mdus,
+                  },
+                  lastJob: job,
+                  hadStatus: true,
+                }
+              }
+              await new Promise((r) => setTimeout(r, gatewayUploadPollIntervalMs))
+            }
+            throw new Error('gateway upload timed out while waiting for completion')
+          }
+
+          const probeInFlightUpload = async (): Promise<GatewayUploadJobStatus | null> => {
+            const deadline = performance.now() + 4_000
+            while (performance.now() < deadline) {
+              const job = await pollStatusOnce()
+              if (job) {
+                return job
+              }
+              await new Promise((r) => setTimeout(r, 250))
+            }
+            return null
           }
 
           try {
@@ -1368,11 +1459,42 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               currentOpStartedAtMs: performance.now(),
             }))
 
-            const resp = await fetch(url, {
-              method: 'POST',
-              body: buildUploadForm(uploadId),
-              signal: AbortSignal.timeout(1_800_000),
-            })
+            let resp: Response
+            try {
+              resp = await fetch(url, {
+                method: 'POST',
+                body: buildUploadForm(uploadId),
+                signal: AbortSignal.timeout(1_800_000),
+              })
+            } catch (err: unknown) {
+              addLog('> Gateway upload request had a transport issue; probing status for in-flight upload')
+              const job = await probeInFlightUpload()
+              if (!job) {
+                throw err
+              }
+              if (job.status === 'error') {
+                throw new Error(job.error || 'gateway upload failed')
+              }
+              if (job.status === 'success') {
+                if (!job.result?.manifest_root) {
+                  throw new Error('gateway upload completed without manifest_root')
+                }
+                return {
+                  payload: {
+                    manifest_root: job.result?.manifest_root,
+                    cid: undefined,
+                    size_bytes: job.result?.size_bytes,
+                    file_size_bytes: job.result?.file_size_bytes,
+                    allocated_length: job.result?.allocated_length,
+                    total_mdus: job.result?.total_mdus,
+                    witness_mdus: job.result?.witness_mdus,
+                  },
+                  lastJob: job,
+                  hadStatus: true,
+                }
+              }
+              return await waitForUploadCompletion()
+            }
 
             if (!resp.ok) {
               const txt = await resp.text().catch(() => '')
@@ -1383,41 +1505,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const rawPayload = (await resp.json().catch(() => null)) as GatewayUploadPayload | GatewayUploadAcceptedPayload
             const acceptedPayload = parseAccepted(rawPayload)
             if (acceptedPayload) {
-              const statusPollUrl = String(acceptedPayload.status_url || statusUrl).trim()
-              if (!statusPollUrl) {
-                throw new Error('gateway upload accepted without status url')
+              const statusPollUrl = String(acceptedPayload.status_url || '').trim()
+              if (statusPollUrl) {
+                const normalizedStatus = normalizeStatusUrl(statusPollUrl)
+                if (normalizedStatus) {
+                  const set = new Set<string>(statusPollCandidates)
+                  if (!set.has(normalizedStatus)) {
+                    statusPollCandidates.unshift(normalizedStatus)
+                  }
+                }
+                if (statusPollCandidates.length === 0) {
+                  throw new Error('gateway upload accepted with invalid status_url')
+                }
+              } else {
+                addLog('> Gateway upload accepted without status_url; using computed status endpoint')
               }
-              pollUrl = statusPollUrl
+
+              if (statusPollCandidates.length === 0) {
+                statusPollCandidates = buildStatusBaseCandidates()
+                if (statusPollCandidates.length === 0) {
+                  throw new Error('gateway upload accepted without status polling endpoint')
+                }
+              }
               addLog(`> Gateway upload accepted; tracking upload_id=${acceptedPayload.upload_id || uploadId}`)
-              addLog(`> Gateway upload status endpoint: ${statusPollUrl}`)
-              const deadline = performance.now() + 10 * 60_000
-              while (performance.now() < deadline) {
-                const job = await pollStatusOnce()
-                updateHeartbeat()
-                if (job?.status === 'error') {
-                  throw new Error(job.error || 'gateway upload failed')
-                }
-                if (job?.status === 'success') {
-                  if (!job.result?.manifest_root) {
-                    throw new Error('gateway upload completed without manifest_root')
-                  }
-                  return {
-                    payload: {
-                      manifest_root: job.result?.manifest_root,
-                      cid: undefined,
-                      size_bytes: job.result?.size_bytes,
-                      file_size_bytes: job.result?.file_size_bytes,
-                      allocated_length: job.result?.allocated_length,
-                      total_mdus: job.result?.total_mdus,
-                      witness_mdus: job.result?.witness_mdus,
-                    },
-                    lastJob: job,
-                    hadStatus: true,
-                  }
-                }
-                await new Promise((r) => setTimeout(r, gatewayUploadPollIntervalMs))
-              }
-              throw new Error('gateway upload timed out while waiting for completion')
+              addLog(`> Gateway upload status endpoints: ${statusPollCandidates.join(' | ')}`)
+              return await waitForUploadCompletion()
             }
 
             const payload = parseGatewayUploadPayload(rawPayload)
@@ -1439,7 +1551,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         for (let i = 0; i < gatewayBases.length; i++) {
           const gatewayBase = gatewayBases[i]
           try {
-            const { payload, lastJob } = await runGatewayUpload(gatewayBase, 'Gateway Mode 2: starting upload...', uploadId)
+            const { payload, lastJob } = await runGatewayUpload(
+              gatewayBase,
+              'Gateway Mode 2: starting upload...',
+              uploadId,
+              gatewayBases,
+            )
             if (finalizeGatewaySuccess(payload, lastJob)) return
             gatewayErrorMessage = 'gateway upload returned no manifest_root'
             gatewayUnreachable = false
@@ -1458,11 +1575,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const rehydrated = await rehydrateGatewayFromOpfs()
               if (rehydrated) {
                 try {
-                  addLog('> Retrying Gateway Mode 2 ingest after rehydrate...')
+                  addLog('> Gateway rehydrated from browser cache; retrying upload...')
                   const { payload } = await runGatewayUpload(
                     gatewayBase,
                     'Gateway rehydrated from browser cache; retrying upload...',
                     uploadId,
+                    gatewayBases,
                   )
                   if (finalizeGatewaySuccess(payload, null)) return
                   msg = 'gateway upload returned no manifest_root'
