@@ -269,17 +269,21 @@ impl GatewayClient {
         let deadline = Instant::now() + GATEWAY_UPLOAD_POLL_TIMEOUT;
         let mut last_error: Option<String> = None;
         loop {
-            let status = self.fetch_upload_status(status_url).await.or_else(|err| {
-                last_error = Some(err);
-                Ok(GatewayUploadJobStatus {
-                    status: None,
-                    result: None,
-                    error: None,
-                    message: None,
-                })
-            })?;
+            let status = match self.fetch_upload_status(status_url).await {
+                Ok(status) => status,
+                Err(err) => {
+                    last_error = Some(err);
+                    GatewayUploadJobStatus {
+                        status: None,
+                        result: None,
+                        error: None,
+                        message: None,
+                    }
+                }
+            };
             let stage = status
                 .status
+                .clone()
                 .unwrap_or_else(|| "running".to_string())
                 .to_lowercase();
             match stage.as_str() {
