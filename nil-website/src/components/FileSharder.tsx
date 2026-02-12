@@ -127,10 +127,15 @@ function isGatewayNetworkError(msg: string): boolean {
   const lower = text.toLowerCase()
   return (
     lower.includes('failed to fetch') ||
+    lower.includes('load failed') ||
+    lower.includes('cors') ||
+    lower.includes('cross-origin') ||
     lower.includes('networkerror') ||
     lower.includes('err_connection_refused') ||
     lower.includes('econnrefused') ||
     lower.includes('connection refused') ||
+    lower.includes('connection reset') ||
+    lower.includes('connection closed') ||
     lower.includes('connect refused') ||
     lower.includes('network is down') ||
     lower.includes('offline') ||
@@ -140,9 +145,20 @@ function isGatewayNetworkError(msg: string): boolean {
   )
 }
 
+function formatGatewayError(error: unknown): string {
+  if (error instanceof Error) {
+    const name = String(error.name || '').trim()
+    const message = String(error.message || '').trim()
+    if (name && message) return `${name}: ${message}`
+    return message || String(error)
+  }
+  return String(error || '')
+}
+
 const gatewayUploadPollIntervalMs = 1000
 const gatewayUploadPollTimeoutMs = 2500
 const gatewayUploadHeartbeatStaleMs = 15_000
+const gatewayFallbackWasmMaxFileBytes = 32 * 1024 * 1024
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected } = useAccount();
@@ -1324,7 +1340,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             gatewayUnreachable = false
             break
           } catch (e: unknown) {
-            let msg = e instanceof Error ? e.message : String(e)
+            let msg = formatGatewayError(e)
             addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
 
             const missingLocalState =
@@ -1346,7 +1362,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   if (finalizeGatewaySuccess(payload, null)) return
                   msg = 'gateway upload returned no manifest_root'
                 } catch (retryErr: unknown) {
-                  msg = retryErr instanceof Error ? retryErr.message : String(retryErr)
+                  msg = formatGatewayError(retryErr)
                   addLog(`> Gateway retry after rehydrate failed: ${msg}`)
                 }
               }
@@ -1364,6 +1380,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
 
         if (gatewayUnreachable) {
+          if (file.size > gatewayFallbackWasmMaxFileBytes) {
+            const sizeLabel = formatBytes(file.size)
+            const errorMessage = `Gateway unavailable while processing ${sizeLabel}. In-browser fallback is disabled for large files; please keep the local gateway running, allow local network access for localhost/127.0.0.1, and retry.`
+            addLog(`> ${errorMessage}`)
+            setMode2UploadError(errorMessage)
+            setShardProgress((p) => ({
+              ...p,
+              phase: 'error',
+              label: errorMessage,
+              currentOpStartedAtMs: null,
+              lastOpMs: performance.now() - startTs,
+            }))
+            setProcessing(false)
+            return
+          }
+
           addLog('> Gateway unavailable; falling back to in-browser Mode 2 sharding + stripe upload.')
           setMode2UploadError(null)
           setShardProgress((p) => ({
