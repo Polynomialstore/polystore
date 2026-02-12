@@ -1193,7 +1193,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           initialLabel: string,
           uploadId: string,
         ): Promise<{ payload: GatewayUploadPayload; lastJob: GatewayUploadJobStatus | null; hadStatus: boolean }> => {
-          let stopPolling = false
           let lastJob: GatewayUploadJobStatus | null = null
           let hadStatus = false
           let staleWarned = false
@@ -1378,7 +1377,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const payload = rawPayload
             return { payload, lastJob, hadStatus }
           } finally {
-            stopPolling = true
             setMode2Uploading(false)
           }
         }
