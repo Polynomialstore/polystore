@@ -71,6 +71,7 @@ async fn wallet_bridge_wait(
 
 #[tauri::command]
 async fn deal_upload_file(
+    app: AppHandle,
     state: State<'_, AppState>,
     deal_id: u64,
     owner: String,
@@ -79,7 +80,7 @@ async fn deal_upload_file(
 ) -> Result<GatewayUploadResponse, String> {
     let base_url = state.sidecar.base_url()?;
     api::GatewayClient::new(base_url)
-        .upload_file(deal_id, owner, file_path, local_path)
+        .upload_file(&app, deal_id, owner, file_path, local_path)
         .await
 }
 

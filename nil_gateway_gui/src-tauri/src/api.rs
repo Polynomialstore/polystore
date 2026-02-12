@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
+use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayStatusResponse {
@@ -56,10 +57,15 @@ struct GatewayUploadJobResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GatewayUploadJobStatus {
+    phase: Option<String>,
     status: Option<String>,
     result: Option<GatewayUploadJobResult>,
     error: Option<String>,
     message: Option<String>,
+    bytes_done: Option<u64>,
+    bytes_total: Option<u64>,
+    steps_done: Option<u64>,
+    steps_total: Option<u64>,
 }
 
 const GATEWAY_UPLOAD_POLL_INTERVAL: Duration = Duration::from_millis(750);
@@ -175,6 +181,7 @@ impl GatewayClient {
 
     pub async fn upload_file(
         &self,
+        app: &AppHandle,
         deal_id: u64,
         owner: String,
         file_path: String,
@@ -241,10 +248,16 @@ impl GatewayClient {
                     normalize_status_url(&self.base_url, deal_id_value, &status_id)
                 });
             let outcome = self
-                .wait_for_upload_status(&status_url, deal_id, &status_id)
+                .wait_for_upload_status(app, &status_url, deal_id, &status_id)
                 .await?;
             let mut response = map_job_outcome(&status_id, &file_name_for_result, outcome)?;
             response.upload_id = status_id;
+            let _ = app.emit(
+                "gateway_log",
+                format!(
+                    "> Gateway upload completed: status=success upload_id={status_id} deal_id={deal_id}"
+                ),
+            );
             return Ok(response);
         }
 
@@ -263,25 +276,38 @@ impl GatewayClient {
 
     async fn wait_for_upload_status(
         &self,
+        app: &AppHandle,
         status_url: &str,
         deal_id: u64,
         upload_id: &str,
     ) -> Result<GatewayUploadJobResult, String> {
         let deadline = Instant::now() + GATEWAY_UPLOAD_POLL_TIMEOUT;
         let mut last_error: Option<String> = None;
+        let mut last_status_line: Option<String> = None;
         loop {
             let status = match self.fetch_upload_status(status_url).await {
                 Ok(status) => status,
                 Err(err) => {
                     last_error = Some(err);
                     GatewayUploadJobStatus {
+                        phase: None,
                         status: None,
                         result: None,
                         error: None,
                         message: None,
+                        bytes_done: None,
+                        bytes_total: None,
+                        steps_done: None,
+                        steps_total: None,
                     }
                 }
             };
+            if let Some(line) = Self::emit_upload_status_log(upload_id, &status) {
+                if last_status_line.as_ref() != Some(&line) {
+                    let _ = app.emit("gateway_log", line.clone());
+                    last_status_line = Some(line);
+                }
+            }
             let stage = status
                 .status
                 .clone()
@@ -316,6 +342,31 @@ impl GatewayClient {
             }
             sleep(GATEWAY_UPLOAD_POLL_INTERVAL).await;
         }
+    }
+
+    fn emit_upload_status_log(
+        upload_id: &str,
+        status: &GatewayUploadJobStatus,
+    ) -> Option<String> {
+        let phase = status.phase.as_deref().unwrap_or("planning").trim().to_string();
+        let state = status.status.as_deref().unwrap_or("running").trim().to_string();
+        let message = status.message.as_deref().unwrap_or("working").trim().to_string();
+
+        let mut line = format!(
+            "> Gateway upload status: upload_id={upload_id} status={state} phase={phase} message={message}"
+        );
+
+        if let Some((done, total)) = status.steps_done.zip(status.steps_total) {
+            if total > 0 {
+                line.push_str(&format!(" steps={done}/{total}"));
+            }
+        } else if let Some((done, total)) = status.bytes_done.zip(status.bytes_total) {
+            if total > 0 {
+                line.push_str(&format!(" bytes={done}/{total}"));
+            }
+        }
+
+        Some(line)
     }
 
     async fn fetch_upload_status(
