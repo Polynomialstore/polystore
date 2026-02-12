@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -730,6 +731,15 @@ func (pw *uploadProgressWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+type uploadFailure struct {
+	status  int
+	message string
+}
+
+func (e uploadFailure) Error() string {
+	return e.message
+}
+
 // GatewayUpload is used by the web UI to upload a file and derive a Root CID + size.
 // It does NOT create a deal; it just returns metadata.
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
@@ -742,26 +752,50 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealIDQuery := uint64(0)
+	rawDealID := strings.TrimSpace(r.URL.Query().Get("deal_id"))
+	var dealIDQuery uint64
 	dealIDQueryOK := false
-	if raw := strings.TrimSpace(r.URL.Query().Get("deal_id")); raw != "" {
-		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil {
-			dealIDQuery = parsed
-			dealIDQueryOK = true
+	if rawDealID != "" {
+		parsed, err := strconv.ParseUint(rawDealID, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid deal_id", http.StatusBadRequest)
+			return
 		}
+		dealIDQuery = parsed
+		dealIDQueryOK = true
 	}
 	uploadID := strings.TrimSpace(r.URL.Query().Get("upload_id"))
+
+	asyncUpload := false
 	var job *uploadJob
 	if dealIDQueryOK && uploadID != "" {
 		job = newUploadJob(dealIDQuery, uploadID)
+		asyncUpload = true
 		job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
 		storeUploadJob(job)
+		log.Printf("GatewayUpload: created async job deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+	}
+
+	cleanupTmpFiles := []string{}
+	cleanupTmpFile := func(path string) {
+		if strings.TrimSpace(path) == "" {
+			return
+		}
+		cleanupTmpFiles = append(cleanupTmpFiles, path)
+	}
+	cleanupRun := func() {
+		for _, p := range cleanupTmpFiles {
+			_ = os.Remove(p)
+		}
 	}
 
 	rec := &statusRecorder{ResponseWriter: w}
 	w = rec
 	defer func() {
 		if job == nil {
+			return
+		}
+		if asyncUpload && rec.status == http.StatusAccepted {
 			return
 		}
 		snap := job.snapshot()
@@ -774,18 +808,35 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		job.setError(fmt.Sprintf("upload failed (HTTP %d)", code))
 	}()
+	defer func() {
+		if !asyncUpload {
+			cleanupRun()
+		}
+	}()
 
-	ingestCtx, cancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
-	ingestCtx = withMode2UploadProfile(ingestCtx, profile)
-	defer cancel()
-	if ingestCtx.Err() != nil {
-		http.Error(w, "request canceled", http.StatusRequestTimeout)
-		return
+	writeUploadError := func(err error) {
+		msg := ""
+		code := http.StatusInternalServerError
+		if e, ok := err.(uploadFailure); ok {
+			code = e.status
+			msg = e.message
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			code = http.StatusRequestTimeout
+			msg = err.Error()
+		}
+		if msg == "" {
+			msg = fmt.Sprintf("%v", err)
+		}
+		http.Error(w, msg, code)
 	}
+
+	receiveCtx, receiveCancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
+	receiveCtx = withMode2UploadProfile(receiveCtx, profile)
+	defer receiveCancel()
 
 	mr, err := r.MultipartReader()
 	if err != nil {
-		http.Error(w, "invalid multipart form", http.StatusBadRequest)
+		writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "invalid multipart form"})
 		return
 	}
 
@@ -801,7 +852,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		path       string
 	)
 
-	const maxFieldSize = 1 << 20 // 1 MiB per field (defensive; fields are small)
+	const maxFieldSize = 1 << 20
 	receiveStarted := time.Now()
 
 	for {
@@ -810,7 +861,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
-			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "invalid multipart form"})
 			return
 		}
 
@@ -821,10 +872,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if formName != "file" {
-			b, err := io.ReadAll(io.LimitReader(part, maxFieldSize))
+			b, readErr := io.ReadAll(io.LimitReader(part, maxFieldSize))
 			_ = part.Close()
-			if err != nil {
-				http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			if readErr != nil {
+				writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "invalid multipart form"})
 				return
 			}
 			val := strings.TrimSpace(string(b))
@@ -847,23 +898,22 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// File upload (streamed: avoids net/http's ParseMultipartForm temp-file buffering).
 		if filename != "" {
 			_ = part.Close()
-			http.Error(w, "only one file is supported", http.StatusBadRequest)
+			writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "only one file is supported"})
 			return
 		}
 
 		filename = strings.TrimSpace(part.FileName())
 		if filename == "" {
 			_ = part.Close()
-			http.Error(w, "invalid filename", http.StatusBadRequest)
+			writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "invalid filename"})
 			return
 		}
 		key := filepath.Base(filename)
 		if strings.TrimSpace(key) == "" || key == "." || key == string(filepath.Separator) {
 			_ = part.Close()
-			http.Error(w, "invalid filename", http.StatusBadRequest)
+			writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "invalid filename"})
 			return
 		}
 
@@ -905,19 +955,18 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		if uploadToken != "" {
 			pattern = fmt.Sprintf("upload-%s-*-", uploadToken)
 		}
+
 		out, err := os.CreateTemp(uploadDir, pattern+fileToken)
 		if err != nil {
 			_ = part.Close()
-			http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+			writeUploadError(uploadFailure{status: http.StatusInternalServerError, message: "failed to create temp file"})
 			return
 		}
 		path = out.Name()
-		defer func() {
-			_ = os.Remove(path)
-		}()
+		cleanupTmpFile(path)
 
 		if bytesTotal == 0 {
-			if parsed, err := strconv.ParseUint(strings.TrimSpace(fileSizeStr), 10, 64); err == nil && parsed > 0 {
+			if parsed, parseErr := strconv.ParseUint(strings.TrimSpace(fileSizeStr), 10, 64); parseErr == nil && parsed > 0 {
 				bytesTotal = parsed
 			}
 		}
@@ -929,7 +978,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		pw := &uploadProgressWriter{job: job, bytesTotal: bytesTotal}
-		reader := &ctxReader{ctx: ingestCtx, r: part}
+		reader := &ctxReader{ctx: receiveCtx, r: part}
 		n64, copyErr := io.CopyBuffer(io.MultiWriter(out, pw), reader, make([]byte, 256<<10))
 		_ = part.Close()
 		if closeErr := out.Close(); closeErr != nil && copyErr == nil {
@@ -940,10 +989,10 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				job.setError(copyErr.Error())
 			}
 			if errors.Is(copyErr, context.Canceled) || errors.Is(copyErr, context.DeadlineExceeded) {
-				http.Error(w, copyErr.Error(), http.StatusRequestTimeout)
+				writeUploadError(copyErr)
 				return
 			}
-			http.Error(w, "failed to write file", http.StatusInternalServerError)
+			writeUploadError(uploadFailure{status: http.StatusInternalServerError, message: "failed to write file"})
 			return
 		}
 
@@ -960,7 +1009,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("gateway_receive_ms", time.Since(receiveStarted))
 
 	if filename == "" || strings.TrimSpace(path) == "" {
-		http.Error(w, "file field is required", http.StatusBadRequest)
+		writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "file field is required"})
 		return
 	}
 
@@ -986,23 +1035,23 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	rawPath := path
 	ingestPath := path
 	logicalSizeBytes := uint64(0)
-	if info, err := os.Stat(rawPath); err == nil {
+	if info, statErr := os.Stat(rawPath); statErr == nil {
 		logicalSizeBytes = uint64(info.Size())
 	}
 	contentEncoding := "none"
 	fileFlags := uint8(0)
 	prepareStarted := time.Now()
 	if nilceEnabled {
-		wrapped, err := maybeWrapNilceZstd(ingestCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
+		wrapped, err := maybeWrapNilceZstd(receiveCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("nilce wrap failed: %v", err), http.StatusInternalServerError)
+			writeUploadError(fmt.Errorf("nilce wrap failed: %w", err))
 			return
 		}
 		if wrapped.Encoding == nilceEncodingZstd && strings.TrimSpace(wrapped.Path) != "" && wrapped.Path != rawPath {
 			ingestPath = wrapped.Path
 			contentEncoding = "zstd"
 			fileFlags |= crypto_ffi.FlagCompressionZstd
-			defer func() { _ = os.Remove(ingestPath) }()
+			cleanupTmpFile(ingestPath)
 		}
 	}
 	if contentEncoding == "none" {
@@ -1018,127 +1067,177 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	profile.addDuration("gateway_prepare_ms", time.Since(prepareStarted))
 
-	var cid string
-	var size uint64
-	var fileSize uint64
-	var allocatedLength uint64
-	var totalMdus uint64
-	var witnessMdus uint64
-
-	// Canonical NilFS ingest by default (MDU #0 + Witness + User MDUs + ManifestRoot).
-	// Legacy/fake modes are only enabled behind explicit env flags:
-	// - NIL_FAKE_INGEST=1: fast SHA256-based manifest_root (dev only, not Triple-Proof valid)
-	// - NIL_FAST_INGEST=1: skip witness generation (faster, still not Triple-Proof valid)
-	maxMdus := uint64(256) // Default ~2 GiB to keep local runs fast
-	if raw := strings.TrimSpace(maxUserMdusStr); raw != "" {
-		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
-			maxMdus = parsed
-		}
+	type gatewayUploadResult struct {
+		cid             string
+		size            uint64
+		fileSize        uint64
+		allocatedLength uint64
+		totalMdus       uint64
+		witnessMdus     uint64
 	}
 
-	if strings.TrimSpace(dealIDStr) != "" {
-		dealID, err := strconv.ParseUint(strings.TrimSpace(dealIDStr), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid deal_id", http.StatusBadRequest)
-			return
+	buildStatusURL := func(dealID uint64, id string) string {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		if hdr := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); hdr != "" && strings.EqualFold(hdr, "https") {
+			scheme = "https"
+		}
+		host := strings.TrimSpace(r.Host)
+		if host == "" {
+			host = "localhost:8080"
+		}
+		values := url.Values{}
+		values.Set("deal_id", strconv.FormatUint(dealID, 10))
+		values.Set("upload_id", id)
+		return (&url.URL{Scheme: scheme, Host: host, Path: "/gateway/upload-status", RawQuery: values.Encode()}).String()
+	}
+
+	runIngest := func(ctx context.Context, fileName string, maxUserMdusSpec, normalizedDealID string) (*gatewayUploadResult, error) {
+		ctx = withMode2UploadProfile(ctx, profile)
+		if ctx == nil {
+			return nil, uploadFailure{status: http.StatusInternalServerError, message: "missing ingest context"}
 		}
 
-		chainOwner, chainCID, err := fetchDealOwnerAndCID(dealID)
-		if err != nil {
-			log.Printf("GatewayUpload: failed to fetch deal %d: %v", dealID, err)
-			http.Error(w, "failed to fetch deal state", http.StatusInternalServerError)
-			return
-		}
-		if owner != "" && chainOwner != "" && owner != chainOwner {
-			http.Error(w, "forbidden: owner does not match deal", http.StatusForbidden)
-			return
+		var (
+			cid             string
+			size            uint64
+			fileSize        uint64
+			allocatedLength uint64
+			totalMdus       uint64
+			witnessMdus     uint64
+		)
+
+		maxMdus := uint64(256)
+		if raw := strings.TrimSpace(maxUserMdusSpec); raw != "" {
+			if parsed, parseErr := strconv.ParseUint(raw, 10, 64); parseErr == nil && parsed > 0 {
+				maxMdus = parsed
+			}
 		}
 
-		serviceHint, err := fetchDealServiceHintFromLCD(ingestCtx, dealID)
-		if err != nil {
-			log.Printf("GatewayUpload: failed to fetch service_hint for deal %d: %v", dealID, err)
-			http.Error(w, "failed to fetch deal service_hint", http.StatusInternalServerError)
-			return
-		}
-		stripe, err := stripeParamsFromHint(serviceHint)
-		if err != nil {
-			log.Printf("GatewayUpload: invalid service_hint for deal %d: %v", dealID, err)
-			http.Error(w, "invalid deal service_hint", http.StatusInternalServerError)
-			return
-		}
+		if strings.TrimSpace(normalizedDealID) != "" {
+			dealID, parseErr := strconv.ParseUint(strings.TrimSpace(normalizedDealID), 10, 64)
+			if parseErr != nil {
+				return nil, uploadFailure{status: http.StatusBadRequest, message: "invalid deal_id"}
+			}
 
-		if chainCID == "" {
-			if stripe.mode == 2 {
-				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-					http.Error(w, "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
-					return
-				}
+			chainOwner, chainCID, err := fetchDealOwnerAndCID(dealID)
+			if err != nil {
+				log.Printf("GatewayUpload: failed to fetch deal %d: %v", dealID, err)
+				return nil, uploadFailure{status: http.StatusInternalServerError, message: "failed to fetch deal state"}
+			}
+			if owner != "" && chainOwner != "" && owner != chainOwner {
+				return nil, uploadFailure{status: http.StatusForbidden, message: "forbidden: owner does not match deal"}
+			}
 
-				res, err := mode2IngestAndUploadNewDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, fileRecordPath, fileFlags)
-				if err != nil {
-					if job != nil {
-						job.setError(err.Error())
+			serviceHint, err := fetchDealServiceHintFromLCD(ctx, dealID)
+			if err != nil {
+				log.Printf("GatewayUpload: failed to fetch service_hint for deal %d: %v", dealID, err)
+				return nil, uploadFailure{status: http.StatusInternalServerError, message: "failed to fetch deal service_hint"}
+			}
+			stripe, err := stripeParamsFromHint(serviceHint)
+			if err != nil {
+				log.Printf("GatewayUpload: invalid service_hint for deal %d: %v", dealID, err)
+				return nil, uploadFailure{status: http.StatusInternalServerError, message: "invalid service_hint"}
+			}
+
+			if chainCID == "" {
+				if stripe.mode == 2 {
+					if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+						return nil, uploadFailure{status: http.StatusBadRequest, message: "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)"}
 					}
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
-						return
+					res, err := mode2IngestAndUploadNewDeal(withUploadJob(ctx, job), ingestPath, dealID, serviceHint, fileRecordPath, fileFlags)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							return nil, uploadFailure{status: http.StatusRequestTimeout, message: err.Error()}
+						}
+						return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("mode2 ingest failed: %v", err)}
 					}
-					http.Error(w, fmt.Sprintf("mode2 ingest failed: %v", err), http.StatusInternalServerError)
-					return
+					cid = res.manifestRoot.Canonical
+					allocatedLength = res.allocatedLength
+					totalMdus = res.allocatedLength
+					witnessMdus = res.witnessMdus
+					fileSize = res.fileSize
+					size = res.sizeBytes
+				} else {
+					switch {
+					case os.Getenv("NIL_FAKE_INGEST") == "1":
+						var err2 error
+						cid, size, allocatedLength, err2 = fastShardQuick(ingestPath)
+						if err2 != nil {
+							return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("fast shard failed: %v", err2)}
+						}
+						fileSize = size
+						totalMdus = allocatedLength
+						witnessMdus = 1
+					case os.Getenv("NIL_FAST_INGEST") == "1":
+						b, manifestRoot, allocLen, err2 := IngestNewDealFast(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+						if err2 != nil {
+							if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
+								return nil, uploadFailure{status: http.StatusRequestTimeout, message: err2.Error()}
+							}
+							return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("IngestNewDealFast failed: %v", err2)}
+						}
+						cid = manifestRoot
+						allocatedLength = allocLen
+						totalMdus = allocLen
+						if b != nil {
+							witnessMdus = b.GetWitnessCount()
+						}
+						if info, err2 := os.Stat(ingestPath); err2 == nil {
+							fileSize = uint64(info.Size())
+						}
+						if b != nil {
+							size = totalSizeBytesFromMdu0(b)
+						}
+					default:
+						b, manifestRoot, allocLen, err2 := IngestNewDeal(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+						if err2 != nil {
+							if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
+								return nil, uploadFailure{status: http.StatusRequestTimeout, message: err2.Error()}
+							}
+							return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("IngestNewDeal failed: %v", err2)}
+						}
+						cid = manifestRoot
+						allocatedLength = allocLen
+						totalMdus = allocLen
+						if b != nil {
+							witnessMdus = b.GetWitnessCount()
+						}
+						if info, err2 := os.Stat(ingestPath); err2 == nil {
+							fileSize = uint64(info.Size())
+						}
+						if b != nil {
+							size = totalSizeBytesFromMdu0(b)
+						}
+					}
 				}
-				cid = res.manifestRoot.Canonical
-				allocatedLength = res.allocatedLength
-				totalMdus = res.allocatedLength
-				witnessMdus = res.witnessMdus
-				fileSize = res.fileSize
-				size = res.sizeBytes
 			} else {
-				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
-				// assigned provider before the first content commit.
-				switch {
-				case os.Getenv("NIL_FAKE_INGEST") == "1":
-					var err error
-					cid, size, allocatedLength, err = fastShardQuick(ingestPath)
-					if err != nil {
-						http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
-						return
-					}
-					fileSize = size
-					totalMdus = allocatedLength
-					witnessMdus = 1
-
-				case os.Getenv("NIL_FAST_INGEST") == "1":
-					b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+				if stripe.mode == 2 {
+					res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ctx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath, fileFlags)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							http.Error(w, err.Error(), http.StatusRequestTimeout)
-							return
+							return nil, uploadFailure{status: http.StatusRequestTimeout, message: err.Error()}
 						}
-						http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
-						return
+						return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("mode2 append failed: %v", err)}
 					}
-					cid = manifestRoot
-					allocatedLength = allocLen
-					totalMdus = allocLen
-					if b != nil {
-						witnessMdus = b.GetWitnessCount()
+					cid = res.manifestRoot.Canonical
+					allocatedLength = res.allocatedLength
+					totalMdus = res.allocatedLength
+					witnessMdus = res.witnessMdus
+					fileSize = res.fileSize
+					size = res.sizeBytes
+				} else {
+					if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+						return nil, uploadFailure{status: http.StatusBadRequest, message: "append is only supported in canonical ingest mode"}
 					}
-					if info, err := os.Stat(ingestPath); err == nil {
-						fileSize = uint64(info.Size())
-					}
-					if b != nil {
-						size = totalSizeBytesFromMdu0(b)
-					}
-
-				default:
-					b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+					b, manifestRoot, allocLen, err := IngestAppendToDeal(ctx, ingestPath, chainCID, maxMdus, fileRecordPath, fileFlags)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							http.Error(w, err.Error(), http.StatusRequestTimeout)
-							return
+							return nil, uploadFailure{status: http.StatusRequestTimeout, message: err.Error()}
 						}
-						http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
-						return
+						return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("IngestAppendToDeal failed: %v", err)}
 					}
 					cid = manifestRoot
 					allocatedLength = allocLen
@@ -1155,40 +1254,23 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			if stripe.mode == 2 {
-				res, err := mode2IngestAndUploadAppendToDeal(withUploadJob(ingestCtx, job), ingestPath, dealID, serviceHint, chainCID, fileRecordPath, fileFlags)
-				if err != nil {
-					if job != nil {
-						job.setError(err.Error())
-					}
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
-						return
-					}
-					http.Error(w, fmt.Sprintf("mode2 append failed: %v", err), http.StatusInternalServerError)
-					return
+			switch {
+			case os.Getenv("NIL_FAKE_INGEST") == "1":
+				var err2 error
+				cid, size, allocatedLength, err2 = fastShardQuick(ingestPath)
+				if err2 != nil {
+					return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("fast shard failed: %v", err2)}
 				}
-				cid = res.manifestRoot.Canonical
-				allocatedLength = res.allocatedLength
-				totalMdus = res.allocatedLength
-				witnessMdus = res.witnessMdus
-				fileSize = res.fileSize
-				size = res.sizeBytes
-			} else {
-				// Append path: load existing slab by on-chain manifest root, then append.
-				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-					http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
-					return
-				}
-
-				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, ingestPath, chainCID, maxMdus, fileRecordPath, fileFlags)
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						http.Error(w, err.Error(), http.StatusRequestTimeout)
-						return
+				fileSize = size
+				totalMdus = allocatedLength
+				witnessMdus = 1
+			case os.Getenv("NIL_FAST_INGEST") == "1":
+				b, manifestRoot, allocLen, err2 := IngestNewDealFast(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+				if err2 != nil {
+					if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
+						return nil, uploadFailure{status: http.StatusRequestTimeout, message: err2.Error()}
 					}
-					http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
-					return
+					return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("IngestNewDealFast failed: %v", err2)}
 				}
 				cid = manifestRoot
 				allocatedLength = allocLen
@@ -1196,7 +1278,27 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				if b != nil {
 					witnessMdus = b.GetWitnessCount()
 				}
-				if info, err := os.Stat(ingestPath); err == nil {
+				if info, err2 := os.Stat(ingestPath); err2 == nil {
+					fileSize = uint64(info.Size())
+				}
+				if b != nil {
+					size = totalSizeBytesFromMdu0(b)
+				}
+			default:
+				b, manifestRoot, allocLen, err2 := IngestNewDeal(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
+				if err2 != nil {
+					if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
+						return nil, uploadFailure{status: http.StatusRequestTimeout, message: err2.Error()}
+					}
+					return nil, uploadFailure{status: http.StatusInternalServerError, message: fmt.Sprintf("IngestNewDeal failed: %v", err2)}
+				}
+				cid = manifestRoot
+				allocatedLength = allocLen
+				totalMdus = allocLen
+				if b != nil {
+					witnessMdus = b.GetWitnessCount()
+				}
+				if info, err2 := os.Stat(ingestPath); err2 == nil {
 					fileSize = uint64(info.Size())
 				}
 				if b != nil {
@@ -1204,116 +1306,90 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	} else {
-		switch {
-		case os.Getenv("NIL_FAKE_INGEST") == "1":
-			// Very fast dev path: SHA256 padded to 48 bytes.
-			var err error
-			cid, size, allocatedLength, err = fastShardQuick(ingestPath)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("fast shard failed: %v", err), http.StatusInternalServerError)
-				return
-			}
-			fileSize = size
-			totalMdus = allocatedLength
-			witnessMdus = 1
 
-		case os.Getenv("NIL_FAST_INGEST") == "1":
-			// Semi-canonical dev path: NilFS slab without Witness MDUs.
-			b, manifestRoot, allocLen, err := IngestNewDealFast(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					http.Error(w, err.Error(), http.StatusRequestTimeout)
-					return
-				}
-				http.Error(w, fmt.Sprintf("IngestNewDealFast failed: %v", err), http.StatusInternalServerError)
-				return
-			}
-			cid = manifestRoot
-			allocatedLength = allocLen
-			totalMdus = allocLen
-			if b != nil {
-				witnessMdus = b.GetWitnessCount()
-			}
-			if info, err := os.Stat(ingestPath); err == nil {
-				fileSize = uint64(info.Size())
-			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
-			}
-
-		default:
-			// Full canonical ingest (Triple-Proof valid).
-			b, manifestRoot, allocLen, err := IngestNewDeal(ingestCtx, ingestPath, maxMdus, fileRecordPath, fileFlags)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					http.Error(w, err.Error(), http.StatusRequestTimeout)
-					return
-				}
-				http.Error(w, fmt.Sprintf("IngestNewDeal failed: %v", err), http.StatusInternalServerError)
-				return
-			}
-			cid = manifestRoot
-			allocatedLength = allocLen
-			totalMdus = allocLen
-			if b != nil {
-				witnessMdus = b.GetWitnessCount()
-			}
-			if info, err := os.Stat(ingestPath); err == nil {
-				fileSize = uint64(info.Size())
-			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
-			}
+		if size == 0 {
+			size = fileSize
 		}
+		if totalMdus == 0 && allocatedLength > 0 {
+			totalMdus = allocatedLength
+		}
+
+		profile.addDuration("gateway_total_ms", time.Since(uploadStarted))
+		profile.setCount("logical_size_bytes", logicalSizeBytes)
+		profile.setCount("wire_size_bytes", fileSize)
+		profile.setCount("total_mdus", totalMdus)
+		profile.setCount("witness_mdus", witnessMdus)
+		profileMS, profileCounts := profile.snapshots()
+		if job != nil {
+			job.setResult(uploadJobResult{ManifestRoot: cid, SizeBytes: size, FileSizeBytes: fileSize, AllocatedLength: allocatedLength})
+			job.setMetrics(profileMS, profileCounts)
+		}
+		log.Printf("GatewayUpload profile: file=%s deal_id=%s manifest_root=%s metrics_ms=%v counts=%v", fileName, normalizedDealID, cid, profileMS, profileCounts)
+
+		return &gatewayUploadResult{cid: cid, size: size, fileSize: fileSize, allocatedLength: allocatedLength, totalMdus: totalMdus, witnessMdus: witnessMdus}, nil
 	}
 
-	// Backstop: preserve previous behavior if we could not compute a non-zero total size.
-	if size == 0 {
-		size = fileSize
-	}
-	if totalMdus == 0 && allocatedLength > 0 {
-		totalMdus = allocatedLength
+	if asyncUpload {
+		log.Printf("GatewayUpload async accepted: file=%s deal_id=%s upload_id=%s", filename, dealIDStr, uploadID)
+		ingestCtx, ingestCancel := context.WithTimeout(context.Background(), uploadIngestTimeout)
+		ingestCtx = withUploadJob(ingestCtx, job)
+		ingestCtx = withMode2UploadProfile(ingestCtx, profile)
+		go func() {
+			defer ingestCancel()
+			defer cleanupRun()
+			if job != nil {
+				job.setPhase(uploadJobPhaseEncoding, "Gateway upload accepted; processing in background...")
+			}
+			if result, err := runIngest(ingestCtx, filename, maxUserMdusStr, dealIDStr); err != nil {
+				if job != nil {
+					job.setError(err.Error())
+				}
+				log.Printf("GatewayUpload async ingest failed: %v", err)
+			} else if result != nil {
+				log.Printf(
+					"GatewayUpload async ingest complete: file=%s deal_id=%s upload_id=%s manifest_root=%s allocated_length=%d total_mdus=%d witness_mdus=%d elapsed_ms=%d",
+					filename,
+					dealIDStr,
+					uploadID,
+					result.cid,
+					result.allocatedLength,
+					result.totalMdus,
+					result.witnessMdus,
+					time.Since(uploadStarted).Milliseconds(),
+				)
+			}
+		}()
+		resp := map[string]any{
+			"status":     "accepted",
+			"deal_id":    dealIDStr,
+			"upload_id":  uploadID,
+			"status_url": buildStatusURL(dealIDQuery, uploadID),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("GatewayUpload accepted encode error: %v", err)
+		}
+		return
 	}
 
-	if job != nil && strings.TrimSpace(cid) != "" {
-		job.setResult(uploadJobResult{
-			ManifestRoot:    cid,
-			SizeBytes:       size,
-			FileSizeBytes:   fileSize,
-			AllocatedLength: allocatedLength,
-		})
+	result, runErr := runIngest(receiveCtx, filename, maxUserMdusStr, dealIDStr)
+	if runErr != nil {
+		writeUploadError(runErr)
+		return
 	}
 
-	profile.addDuration("gateway_total_ms", time.Since(uploadStarted))
-	profile.setCount("logical_size_bytes", logicalSizeBytes)
-	profile.setCount("wire_size_bytes", fileSize)
-	profile.setCount("total_mdus", totalMdus)
-	profile.setCount("witness_mdus", witnessMdus)
 	profileMS, profileCounts := profile.snapshots()
-	if job != nil {
-		job.setMetrics(profileMS, profileCounts)
-	}
-
-	log.Printf(
-		"GatewayUpload profile: file=%s deal_id=%s manifest_root=%s metrics_ms=%v counts=%v",
-		filename,
-		dealIDStr,
-		cid,
-		profileMS,
-		profileCounts,
-	)
-
 	resp := map[string]any{
-		"cid":                cid,
-		"manifest_root":      cid,
-		"size_bytes":         size,
-		"file_size_bytes":    fileSize,
+		"cid":                result.cid,
+		"manifest_root":      result.cid,
+		"size_bytes":         result.size,
+		"file_size_bytes":    result.fileSize,
 		"logical_size_bytes": logicalSizeBytes,
 		"content_encoding":   contentEncoding,
-		"allocated_length":   allocatedLength,
-		"total_mdus":         totalMdus,
-		"witness_mdus":       witnessMdus,
+		"allocated_length":   result.allocatedLength,
+		"total_mdus":         result.totalMdus,
+		"witness_mdus":       result.witnessMdus,
 		"filename":           filename,
 		"upload_id":          uploadID,
 		"profile_ms":         profileMS,
@@ -1324,7 +1400,6 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GatewayUpload encode error: %v", err)
 	}
 }
-
 func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
 	if b == nil {
 		return 0

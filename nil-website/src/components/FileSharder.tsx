@@ -1172,6 +1172,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           witness_mdus?: number
         } | null
 
+        type GatewayUploadAcceptedPayload = {
+          status?: string
+          upload_id?: string
+          status_url?: string
+        }
+
         const buildUploadForm = (id: string) => {
           const form = new FormData()
           form.append('deal_id', dealId)
@@ -1193,6 +1199,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           let staleWarned = false
           let lastStatusTs = 0
           const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+          let pollUrl = statusUrl
           const url = `${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
           const phaseToDisplay = (phaseRaw: string): ShardPhase => {
             const phase = String(phaseRaw || '').trim()
@@ -1255,36 +1262,48 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             }))
           }
 
-          const pollStatus = async () => {
-            while (!stopPolling) {
-              try {
-                const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
-                if (res.ok) {
-                  const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
-                  if (job) {
-                    lastJob = job
-                    hadStatus = true
-                    lastStatusTs = performance.now()
-                    staleWarned = false
-                    applyProgress(job)
-                  }
-                }
-              } catch {
-                // Ignore polling errors; the primary upload request is the source of truth.
-              }
+          const parseAccepted = (value: unknown): GatewayUploadAcceptedPayload | null => {
+            if (!value || typeof value !== 'object') return null
+            const obj = value as Record<string, unknown>
+            if (typeof obj['status'] !== 'string' || String(obj['status']).toLowerCase() !== 'accepted') return null
 
-              if (hadStatus && lastStatusTs > 0 && performance.now() - lastStatusTs >= gatewayUploadHeartbeatStaleMs && !staleWarned) {
-                staleWarned = true
-                setShardProgress((p) => ({
-                  ...p,
-                  label: 'Gateway Mode 2: upload heartbeat stalled; waiting for provider status...',
-                }))
-              }
-              await new Promise((r) => setTimeout(r, gatewayUploadPollIntervalMs))
+            return {
+              status: String(obj['status']),
+              upload_id: typeof obj['upload_id'] === 'string' ? String(obj['upload_id']) : undefined,
+              status_url: typeof obj['status_url'] === 'string' ? String(obj['status_url']).trim() : undefined,
             }
           }
 
-          const pollPromise = pollStatus()
+          const pollStatusOnce = async (): Promise<GatewayUploadJobStatus | null> => {
+            try {
+              const res = await fetch(pollUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
+              if (res.ok) {
+                const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
+                if (job) {
+                  lastJob = job
+                  hadStatus = true
+                  lastStatusTs = performance.now()
+                  staleWarned = false
+                  applyProgress(job)
+                  return job
+                }
+              }
+            } catch {
+              // Ignore polling errors; the primary upload request is the source of truth.
+            }
+            return null
+          }
+
+          const updateHeartbeat = () => {
+            if (hadStatus && lastStatusTs > 0 && performance.now() - lastStatusTs >= gatewayUploadHeartbeatStaleMs && !staleWarned) {
+              staleWarned = true
+              setShardProgress((p) => ({
+                ...p,
+                label: 'Gateway Mode 2: upload heartbeat stalled; waiting for provider status...',
+              }))
+            }
+          }
+
           try {
             setMode2Uploading(true)
             gatewayUploadProgressRef.current = {
@@ -1316,11 +1335,50 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               throw new Error(txt || statusErr || `gateway upload failed (${resp.status})`)
             }
 
-            const payload = (await resp.json().catch(() => null)) as GatewayUploadPayload
+            const rawPayload = (await resp.json().catch(() => null)) as GatewayUploadPayload | GatewayUploadAcceptedPayload
+            const acceptedPayload = parseAccepted(rawPayload)
+            if (acceptedPayload) {
+              const statusPollUrl = String(acceptedPayload.status_url || statusUrl).trim()
+              if (!statusPollUrl) {
+                throw new Error('gateway upload accepted without status url')
+              }
+              pollUrl = statusPollUrl
+              addLog(`> Gateway upload accepted; tracking upload_id=${acceptedPayload.upload_id || uploadId}`)
+              addLog(`> Gateway upload status endpoint: ${statusPollUrl}`)
+              const deadline = performance.now() + 10 * 60_000
+              while (performance.now() < deadline) {
+                const job = await pollStatusOnce()
+                updateHeartbeat()
+                if (job?.status === 'error') {
+                  throw new Error(job.error || 'gateway upload failed')
+                }
+                if (job?.status === 'success') {
+                  if (!job.result?.manifest_root) {
+                    throw new Error('gateway upload completed without manifest_root')
+                  }
+                  return {
+                    payload: {
+                      manifest_root: job.result?.manifest_root,
+                      cid: undefined,
+                      size_bytes: job.result?.size_bytes,
+                      file_size_bytes: job.result?.file_size_bytes,
+                      allocated_length: job.result?.allocated_length,
+                      total_mdus: job.result?.total_mdus,
+                      witness_mdus: job.result?.witness_mdus,
+                    },
+                    lastJob: job,
+                    hadStatus: true,
+                  }
+                }
+                await new Promise((r) => setTimeout(r, gatewayUploadPollIntervalMs))
+              }
+              throw new Error('gateway upload timed out while waiting for completion')
+            }
+
+            const payload = rawPayload
             return { payload, lastJob, hadStatus }
           } finally {
             stopPolling = true
-            await pollPromise.catch(() => {})
             setMode2Uploading(false)
           }
         }
