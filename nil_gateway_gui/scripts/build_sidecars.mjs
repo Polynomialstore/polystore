@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,12 @@ if (process.platform === "win32") {
 
 mkdirSync(binDir, { recursive: true });
 
+function atomicCopy(src, dest) {
+  const tmp = `${dest}.tmp-${process.pid}-${Date.now()}`;
+  copyFileSync(src, tmp);
+  renameSync(tmp, dest);
+}
+
 console.log("==> Building nil_core shared library");
 const cargoArgs = ["build", "--release"];
 if (nilCoreTarget) {
@@ -46,20 +52,18 @@ if (!nilCorePath) {
 }
 
 console.log(`==> Staging ${basename(nilCorePath)}`);
-copyFileSync(nilCorePath, join(binDir, basename(nilCorePath)));
+atomicCopy(nilCorePath, join(binDir, basename(nilCorePath)));
 
 console.log("==> Building nil_gateway sidecar");
 const nilGatewayOutput = join(binDir, `nil_gateway${ext}`);
-if (existsSync(nilGatewayOutput)) {
-  unlinkSync(nilGatewayOutput);
-}
+const nilGatewayTempOutput = `${nilGatewayOutput}.tmp-${process.pid}-${Date.now()}`;
 const goBuildArgs = ["build"];
 if (process.platform === "linux") {
   goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,$ORIGIN");
 } else if (process.platform === "darwin") {
   goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,@loader_path");
 }
-goBuildArgs.push("-o", nilGatewayOutput, ".");
+goBuildArgs.push("-o", nilGatewayTempOutput, ".");
 execFileSync(
   "go",
   goBuildArgs,
@@ -68,13 +72,14 @@ execFileSync(
     stdio: "inherit",
   },
 );
+renameSync(nilGatewayTempOutput, nilGatewayOutput);
 
 console.log("==> Building nil_cli sidecar");
 execFileSync("cargo", ["build", "--release"], {
   cwd: join(rootDir, "nil_cli"),
   stdio: "inherit",
 });
-copyFileSync(
+atomicCopy(
   join(rootDir, "nil_cli", "target", "release", `nil_cli${ext}`),
   join(binDir, `nil_cli${ext}`),
 );
