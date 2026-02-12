@@ -62,23 +62,28 @@ type uploadJob struct {
 
 	result *uploadJobResult
 	err    string
+
+	metricsMS     map[string]uint64
+	metricsCounts map[string]uint64
 }
 
 type uploadJobResponse struct {
-	DealID     string           `json:"deal_id"`
-	UploadID   string           `json:"upload_id"`
-	Status     string           `json:"status"`
-	Phase      string           `json:"phase"`
-	FileName   string           `json:"file_name,omitempty"`
-	Message    string           `json:"message,omitempty"`
-	BytesDone  uint64           `json:"bytes_done,omitempty"`
-	BytesTotal uint64           `json:"bytes_total,omitempty"`
-	StepsDone  uint64           `json:"steps_done,omitempty"`
-	StepsTotal uint64           `json:"steps_total,omitempty"`
-	StartedAt  string           `json:"started_at"`
-	UpdatedAt  string           `json:"updated_at"`
-	Result     *uploadJobResult `json:"result,omitempty"`
-	Error      string           `json:"error,omitempty"`
+	DealID     string            `json:"deal_id"`
+	UploadID   string            `json:"upload_id"`
+	Status     string            `json:"status"`
+	Phase      string            `json:"phase"`
+	FileName   string            `json:"file_name,omitempty"`
+	Message    string            `json:"message,omitempty"`
+	BytesDone  uint64            `json:"bytes_done,omitempty"`
+	BytesTotal uint64            `json:"bytes_total,omitempty"`
+	StepsDone  uint64            `json:"steps_done,omitempty"`
+	StepsTotal uint64            `json:"steps_total,omitempty"`
+	StartedAt  string            `json:"started_at"`
+	UpdatedAt  string            `json:"updated_at"`
+	Result     *uploadJobResult  `json:"result,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	MetricsMS  map[string]uint64 `json:"metrics_ms,omitempty"`
+	Counts     map[string]uint64 `json:"counts,omitempty"`
 }
 
 var uploadJobsMu sync.RWMutex
@@ -142,6 +147,22 @@ func (j *uploadJob) snapshot() uploadJobResponse {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 
+	var metricsMS map[string]uint64
+	if len(j.metricsMS) > 0 {
+		metricsMS = make(map[string]uint64, len(j.metricsMS))
+		for k, v := range j.metricsMS {
+			metricsMS[k] = v
+		}
+	}
+
+	var counts map[string]uint64
+	if len(j.metricsCounts) > 0 {
+		counts = make(map[string]uint64, len(j.metricsCounts))
+		for k, v := range j.metricsCounts {
+			counts[k] = v
+		}
+	}
+
 	return uploadJobResponse{
 		DealID:     strconv.FormatUint(j.dealID, 10),
 		UploadID:   j.uploadID,
@@ -157,6 +178,8 @@ func (j *uploadJob) snapshot() uploadJobResponse {
 		UpdatedAt:  j.updatedAt.UTC().Format(time.RFC3339Nano),
 		Result:     j.result,
 		Error:      j.err,
+		MetricsMS:  metricsMS,
+		Counts:     counts,
 	}
 }
 
@@ -238,6 +261,31 @@ func (j *uploadJob) setError(msg string) {
 	j.status = uploadJobError
 	j.phase = uploadJobPhaseDone
 	j.err = strings.TrimSpace(msg)
+	j.touchLocked()
+	j.mu.Unlock()
+}
+
+func (j *uploadJob) setMetrics(metricsMS map[string]uint64, counts map[string]uint64) {
+	if j == nil {
+		return
+	}
+	j.mu.Lock()
+	if len(metricsMS) > 0 {
+		j.metricsMS = make(map[string]uint64, len(metricsMS))
+		for k, v := range metricsMS {
+			j.metricsMS[k] = v
+		}
+	} else {
+		j.metricsMS = nil
+	}
+	if len(counts) > 0 {
+		j.metricsCounts = make(map[string]uint64, len(counts))
+		for k, v := range counts {
+			j.metricsCounts[k] = v
+		}
+	} else {
+		j.metricsCounts = nil
+	}
 	j.touchLocked()
 	j.mu.Unlock()
 }

@@ -730,6 +730,9 @@ func (pw *uploadProgressWriter) Write(p []byte) (int, error) {
 // GatewayUpload is used by the web UI to upload a file and derive a Root CID + size.
 // It does NOT create a deal; it just returns metadata.
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
+	uploadStarted := time.Now()
+	profile := newMode2UploadProfile()
+
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -770,6 +773,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	ingestCtx, cancel := context.WithTimeout(r.Context(), uploadIngestTimeout)
+	ingestCtx = withMode2UploadProfile(ingestCtx, profile)
 	defer cancel()
 	if ingestCtx.Err() != nil {
 		http.Error(w, "request canceled", http.StatusRequestTimeout)
@@ -795,6 +799,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	)
 
 	const maxFieldSize = 1 << 20 // 1 MiB per field (defensive; fields are small)
+	receiveStarted := time.Now()
 
 	for {
 		part, err := mr.NextPart()
@@ -945,6 +950,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	profile.addDuration("gateway_receive_ms", time.Since(receiveStarted))
 
 	if filename == "" || strings.TrimSpace(path) == "" {
 		http.Error(w, "file field is required", http.StatusBadRequest)
@@ -978,6 +984,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	contentEncoding := "none"
 	fileFlags := uint8(0)
+	prepareStarted := time.Now()
 	if nilceEnabled {
 		wrapped, err := maybeWrapNilceZstd(ingestCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
 		if err != nil {
@@ -1002,6 +1009,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	profile.addDuration("gateway_prepare_ms", time.Since(prepareStarted))
 
 	var cid string
 	var size uint64
@@ -1270,6 +1278,25 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	profile.addDuration("gateway_total_ms", time.Since(uploadStarted))
+	profile.setCount("logical_size_bytes", logicalSizeBytes)
+	profile.setCount("wire_size_bytes", fileSize)
+	profile.setCount("total_mdus", totalMdus)
+	profile.setCount("witness_mdus", witnessMdus)
+	profileMS, profileCounts := profile.snapshots()
+	if job != nil {
+		job.setMetrics(profileMS, profileCounts)
+	}
+
+	log.Printf(
+		"GatewayUpload profile: file=%s deal_id=%s manifest_root=%s metrics_ms=%v counts=%v",
+		filename,
+		dealIDStr,
+		cid,
+		profileMS,
+		profileCounts,
+	)
+
 	resp := map[string]any{
 		"cid":                cid,
 		"manifest_root":      cid,
@@ -1282,6 +1309,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"witness_mdus":       witnessMdus,
 		"filename":           filename,
 		"upload_id":          uploadID,
+		"profile_ms":         profileMS,
+		"profile_counts":     profileCounts,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

@@ -97,6 +97,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	profile := mode2UploadProfileFromContext(ctx)
 	stripe, err := stripeParamsFromHint(hint)
 	if err != nil {
 		return nil, "", fmt.Errorf("parse service_hint: %w", err)
@@ -138,6 +139,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		job.setPhase(uploadJobPhaseEncoding, "Gateway Mode 2: encoding stripes...")
 		job.setSteps(0, totalSteps)
 	}
+	if profile != nil {
+		profile.setCount("mode2_user_mdus", userMdus)
+		profile.setCount("mode2_witness_mdus", witnessCount)
+	}
 
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
@@ -164,6 +169,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	defer f.Close()
 
+	encodeStarted := time.Now()
 	{
 		bufPool := sync.Pool{
 			New: func() any {
@@ -242,6 +248,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 			return nil, "", err
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_encode_user_mdus_ms", time.Since(encodeStarted))
+	}
 
 	witnessBytesPerUser := uint64(0)
 	for i := uint64(0); i < userMdus; i++ {
@@ -270,6 +279,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 
 	// Build witness MDUs from the concatenated witness commitments.
+	witnessStarted := time.Now()
 	witnessRoots := make([][]byte, 0, witnessCount)
 	for i := uint64(0); i < witnessCount; i++ {
 		start := i * RawMduCapacity
@@ -302,6 +312,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 			job.setSteps(userMdus+i+1, totalSteps)
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_build_witness_mdus_ms", time.Since(witnessStarted))
+	}
 
 	// Append the file record (naive single-file mapping at offset 0 for now).
 	if err := builder.AppendFileWithFlags(fileRecordPath, fileSize, 0, fileFlags); err != nil {
@@ -309,6 +322,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	sizeBytes := totalSizeBytesFromMdu0(builder)
 
+	manifestStarted := time.Now()
 	// Write MDU #0 and compute its root.
 	mdu0Bytes, err := builder.Bytes()
 	if err != nil {
@@ -342,13 +356,20 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
 		return nil, "", err
 	}
+	if profile != nil {
+		profile.addDuration("mode2_build_manifest_ms", time.Since(manifestStarted))
+	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
+	finalizeStarted := time.Now()
 	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
+	}
+	if profile != nil {
+		profile.addDuration("mode2_finalize_dir_ms", time.Since(finalizeStarted))
 	}
 	rollback = false
 	if job != nil {
@@ -386,27 +407,25 @@ func mode2UploadParallelism(slotCount uint64) int {
 			return parsed
 		}
 	}
+	// Default sequential-by-design while we optimize single upload performance.
+	// Operators can opt in to parallel uploads via NIL_MODE2_UPLOAD_PARALLELISM.
+	_ = slotCount
+	return 1
+}
 
-	slots := int(slotCount)
-	if slots <= 0 {
-		slots = 1
+func mode2ExpectContinueTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_EXPECT_CONTINUE_MS"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			if parsed <= 0 {
+				return 0
+			}
+			return time.Duration(parsed) * time.Millisecond
+		}
 	}
-
-	// Default to a few concurrent uploads per slot; cap to avoid runaway concurrency
-	// when the deal has many slots.
-	target := slots * 4
-	if target < slots {
-		target = slots
-	}
-	if cpus := runtime.GOMAXPROCS(0); cpus > 0 && target < cpus*2 {
-		target = cpus * 2
-	}
-
-	const max = 64
-	if target > max {
-		return max
-	}
-	return target
+	// Keep a short pause for early 4xx/5xx rejects without paying a multi-second
+	// RTT penalty per upload request.
+	return 250 * time.Millisecond
 }
 
 func mode2SparseUploadEnabled() bool {
@@ -622,6 +641,7 @@ func mode2BuildArtifactsAppend(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	profile := mode2UploadProfileFromContext(ctx)
 	stripe, err := stripeParamsFromHint(hint)
 	if err != nil {
 		return nil, "", fmt.Errorf("parse service_hint: %w", err)
@@ -727,6 +747,12 @@ func mode2BuildArtifactsAppend(
 		job.setPhase(uploadJobPhaseEncoding, "Gateway Mode 2: encoding append...")
 		job.setSteps(0, totalSteps)
 	}
+	if profile != nil {
+		profile.setCount("mode2_old_user_mdus", oldUserMdus)
+		profile.setCount("mode2_new_user_mdus", newUserMdus)
+		profile.setCount("mode2_user_mdus", totalUserMdus)
+		profile.setCount("mode2_witness_mdus", witnessCount)
+	}
 
 	// Copy existing user shards into staging so the new manifest root is fully materialized on providers.
 	for userIdx := uint64(0); userIdx < oldUserMdus; userIdx++ {
@@ -798,6 +824,7 @@ func mode2BuildArtifactsAppend(
 	defer f.Close()
 	newUserRoots := make([][]byte, newUserMdus)
 	newWitnessFlats := make([][]byte, newUserMdus)
+	encodeStarted := time.Now()
 	{
 		bufPool := sync.Pool{
 			New: func() any {
@@ -878,6 +905,9 @@ func mode2BuildArtifactsAppend(
 			return nil, "", err
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_encode_user_mdus_ms", time.Since(encodeStarted))
+	}
 
 	newWitnessBytes := make([]byte, 0, newUserMdus*witnessBytesPerUser)
 	for i := uint64(0); i < newUserMdus; i++ {
@@ -910,6 +940,7 @@ func mode2BuildArtifactsAppend(
 	userRoots = append(userRoots, newUserRoots...)
 
 	// Build witness MDUs from the concatenated witness commitments.
+	witnessStarted := time.Now()
 	witnessRoots := make([][]byte, 0, witnessCount)
 	for i := uint64(0); i < witnessCount; i++ {
 		start := i * RawMduCapacity
@@ -942,6 +973,9 @@ func mode2BuildArtifactsAppend(
 			job.setSteps(newUserMdus+i+1, totalSteps)
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_build_witness_mdus_ms", time.Since(witnessStarted))
+	}
 
 	// Write user roots into MDU0 (starting after witness roots).
 	for i, root := range userRoots {
@@ -950,6 +984,7 @@ func mode2BuildArtifactsAppend(
 		}
 	}
 
+	manifestStarted := time.Now()
 	// Write MDU #0 and compute its root.
 	mdu0Bytes, err := builder.Bytes()
 	if err != nil {
@@ -983,13 +1018,20 @@ func mode2BuildArtifactsAppend(
 	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
 		return nil, "", err
 	}
+	if profile != nil {
+		profile.addDuration("mode2_build_manifest_ms", time.Since(manifestStarted))
+	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
+	finalizeStarted := time.Now()
 	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
+	}
+	if profile != nil {
+		profile.addDuration("mode2_finalize_dir_ms", time.Since(finalizeStarted))
 	}
 	rollback = false
 	if job != nil {
@@ -1019,6 +1061,7 @@ func mode2UploadArtifactsToProviders(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	profile := mode2UploadProfileFromContext(ctx)
 	stripe, err := stripeParamsFromHint(hint)
 	if err != nil {
 		return fmt.Errorf("parse service_hint: %w", err)
@@ -1031,12 +1074,16 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
+	resolveSlotsStarted := time.Now()
 	slots, err := resolveDealMode2Slots(ctx, dealID)
 	if err != nil {
 		return err
 	}
 	if len(slots) < int(stripe.slotCount) {
 		return fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
+	}
+	if profile != nil {
+		profile.addDuration("mode2_resolve_slots_ms", time.Since(resolveSlotsStarted))
 	}
 
 	localProviderAddr := strings.TrimSpace(cachedProviderAddress(ctx))
@@ -1047,6 +1094,8 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	targets := make([]slotTarget, 0, stripe.slotCount)
+	metadataProviders := make([]string, 0, stripe.slotCount)
+	metadataSeen := make(map[string]struct{}, stripe.slotCount)
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		assign := slots[int(slot)]
 		provider := strings.TrimSpace(assign.Provider)
@@ -1067,14 +1116,28 @@ func mode2UploadArtifactsToProviders(
 			continue
 		}
 		targets = append(targets, slotTarget{slot: slot, provider: provider})
+		if _, ok := metadataSeen[provider]; !ok {
+			metadataSeen[provider] = struct{}{}
+			metadataProviders = append(metadataProviders, provider)
+		}
+	}
+	if profile != nil {
+		profile.setCount("mode2_slots_targeted", uint64(len(targets)))
+		profile.setCount("mode2_remote_providers_targeted", uint64(len(metadataProviders)))
 	}
 
 	job := uploadJobFromContext(ctx)
-	uploadsPerSlot := witnessCount + 2 + userMdus
-	totalUploads := uint64(len(targets)) * uploadsPerSlot
+	metadataUploads := uint64(len(metadataProviders)) * (witnessCount + 2) // mdu_0..mdu_witness + manifest.bin
+	shardUploads := uint64(len(targets)) * userMdus                        // slot-local user shards only
+	totalUploads := metadataUploads + shardUploads
 	if job != nil {
 		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
 		job.setSteps(0, totalUploads)
+	}
+	if profile != nil {
+		profile.setCount("mode2_upload_tasks_metadata", metadataUploads)
+		profile.setCount("mode2_upload_tasks_shards", shardUploads)
+		profile.setCount("mode2_upload_tasks_total", totalUploads)
 	}
 
 	var uploaded atomic.Uint64
@@ -1085,19 +1148,14 @@ func mode2UploadArtifactsToProviders(
 		}
 	}
 
-	providerBases := make(map[string]string, len(targets))
+	resolveProvidersStarted := time.Now()
+	providerBases := make(map[string]string, len(metadataProviders))
 	{
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.SetLimit(int(stripe.slotCount))
 
 		var mu sync.Mutex
-		seen := make(map[string]struct{}, len(targets))
-		for _, target := range targets {
-			providerAddr := target.provider
-			if _, ok := seen[providerAddr]; ok {
-				continue
-			}
-			seen[providerAddr] = struct{}{}
+		for _, providerAddr := range metadataProviders {
 			providerAddrLocal := providerAddr
 
 			eg.Go(func() error {
@@ -1115,14 +1173,19 @@ func mode2UploadArtifactsToProviders(
 			return err
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_resolve_provider_endpoints_ms", time.Since(resolveProvidersStarted))
+	}
 
+	expectContinueTimeout := mode2ExpectContinueTimeout()
 	transport := &http.Transport{
 		MaxIdleConns:        256,
 		MaxIdleConnsPerHost: 32,
+		ForceAttemptHTTP2:   false,
 		// Providers validate deal state via LCD before reading bodies; keep a generous
 		// wait window so we don't start streaming 8 MiB payloads only to be rejected
 		// a moment later (which also triggers client-side ContentLength mismatch errors).
-		ExpectContinueTimeout: 1200 * time.Millisecond,
+		ExpectContinueTimeout: expectContinueTimeout,
 		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: 60 * time.Second, Transport: transport}
@@ -1133,6 +1196,7 @@ func mode2UploadArtifactsToProviders(
 	type uploadTask struct {
 		url          string
 		path         string
+		sizeBytes    int64
 		maxBytes     int64
 		dealID       string
 		manifestRoot string
@@ -1184,6 +1248,8 @@ func mode2UploadArtifactsToProviders(
 		return false
 	}
 
+	var retries atomic.Uint64
+
 	uploadBlob := func(ctx context.Context, task uploadTask) error {
 		fullSize, sendSize, err := mode2SparsePayloadLength(task.path, task.maxBytes)
 		if err != nil {
@@ -1220,10 +1286,11 @@ func mode2UploadArtifactsToProviders(
 			req.ContentLength = currentSendSize
 			req.Header.Set("Content-Type", "application/octet-stream")
 			// Avoid sending large bodies when the SP would reject early (deal validation,
-			// missing headers, etc). This prevents spurious client-side "ContentLength ...
-			// with Body length ..." transport errors when the server responds before
-			// reading the full payload.
-			req.Header.Set("Expect", "100-continue")
+			// missing headers, etc). Keep this short so uploads don't block on origins
+			// that don't promptly emit a 100-Continue response.
+			if expectContinueTimeout > 0 {
+				req.Header.Set("Expect", "100-continue")
+			}
 			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
 				req.Header.Set("X-Nil-Full-Size", strconv.FormatInt(fullSize, 10))
 			}
@@ -1279,6 +1346,7 @@ func mode2UploadArtifactsToProviders(
 			if attempt == maxAttempts || !isRetryableUploadErr(err) {
 				break
 			}
+			retries.Add(1)
 			backoff := time.Duration(attempt*attempt) * 250 * time.Millisecond
 			timer := time.NewTimer(backoff)
 			select {
@@ -1291,21 +1359,41 @@ func mode2UploadArtifactsToProviders(
 		return fmt.Errorf("upload to %s failed after retries: %w", task.url, lastErr)
 	}
 
+	taskBuildStarted := time.Now()
+	fileSizeCache := make(map[string]int64, totalUploads)
+	statSize := func(path string) (int64, error) {
+		if size, ok := fileSizeCache[path]; ok {
+			return size, nil
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return 0, err
+		}
+		size := info.Size()
+		fileSizeCache[path] = size
+		return size, nil
+	}
+
 	tasks := make([]uploadTask, 0, totalUploads)
-	for _, target := range targets {
-		slot := target.slot
-		base := providerBases[target.provider]
+
+	// Upload replicated metadata once per provider.
+	for _, provider := range metadataProviders {
+		base := providerBases[provider]
 		if base == "" {
 			continue
 		}
 
-		// Replicated metadata: mdu_0..mdu_witnessCount + manifest.bin to all slots.
 		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
 			mduIndexStr := strconv.FormatUint(mduIndex, 10)
 			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+			sizeBytes, err := statSize(artifactPath)
+			if err != nil {
+				return err
+			}
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_mdu",
 				path:         artifactPath,
+				sizeBytes:    sizeBytes,
 				maxBytes:     10 << 20,
 				dealID:       dealIDStr,
 				manifestRoot: manifestRootCanonical,
@@ -1313,23 +1401,42 @@ func mode2UploadArtifactsToProviders(
 			})
 		}
 
+		manifestPath := filepath.Join(finalDir, "manifest.bin")
+		manifestSize, err := statSize(manifestPath)
+		if err != nil {
+			return err
+		}
 		tasks = append(tasks, uploadTask{
 			url:          base + "/sp/upload_manifest",
-			path:         filepath.Join(finalDir, "manifest.bin"),
+			path:         manifestPath,
+			sizeBytes:    manifestSize,
 			maxBytes:     512 << 10,
 			dealID:       dealIDStr,
 			manifestRoot: manifestRootCanonical,
 		})
+	}
 
-		// Striped user shards for this slot only.
+	// Upload striped user shards per slot.
+	for _, target := range targets {
+		slot := target.slot
+		base := providerBases[target.provider]
+		if base == "" {
+			continue
+		}
+
 		for i := uint64(0); i < userMdus; i++ {
 			slabIndex := uint64(1) + witnessCount + i
 			slabIndexStr := strconv.FormatUint(slabIndex, 10)
 			slotStr := strconv.FormatUint(slot, 10)
 			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
+			sizeBytes, err := statSize(artifactPath)
+			if err != nil {
+				return err
+			}
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_shard",
 				path:         artifactPath,
+				sizeBytes:    sizeBytes,
 				maxBytes:     10 << 20,
 				dealID:       dealIDStr,
 				manifestRoot: manifestRootCanonical,
@@ -1338,8 +1445,12 @@ func mode2UploadArtifactsToProviders(
 			})
 		}
 	}
+	if profile != nil {
+		profile.addDuration("mode2_build_upload_tasks_ms", time.Since(taskBuildStarted))
+	}
 
 	uploadParallelism := mode2UploadParallelism(stripe.slotCount)
+	uploadStarted := time.Now()
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(uploadParallelism)
 	for _, task := range tasks {
@@ -1352,7 +1463,15 @@ func mode2UploadArtifactsToProviders(
 			return nil
 		})
 	}
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+	if profile != nil {
+		profile.addDuration("mode2_upload_requests_ms", time.Since(uploadStarted))
+		profile.setCount("mode2_upload_parallelism", uint64(uploadParallelism))
+		profile.setCount("mode2_upload_retries", retries.Load())
+	}
+	return nil
 }
 
 func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
