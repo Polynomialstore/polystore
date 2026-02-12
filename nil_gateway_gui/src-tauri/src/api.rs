@@ -251,7 +251,7 @@ impl GatewayClient {
                 .wait_for_upload_status(app, &status_url, deal_id, &status_id)
                 .await?;
             let mut response = map_job_outcome(&status_id, &file_name_for_result, outcome)?;
-            response.upload_id = status_id;
+            response.upload_id = status_id.clone();
             let _ = app.emit(
                 "gateway_log",
                 format!(
