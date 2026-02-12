@@ -1054,6 +1054,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           steps_total?: number
           result?: {
             manifest_root?: string
+            size_bytes?: number
+            file_size_bytes?: number
             total_mdus?: number
             witness_mdus?: number
             allocated_length?: number
@@ -1074,6 +1076,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const obj = value as Record<string, unknown>
           const resultObj = obj.result && typeof obj.result === 'object' ? (obj.result as Record<string, unknown>) : null
           const manifestRoot = resultObj && typeof resultObj.manifest_root === 'string' ? resultObj.manifest_root : undefined
+          const sizeBytes = resultObj ? asNumber(resultObj.size_bytes) : undefined
+          const fileSizeBytes = resultObj ? asNumber(resultObj.file_size_bytes) : undefined
           const totalMdus = resultObj ? asNumber(resultObj.total_mdus) : undefined
           const witnessMdus = resultObj ? asNumber(resultObj.witness_mdus) : undefined
           const allocatedLength = resultObj ? asNumber(resultObj.allocated_length) : undefined
@@ -1089,9 +1093,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             bytes_total: asNumber(obj.bytes_total),
             steps_done: asNumber(obj.steps_done),
             steps_total: asNumber(obj.steps_total),
-            result: manifestRoot || totalMdus !== undefined || witnessMdus !== undefined || allocatedLength !== undefined
-              ? { manifest_root: manifestRoot, total_mdus: totalMdus, witness_mdus: witnessMdus, allocated_length: allocatedLength }
-              : undefined,
+            result:
+              manifestRoot || sizeBytes !== undefined || fileSizeBytes !== undefined || totalMdus !== undefined || witnessMdus !== undefined || allocatedLength !== undefined
+                ? {
+                    manifest_root: manifestRoot,
+                    size_bytes: sizeBytes,
+                    file_size_bytes: fileSizeBytes,
+                    total_mdus: totalMdus,
+                    witness_mdus: witnessMdus,
+                    allocated_length: allocatedLength,
+                  }
+                : undefined,
           }
         }
 
@@ -1273,6 +1285,40 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             }
           }
 
+          const parseGatewayUploadPayload = (value: unknown): GatewayUploadPayload | null => {
+            if (!value || typeof value !== 'object') return null
+            const obj = value as Record<string, unknown>
+            const manifestRoot = typeof obj.manifest_root === 'string' ? obj.manifest_root : undefined
+            const cid = typeof obj.cid === 'string' ? obj.cid : undefined
+            const sizeBytes = asNumber(obj.size_bytes)
+            const fileSizeBytes = asNumber(obj.file_size_bytes)
+            const totalMdus = asNumber(obj.total_mdus)
+            const witnessMdus = asNumber(obj.witness_mdus)
+            const allocatedLength = asNumber(obj.allocated_length)
+
+            if (
+              manifestRoot === undefined &&
+              cid === undefined &&
+              sizeBytes === undefined &&
+              fileSizeBytes === undefined &&
+              totalMdus === undefined &&
+              witnessMdus === undefined &&
+              allocatedLength === undefined
+            ) {
+              return null
+            }
+
+            return {
+              manifest_root: manifestRoot,
+              cid,
+              size_bytes: sizeBytes,
+              file_size_bytes: fileSizeBytes,
+              allocated_length: allocatedLength,
+              total_mdus: totalMdus,
+              witness_mdus: witnessMdus,
+            }
+          }
+
           const pollStatusOnce = async (): Promise<GatewayUploadJobStatus | null> => {
             try {
               const res = await fetch(pollUrl, { method: 'GET', signal: AbortSignal.timeout(gatewayUploadPollTimeoutMs) })
@@ -1374,7 +1420,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               throw new Error('gateway upload timed out while waiting for completion')
             }
 
-            const payload = rawPayload
+            const payload = parseGatewayUploadPayload(rawPayload)
+            if (!payload) {
+              throw new Error('Gateway upload returned unexpected payload')
+            }
             return { payload, lastJob, hadStatus }
           } finally {
             setMode2Uploading(false)
