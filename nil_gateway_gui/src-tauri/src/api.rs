@@ -13,6 +13,7 @@ pub struct GatewayStatusResponse {
     pub build_time: String,
     pub mode: String,
     pub listening_addr: String,
+    pub managed: Option<bool>,
     pub provider_base: Option<String>,
     pub p2p_addrs: Option<Vec<String>>,
     pub capabilities: HashMap<String, bool>,

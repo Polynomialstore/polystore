@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -108,12 +109,16 @@ impl SidecarManager {
             .child
             .lock()
             .map_err(|_| "gateway lock poisoned".to_string())?;
-        if let Some(child) = guard.as_ref() {
+        if self.running_child(&mut guard)? {
             let base_url = self.base_url()?;
             return Ok(GatewayStartResponse {
                 base_url,
-                pid: child.id(),
+                pid: guard.as_ref().map_or(0, Child::id),
             });
+        }
+
+        if guard.is_some() {
+            guard.take();
         }
 
         let (listen_addr, base_url) = normalize_listen_addr(
@@ -122,6 +127,12 @@ impl SidecarManager {
                 .clone()
                 .unwrap_or_else(|| DEFAULT_LISTEN_ADDR.to_string()),
         );
+        if is_listening_addr_in_use(&listen_addr) {
+            return Err(format!(
+                "address {listen_addr} is already in use by another process. Stop external gateway first or choose a different listen address."
+            ));
+        }
+
         let binary = resolve_binary_path(&app, config.binary_path.clone(), "nil_gateway")?;
         let args = config.args.unwrap_or_default();
 
@@ -212,6 +223,9 @@ impl SidecarManager {
             .try_wait()
             .map_err(|err| format!("failed to check gateway status: {err}"))?
         {
+            if let Ok(mut base_url) = self.base_url.lock() {
+                *base_url = None;
+            }
             return Err(format!(
                 "gateway exited during startup (status: {status}). Check logs for bind/lib dependency errors."
             ));
@@ -226,8 +240,15 @@ impl SidecarManager {
             .child
             .lock()
             .map_err(|_| "gateway lock poisoned".to_string())?;
+        if !self.running_child(&mut guard)? {
+            return Err(
+                "No managed Gateway process is currently running under this GUI session."
+                    .to_string(),
+            );
+        }
         if let Some(mut child) = guard.take() {
             let _ = child.kill();
+            let _ = child.wait();
         }
         if let Ok(mut base_url) = self.base_url.lock() {
             *base_url = None;
@@ -238,6 +259,31 @@ impl SidecarManager {
     pub fn set_base_url_for_tests(&self, base_url: String) {
         if let Ok(mut guard) = self.base_url.lock() {
             *guard = Some(normalize_base_url(base_url));
+        }
+    }
+
+    pub fn is_managed(&self) -> Result<bool, String> {
+        let mut guard = self
+            .child
+            .lock()
+            .map_err(|_| "gateway lock poisoned".to_string())?;
+        self.running_child(&mut guard)
+    }
+
+    fn running_child(&self, guard: &mut Option<Child>) -> Result<bool, String> {
+        let Some(child) = guard.as_mut() else {
+            return Ok(false);
+        };
+
+        match child
+            .try_wait()
+            .map_err(|err| format!("failed to check gateway status: {err}"))?
+        {
+            Some(_) => {
+                guard.take();
+                Ok(false)
+            }
+            None => Ok(true),
         }
     }
 }
@@ -263,6 +309,18 @@ fn parse_listening_addr(line: &str) -> Option<String> {
     }
 
     None
+}
+
+fn is_listening_addr_in_use(listen_addr: &str) -> bool {
+    let Ok(addrs) = listen_addr.to_socket_addrs() else {
+        return false;
+    };
+    for addr in addrs {
+        if TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok() {
+            return true;
+        }
+    }
+    false
 }
 
 fn normalize_base_url(value: String) -> String {

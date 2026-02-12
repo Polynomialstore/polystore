@@ -156,6 +156,7 @@ async function copyToClipboard(text: string): Promise<void> {
 export default function App() {
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://127.0.0.1:8080");
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
+  const [gatewayManaged, setGatewayManaged] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<GatewayPhase>("booting");
   const [phaseMessage, setPhaseMessage] = useState("Starting local Gateway...");
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
@@ -234,6 +235,7 @@ export default function App() {
 
   const applyOnlineStatus = useCallback((status: GatewayStatusResponse) => {
     setGateway(status);
+    setGatewayManaged(status.managed ?? null);
     setPhase("online");
     setPhaseMessage(`Listening on ${status.listening_addr}`);
     setStatusDetail(null);
@@ -256,9 +258,8 @@ export default function App() {
   );
 
   const probeAfterStart = useCallback(
-    async (baseUrl: string) => {
+    async () => {
       let lastErr: unknown = null;
-      await gatewayAttach(baseUrl);
       for (let attempt = 0; attempt < STARTUP_PROBE_ATTEMPTS; attempt += 1) {
         try {
           return await probeStatus();
@@ -285,7 +286,7 @@ export default function App() {
       await gatewayStart({
         listen_addr: normalizeListenAddr(baseUrl),
       });
-      await probeAfterStart(baseUrl);
+      await probeAfterStart();
       addLog("Local Gateway started successfully.");
     },
     [addLog, probeAfterStart],
@@ -299,6 +300,7 @@ export default function App() {
       setGateway(null);
       setStatusDetail(msg);
       setLastStatusAt(Date.now());
+      setGatewayManaged(null);
       consecutiveFailuresRef.current += 1;
 
       if (!autoStartEnabled && !forceStart) {
@@ -358,6 +360,11 @@ export default function App() {
       setPhaseMessage(`Checking ${normalizedBase}/status...`);
       setStatusDetail(null);
       try {
+        if (startIfOffline) {
+          await startLocalGateway(normalizedBase);
+          return;
+        }
+
         await attachAndProbe(normalizedBase);
         return;
       } catch (firstErr) {
@@ -375,7 +382,7 @@ export default function App() {
         await recoverFromStatusFailure(firstErr, { forceStart: true });
       }
     },
-    [addLog, attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure],
+    [addLog, attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure, startLocalGateway],
   );
 
   useEffect(() => {
@@ -416,12 +423,11 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const normalizedBase = gatewayBaseUrl.trim().replace(/\/$/, "");
 
     const tick = async () => {
       if (cancelled) return;
       try {
-        await attachAndProbe(normalizedBase);
+        await probeStatus();
       } catch (err) {
         if (cancelled) return;
         await recoverFromStatusFailure(err);
@@ -436,7 +442,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [attachAndProbe, gatewayBaseUrl, recoverFromStatusFailure]);
+  }, [probeStatus, recoverFromStatusFailure]);
 
   useEffect(() => {
     let cancelled = false;
@@ -719,7 +725,9 @@ export default function App() {
                 : "blocked",
           detail:
             phase === "online"
-              ? gateway?.listening_addr || "Listening"
+              ? gatewayManaged === false
+                ? "External endpoint connected"
+                : "GUI-managed local process"
               : "Start or reconnect the local Gateway process",
         },
         {
@@ -755,7 +763,7 @@ export default function App() {
               : "Provider path check failed",
         },
       ] as Array<{ key: string; title: string; state: ReadinessState; detail: string }>,
-    [gateway?.deps?.lcd_reachable, gateway?.deps?.sp_reachable, gateway?.listening_addr, phase],
+    [gateway?.deps?.lcd_reachable, gateway?.deps?.sp_reachable, gatewayManaged, phase],
   );
 
   const readinessCounts = useMemo(
@@ -766,6 +774,22 @@ export default function App() {
     }),
     [readinessItems],
   );
+
+  const gatewaySourceLabel = useMemo(() => {
+    if (gatewayManaged === true) return "managed by GUI";
+    if (gatewayManaged === false) return "attached (external)";
+    return "unknown";
+  }, [gatewayManaged]);
+
+  const gatewayLogMessage = useMemo(() => {
+    if (gatewayManaged === true) {
+      return "Waiting for gateway logs. Start a local upload now to stream upload activity.";
+    }
+    if (gatewayManaged === false) {
+      return "Connected to an external Gateway endpoint; GUI log streaming is unavailable.";
+    }
+    return "Start the local Gateway to begin managed log streaming.";
+  }, [gatewayManaged]);
 
   const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);
 
@@ -782,6 +806,7 @@ export default function App() {
           phase_message: phaseMessage,
           status_detail: statusDetail,
           auto_start: autoStartEnabled,
+          gateway_managed: gatewayManaged,
           gateway_base_url: gatewayBaseUrl,
           last_status_at: lastStatusAt,
           storage_last_at: storageLastAt,
@@ -806,6 +831,7 @@ export default function App() {
     addLog,
     autoStartEnabled,
     gateway,
+    gatewayManaged,
     gatewayBaseUrl,
     lastStatusAt,
     logs,
@@ -893,17 +919,20 @@ export default function App() {
                   : " · system healthy"}
               {lastStatusAt ? ` · checked ${new Date(lastStatusAt).toLocaleTimeString()}` : ""}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="meta-chip">
-                <strong>Endpoint</strong> {gatewayBaseUrl}
-              </span>
-              <span className="meta-chip">
-                <strong>Mode</strong> {gateway?.mode || "standalone"}
-              </span>
-              <span className="meta-chip">
-                <strong>Auto-start</strong> {autoStartEnabled ? "enabled" : "paused"}
-              </span>
-            </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="meta-chip">
+                  <strong>Endpoint</strong> {gatewayBaseUrl}
+                </span>
+                <span className="meta-chip">
+                  <strong>Mode</strong> {gateway?.mode || "standalone"}
+                </span>
+                <span className="meta-chip">
+                  <strong>Gateway source</strong> {gatewaySourceLabel}
+                </span>
+                <span className="meta-chip">
+                  <strong>Auto-start</strong> {autoStartEnabled ? "enabled" : "paused"}
+                </span>
+              </div>
             {diagCopyMessage ? (
               <p className="mt-1 text-xs font-semibold text-emerald-700">{diagCopyMessage}</p>
             ) : null}
@@ -1021,7 +1050,13 @@ export default function App() {
                       type="button"
                       className="control-btn control-btn-inline"
                       onClick={handleStop}
-                      disabled={actionBusy || phase === "offline" || phase === "booting" || phase === "stopping"}
+                      disabled={
+                        actionBusy ||
+                        phase === "offline" ||
+                        phase === "booting" ||
+                        phase === "stopping" ||
+                        gatewayManaged === false
+                      }
                     >
                       Stop
                     </button>
@@ -1223,22 +1258,22 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <div
-                  className="log-panel mt-3 h-[340px] overflow-auto p-3 font-mono text-xs leading-relaxed text-emerald-200"
+                  <div
+                    className="log-panel mt-3 h-[340px] overflow-auto p-3 font-mono text-xs leading-relaxed text-emerald-200"
                   ref={(node) => {
                     if (node && autoScrollLogs) {
                       node.scrollTop = node.scrollHeight;
                     }
                   }}
-                >
-                  {logs.length === 0 ? (
-                    <p className="text-slate-400">
-                      Waiting for gateway logs. Start or connect to the local Gateway to stream output.
-                    </p>
-                  ) : (
-                    logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
-                  )}
-                </div>
+                  >
+                    {logs.length === 0 ? (
+                      <p className="text-slate-400">
+                        {gatewayLogMessage}
+                      </p>
+                    ) : (
+                      logs.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
+                    )}
+                  </div>
               </div>
 
               <div className="space-y-3">

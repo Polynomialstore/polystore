@@ -6,6 +6,7 @@ export type GatewayStatusResponse = {
   build_time: string;
   mode: string;
   listening_addr: string;
+  managed?: boolean;
   provider_base?: string;
   p2p_addrs?: string[];
   capabilities: Record<string, boolean>;
