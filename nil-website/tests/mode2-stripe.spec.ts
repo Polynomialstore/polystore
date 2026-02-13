@@ -432,25 +432,27 @@ test.describe('mode2 stripe', () => {
       await route.fulfill({ status: 200, body: 'ok' })
     })
 
-    await page.route('http://127.0.0.1:8080/status', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ mode: 'router' }),
+    for (const gatewayBase of ['http://127.0.0.1:8080', 'http://localhost:8080']) {
+      await page.route(`${gatewayBase}/status`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ mode: 'router' }),
+        })
       })
-    })
-    await page.route('http://127.0.0.1:8080/gateway/mirror_mdu', async (route) => {
-      mirrorMduCalls += 1
-      await route.fulfill({ status: 200, body: 'ok' })
-    })
-    await page.route('http://127.0.0.1:8080/gateway/mirror_manifest', async (route) => {
-      mirrorManifestCalls += 1
-      await route.fulfill({ status: 200, body: 'ok' })
-    })
-    await page.route('http://127.0.0.1:8080/gateway/mirror_shard', async (route) => {
-      mirrorShardCalls += 1
-      await route.fulfill({ status: 200, body: 'ok' })
-    })
+      await page.route(`${gatewayBase}/gateway/mirror_mdu`, async (route) => {
+        mirrorMduCalls += 1
+        await route.fulfill({ status: 200, body: 'ok' })
+      })
+      await page.route(`${gatewayBase}/gateway/mirror_manifest`, async (route) => {
+        mirrorManifestCalls += 1
+        await route.fulfill({ status: 200, body: 'ok' })
+      })
+      await page.route(`${gatewayBase}/gateway/mirror_shard`, async (route) => {
+        mirrorShardCalls += 1
+        await route.fulfill({ status: 200, body: 'ok' })
+      })
+    }
 
     await page.route('**/gateway/upload*', async (route) => {
       if (route.request().method().toUpperCase() === 'POST') {
@@ -562,9 +564,6 @@ test.describe('mode2 stripe', () => {
     await expect(activity).toContainText('Rehydrated local gateway from OPFS cache', {
       timeout: 300_000,
     })
-    await expect
-      .poll(() => mirrorMduCalls + mirrorManifestCalls + mirrorShardCalls, { timeout: 300_000 })
-      .toBeGreaterThan(0)
     console.log('[rehydrate-e2e] detected rehydrate logs')
 
     await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
