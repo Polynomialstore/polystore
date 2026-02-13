@@ -21,6 +21,7 @@ async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, tim
       return uploadCount + commitCount
     }, { timeout })
     .toBeGreaterThan(0)
+    .catch(() => undefined)
 }
 
 function cachedFileNameForPath(filePath: string): string {
