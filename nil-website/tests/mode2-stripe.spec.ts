@@ -48,6 +48,19 @@ async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string 
   }
 }
 
+async function listOpfsFiles(page: Page, dealId: string): Promise<string[]> {
+  return await page.evaluate(async ({ dealId }) => {
+    const root = await navigator.storage.getDirectory()
+    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+    const names: string[] = []
+    // @ts-expect-error - FileSystemDirectoryHandle is iterable in browsers used by tests
+    for await (const entry of dealDir.values()) {
+      if (entry.kind === 'file') names.push(String(entry.name || ''))
+    }
+    return names
+  }, { dealId })
+}
+
 function resolveRouterUploadDir(): string {
   const fromEnv = String(process.env.E2E_ROUTER_UPLOAD_DIR || '').trim()
   if (fromEnv) return path.resolve(fromEnv)
@@ -384,9 +397,9 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
     const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    await dealRow.click().catch(() => {})
     await expect
       .poll(async () => {
-        await dealRow.click().catch(() => {})
         const hasA = (await page.locator(`[data-file-path="${fileA.name}"]`).count().catch(() => 0)) > 0
         const hasB = (await page.locator(`[data-file-path="${fileB.name}"]`).count().catch(() => 0)) > 0
         return hasA && hasB
@@ -425,6 +438,8 @@ test.describe('mode2 stripe', () => {
     // Force first gateway ingest to fail so browser fallback computes and persists OPFS slab.
     // Keep subsequent attempts deterministic for local/CI by stubbing provider transport.
     let gatewayUploadPostCount = 0
+    let fileBGatewayAttemptCount = 0
+    let rehydratePhase: 'fileA' | 'fileB' = 'fileA'
     let mirrorMduCalls = 0
     let mirrorManifestCalls = 0
     let mirrorShardCalls = 0
@@ -465,14 +480,15 @@ test.describe('mode2 stripe', () => {
     await page.route('**/gateway/upload*', async (route) => {
       if (route.request().method().toUpperCase() === 'POST') {
         gatewayUploadPostCount += 1
-        // Gateway client may retry across localhost/127.0.0.1.
-        // Keep fileA deterministic by forcing transport failures for the first two POSTs.
-        if (gatewayUploadPostCount <= 2) {
+        // Force fileA to use browser fallback so OPFS definitely gets populated.
+        if (rehydratePhase === 'fileA') {
           await route.abort('failed')
           return
         }
-        // Then simulate append recovery on fileB: first real ingest attempt fails due missing slab.
-        if (gatewayUploadPostCount === 3) {
+
+        fileBGatewayAttemptCount += 1
+        // Simulate append recovery on fileB: first gateway ingest attempt fails due missing slab.
+        if (fileBGatewayAttemptCount === 1) {
           await route.fulfill({
             status: 500,
             contentType: 'text/plain',
@@ -520,17 +536,18 @@ test.describe('mode2 stripe', () => {
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
     console.log('[rehydrate-e2e] fileA committed')
+    rehydratePhase = 'fileB'
 
     await expect
       .poll(async () => {
-        return (await readOpfsManifestRoot(page, dealId)) || ''
+        const files = await listOpfsFiles(page, dealId).catch(() => [])
+        const hasMdu0 = files.includes('mdu_0.bin')
+        const shardCount = files.filter((name) => /^mdu_\d+_slot_\d+\.bin$/.test(name)).length
+        return hasMdu0 && shardCount > 0
       }, { timeout: 120_000 })
-      .toMatch(/^0x[0-9a-fA-F]{96}$/)
-    const firstManifestRoot = (await readOpfsManifestRoot(page, dealId)) || ''
-    expect(firstManifestRoot).toMatch(/^0x[0-9a-fA-F]{96}$/)
+      .toBe(true)
 
-    const manifestKey = firstManifestRoot.replace(/^0x/i, '').toLowerCase()
-    const routerDealDir = path.join(resolveRouterUploadDir(), 'deals', String(dealId), manifestKey)
+    const routerDealDir = path.join(resolveRouterUploadDir(), 'deals', String(dealId))
     await fs.rm(routerDealDir, { recursive: true, force: true })
 
     // Ensure the local gateway truly lost its prior slab state.
@@ -562,7 +579,7 @@ test.describe('mode2 stripe', () => {
       console.log('[rehydrate-e2e] fileB upload complete (explicit upload button path)')
     }
 
-    await expect.poll(() => gatewayUploadPostCount, { timeout: 300_000 }).toBeGreaterThanOrEqual(3)
+    await expect.poll(() => fileBGatewayAttemptCount, { timeout: 300_000 }).toBeGreaterThanOrEqual(1)
 
     const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
     await expect(activity).toContainText('Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS', {
