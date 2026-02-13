@@ -455,11 +455,14 @@ test.describe('mode2 stripe', () => {
     await page.route('**/gateway/upload*', async (route) => {
       if (route.request().method().toUpperCase() === 'POST') {
         gatewayUploadPostCount += 1
-        if (gatewayUploadPostCount === 1) {
+        // Gateway client may retry across localhost/127.0.0.1.
+        // Keep fileA deterministic by forcing transport failures for the first two POSTs.
+        if (gatewayUploadPostCount <= 2) {
           await route.abort('failed')
           return
         }
-        if (gatewayUploadPostCount === 2) {
+        // Then simulate append recovery on fileB: first real ingest attempt fails due missing slab.
+        if (gatewayUploadPostCount === 3) {
           await route.fulfill({
             status: 500,
             contentType: 'text/plain',
