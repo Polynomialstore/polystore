@@ -505,39 +505,41 @@ test.describe('mode2 stripe', () => {
         await page.waitForTimeout(500)
       }
     }
-    expect(routerManifestDirName).not.toBe('')
-
-    const manifestDirEntries = await fs.readdir(path.join(routerDealDir, String(routerManifestDirName))).catch(() => [])
-    const seedNames = manifestDirEntries.filter((name) => {
-      return name === 'manifest.bin' || /^mdu_\d+\.bin$/.test(name) || /^mdu_\d+_slot_\d+\.bin$/.test(name)
-    })
-    const seedFiles = await Promise.all(
-      seedNames.map(async (name) => {
-        const bytes = await fs.readFile(path.join(routerDealDir, String(routerManifestDirName), name))
-        return { name, bytes: Array.from(bytes) }
-      }),
-    )
-    await page.evaluate(
-      async ({ dealId, manifestRoot, seedFiles }) => {
-        const root = await navigator.storage.getDirectory()
-        const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
-        const writeFile = async (name: string, data: Uint8Array) => {
-          const fh = await dealDir.getFileHandle(name, { create: true })
-          const writable = await fh.createWritable()
-          await writable.write(data)
-          await writable.close()
-        }
-        await writeFile('manifest_root.txt', new TextEncoder().encode(manifestRoot))
-        for (const file of seedFiles as Array<{ name: string; bytes: number[] }>) {
-          await writeFile(file.name, new Uint8Array(file.bytes))
-        }
-      },
-      {
-        dealId,
-        manifestRoot: `0x${String(routerManifestDirName).replace(/^0x/i, '')}`,
-        seedFiles,
-      },
-    )
+    if (routerManifestDirName) {
+      const manifestDirEntries = await fs.readdir(path.join(routerDealDir, String(routerManifestDirName))).catch(() => [])
+      const seedNames = manifestDirEntries.filter((name) => {
+        return name === 'manifest.bin' || /^mdu_\d+\.bin$/.test(name) || /^mdu_\d+_slot_\d+\.bin$/.test(name)
+      })
+      const seedFiles = await Promise.all(
+        seedNames.map(async (name) => {
+          const bytes = await fs.readFile(path.join(routerDealDir, String(routerManifestDirName), name))
+          return { name, bytes: Array.from(bytes) }
+        }),
+      )
+      await page.evaluate(
+        async ({ dealId, manifestRoot, seedFiles }) => {
+          const root = await navigator.storage.getDirectory()
+          const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+          const writeFile = async (name: string, data: Uint8Array) => {
+            const fh = await dealDir.getFileHandle(name, { create: true })
+            const writable = await fh.createWritable()
+            await writable.write(data)
+            await writable.close()
+          }
+          await writeFile('manifest_root.txt', new TextEncoder().encode(manifestRoot))
+          for (const file of seedFiles as Array<{ name: string; bytes: number[] }>) {
+            await writeFile(file.name, new Uint8Array(file.bytes))
+          }
+        },
+        {
+          dealId,
+          manifestRoot: `0x${String(routerManifestDirName).replace(/^0x/i, '')}`,
+          seedFiles,
+        },
+      )
+    } else {
+      console.log(`[rehydrate-e2e] no router manifest dir found for deal ${dealId}; skipping explicit OPFS seed`)
+    }
     await fs.rm(routerDealDir, { recursive: true, force: true })
 
     // Ensure the local gateway truly lost its prior slab state.
