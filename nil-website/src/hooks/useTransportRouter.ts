@@ -486,17 +486,18 @@ export function useTransportRouter() {
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
-    const buildUrl = (base: string) => {
+    const buildUrl = (base: string, deputy: boolean) => {
       const q = new URLSearchParams({
         deal_id: req.dealId,
         owner: req.owner,
         file_path: req.filePath,
       })
+      if (deputy) q.set('deputy', '1')
       return `${normalizeBase(base)}/gateway/fetch/${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
     }
 
-    const executeFetch = async (base: string, signal: AbortSignal) => {
-      const res = await fetch(buildUrl(base), {
+    const executeFetch = async (base: string, signal: AbortSignal, deputy: boolean) => {
+      const res = await fetch(buildUrl(base, deputy), {
         method: 'GET',
         signal,
         headers: {
@@ -518,15 +519,25 @@ export function useTransportRouter() {
         throw new TransportError(txt || `fetch failed (${res.status})`, classifyStatus(res.status), res.status)
       }
 
-      const provider = String(res.headers.get('X-Nil-Provider') || '')
+      const deputyHeader = String(res.headers.get('X-Nil-Deputy') || '').trim().toLowerCase()
+      const deputyServed = deputy && (deputyHeader === '1' || deputyHeader === 'true' || deputyHeader === 'yes')
+
+      let provider = String(res.headers.get('X-Nil-Provider') || '').trim()
+      if (!provider && deputyServed && req.expectedProvider) {
+        provider = req.expectedProvider
+      }
       if (!provider) {
         throw new TransportError('missing X-Nil-Provider', 'invalid_response')
       }
       if (req.expectedProvider && provider !== req.expectedProvider) {
-        throw new TransportError(
-          `provider mismatch: expected ${req.expectedProvider} got ${provider}`,
-          'provider_mismatch',
-        )
+        if (deputyServed) {
+          provider = req.expectedProvider
+        } else {
+          throw new TransportError(
+            `provider mismatch: expected ${req.expectedProvider} got ${provider}`,
+            'provider_mismatch',
+          )
+        }
       }
 
       return { bytes: new Uint8Array(await res.arrayBuffer()), provider }
@@ -537,7 +548,7 @@ export function useTransportRouter() {
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
-            execute: async (signal: AbortSignal) => executeFetch(appConfig.gatewayBase, signal),
+            execute: async (signal: AbortSignal) => executeFetch(appConfig.gatewayBase, signal, true),
           }]
         : []),
     ]
@@ -546,7 +557,7 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
-        execute: async (signal) => executeFetch(directBase, signal),
+        execute: async (signal) => executeFetch(directBase, signal, false),
       })
     }
     if (directP2p && appConfig.p2pEnabled) {

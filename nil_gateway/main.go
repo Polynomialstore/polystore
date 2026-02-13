@@ -3192,13 +3192,25 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Resolve Provider Address for the Header (for Client-Side Signing)
-	providerAddr := cachedProviderAddress(r.Context())
-	if strings.TrimSpace(providerAddr) == "" {
+	// Resolve Provider Address for the Header (for Client-Side Signing).
+	// In deputy mode, a gateway may serve cached bytes on behalf of the assigned provider
+	// even when no local provider key exists.
+	providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
+	if providerAddr == "" && allowDeputy {
+		switch {
+		case isOnchainSession && onchainSession != nil && strings.TrimSpace(onchainSession.Provider) != "":
+			providerAddr = strings.TrimSpace(onchainSession.Provider)
+			w.Header().Set("X-Nil-Deputy", "1")
+		case isDownloadSession && !isOnchainSession && strings.TrimSpace(dlSession.Provider) != "":
+			providerAddr = strings.TrimSpace(dlSession.Provider)
+			w.Header().Set("X-Nil-Deputy", "1")
+		}
+	}
+	if providerAddr == "" {
 		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
 		return
 	}
-	if isDownloadSession && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
+	if isDownloadSession && !allowDeputy && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
 		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
 		return
 	}

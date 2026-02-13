@@ -190,6 +190,13 @@ export function Dashboard() {
       await refreshWalletNetwork()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
+      if (e instanceof Error && e.message === 'GENESIS_MISMATCH_AFTER_SWITCH') {
+        setStatusTone('error')
+        setStatusMsg(
+          `MetaMask is still using a different RPC for chain ${appConfig.chainId}. Open MetaMask > Networks > NilStore Devnet and set RPC URL to ${appConfig.evmRpc}, or remove/re-add the network.`,
+        )
+        return
+      }
       alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
     }
   }, [refreshWalletNetwork, switchNetwork])

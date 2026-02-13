@@ -14,6 +14,14 @@ type ProviderRpcError = {
   message?: string
 }
 
+type RpcBlock = {
+  hash?: unknown
+}
+
+type RpcEnvelope = {
+  result?: unknown
+}
+
 function getEthereumProvider(): EthereumProvider | null {
   if (typeof window === 'undefined') return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +46,50 @@ function isAlreadyExistsError(error: unknown): boolean {
   if (!e) return false
   const message = String(e.message ?? '').toLowerCase()
   return message.includes('already exists') || message.includes('may not specify default chain')
+}
+
+function normalizeHex(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed.startsWith('0x')) return ''
+  return trimmed
+}
+
+async function fetchExpectedGenesisHash(): Promise<string | null> {
+  try {
+    const res = await fetch(appConfig.evmRpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getBlockByNumber',
+        params: ['0x0', false],
+        id: 1,
+      }),
+    })
+    if (!res.ok) return null
+    const json = (await res.json().catch(() => null)) as RpcEnvelope | null
+    const block = (json?.result ?? null) as RpcBlock | null
+    const hash = normalizeHex(block?.hash)
+    return hash || null
+  } catch {
+    return null
+  }
+}
+
+async function fetchWalletGenesisHash(ethereum: EthereumProvider): Promise<string | null> {
+  if (!ethereum?.request) return null
+  try {
+    const raw = await ethereum.request({
+      method: 'eth_getBlockByNumber',
+      params: ['0x0', false],
+    })
+    const block = (raw ?? null) as RpcBlock | null
+    const hash = normalizeHex(block?.hash)
+    return hash || null
+  } catch {
+    return null
+  }
 }
 
 export function useNetwork() {
@@ -74,6 +126,8 @@ export function useNetwork() {
   const switchNetwork = async (options?: SwitchNetworkOptions) => {
     const forceAdd = Boolean(options?.forceAdd)
     try {
+      const ethereum = getEthereumProvider()
+      if (!ethereum?.request) throw new Error('No crypto wallet found')
       if (forceAdd) {
         try {
           await addChain()
@@ -88,6 +142,16 @@ export function useNetwork() {
       } catch {
         // Non-fatal: wallet may already be on target chain and wagmi can no-op/error.
       }
+
+      if (forceAdd) {
+        const [expectedGenesis, walletGenesis] = await Promise.all([
+          fetchExpectedGenesisHash(),
+          fetchWalletGenesisHash(ethereum),
+        ])
+        if (expectedGenesis && walletGenesis && expectedGenesis !== walletGenesis) {
+          throw new Error('GENESIS_MISMATCH_AFTER_SWITCH')
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('Failed to switch network:', e)
@@ -100,6 +164,18 @@ export function useNetwork() {
                await switchChainAsync({ chainId: appConfig.chainId })
              } catch {
                // Non-fatal wagmi sync error.
+             }
+
+             if (forceAdd) {
+               const ethereum = getEthereumProvider()
+               if (!ethereum?.request) throw new Error('No crypto wallet found')
+               const [expectedGenesis, walletGenesis] = await Promise.all([
+                 fetchExpectedGenesisHash(),
+                 fetchWalletGenesisHash(ethereum),
+               ])
+               if (expectedGenesis && walletGenesis && expectedGenesis !== walletGenesis) {
+                 throw new Error('GENESIS_MISMATCH_AFTER_SWITCH')
+               }
              }
          } catch (addError) {
              console.error('Failed to add network:', addError)
