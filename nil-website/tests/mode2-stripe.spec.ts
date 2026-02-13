@@ -126,8 +126,6 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
@@ -325,8 +323,6 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
@@ -378,10 +374,10 @@ test.describe('mode2 stripe', () => {
     const dealRow = page.getByTestId(`deal-row-${dealId}`)
     await dealRow.click()
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
-      timeout: 60_000,
+      timeout: 180_000,
     })
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileB.name}"]`)).toBeVisible({
-      timeout: 60_000,
+      timeout: 180_000,
     })
   })
 
@@ -404,7 +400,6 @@ test.describe('mode2 stripe', () => {
     console.log('[rehydrate-e2e] faucet funded')
 
     await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''

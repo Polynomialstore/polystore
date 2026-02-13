@@ -166,9 +166,14 @@ impl SidecarManager {
             if is_resource_ready(&nil_cli_path) {
                 cmd.env("NIL_CLI_BIN", &nil_cli_path);
             }
-            let trusted_setup_path = resource_dir.join("trusted_setup.txt");
-            if is_resource_ready(&trusted_setup_path) {
-                cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+            for trusted_setup_path in [
+                resource_dir.join("bin").join("trusted_setup.txt"),
+                resource_dir.join("trusted_setup.txt"),
+            ] {
+                if is_resource_ready(&trusted_setup_path) {
+                    cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+                    break;
+                }
             }
             configure_sidecar_runtime_env(&mut cmd, &resource_dir);
         }
@@ -464,10 +469,16 @@ fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
         cmd.env("NIL_CLI_BIN", &nil_cli_path);
     }
 
-    if let Some(root_dir) = bin_dir.parent() {
-        let trusted_setup_path = root_dir.join("trusted_setup.txt");
+    for trusted_setup_path in {
+        let mut candidates = vec![bin_dir.join("trusted_setup.txt")];
+        if let Some(root_dir) = bin_dir.parent() {
+            candidates.push(root_dir.join("trusted_setup.txt"));
+        }
+        candidates
+    } {
         if is_resource_ready(&trusted_setup_path) {
             cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+            break;
         }
     }
 
