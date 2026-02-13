@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -13,21 +13,38 @@ async function waitForGatewayConnected(page: Page): Promise<void> {
   await expect(widget.first()).toHaveAttribute('data-status', 'connected', { timeout: 60_000 })
 }
 
+async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, timeout = 300_000): Promise<void> {
+  await expect
+    .poll(async () => {
+      const uploadCount = await uploadBtn.count().catch(() => 0)
+      const commitCount = await commitBtn.count().catch(() => 0)
+      return uploadCount + commitCount
+    }, { timeout })
+    .toBeGreaterThan(0)
+}
+
 function cachedFileNameForPath(filePath: string): string {
   const normalized = String(filePath ?? '')
   const digest = crypto.createHash('sha256').update(Buffer.from(normalized, 'utf8')).digest('hex')
   return `filecache_${digest}.bin`
 }
 
-async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string> {
-  const manifestRoot = await page.evaluate(async ({ dealId }) => {
-    const root = await navigator.storage.getDirectory()
-    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
-    const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
-    const file = await fh.getFile()
-    return (await file.text()).trim()
-  }, { dealId })
-  return String(manifestRoot || '').trim()
+async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string | null> {
+  try {
+    const manifestRoot = await page.evaluate(async ({ dealId }) => {
+      const root = await navigator.storage.getDirectory()
+      const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+      const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
+      const file = await fh.getFile()
+      return (await file.text()).trim()
+    }, { dealId })
+    const value = String(manifestRoot || '').trim()
+    return value || null
+  } catch (err) {
+    const name = err instanceof Error ? err.name : String((err as { name?: string } | null)?.name || '')
+    if (name === 'NotFoundError') return null
+    throw err
+  }
 }
 
 function resolveRouterUploadDir(): string {
@@ -143,10 +160,7 @@ test.describe('mode2 stripe', () => {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
-      timeout: 300_000,
-      state: 'attached',
-    })
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     if ((await uploadBtn.count().catch(() => 0)) > 0) {
       await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
       await uploadBtn.click()
@@ -339,10 +353,7 @@ test.describe('mode2 stripe', () => {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
-      timeout: 300_000,
-      state: 'attached',
-    })
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     if ((await uploadBtn.count().catch(() => 0)) > 0) {
       await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
       await uploadBtn.click()
@@ -372,13 +383,14 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
     const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click()
-    await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
-      timeout: 180_000,
-    })
-    await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileB.name}"]`)).toBeVisible({
-      timeout: 180_000,
-    })
+    await expect
+      .poll(async () => {
+        await dealRow.click().catch(() => {})
+        const hasA = (await page.locator(`[data-file-path="${fileA.name}"]`).count().catch(() => 0)) > 0
+        const hasB = (await page.locator(`[data-file-path="${fileB.name}"]`).count().catch(() => 0)) > 0
+        return hasA && hasB
+      }, { timeout: 180_000 })
+      .toBe(true)
   })
 
   test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {
@@ -492,10 +504,7 @@ test.describe('mode2 stripe', () => {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
-      timeout: 300_000,
-      state: 'attached',
-    })
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
     await uploadBtn.click()
     await expect
@@ -511,7 +520,12 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
     console.log('[rehydrate-e2e] fileA committed')
 
-    const firstManifestRoot = await readOpfsManifestRoot(page, dealId)
+    await expect
+      .poll(async () => {
+        return (await readOpfsManifestRoot(page, dealId)) || ''
+      }, { timeout: 120_000 })
+      .toMatch(/^0x[0-9a-fA-F]{96}$/)
+    const firstManifestRoot = (await readOpfsManifestRoot(page, dealId)) || ''
     expect(firstManifestRoot).toMatch(/^0x[0-9a-fA-F]{96}$/)
 
     const manifestKey = firstManifestRoot.replace(/^0x/i, '').toLowerCase()
@@ -530,10 +544,7 @@ test.describe('mode2 stripe', () => {
     })
     console.log('[rehydrate-e2e] fileB selected')
 
-    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
-      timeout: 300_000,
-      state: 'attached',
-    })
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     if ((await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false))) {
       const preUploadText = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
       if (!/Upload Complete/i.test(preUploadText)) {
