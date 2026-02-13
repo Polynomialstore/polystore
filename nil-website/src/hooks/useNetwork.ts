@@ -9,11 +9,35 @@ type SwitchNetworkOptions = {
   forceAdd?: boolean
 }
 
+type ProviderRpcError = {
+  code?: number
+  message?: string
+}
+
 function getEthereumProvider(): EthereumProvider | null {
   if (typeof window === 'undefined') return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ethereum = (window as any).ethereum as EthereumProvider | undefined
   return ethereum ?? null
+}
+
+function toChainHex(chainId: number): string {
+  return `0x${chainId.toString(16)}`
+}
+
+function isUnknownChainError(error: unknown): boolean {
+  const e = error as ProviderRpcError | undefined
+  if (!e) return false
+  if (e.code === 4902 || e.code === -32603) return true
+  const message = String(e.message ?? '')
+  return message.includes('Unrecognized chain ID') || message.includes('unknown chain')
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  const e = error as ProviderRpcError | undefined
+  if (!e) return false
+  const message = String(e.message ?? '').toLowerCase()
+  return message.includes('already exists') || message.includes('may not specify default chain')
 }
 
 export function useNetwork() {
@@ -25,7 +49,7 @@ export function useNetwork() {
     await ethereum.request({
       method: 'wallet_addEthereumChain',
       params: [{
-        chainId: `0x${appConfig.chainId.toString(16)}`,
+        chainId: toChainHex(appConfig.chainId),
         chainName: 'NilStore Devnet',
         nativeCurrency: {
           name: 'NIL',
@@ -38,24 +62,45 @@ export function useNetwork() {
     })
   }
 
+  const switchWithProvider = async () => {
+    const ethereum = getEthereumProvider()
+    if (!ethereum?.request) throw new Error('No crypto wallet found')
+    await ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: toChainHex(appConfig.chainId) }],
+    })
+  }
+
   const switchNetwork = async (options?: SwitchNetworkOptions) => {
     const forceAdd = Boolean(options?.forceAdd)
     try {
       if (forceAdd) {
-        await addChain()
+        try {
+          await addChain()
+        } catch (e) {
+          if (!isAlreadyExistsError(e)) throw e
+        }
       }
-      await switchChainAsync({ chainId: appConfig.chainId })
+      await switchWithProvider()
+      // Keep wagmi state synchronized with wallet chain state.
+      try {
+        await switchChainAsync({ chainId: appConfig.chainId })
+      } catch {
+        // Non-fatal: wallet may already be on target chain and wagmi can no-op/error.
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('Failed to switch network:', e)
       
-      // Error code 4902 means the chain has not been added to MetaMask.
-      // -32603 is an Internal Error that sometimes wraps 4902 in some wallet versions.
-      if (e.code === 4902 || e.message?.includes('Unrecognized chain ID') || e.code === -32603) {
+      if (isUnknownChainError(e)) {
          try {
              await addChain()
-             // Try switching again after adding
-             await switchChainAsync({ chainId: appConfig.chainId })
+             await switchWithProvider()
+             try {
+               await switchChainAsync({ chainId: appConfig.chainId })
+             } catch {
+               // Non-fatal wagmi sync error.
+             }
          } catch (addError) {
              console.error('Failed to add network:', addError)
              throw addError
