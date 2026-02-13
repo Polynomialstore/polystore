@@ -269,8 +269,13 @@ export async function gatewayListFiles(
 
   return files
     .filter((f): f is Record<string, unknown> => isRecord(f) && typeof f['path'] === 'string')
-    .map((f) => ({
-      ...(f as NilfsFileEntry),
+    .map((f): NilfsFileEntry => ({
+      path: String(f['path']),
+      size_bytes: asNumber(f['size_bytes']) ?? 0,
+      logical_size_bytes: asNumber(f['logical_size_bytes']),
+      content_encoding: asString(f['content_encoding']),
+      start_offset: asNumber(f['start_offset']) ?? 0,
+      flags: asNumber(f['flags']) ?? 0,
       cache_present: f['cache_present'] === true,
     }))
 }

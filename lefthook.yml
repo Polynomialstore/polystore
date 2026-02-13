@@ -1,11 +1,11 @@
 pre-commit:
+  files: git ls-files nil-website
   commands:
     lint:
-      run: npm run lint
-      root: nil-website
+      run: cd nil-website && npm run lint
 
 pre-push:
+  files: git ls-files nil-website
   commands:
     build:
-      run: npm run build
-      root: nil-website
+      run: cd nil-website && npm run build
