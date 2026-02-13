@@ -33,7 +33,7 @@ async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string 
   try {
     const manifestRoot = await page.evaluate(async ({ dealId }) => {
       const root = await navigator.storage.getDirectory()
-      const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
+      const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
       const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
       const file = await fh.getFile()
       return (await file.text()).trim()
@@ -42,7 +42,8 @@ async function readOpfsManifestRoot(page: Page, dealId: string): Promise<string 
     return value || null
   } catch (err) {
     const name = err instanceof Error ? err.name : String((err as { name?: string } | null)?.name || '')
-    if (name === 'NotFoundError') return null
+    const message = err instanceof Error ? err.message : String(err || '')
+    if (name === 'NotFoundError' || message.includes('NotFoundError')) return null
     throw err
   }
 }
