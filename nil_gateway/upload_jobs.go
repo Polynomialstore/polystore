@@ -68,6 +68,11 @@ type uploadJob struct {
 
 	metricsMS     map[string]uint64
 	metricsCounts map[string]uint64
+
+	lastProgressLogAt    time.Time
+	lastProgressLogDone  uint64
+	lastHeartbeatLogAt   time.Time
+	lastHeartbeatStepsAt uint64
 }
 
 type uploadJobResponse struct {
@@ -195,12 +200,27 @@ func (j *uploadJob) setPhase(phase uploadJobPhase, message string) {
 		return
 	}
 	j.mu.Lock()
+	previous := j.phase
 	j.phase = phase
 	if strings.TrimSpace(message) != "" {
 		j.message = message
 	}
 	j.touchLocked()
+	phaseChanged := previous != phase
+	phaseValue := j.phase
+	msgValue := j.message
+	statusValue := j.status
 	j.mu.Unlock()
+	if phaseChanged {
+		log.Printf(
+			"GatewayUpload phase: deal_id=%d upload_id=%s status=%s phase=%s message=%s",
+			j.dealID,
+			j.uploadID,
+			statusValue,
+			phaseValue,
+			msgValue,
+		)
+	}
 }
 
 func (j *uploadJob) setFile(name string, bytesTotal uint64) {
@@ -241,6 +261,7 @@ func (j *uploadJob) setSteps(done uint64, total uint64) {
 		return
 	}
 	j.mu.Lock()
+	prevDone := j.stepsDone
 	if total > 0 {
 		j.stepsTotal = total
 	}
@@ -252,7 +273,46 @@ func (j *uploadJob) setSteps(done uint64, total uint64) {
 		}
 	}
 	j.touchLocked()
+	currentDone := j.stepsDone
+	currentTotal := j.stepsTotal
+	currentPhase := j.phase
+	currentStatus := j.status
+	shouldLogProgress := false
+	now := time.Now()
+	if currentTotal > 0 && currentDone >= prevDone {
+		stepBucket := currentTotal / 20 // 5% increments
+		if stepBucket == 0 {
+			stepBucket = 1
+		}
+		progressAdvanced := currentDone > j.lastProgressLogDone
+		bucketReached := progressAdvanced && (currentDone-j.lastProgressLogDone >= stepBucket)
+		firstTick := j.lastProgressLogDone == 0 && currentDone > 0
+		completed := currentDone == currentTotal
+		timed := progressAdvanced && now.Sub(j.lastProgressLogAt) >= 10*time.Second
+		phaseAllows := currentPhase == uploadJobPhaseEncoding || currentPhase == uploadJobPhaseUploading
+		if phaseAllows && (firstTick || bucketReached || completed || timed) {
+			j.lastProgressLogAt = now
+			j.lastProgressLogDone = currentDone
+			shouldLogProgress = true
+		}
+	}
 	j.mu.Unlock()
+	if shouldLogProgress {
+		pct := float64(0)
+		if currentTotal > 0 {
+			pct = (float64(currentDone) / float64(currentTotal)) * 100
+		}
+		log.Printf(
+			"GatewayUpload progress: deal_id=%d upload_id=%s status=%s phase=%s steps=%d/%d (%.1f%%)",
+			j.dealID,
+			j.uploadID,
+			currentStatus,
+			currentPhase,
+			currentDone,
+			currentTotal,
+			pct,
+		)
+	}
 }
 
 func (j *uploadJob) setResult(res uploadJobResult) {
@@ -310,6 +370,59 @@ func (j *uploadJob) setMetrics(metricsMS map[string]uint64, counts map[string]ui
 	j.mu.Unlock()
 }
 
+func (j *uploadJob) maybeLogHeartbeat() {
+	if j == nil {
+		return
+	}
+	j.mu.Lock()
+	if time.Since(j.lastHeartbeatLogAt) < 15*time.Second {
+		j.mu.Unlock()
+		return
+	}
+	j.lastHeartbeatLogAt = time.Now()
+	dealID := j.dealID
+	uploadID := j.uploadID
+	status := j.status
+	phase := j.phase
+	message := j.message
+	stepsDone := j.stepsDone
+	stepsTotal := j.stepsTotal
+	bytesDone := j.bytesDone
+	bytesTotal := j.bytesTotal
+	updatedAt := j.updatedAt
+	j.lastHeartbeatStepsAt = stepsDone
+	j.mu.Unlock()
+
+	age := time.Since(updatedAt).Round(time.Millisecond)
+	if stepsTotal > 0 {
+		log.Printf(
+			"GatewayUpload heartbeat: deal_id=%d upload_id=%s status=%s phase=%s steps=%d/%d message=%s updated_ago=%s",
+			dealID,
+			uploadID,
+			status,
+			phase,
+			stepsDone,
+			stepsTotal,
+			message,
+			age,
+		)
+		return
+	}
+	if bytesTotal > 0 {
+		log.Printf(
+			"GatewayUpload heartbeat: deal_id=%d upload_id=%s status=%s phase=%s bytes=%d/%d message=%s updated_ago=%s",
+			dealID,
+			uploadID,
+			status,
+			phase,
+			bytesDone,
+			bytesTotal,
+			message,
+			age,
+		)
+	}
+}
+
 type uploadJobCtxKey struct{}
 
 func withUploadJob(ctx context.Context, job *uploadJob) context.Context {
@@ -356,6 +469,7 @@ func GatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "upload not found", "")
 		return
 	}
+	job.maybeLogHeartbeat()
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(job.snapshot())

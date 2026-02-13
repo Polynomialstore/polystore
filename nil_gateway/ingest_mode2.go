@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -1566,6 +1567,18 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	uploadParallelism := mode2UploadParallelism(stripe.slotCount)
+	log.Printf(
+		"GatewayUpload mode2 upload plan: deal_id=%d providers=%d targets=%d user_mdus=%d witness_mdus=%d total_tasks=%d parallelism=%d timeout=%s sparse=%t",
+		dealID,
+		len(metadataProviders),
+		len(targets),
+		userMdus,
+		witnessCount,
+		len(tasks),
+		uploadParallelism,
+		mode2UploadTaskTimeout.String(),
+		sparseUploads,
+	)
 	uploadStarted := time.Now()
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(uploadParallelism)
