@@ -35,6 +35,76 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
+func parseUintFromJSON(raw any) (uint64, bool) {
+	switch v := raw.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		if v < 0 || v > float64(^uint64(0)) || v != float64(uint64(v)) {
+			return 0, false
+		}
+		return uint64(v), true
+	case float32:
+		if v < 0 || v > float32(^uint64(0)) || v != float32(uint64(v)) {
+			return 0, false
+		}
+		return uint64(v), true
+	case int:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int8:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int16:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int32:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int64:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case uint:
+		return uint64(v), true
+	case uint8:
+		return uint64(v), true
+	case uint16:
+		return uint64(v), true
+	case uint32:
+		return uint64(v), true
+	case uint64:
+		return v, true
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return uint64(n), true
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, false
+		}
+		n, err := strconv.ParseUint(trimmed, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	default:
+		return 0, false
+	}
+}
+
 // Configurable paths & chain settings (overridable via env).
 var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
@@ -1786,6 +1856,22 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intent must include creator_evm", http.StatusBadRequest)
 		return
 	}
+	// Backward compatibility: newer web clients emit duration_seconds while
+	// on-chain message decoding still expects duration_blocks today.
+	if _, hasLegacy := req.Intent["duration_blocks"]; !hasLegacy {
+		if rawDurationSeconds, hasDurationSeconds := req.Intent["duration_seconds"]; hasDurationSeconds {
+			if durationSeconds, okDurationSeconds := parseUintFromJSON(rawDurationSeconds); okDurationSeconds {
+				req.Intent["duration_blocks"] = durationSeconds
+			}
+		}
+	}
+	if rawDurationBlocks, hasDurationBlocks := req.Intent["duration_blocks"]; hasDurationBlocks {
+		if _, ok := parseUintFromJSON(rawDurationBlocks); !ok {
+			http.Error(w, "duration blocks must be a valid integer", http.StatusBadRequest)
+			return
+		}
+	}
+
 	if creatorNil, err := evmHexToNilAddress(rawCreator); err == nil {
 		// Only hit the faucet if the creator has no on-chain balance.
 		// This avoids bumping the faucet key sequence right before we submit
@@ -3798,10 +3884,10 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
 		length, flags := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		entry := nilfsFileEntry{
-			Path:        name,
-			SizeBytes:   length,
-			StartOffset: rec.StartOffset,
-			Flags:       flags,
+			Path:         name,
+			SizeBytes:    length,
+			StartOffset:  rec.StartOffset,
+			Flags:        flags,
 			CachePresent: true,
 		}
 		if hdr, ok, err := readNilceHeaderForNilfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
