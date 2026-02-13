@@ -440,17 +440,20 @@ func mode2UploadParallelism(slotCount uint64) int {
 			return parsed
 		}
 	}
-	// Auto-tune by slot count so default 2+1 uploads run with 3-way concurrency
-	// and wider RS profiles can fan out, while still capping pressure.
-	parallelism := int(slotCount)
-	if parallelism <= 0 {
-		parallelism = 1
+	// Auto-tune by slot count with extra fanout so local RS(2,1) uploads can keep
+	// providers saturated while preserving a hard cap for stability.
+	parallelism := int(slotCount) * 2
+	if parallelism < 4 {
+		parallelism = 4
 	}
-	if parallelism > 16 {
-		parallelism = 16
+	if parallelism > 32 {
+		parallelism = 32
 	}
 	if n := runtime.GOMAXPROCS(0); n > 0 {
-		cpuCap := n * 2
+		cpuCap := n * 4
+		if cpuCap < 4 {
+			cpuCap = 4
+		}
 		if parallelism > cpuCap {
 			parallelism = cpuCap
 		}
@@ -536,20 +539,34 @@ func mode2SparsePayloadLength(path string, maxBytes int64) (fullSize int64, send
 		return fullSize, fullSize, nil
 	}
 
-	buf, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return 0, 0, err
 	}
-	send := len(buf)
-	for send > 0 && buf[send-1] == 0 {
-		send--
+	defer f.Close()
+
+	const scanChunk = 64 << 10
+	buf := make([]byte, scanChunk)
+	remaining := fullSize
+	for remaining > 0 {
+		readSize := scanChunk
+		if remaining < int64(readSize) {
+			readSize = int(remaining)
+		}
+		offset := remaining - int64(readSize)
+		n, readErr := f.ReadAt(buf[:readSize], offset)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return 0, 0, readErr
+		}
+		for i := n - 1; i >= 0; i-- {
+			if buf[i] != 0 {
+				return fullSize, offset + int64(i+1), nil
+			}
+		}
+		remaining = offset
 	}
 	// Preserve a non-empty upload body so existing transport/server logic keeps working.
-	if send == 0 && fullSize > 0 {
-		send = 1
-	}
-
-	return fullSize, int64(send), nil
+	return fullSize, 1, nil
 }
 
 type limitedReadCloser struct {
@@ -1245,10 +1262,38 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	var uploaded atomic.Uint64
-	bump := func() {
+	var uploadedBytes atomic.Uint64
+	var inFlight atomic.Int64
+	uploadStarted := time.Now()
+	uploadRateMiBs := func(doneBytes uint64) float64 {
+		elapsed := time.Since(uploadStarted)
+		if elapsed <= 0 {
+			return 0
+		}
+		return (float64(doneBytes) / (1024 * 1024)) / elapsed.Seconds()
+	}
+	bump := func(sizeBytes int64) {
+		if sizeBytes > 0 {
+			uploadedBytes.Add(uint64(sizeBytes))
+		}
 		next := uploaded.Add(1)
 		if job != nil {
 			job.setSteps(next, totalUploads)
+			if totalUploads > 0 {
+				bucket := totalUploads / 20
+				if bucket == 0 {
+					bucket = 1
+				}
+				if next == 1 || next == totalUploads || next%bucket == 0 {
+					msg := fmt.Sprintf(
+						"Gateway Mode 2: uploading to providers... (%d/%d artifacts, %.2f MiB/s)",
+						next,
+						totalUploads,
+						uploadRateMiBs(uploadedBytes.Load()),
+					)
+					job.setPhase(uploadJobPhaseUploading, msg)
+				}
+			}
 		}
 	}
 
@@ -1313,6 +1358,7 @@ func mode2UploadArtifactsToProviders(
 		url          string
 		path         string
 		sizeBytes    int64
+		sendBytes    int64
 		maxBytes     int64
 		dealID       string
 		manifestRoot string
@@ -1367,12 +1413,18 @@ func mode2UploadArtifactsToProviders(
 	var retries atomic.Uint64
 
 	uploadBlob := func(ctx context.Context, task uploadTask) error {
-		fullSize, sendSize, err := mode2SparsePayloadLength(task.path, task.maxBytes)
-		if err != nil {
-			return err
+		fullSize := task.sizeBytes
+		if fullSize <= 0 {
+			fullSize = task.sendBytes
 		}
 		const maxAttempts = 3
-		currentSendSize := sendSize
+		currentSendSize := task.sendBytes
+		if currentSendSize <= 0 || currentSendSize > fullSize {
+			currentSendSize = fullSize
+		}
+		if fullSize <= 0 {
+			return fmt.Errorf("invalid artifact size for %s", task.path)
+		}
 		targetKey := mode2UploadTargetMetricKey(task.url)
 		targetDurationLabel := "mode2_upload_target_" + targetKey + "_ms"
 		targetRequestsLabel := "mode2_upload_target_" + targetKey + "_requests"
@@ -1478,6 +1530,16 @@ func mode2UploadArtifactsToProviders(
 			if attempt == maxAttempts || !isRetryableUploadErr(err) {
 				break
 			}
+			log.Printf(
+				"GatewayUpload mode2 retry: deal_id=%s target=%s mdu=%s slot=%s attempt=%d/%d err=%v",
+				task.dealID,
+				task.url,
+				task.mduIndex,
+				task.slot,
+				attempt,
+				maxAttempts,
+				err,
+			)
 			retries.Add(1)
 			backoff := time.Duration(attempt*attempt) * 250 * time.Millisecond
 			timer := time.NewTimer(backoff)
@@ -1488,22 +1550,46 @@ func mode2UploadArtifactsToProviders(
 			case <-timer.C:
 			}
 		}
-		return fmt.Errorf("upload to %s failed after retries: %w", task.url, lastErr)
+		return fmt.Errorf("upload to %s (mdu=%s slot=%s) failed after retries: %w", task.url, task.mduIndex, task.slot, lastErr)
 	}
 
 	taskBuildStarted := time.Now()
-	fileSizeCache := make(map[string]int64, totalUploads)
-	statSize := func(path string) (int64, error) {
-		if size, ok := fileSizeCache[path]; ok {
-			return size, nil
+	type artifactSizes struct {
+		full int64
+		send int64
+	}
+	fileSizeCache := make(map[string]artifactSizes, totalUploads)
+	statSizes := func(path string, maxBytes int64) (artifactSizes, error) {
+		if sizes, ok := fileSizeCache[path]; ok {
+			if maxBytes > 0 && sizes.full > maxBytes {
+				return artifactSizes{}, fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), sizes.full)
+			}
+			return sizes, nil
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return 0, err
+		sizes := artifactSizes{}
+		if sparseUploads {
+			full, send, err := mode2SparsePayloadLength(path, maxBytes)
+			if err != nil {
+				return artifactSizes{}, err
+			}
+			sizes.full = full
+			sizes.send = send
+		} else {
+			info, err := os.Stat(path)
+			if err != nil {
+				return artifactSizes{}, err
+			}
+			sizes.full = info.Size()
+			if maxBytes > 0 && sizes.full > maxBytes {
+				return artifactSizes{}, fmt.Errorf("artifact too large: %s (%d bytes)", filepath.Base(path), sizes.full)
+			}
+			sizes.send = sizes.full
 		}
-		size := info.Size()
-		fileSizeCache[path] = size
-		return size, nil
+		if sizes.send <= 0 && sizes.full > 0 {
+			sizes.send = 1
+		}
+		fileSizeCache[path] = sizes
+		return sizes, nil
 	}
 
 	tasks := make([]uploadTask, 0, totalUploads)
@@ -1513,7 +1599,7 @@ func mode2UploadArtifactsToProviders(
 	for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
 		mduIndexStr := strconv.FormatUint(mduIndex, 10)
 		artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-		sizeBytes, err := statSize(artifactPath)
+		sizes, err := statSizes(artifactPath, 10<<20)
 		if err != nil {
 			return err
 		}
@@ -1525,7 +1611,8 @@ func mode2UploadArtifactsToProviders(
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_mdu",
 				path:         artifactPath,
-				sizeBytes:    sizeBytes,
+				sizeBytes:    sizes.full,
+				sendBytes:    sizes.send,
 				maxBytes:     10 << 20,
 				dealID:       dealIDStr,
 				manifestRoot: manifestRootCanonical,
@@ -1535,7 +1622,7 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	manifestPath := filepath.Join(finalDir, "manifest.bin")
-	manifestSize, err := statSize(manifestPath)
+	manifestSizes, err := statSizes(manifestPath, 512<<10)
 	if err != nil {
 		return err
 	}
@@ -1547,7 +1634,8 @@ func mode2UploadArtifactsToProviders(
 		tasks = append(tasks, uploadTask{
 			url:          base + "/sp/upload_manifest",
 			path:         manifestPath,
-			sizeBytes:    manifestSize,
+			sizeBytes:    manifestSizes.full,
+			sendBytes:    manifestSizes.send,
 			maxBytes:     512 << 10,
 			dealID:       dealIDStr,
 			manifestRoot: manifestRootCanonical,
@@ -1566,14 +1654,15 @@ func mode2UploadArtifactsToProviders(
 			slabIndexStr := strconv.FormatUint(slabIndex, 10)
 			slotStr := strconv.FormatUint(slot, 10)
 			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot))
-			sizeBytes, err := statSize(artifactPath)
+			sizes, err := statSizes(artifactPath, 10<<20)
 			if err != nil {
 				return err
 			}
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_shard",
 				path:         artifactPath,
-				sizeBytes:    sizeBytes,
+				sizeBytes:    sizes.full,
+				sendBytes:    sizes.send,
 				maxBytes:     10 << 20,
 				dealID:       dealIDStr,
 				manifestRoot: manifestRootCanonical,
@@ -1599,7 +1688,54 @@ func mode2UploadArtifactsToProviders(
 		mode2UploadTaskTimeout.String(),
 		sparseUploads,
 	)
-	uploadStarted := time.Now()
+	progressCtx, cancelProgress := context.WithCancel(ctx)
+	defer cancelProgress()
+	go func() {
+		if totalUploads == 0 {
+			return
+		}
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		lastDone := uploaded.Load()
+		lastAdvanced := time.Now()
+		for {
+			select {
+			case <-progressCtx.Done():
+				return
+			case <-ticker.C:
+				done := uploaded.Load()
+				if done != lastDone {
+					lastDone = done
+					lastAdvanced = time.Now()
+					continue
+				}
+				active := inFlight.Load()
+				if active <= 0 || time.Since(lastAdvanced) < 10*time.Second {
+					continue
+				}
+				rate := uploadRateMiBs(uploadedBytes.Load())
+				msg := fmt.Sprintf(
+					"Gateway Mode 2: uploading to providers... (%d/%d artifacts, %.2f MiB/s, waiting on %d in-flight)",
+					done,
+					totalUploads,
+					rate,
+					active,
+				)
+				if job != nil {
+					job.setPhase(uploadJobPhaseUploading, msg)
+				}
+				log.Printf(
+					"GatewayUpload mode2 upload heartbeat: deal_id=%d tasks=%d/%d avg=%.2f MiB/s in_flight=%d stalled_for=%s",
+					dealID,
+					done,
+					totalUploads,
+					rate,
+					active,
+					time.Since(lastAdvanced).Round(time.Second),
+				)
+			}
+		}
+	}()
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(uploadParallelism)
 	var firstUploadErr error
@@ -1607,15 +1743,18 @@ func mode2UploadArtifactsToProviders(
 	for _, task := range tasks {
 		task := task
 		eg.Go(func() error {
+			inFlight.Add(1)
+			defer inFlight.Add(-1)
 			if err := uploadBlob(egctx, task); err != nil {
 				captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
 				return err
 			}
-			bump()
+			bump(task.sizeBytes)
 			return nil
 		})
 	}
 	if err := eg.Wait(); err != nil {
+		cancelProgress()
 		firstUploadErrMu.Lock()
 		errFromUpload := firstUploadErr
 		firstUploadErrMu.Unlock()
@@ -1627,6 +1766,7 @@ func mode2UploadArtifactsToProviders(
 		}
 		return fmt.Errorf("mode2 provider upload failed: %w", err)
 	}
+	cancelProgress()
 	if profile != nil {
 		profile.addDuration("mode2_upload_requests_ms", time.Since(uploadStarted))
 		profile.setCount("mode2_upload_parallelism", uint64(uploadParallelism))

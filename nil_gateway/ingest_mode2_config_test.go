@@ -10,8 +10,8 @@ func TestMode2UploadParallelism_DefaultAutotuned(t *testing.T) {
 	prev := runtime.GOMAXPROCS(2)
 	defer runtime.GOMAXPROCS(prev)
 	t.Setenv("NIL_MODE2_UPLOAD_PARALLELISM", "")
-	if got := mode2UploadParallelism(12); got != 4 {
-		t.Fatalf("default upload parallelism mismatch: got=%d want=4", got)
+	if got := mode2UploadParallelism(12); got != 8 {
+		t.Fatalf("default upload parallelism mismatch: got=%d want=8", got)
 	}
 }
 

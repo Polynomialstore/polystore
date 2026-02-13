@@ -533,11 +533,25 @@ init_chain() {
 
 start_chain() {
   banner "Starting nilchaind"
+  local grpc_flags=()
+  if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
+    grpc_flags+=(--grpc.enable=true)
+    if [ "${NIL_GRPC_WEB_ENABLE:-1}" = "1" ]; then
+      grpc_flags+=(--grpc-web.enable=true)
+    else
+      grpc_flags+=(--grpc-web.enable=false)
+    fi
+  else
+    # Keep local stacks resilient when port 9090 is already occupied by another
+    # service on a developer machine. gRPC is not required for browser/gateway e2e.
+    grpc_flags+=(--grpc.enable=false --grpc-web.enable=false)
+  fi
   nohup "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
     --api.enable \
+    "${grpc_flags[@]}" \
     >"$LOG_DIR/nilchaind.log" 2>&1 &
   echo $! >"$PID_DIR/nilchaind.pid"
   sleep 1
