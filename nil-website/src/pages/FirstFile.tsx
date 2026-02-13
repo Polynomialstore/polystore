@@ -192,7 +192,7 @@ export function FirstFile() {
     try {
       const res = await submitDeal({
         creator: address,
-        duration: Number(duration),
+        durationSeconds: Number(duration),
         initialEscrow,
         maxMonthlySpend,
         serviceHint: buildServiceHint('General', {}),
@@ -481,7 +481,7 @@ export function FirstFile() {
 
         <div className="grid md:grid-cols-3 gap-3 text-sm">
           <label className="block">
-            <div className="text-xs text-muted-foreground">Duration</div>
+            <div className="text-xs text-muted-foreground">Duration (seconds)</div>
             <input
               value={duration}
               onChange={(e) => setDuration(e.target.value)}

@@ -34,7 +34,7 @@ echo "=== 2. Creating Deal (Capacity) ==="
 # Note: Creator is faucet logic in Gateway, so we pass empty creator or dummy
 DEAL_RESP=$(timeout 10s curl -s -X POST http://localhost:8080/gateway/create-deal \
   -H "Content-Type: application/json" \
-  -d "{\"creator\":\"\", \"duration_blocks\":100, \"initial_escrow\":\"1000000\", \"max_monthly_spend\":\"500000\"}")
+  -d "{\"creator\":\"\", \"duration_seconds\":100, \"initial_escrow\":\"1000000\", \"max_monthly_spend\":\"500000\"}")
 echo "Create Deal Resp: $DEAL_RESP"
 TX_HASH=$(echo $DEAL_RESP | jq -r '.tx_hash')
 

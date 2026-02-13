@@ -21,7 +21,7 @@ function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T
 test('CreateDeal typed data hashes to chain digest', async () => {
   const intent = {
     creator_evm: TEST_ACCOUNT.address,
-    duration_blocks: 100,
+    duration_seconds: 100,
     service_hint: 'General',
     initial_escrow: '1000000',
     max_monthly_spend: '5000000',

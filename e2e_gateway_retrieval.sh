@@ -97,7 +97,7 @@ banner "Creating deal via GatewayCreateDeal"
 	CREATE_PAYLOAD="$(cat <<JSON
 	{
 	  "creator": "",
-	  "duration_blocks": 100,
+	  "duration_seconds": 100,
 	  "service_hint": "General",
 	  "initial_escrow": "1000000",
 	  "max_monthly_spend": "5000000"

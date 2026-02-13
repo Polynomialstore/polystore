@@ -47,7 +47,7 @@ var (
 	nodeAddr        = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
 	homeDir         = envDefault("NIL_HOME", "../_artifacts/nilchain_data")
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
-	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
+	defaultDuration = envDefault("NIL_DEFAULT_DEAL_DURATION_SECONDS", envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000"))
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
 	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
@@ -1562,6 +1562,7 @@ func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
 type createDealRequest struct {
 	Creator         string `json:"creator"`
 	DurationBlocks  uint64 `json:"duration_blocks"`
+	DurationSeconds uint64 `json:"duration_seconds"`
 	ServiceHint     string `json:"service_hint"`
 	InitialEscrow   string `json:"initial_escrow"`
 	MaxMonthlySpend string `json:"max_monthly_spend"`
@@ -1604,7 +1605,11 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	durationStr := strconv.FormatUint(req.DurationBlocks, 10)
+	requestedDuration := req.DurationBlocks
+	if req.DurationSeconds != 0 {
+		requestedDuration = req.DurationSeconds
+	}
+	durationStr := strconv.FormatUint(requestedDuration, 10)
 	if durationStr == "0" {
 		durationStr = defaultDuration
 	}

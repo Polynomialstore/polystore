@@ -21,7 +21,7 @@ export type GatewayStartResponse = {
 
 export type GatewayCreateDealIntent = {
   creator_evm: string;
-  duration_blocks: number;
+  duration_seconds: number;
   service_hint: string;
   initial_escrow: string;
   max_monthly_spend: string;

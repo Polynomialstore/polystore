@@ -10,7 +10,7 @@ import { classifyWalletError } from '../lib/walletErrors'
 
 export interface CreateDealInput {
   creator: string
-  duration: number
+  durationSeconds: number
   initialEscrow: string
   maxMonthlySpend: string
   serviceHint?: string
@@ -32,11 +32,12 @@ export function useCreateDeal() {
         ? input.serviceHint.trim()
         : buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
 
+      const durationSeconds = Math.max(1, Number(input.durationSeconds) || 0)
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'createDeal',
         args: [
-          BigInt(Math.max(1, Number(input.duration) || 0)),
+          BigInt(durationSeconds),
           serviceHint,
           BigInt(String(input.initialEscrow || '0')),
           BigInt(String(input.maxMonthlySpend || '0')),

@@ -41,7 +41,7 @@ async function main() {
   if (mode === 'create-deal') {
     const intent: CreateDealIntent = {
       creator_evm: account.address,
-      duration_blocks: Number(process.env.DURATION_BLOCKS || 100),
+      duration_seconds: Number(process.env.DURATION_SECONDS || process.env.DURATION_BLOCKS || 100),
       service_hint: process.env.SERVICE_HINT || 'General',
       initial_escrow: process.env.INITIAL_ESCROW || '1000000',
       max_monthly_spend: process.env.MAX_MONTHLY_SPEND || '500000',
