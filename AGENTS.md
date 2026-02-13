@@ -12,6 +12,18 @@
 *   **Commit & Push Cadence:** Treat `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md` as the canonical PR-by-PR TODO list for the Feb 2026 trusted devnet soft launch. Keep this file high-level and link out to repo-tracked TODOs/checklists instead of using this as a sprint tracker.
 *   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to both remotes. Keep commits small and descriptive, and avoid batching unrelated changes.
 
+### Auto-commit contract (MANDATORY)
+*   If a task is implemented and the user did not explicitly say “don’t commit/push yet,” commit and push automatically.
+*   Do not ask for commit/push confirmation.
+*   Only ask if blocked by one of these:
+    *   push/auth failure
+    *   required tests failing with unclear remediation
+    *   ambiguous ownership of conflicting uncommitted changes
+    *   destructive/history-rewrite action required
+*   Always push both remotes in sequence:
+    *   `git push origin main`
+    *   `git push nil-store main`
+
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Phase 1: The "Localhost" Prototype (Months 1-3)
