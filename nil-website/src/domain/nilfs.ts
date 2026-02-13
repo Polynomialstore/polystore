@@ -5,6 +5,7 @@ export interface NilfsFileEntry {
   content_encoding?: string
   start_offset: number
   flags: number
+  cache_present?: boolean
 }
 
 export interface SlabSegment {

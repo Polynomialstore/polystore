@@ -3628,6 +3628,7 @@ type nilfsFileEntry struct {
 	ContentEncoding  string `json:"content_encoding,omitempty"`
 	StartOffset      uint64 `json:"start_offset"`
 	Flags            uint8  `json:"flags"`
+	CachePresent     bool   `json:"cache_present"`
 }
 
 type slabSegment struct {
@@ -3796,6 +3797,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 			SizeBytes:   length,
 			StartOffset: rec.StartOffset,
 			Flags:       flags,
+			CachePresent: true,
 		}
 		if hdr, ok, err := readNilceHeaderForNilfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
 			if hdr.UncompressedLen > 0 {

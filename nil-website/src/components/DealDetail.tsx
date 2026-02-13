@@ -1178,7 +1178,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                       ) : files && files.length > 0 ? (
                         <div className="space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => {
-                            const cached = !!browserCachedByPath[f.path]
+                            const browserCached = !!browserCachedByPath[f.path]
+                            const gatewayCached = f.cache_present === true
                             const isBusy = busyFilePath === f.path
                             return (
                               <div
@@ -1195,7 +1196,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                                       <span className="font-mono">{f.size_bytes} bytes</span>
                                       <span className="text-border">|</span>
-                                      <span>File cache: {cached ? 'yes' : 'no'}</span>
+                                      <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
+                                      <span className="text-border">|</span>
+                                      <span>Gateway cache: {gatewayCached ? 'yes' : 'no'}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1219,13 +1222,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             setBusyFilePath(null)
                                           }
                                         }}
-                                        disabled={isBusy || !cached}
+                                        disabled={isBusy || !browserCached}
                                         data-testid="deal-detail-download-browser-cache"
                                         data-file-path={f.path}
                                         className="order-6 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download cached bytes (no network)"
+                                        title="Download file bytes cached in this browser (no network)."
                                       >
-                                        Cached
+                                        Download from Browser cache
                                       </button>
                                       <button
                                         onClick={async () => {
@@ -1262,10 +1265,10 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download-browser-slab"
                                         data-file-path={f.path}
                                         className="order-3 inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download from local slab (OPFS)"
+                                        title="Rebuild file from browser OPFS MDU cache, then download."
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
-                                        {isBusy ? 'Loading...' : 'Slab'}
+                                        {isBusy ? 'Loading...' : 'Assemble from Browser MDUs'}
                                       </button>
                                       <button
                                         onClick={async () => {
@@ -1279,13 +1282,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             setFileActionError(msg)
                                           }
                                         }}
-                                        disabled={downloading || isBusy || !cached}
+                                        disabled={downloading || isBusy || !browserCached}
                                         data-testid="deal-detail-clear-browser-cache"
                                         data-file-path={f.path}
                                         className="order-5 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Clear cached file"
+                                        title="Remove cached file bytes from this browser."
                                       >
-                                        Clear
+                                        Clear Browser cache
                                       </button>
                                       <button
                                         onClick={async () => {
@@ -1361,9 +1364,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download"
                                         data-file-path={f.path}
                                         className="order-1 inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download (uses cache when available)"
+                                        title="Download using best available path (Gateway cache, provider, or browser cache)."
                                       >
-                                        Download
+                                        Download (auto source)
                                       </button>
                                     </div>
                                   </div>
@@ -1438,9 +1441,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download-gateway"
                                         data-file-path={f.path}
                                         className="order-4 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download through local gateway path"
+                                        title="Request file through local Gateway endpoint."
                                       >
-                                        Gateway
+                                        Download via Gateway
                                       </button>
                                     </div>
                                   </div>

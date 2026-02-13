@@ -267,7 +267,12 @@ export async function gatewayListFiles(
   const files = payload['files']
   if (!Array.isArray(files)) return []
 
-  return files.filter((f): f is NilfsFileEntry => isRecord(f) && typeof f['path'] === 'string') as NilfsFileEntry[]
+  return files
+    .filter((f): f is Record<string, unknown> => isRecord(f) && typeof f['path'] === 'string')
+    .map((f) => ({
+      ...(f as NilfsFileEntry),
+      cache_present: f['cache_present'] === true,
+    }))
 }
 
 export async function gatewayFetchManifestInfo(
