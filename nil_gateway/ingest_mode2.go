@@ -440,10 +440,25 @@ func mode2UploadParallelism(slotCount uint64) int {
 			return parsed
 		}
 	}
-	// Default sequential-by-design while we optimize single upload performance.
-	// Operators can opt in to parallel uploads via NIL_MODE2_UPLOAD_PARALLELISM.
-	_ = slotCount
-	return 1
+	// Auto-tune by slot count so default 2+1 uploads run with 3-way concurrency
+	// and wider RS profiles can fan out, while still capping pressure.
+	parallelism := int(slotCount)
+	if parallelism <= 0 {
+		parallelism = 1
+	}
+	if parallelism > 16 {
+		parallelism = 16
+	}
+	if n := runtime.GOMAXPROCS(0); n > 0 {
+		cpuCap := n * 2
+		if parallelism > cpuCap {
+			parallelism = cpuCap
+		}
+	}
+	if parallelism <= 0 {
+		return 1
+	}
+	return parallelism
 }
 
 func mode2ExpectContinueTimeout() time.Duration {
@@ -1493,19 +1508,19 @@ func mode2UploadArtifactsToProviders(
 
 	tasks := make([]uploadTask, 0, totalUploads)
 
-	// Upload replicated metadata once per provider.
-	for _, provider := range metadataProviders {
-		base := providerBases[provider]
-		if base == "" {
-			continue
+	// Upload replicated metadata once per provider, interleaved by MDU index so
+	// scheduler fair-sharing starts across providers immediately.
+	for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
+		mduIndexStr := strconv.FormatUint(mduIndex, 10)
+		artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+		sizeBytes, err := statSize(artifactPath)
+		if err != nil {
+			return err
 		}
-
-		for mduIndex := uint64(0); mduIndex <= witnessCount; mduIndex++ {
-			mduIndexStr := strconv.FormatUint(mduIndex, 10)
-			artifactPath := filepath.Join(finalDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-			sizeBytes, err := statSize(artifactPath)
-			if err != nil {
-				return err
+		for _, provider := range metadataProviders {
+			base := providerBases[provider]
+			if base == "" {
+				continue
 			}
 			tasks = append(tasks, uploadTask{
 				url:          base + "/sp/upload_mdu",
@@ -1517,11 +1532,17 @@ func mode2UploadArtifactsToProviders(
 				mduIndex:     mduIndexStr,
 			})
 		}
+	}
 
-		manifestPath := filepath.Join(finalDir, "manifest.bin")
-		manifestSize, err := statSize(manifestPath)
-		if err != nil {
-			return err
+	manifestPath := filepath.Join(finalDir, "manifest.bin")
+	manifestSize, err := statSize(manifestPath)
+	if err != nil {
+		return err
+	}
+	for _, provider := range metadataProviders {
+		base := providerBases[provider]
+		if base == "" {
+			continue
 		}
 		tasks = append(tasks, uploadTask{
 			url:          base + "/sp/upload_manifest",
@@ -1533,15 +1554,14 @@ func mode2UploadArtifactsToProviders(
 		})
 	}
 
-	// Upload striped user shards per slot.
-	for _, target := range targets {
-		slot := target.slot
-		base := providerBases[target.provider]
-		if base == "" {
-			continue
-		}
-
-		for i := uint64(0); i < userMdus; i++ {
+	// Upload striped user shards interleaved across providers per slab index.
+	for i := uint64(0); i < userMdus; i++ {
+		for _, target := range targets {
+			slot := target.slot
+			base := providerBases[target.provider]
+			if base == "" {
+				continue
+			}
 			slabIndex := uint64(1) + witnessCount + i
 			slabIndexStr := strconv.FormatUint(slabIndex, 10)
 			slotStr := strconv.FormatUint(slot, 10)
