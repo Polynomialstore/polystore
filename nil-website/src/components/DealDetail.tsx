@@ -1518,10 +1518,10 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download-sp"
                                         data-file-path={f.path}
                                         className="order-2 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Force a fresh retrieval session (submits receipt)"
+                                        title="Force fresh network retrieval and submit on-chain receipt."
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
-                                        Verify
+                                        On-chain Retrieval
                                       </button>
                                     </div>
                                   </div>
