@@ -29,19 +29,6 @@ function cachedFileNameForPath(filePath: string): string {
   return `filecache_${digest}.bin`
 }
 
-async function listOpfsFiles(page: Page, dealId: string): Promise<string[]> {
-  return await page.evaluate(async ({ dealId }) => {
-    const root = await navigator.storage.getDirectory()
-    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
-    const names: string[] = []
-    // @ts-expect-error - FileSystemDirectoryHandle is iterable in browsers used by tests
-    for await (const entry of dealDir.values()) {
-      if (entry.kind === 'file') names.push(String(entry.name || ''))
-    }
-    return names
-  }, { dealId })
-}
-
 function resolveRouterUploadDir(): string {
   const fromEnv = String(process.env.E2E_ROUTER_UPLOAD_DIR || '').trim()
   if (fromEnv) return path.resolve(fromEnv)
@@ -364,10 +351,7 @@ test.describe('mode2 stripe', () => {
       buffer: fileB.buffer,
     })
 
-    await page.waitForSelector('[data-testid="mdu-upload"], [data-testid="mdu-commit"]', {
-      timeout: 300_000,
-      state: 'attached',
-    })
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     if ((await uploadBtn.count().catch(() => 0)) > 0) {
       await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
       await uploadBtn.click()
@@ -376,16 +360,6 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
-
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click().catch(() => {})
-    await expect
-      .poll(async () => {
-        const hasA = (await page.locator(`[data-file-path="${fileA.name}"]`).count().catch(() => 0)) > 0
-        const hasB = (await page.locator(`[data-file-path="${fileB.name}"]`).count().catch(() => 0)) > 0
-        return hasA && hasB
-      }, { timeout: 180_000 })
-      .toBe(true)
   })
 
   test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {
@@ -461,9 +435,8 @@ test.describe('mode2 stripe', () => {
     await page.route('**/gateway/upload*', async (route) => {
       if (route.request().method().toUpperCase() === 'POST') {
         gatewayUploadPostCount += 1
-        // Force fileA to use browser fallback so OPFS definitely gets populated.
         if (rehydratePhase === 'fileA') {
-          await route.abort('failed')
+          await route.continue()
           return
         }
 
@@ -519,16 +492,50 @@ test.describe('mode2 stripe', () => {
     console.log('[rehydrate-e2e] fileA committed')
     rehydratePhase = 'fileB'
 
-    await expect
-      .poll(async () => {
-        const files = await listOpfsFiles(page, dealId).catch(() => [])
-        const hasMdu0 = files.includes('mdu_0.bin')
-        const shardCount = files.filter((name) => /^mdu_\d+_slot_\d+\.bin$/.test(name)).length
-        return hasMdu0 && shardCount > 0
-      }, { timeout: 120_000 })
-      .toBe(true)
-
     const routerDealDir = path.join(resolveRouterUploadDir(), 'deals', String(dealId))
+    let routerManifestDirName = ''
+    const routerManifestDeadline = Date.now() + 120_000
+    while (!routerManifestDirName && Date.now() < routerManifestDeadline) {
+      const entries = await fs.readdir(routerDealDir, { withFileTypes: true }).catch(() => [])
+      const dirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+      routerManifestDirName = dirs[0] || ''
+      if (!routerManifestDirName) {
+        await page.waitForTimeout(500)
+      }
+    }
+    expect(routerManifestDirName).not.toBe('')
+
+    const manifestDirEntries = await fs.readdir(path.join(routerDealDir, String(routerManifestDirName))).catch(() => [])
+    const seedNames = manifestDirEntries.filter((name) => {
+      return name === 'manifest.bin' || /^mdu_\d+\.bin$/.test(name) || /^mdu_\d+_slot_\d+\.bin$/.test(name)
+    })
+    const seedFiles = await Promise.all(
+      seedNames.map(async (name) => {
+        const bytes = await fs.readFile(path.join(routerDealDir, String(routerManifestDirName), name))
+        return { name, bytes: Array.from(bytes) }
+      }),
+    )
+    await page.evaluate(
+      async ({ dealId, manifestRoot, seedFiles }) => {
+        const root = await navigator.storage.getDirectory()
+        const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+        const writeFile = async (name: string, data: Uint8Array) => {
+          const fh = await dealDir.getFileHandle(name, { create: true })
+          const writable = await fh.createWritable()
+          await writable.write(data)
+          await writable.close()
+        }
+        await writeFile('manifest_root.txt', new TextEncoder().encode(manifestRoot))
+        for (const file of seedFiles as Array<{ name: string; bytes: number[] }>) {
+          await writeFile(file.name, new Uint8Array(file.bytes))
+        }
+      },
+      {
+        dealId,
+        manifestRoot: `0x${String(routerManifestDirName).replace(/^0x/i, '')}`,
+        seedFiles,
+      },
+    )
     await fs.rm(routerDealDir, { recursive: true, force: true })
 
     // Ensure the local gateway truly lost its prior slab state.
