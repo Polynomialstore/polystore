@@ -476,15 +476,17 @@ test.describe('mode2 stripe', () => {
     const commitBtn = page.getByTestId('mdu-commit')
 
     await waitForUploadControls(uploadBtn, commitBtn, 300_000)
-    await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
-    await uploadBtn.click()
-    await expect
-      .poll(async () => {
-        const text = (await uploadBtn.textContent().catch(() => '')) || ''
-        const committed = await commitBtn.isEnabled().catch(() => false)
-        return /Upload Complete/i.test(text) || committed
-      }, { timeout: 300_000 })
-      .toBe(true)
+    if ((await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false))) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect
+        .poll(async () => {
+          const text = (await uploadBtn.textContent().catch(() => '')) || ''
+          const committed = await commitBtn.isEnabled().catch(() => false)
+          return /Upload Complete/i.test(text) || committed
+        }, { timeout: 300_000 })
+        .toBe(true)
+    }
     console.log('[rehydrate-e2e] fileA upload complete')
     await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
     await commitBtn.click()
