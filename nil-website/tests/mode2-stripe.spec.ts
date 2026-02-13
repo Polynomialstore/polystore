@@ -38,17 +38,31 @@ function resolveRouterUploadDir(): string {
 }
 
 async function ensureWalletConnected(page: Page): Promise<void> {
-  const connectedSelector =
-    '[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]'
-  const connected = page.locator(connectedSelector)
+  const walletAddressSelector = '[data-testid="wallet-address"], [data-testid="wallet-address-full"]'
+  const walletAddress = page.locator(walletAddressSelector).first()
+  const cosmosIdentity = page.getByTestId('cosmos-identity')
   const connectBtn = page.getByTestId('connect-wallet').first()
 
-  await page.waitForSelector(`${connectedSelector}, [data-testid="connect-wallet"]`, {
+  await page.waitForSelector(`${walletAddressSelector}, [data-testid="cosmos-identity"], [data-testid="connect-wallet"]`, {
     timeout: 60_000,
     state: 'attached',
   })
 
-  if (await connected.first().isVisible().catch(() => false)) return
+  const isConnected = async (): Promise<boolean> => {
+    const walletVisible = await walletAddress.first().isVisible().catch(() => false)
+    if (walletVisible) return true
+
+    if (await cosmosIdentity.isVisible().catch(() => false)) {
+      const raw = (await cosmosIdentity.textContent().catch(() => ''))?.trim()
+      if (raw && raw !== '—' && !/^(?:—|—)$/.test(raw) && !/^not\s+connected$/i.test(raw)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (await isConnected()) return
 
   if (await connectBtn.isVisible().catch(() => false)) {
     await connectBtn.click({ force: true })
@@ -62,18 +76,22 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
-    if (await connected.first().isVisible().catch(() => false)) return
+    if (await isConnected()) return
 
     if (await browserWalletBtn.isVisible().catch(() => false)) {
       await browserWalletBtn.click({ force: true })
-      await expect(connected.first()).toBeVisible({ timeout: 20_000 })
+      await expect(walletAddress.first()).toBeVisible({ timeout: 20_000 }).catch(async () => {
+        await expect(cosmosIdentity).toBeVisible({ timeout: 20_000 })
+      })
       return
     }
 
     for (const candidate of fallbackWalletBtns) {
       if (await candidate.isVisible().catch(() => false)) {
         await candidate.click({ force: true })
-        await expect(connected.first()).toBeVisible({ timeout: 20_000 })
+        await expect(walletAddress.first()).toBeVisible({ timeout: 20_000 }).catch(async () => {
+          await expect(cosmosIdentity).toBeVisible({ timeout: 20_000 })
+        })
         return
       }
     }
@@ -85,7 +103,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     }
   }
 
-  await expect(connected.first()).toBeVisible({ timeout: 5_000 })
+  expect(await isConnected()).toBe(true)
 }
 
 test.describe('mode2 stripe', () => {
