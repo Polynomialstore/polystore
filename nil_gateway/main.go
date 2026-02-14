@@ -2821,6 +2821,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
+	cleanupStaleDealGenerations(dealID, manifestRoot)
 
 	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
 	if serr != nil {
@@ -3738,6 +3739,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	cleanupStaleDealGenerations(dealID, manifestRoot)
 
 	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
 	if err != nil {
@@ -3793,10 +3795,10 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
 		length, flags := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		entry := nilfsFileEntry{
-			Path:        name,
-			SizeBytes:   length,
-			StartOffset: rec.StartOffset,
-			Flags:       flags,
+			Path:         name,
+			SizeBytes:    length,
+			StartOffset:  rec.StartOffset,
+			Flags:        flags,
 			CachePresent: true,
 		}
 		if hdr, ok, err := readNilceHeaderForNilfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
@@ -3905,6 +3907,7 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+		cleanupStaleDealGenerations(dealID, manifestRoot)
 	}
 
 	var dealDir string

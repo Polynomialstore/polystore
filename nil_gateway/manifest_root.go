@@ -4,10 +4,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
@@ -108,4 +110,69 @@ func resolveDealDirForDeal(dealID uint64, root ManifestRoot, rawParam string) (s
 		return cand, nil
 	}
 	return resolveDealDir(root, rawParam)
+}
+
+func isManifestRootDirName(name string) bool {
+	if len(name) != 96 {
+		return false
+	}
+	_, err := hex.DecodeString(name)
+	return err == nil
+}
+
+func cleanupStaleDealGenerations(dealID uint64, keepRoot ManifestRoot) {
+	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
+	entries, err := os.ReadDir(baseDealDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Gateway cache cleanup: failed to list deal dir deal_id=%d err=%v", dealID, err)
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" || name == keepRoot.Key {
+			continue
+		}
+		if strings.HasPrefix(name, "staging-") || strings.HasPrefix(name, ".") {
+			continue
+		}
+		if !isManifestRootDirName(name) {
+			continue
+		}
+
+		srcDir := filepath.Join(baseDealDir, name)
+		quarantineDir := filepath.Join(baseDealDir, fmt.Sprintf(".gc-%s-%d", name, time.Now().UnixNano()))
+		if err := os.Rename(srcDir, quarantineDir); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			log.Printf(
+				"Gateway cache cleanup: failed to quarantine stale generation deal_id=%d stale_manifest_root=%s err=%v",
+				dealID,
+				name,
+				err,
+			)
+			continue
+		}
+		if err := os.RemoveAll(quarantineDir); err != nil && !os.IsNotExist(err) {
+			log.Printf(
+				"Gateway cache cleanup: failed to remove stale generation deal_id=%d stale_manifest_root=%s err=%v",
+				dealID,
+				name,
+				err,
+			)
+			continue
+		}
+		log.Printf(
+			"Gateway cache cleanup: removed stale generation deal_id=%d stale_manifest_root=%s keep_manifest_root=%s",
+			dealID,
+			name,
+			keepRoot.Key,
+		)
+	}
 }

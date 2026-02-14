@@ -404,6 +404,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if profile != nil {
 		profile.addDuration("mode2_finalize_dir_ms", time.Since(finalizeStarted))
 	}
+	cleanupStaleDealGenerations(dealID, parsedRoot)
 	rollback = false
 	if job != nil {
 		job.setSteps(totalSteps, totalSteps)
@@ -1150,6 +1151,7 @@ func mode2BuildArtifactsAppend(
 	if profile != nil {
 		profile.addDuration("mode2_finalize_dir_ms", time.Since(finalizeStarted))
 	}
+	cleanupStaleDealGenerations(dealID, parsedRoot)
 	rollback = false
 	if job != nil {
 		job.setSteps(totalSteps, totalSteps)

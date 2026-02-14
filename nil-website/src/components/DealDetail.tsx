@@ -10,7 +10,7 @@ import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
-import { deleteCachedFile, hasCachedFile, readCachedFile, readMdu, readManifestRoot, writeCachedFile } from '../lib/storage/OpfsAdapter'
+import { deleteCachedFile, deleteDealDirectory, hasCachedFile, readCachedFile, readMdu, readManifestRoot, writeCachedFile } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
@@ -466,6 +466,30 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
 
+  const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<boolean> => {
+    const normalizedChainRoot = String(chainManifestRoot || '').trim().toLowerCase()
+    if (!normalizedChainRoot) return false
+
+    const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
+    if (!localManifest) return false
+
+    const normalizedLocalRoot = localManifest.trim().toLowerCase()
+    if (normalizedLocalRoot === normalizedChainRoot) return true
+
+    try {
+      await deleteDealDirectory(String(dealId))
+      setBrowserCachedByPath({})
+      console.info('Cleared stale browser MDU cache', {
+        dealId,
+        localManifestRoot: normalizedLocalRoot,
+        chainManifestRoot: normalizedChainRoot,
+      })
+    } catch (e) {
+      console.warn('Failed to clear stale browser MDU cache', { dealId, error: e })
+    }
+    return false
+  }, [])
+
   const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
@@ -494,8 +518,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Fall back to local OPFS slab layout if available (thick client / multi-tab).
       try {
         if (!dealId) return
-        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-        if (!localManifest || localManifest.trim() !== cid.trim()) return
+        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
+        if (!canUseLocalSlab) return
         const mdu0 = await readMdu(String(dealId), 0)
         if (!mdu0) return
         const localFiles = parseNilfsFilesFromMdu0(mdu0)
@@ -529,7 +553,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     } finally {
       setLoadingSlab(false)
     }
-  }, [fetchSlabLayout, resolveProviderHttpBase, resolveProviderP2pTarget])
+  }, [fetchSlabLayout, resolveProviderHttpBase, resolveProviderP2pTarget, reconcileLocalMduCache])
 
   const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
     if (!cid || !dealId || !owner) return
@@ -550,9 +574,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
         return
       }
 
-      const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-      if (localManifest && localManifest.trim() !== cid.trim()) {
-        // Local slab doesn't match chain; still show gateway result (empty) to avoid confusion.
+      const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
+      if (!canUseLocalSlab) {
         setFiles(list)
         return
       }
@@ -569,7 +592,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     } finally {
       setLoadingFiles(false)
     }
-  }, [fetchLocalFiles, resolveProviderHttpBase, resolveProviderP2pTarget, listFilesTransport])
+  }, [fetchLocalFiles, resolveProviderHttpBase, resolveProviderP2pTarget, listFilesTransport, reconcileLocalMduCache])
 
   const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
@@ -594,9 +617,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Local OPFS fallback: compute manifest info from locally stored MDUs.
       try {
         if (!dealId) throw new Error('missing deal id')
-        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-        if (!localManifest) throw new Error('missing local manifest root')
-        if (cid && localManifest.trim() !== cid.trim()) throw new Error('local slab does not match chain CID')
+        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
+        if (!canUseLocalSlab) throw new Error('local slab not available')
 
         const mdu0 = await readMdu(String(dealId), 0)
         if (!mdu0) throw new Error('missing local MDU #0')
@@ -650,7 +672,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     } finally {
       setLoadingManifestInfo(false)
     }
-  }, [manifestInfoTransport, resolveProviderHttpBase, resolveProviderP2pTarget])
+  }, [manifestInfoTransport, resolveProviderHttpBase, resolveProviderP2pTarget, reconcileLocalMduCache])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -674,9 +696,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Local OPFS fallback.
       try {
         if (!dealId) throw new Error('missing deal id')
-        const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-        if (!localManifest) throw new Error('missing local manifest root')
-        if (cid && localManifest.trim() !== cid.trim()) throw new Error('local slab does not match chain CID')
+        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
+        if (!canUseLocalSlab) throw new Error('local slab not available')
 
         const bytes = await readMdu(String(dealId), mduIndex)
         if (!bytes) throw new Error(`missing local MDU #${mduIndex}`)
@@ -1234,14 +1255,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         onClick={async () => {
                                           setFileActionError(null)
                                           setBusyFilePath(f.path)
-                                          const dealId = String(deal.id)
-                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+                                            const dealId = String(deal.id)
+                                            const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+                                            const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                           try {
                                             const chainCid = String(deal.cid || '').trim()
-                                            const localManifest = await readManifestRoot(dealId).catch(() => null)
-                                            const canUseLocalSlab =
-                                              !!localManifest && !!chainCid && localManifest.trim() === chainCid
+                                            const canUseLocalSlab = await reconcileLocalMduCache(dealId, chainCid)
                                             if (!canUseLocalSlab) throw new Error('local slab not available')
 
                                             const bytes = await readNilfsFileFromOpfs({
