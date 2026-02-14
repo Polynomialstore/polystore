@@ -33,6 +33,12 @@ func NewMsgServerImpl(keeper Keeper) types.MsgServer {
 	return &msgServer{Keeper: keeper}
 }
 
+func wallDurationToBlocks(wallDuration uint64) uint64 {
+	// Deal durations are still stored as block units in state, but inputs are
+	// documented as wall-time seconds at the API layer.
+	return wallDuration
+}
+
 // Ensure msgServer implements the types.MsgServer interface
 var _ types.MsgServer = msgServer{}
 
@@ -68,7 +74,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	domainSep := types.HashDomainSeparator(eip712ChainID)
 
 	if params.MinDurationBlocks > 0 && intent.DurationBlocks < params.MinDurationBlocks {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d seconds", params.MinDurationBlocks)
 	}
 
 	structHash, err := types.HashCreateDeal(intent)
@@ -212,6 +218,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	currentReplication := uint64(len(assignedProviders))
 	height := uint64(ctx.BlockHeight())
 
+	durationBlocks := wallDurationToBlocks(intent.DurationBlocks)
 	deal := types.Deal{
 		Id:                     dealID,
 		ManifestRoot:           nil, // Empty initially
@@ -219,7 +226,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		Owner:                  ownerAddrStr,
 		EscrowBalance:          intent.InitialEscrow,
 		StartBlock:             height,
-		EndBlock:               height + intent.DurationBlocks,
+		EndBlock:               height + durationBlocks,
 		Providers:              assignedProviders,
 		RedundancyMode:         redundancyMode,
 		CurrentReplication:     currentReplication,
@@ -375,7 +382,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	params := k.GetParams(ctx)
 	if params.MinDurationBlocks > 0 && msg.DurationBlocks < params.MinDurationBlocks {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d blocks", params.MinDurationBlocks)
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal duration must be >= %d seconds", params.MinDurationBlocks)
 	}
 
 	// --- CREATION FEE ---
@@ -473,6 +480,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	currentReplication := uint64(len(assignedProviders))
 	height := uint64(ctx.BlockHeight())
 
+	durationBlocks := wallDurationToBlocks(msg.DurationBlocks)
 	deal := types.Deal{
 		Id:                     dealID,
 		ManifestRoot:           nil, // Empty
@@ -480,7 +488,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		Owner:                  ownerAddrStr,
 		EscrowBalance:          initialEscrowAmount,
 		StartBlock:             height,
-		EndBlock:               height + msg.DurationBlocks,
+		EndBlock:               height + durationBlocks,
 		Providers:              assignedProviders,
 		RedundancyMode:         redundancyMode,
 		CurrentReplication:     currentReplication,
@@ -1781,7 +1789,7 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
 	if msg.AdditionalDurationBlocks == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("additional_duration_blocks must be > 0")
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("additional_duration_blocks (seconds) must be > 0")
 	}
 
 	deal, err := k.Deals.Get(ctx, msg.DealId)
@@ -1808,7 +1816,8 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 	if h > base {
 		base = h
 	}
-	newEnd, overflow := addUint64(base, msg.AdditionalDurationBlocks)
+	additionalDurationBlocks := wallDurationToBlocks(msg.AdditionalDurationBlocks)
+	newEnd, overflow := addUint64(base, additionalDurationBlocks)
 	if overflow {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("end_block overflow")
 	}
@@ -1819,7 +1828,7 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 	if price.IsPositive() && deal.Size_ > 0 {
 		costDec := price.
 			MulInt(math.NewIntFromUint64(deal.Size_)).
-			MulInt(math.NewIntFromUint64(msg.AdditionalDurationBlocks))
+			MulInt(math.NewIntFromUint64(additionalDurationBlocks))
 		cost = costDec.Ceil().TruncateInt()
 	}
 

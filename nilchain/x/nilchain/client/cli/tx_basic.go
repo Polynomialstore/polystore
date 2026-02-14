@@ -58,7 +58,7 @@ func CmdRegisterProvider() *cobra.Command {
 
 func CmdCreateDeal() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "create-deal [duration] [initial-escrow] [max-monthly-spend]",
+		Use:   "create-deal [duration-seconds] [initial-escrow] [max-monthly-spend]",
 		Short: "Create a new storage deal (allocate capacity with dynamic sizing)",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {

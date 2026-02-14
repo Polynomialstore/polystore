@@ -35,6 +35,76 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
+func parseUintFromJSON(raw any) (uint64, bool) {
+	switch v := raw.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		if v < 0 || v > float64(^uint64(0)) || v != float64(uint64(v)) {
+			return 0, false
+		}
+		return uint64(v), true
+	case float32:
+		if v < 0 || v > float32(^uint64(0)) || v != float32(uint64(v)) {
+			return 0, false
+		}
+		return uint64(v), true
+	case int:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int8:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int16:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int32:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case int64:
+		if v < 0 {
+			return 0, false
+		}
+		return uint64(v), true
+	case uint:
+		return uint64(v), true
+	case uint8:
+		return uint64(v), true
+	case uint16:
+		return uint64(v), true
+	case uint32:
+		return uint64(v), true
+	case uint64:
+		return v, true
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return uint64(n), true
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, false
+		}
+		n, err := strconv.ParseUint(trimmed, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	default:
+		return 0, false
+	}
+}
+
 // Configurable paths & chain settings (overridable via env).
 var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
@@ -47,7 +117,7 @@ var (
 	nodeAddr        = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
 	homeDir         = envDefault("NIL_HOME", "../_artifacts/nilchain_data")
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
-	defaultDuration = envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000")
+	defaultDuration = envDefault("NIL_DEFAULT_DEAL_DURATION_SECONDS", envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000"))
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
 	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
@@ -1562,6 +1632,7 @@ func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
 type createDealRequest struct {
 	Creator         string `json:"creator"`
 	DurationBlocks  uint64 `json:"duration_blocks"`
+	DurationSeconds uint64 `json:"duration_seconds"`
 	ServiceHint     string `json:"service_hint"`
 	InitialEscrow   string `json:"initial_escrow"`
 	MaxMonthlySpend string `json:"max_monthly_spend"`
@@ -1604,7 +1675,11 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	durationStr := strconv.FormatUint(req.DurationBlocks, 10)
+	requestedDuration := req.DurationBlocks
+	if req.DurationSeconds != 0 {
+		requestedDuration = req.DurationSeconds
+	}
+	durationStr := strconv.FormatUint(requestedDuration, 10)
 	if durationStr == "0" {
 		durationStr = defaultDuration
 	}
@@ -1781,6 +1856,22 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "intent must include creator_evm", http.StatusBadRequest)
 		return
 	}
+	// Backward compatibility: newer web clients emit duration_seconds while
+	// on-chain message decoding still expects duration_blocks today.
+	if _, hasLegacy := req.Intent["duration_blocks"]; !hasLegacy {
+		if rawDurationSeconds, hasDurationSeconds := req.Intent["duration_seconds"]; hasDurationSeconds {
+			if durationSeconds, okDurationSeconds := parseUintFromJSON(rawDurationSeconds); okDurationSeconds {
+				req.Intent["duration_blocks"] = durationSeconds
+			}
+		}
+	}
+	if rawDurationBlocks, hasDurationBlocks := req.Intent["duration_blocks"]; hasDurationBlocks {
+		if _, ok := parseUintFromJSON(rawDurationBlocks); !ok {
+			http.Error(w, "duration blocks must be a valid integer", http.StatusBadRequest)
+			return
+		}
+	}
+
 	if creatorNil, err := evmHexToNilAddress(rawCreator); err == nil {
 		// Only hit the faucet if the creator has no on-chain balance.
 		// This avoids bumping the faucet key sequence right before we submit

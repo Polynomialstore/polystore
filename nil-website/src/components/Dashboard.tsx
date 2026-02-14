@@ -1123,7 +1123,7 @@ export function Dashboard() {
 
       const res = await submitDeal({
         creator: evmCreator,
-        duration: Number(duration),
+        durationSeconds: Number(duration),
         initialEscrow,
         maxMonthlySpend,
         serviceHint,
@@ -2502,7 +2502,7 @@ export function Dashboard() {
 
             <div className="mt-4 space-y-3 text-sm">
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (blocks)</span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (seconds)</span>
                 <input
                   defaultValue={duration ?? ''}
                   onChange={(e) => setDuration(e.target.value ?? '')}

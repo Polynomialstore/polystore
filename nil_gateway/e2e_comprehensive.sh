@@ -48,7 +48,7 @@ CREATOR="nil198ywt0pv8k5qua3fvcw9lge6stk0usgag8ehcl"
 
 CREATE_RESP=$(timeout 10s curl -s -X POST -H "Content-Type: application/json" -d '{
     "creator": "'$CREATOR'",
-    "duration_blocks": 1000,
+    "duration_seconds": 1000,
     "initial_escrow": "1000000",
     "max_monthly_spend": "1000000"
 }' "$GATEWAY_URL/gateway/create-deal")

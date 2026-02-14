@@ -78,7 +78,7 @@ func HashDomainSeparator(chainID *big.Int) common.Hash {
 }
 
 // HashCreateDeal computes the struct hash for a CreateDeal intent.
-// Fields: creator, duration, service_hint, initial_escrow, max_monthly_spend, nonce
+// Fields: creator, duration (seconds), service_hint, initial_escrow, max_monthly_spend, nonce
 func HashCreateDeal(intent *EvmCreateDealIntent) (common.Hash, error) {
 	creatorAddr := common.HexToAddress(intent.CreatorEvm)
 

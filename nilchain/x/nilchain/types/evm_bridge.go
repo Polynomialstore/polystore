@@ -22,7 +22,7 @@ const (
 // (MetaMask) and the on-chain keeper must use this exact encoding.
 //
 // The format is:
-//   "NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_blocks>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
+//   "NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_seconds>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
 //
 // All numeric values are encoded in base-10. creator_evm is lowercased and
 // normalised to a 0x-prefixed hexadecimal address.

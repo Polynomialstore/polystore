@@ -215,7 +215,7 @@ create_mode2_deal() {
       --arg max "$chain_max_monthly" \
       --arg creator "$creator" \
       '{
-        "duration_blocks": ($duration|tonumber),
+        "duration_seconds": ($duration|tonumber),
         "service_hint": $hint,
         "initial_escrow": $escrow,
         "max_monthly_spend": $max,
@@ -227,7 +227,7 @@ create_mode2_deal() {
       --arg escrow "$chain_escrow" \
       --arg max "$chain_max_monthly" \
       '{
-        "duration_blocks": ($duration|tonumber),
+        "duration_seconds": ($duration|tonumber),
         "service_hint": $hint,
         "initial_escrow": $escrow,
         "max_monthly_spend": $max

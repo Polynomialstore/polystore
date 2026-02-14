@@ -42,7 +42,7 @@ export const UpdateContentTypes = {
 
 export interface CreateDealIntent {
   creator_evm: string
-  duration_blocks: number
+  duration_seconds: number
   service_hint: string
   initial_escrow: string
   max_monthly_spend: string
@@ -71,7 +71,7 @@ export function buildCreateDealTypedData(intent: CreateDealIntent, chainId: numb
     primaryType: 'CreateDeal' as const,
     message: {
       creator: intent.creator_evm,
-      duration: Number(intent.duration_blocks),
+      duration: Number(intent.duration_seconds),
       service_hint: intent.service_hint,
       initial_escrow: intent.initial_escrow,
       max_monthly_spend: intent.max_monthly_spend,

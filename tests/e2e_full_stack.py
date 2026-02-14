@@ -92,7 +92,7 @@ def create_deal():
     # Construct Intent
     intent = {
         "creator_evm": account.address,
-        "duration_blocks": duration,
+        "duration_seconds": duration,
         "service_hint": service_hint,
         "initial_escrow": str(initial_escrow),
         "max_monthly_spend": str(max_monthly_spend),

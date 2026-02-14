@@ -884,7 +884,7 @@ func (p *Precompile) runCreateDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Co
 
 	duration, err := asUint64(args["durationBlocks"])
 	if err != nil || duration == 0 {
-		return nil, errors.New("createDeal: durationBlocks must be > 0")
+		return nil, errors.New("createDeal: duration (seconds) must be > 0")
 	}
 	serviceHint, err := asString(args["serviceHint"])
 	if err != nil {
@@ -994,7 +994,7 @@ func (p *Precompile) runExtendDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Co
 	}
 	additional, err := asUint64(args["additionalDurationBlocks"])
 	if err != nil || additional == 0 {
-		return nil, errors.New("extendDeal: additionalDurationBlocks must be > 0")
+		return nil, errors.New("extendDeal: additionalDurationBlocks (seconds) must be > 0")
 	}
 
 	caller := contract.Caller()
