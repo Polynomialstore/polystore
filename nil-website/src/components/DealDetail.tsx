@@ -1333,12 +1333,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               action: 'download',
                                               status: 'pending',
                                             })
+                                            const autoServiceBase =
+                                              gatewaySlabStatus === 'present' ? appConfig.gatewayBase : resolveProviderHttpBase()
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
                                               owner: nilAddress,
                                               filePath: f.path,
-                                              serviceBase: resolveProviderHttpBase(),
+                                              serviceBase: autoServiceBase,
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
                                               fileStartOffset: f.start_offset,
@@ -1383,7 +1385,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                         data-testid="deal-detail-download"
                                         data-file-path={f.path}
                                         className="order-1 inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download using best available path (Gateway cache, provider, or browser cache)."
+                                        title="Download using best available path (gateway cache first, then provider path, then browser cache)."
                                       >
                                         Download (auto source)
                                       </button>
