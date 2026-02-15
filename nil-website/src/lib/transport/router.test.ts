@@ -78,8 +78,8 @@ test('executeWithFallback retries on 429 with the same backend', async () => {
   assert.equal(result.trace.attempts[0]?.errorClass, 'http_429')
 })
 
-test('executeWithFallback treats provider mismatch as terminal', async () => {
-  let spCalled = false
+test('executeWithFallback treats provider mismatch as terminal per-backend and falls back', async () => {
+  let spCalled = 0
   const candidates: TransportCandidate<string>[] = [
     {
       backend: 'gateway',
@@ -92,17 +92,21 @@ test('executeWithFallback treats provider mismatch as terminal', async () => {
       backend: 'direct_sp',
       endpoint: 'http://sp',
       execute: async () => {
-        spCalled = true
+        spCalled += 1
         return 'ok'
       },
     },
   ]
 
-  await assert.rejects(
-    executeWithFallback('fetch', candidates, { preference: 'auto' }),
-    /Terminal fetch failure/,
-  )
-  assert.equal(spCalled, false)
+  const result = await executeWithFallback('fetch', candidates, { preference: 'auto' })
+  assert.equal(result.backend, 'direct_sp')
+  assert.equal(result.data, 'ok')
+  assert.equal(spCalled, 1)
+  assert.equal(result.trace.attempts.length, 2)
+  assert.equal(result.trace.attempts[0]?.backend, 'gateway')
+  assert.equal(result.trace.attempts[0]?.errorClass, 'provider_mismatch')
+  assert.equal(result.trace.attempts[1]?.backend, 'direct_sp')
+  assert.equal(result.trace.attempts[1]?.ok, true)
 })
 
 test('executeWithFallback classifies timeouts and falls back', async () => {
