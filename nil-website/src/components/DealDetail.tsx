@@ -205,6 +205,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
     lastTrace,
+    preference: transportPreference,
   } = useTransportRouter()
 
   // Filter proofs for this deal
@@ -1334,7 +1335,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               status: 'pending',
                                             })
                                             const autoServiceBase = resolveProviderHttpBase()
-                                            const autoRoutePreference = gatewaySlabStatus === 'present' ? 'prefer_gateway' : 'prefer_direct_sp'
+                                            const autoRoutePreference =
+                                              transportPreference === 'prefer_p2p'
+                                                ? 'prefer_p2p'
+                                                : gatewaySlabStatus === 'present'
+                                                  ? 'prefer_gateway'
+                                                  : 'prefer_direct_sp'
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
