@@ -1333,14 +1333,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               action: 'download',
                                               status: 'pending',
                                             })
-                                            const autoServiceBase =
-                                              gatewaySlabStatus === 'present' ? appConfig.gatewayBase : resolveProviderHttpBase()
+                                            const autoServiceBase = resolveProviderHttpBase()
+                                            const autoRoutePreference = gatewaySlabStatus === 'present' ? 'prefer_gateway' : 'prefer_direct_sp'
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
                                               owner: nilAddress,
                                               filePath: f.path,
                                               serviceBase: autoServiceBase,
+                                              routePreference: autoRoutePreference,
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
                                               fileStartOffset: f.start_offset,
@@ -1418,6 +1419,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               owner: nilAddress,
                                               filePath: f.path,
                                               serviceBase: appConfig.gatewayBase,
+                                              routePreference: 'prefer_gateway',
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
                                               fileStartOffset: f.start_offset,
@@ -1495,6 +1497,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               owner: nilAddress,
                                               filePath: f.path,
                                               serviceBase: resolveProviderHttpBase(),
+                                              routePreference: 'prefer_direct_sp',
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
                                               fileStartOffset: f.start_offset,

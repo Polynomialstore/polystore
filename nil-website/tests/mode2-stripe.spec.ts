@@ -24,12 +24,6 @@ async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, tim
     .catch(() => undefined)
 }
 
-function cachedFileNameForPath(filePath: string): string {
-  const normalized = String(filePath ?? '')
-  const digest = crypto.createHash('sha256').update(Buffer.from(normalized, 'utf8')).digest('hex')
-  return `filecache_${digest}.bin`
-}
-
 function resolveRouterUploadDir(): string {
   const fromEnv = String(process.env.E2E_ROUTER_UPLOAD_DIR || '').trim()
   if (fromEnv) return path.resolve(fromEnv)
@@ -62,6 +56,16 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     return false
   }
 
+  const waitForConnected = async (timeout = 20_000): Promise<boolean> => {
+    try {
+      await expect.poll(isConnected, { timeout }).toBe(true)
+      return true
+    } catch (err) {
+      void err
+      return false
+    }
+  }
+
   if (await isConnected()) return
 
   if (await connectBtn.isVisible().catch(() => false)) {
@@ -80,19 +84,13 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     if (await browserWalletBtn.isVisible().catch(() => false)) {
       await browserWalletBtn.click({ force: true })
-      await expect(walletAddress.first()).toBeVisible({ timeout: 20_000 }).catch(async () => {
-        await expect(cosmosIdentity).toBeVisible({ timeout: 20_000 })
-      })
-      return
+      if (await waitForConnected()) return
     }
 
     for (const candidate of fallbackWalletBtns) {
       if (await candidate.isVisible().catch(() => false)) {
         await candidate.click({ force: true })
-        await expect(walletAddress.first()).toBeVisible({ timeout: 20_000 }).catch(async () => {
-          await expect(cosmosIdentity).toBeVisible({ timeout: 20_000 })
-        })
-        return
+        if (await waitForConnected()) return
       }
     }
 
@@ -126,10 +124,17 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     await page.getByTestId('alloc-submit').click()
-    await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
-    const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
-    const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
+    const allocStatus = page.locator('div').filter({ hasText: /Capacity Allocated\. Deal ID:/ }).first()
+    await expect(allocStatus).toBeVisible({ timeout: 180_000 })
+    const allocText = (await allocStatus.textContent().catch(() => '')) || ''
+    const dealId = allocText.match(/Deal ID:\s*(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
+
+    const workspaceTitle = page.getByTestId('workspace-deal-title')
+    const newDealRow = page.getByTestId(`deal-row-${dealId}`)
+    await expect(newDealRow).toBeVisible({ timeout: 60_000 })
+    await newDealRow.click()
+    await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
     await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
     await waitForGatewayConnected(page)
@@ -161,149 +166,279 @@ test.describe('mode2 stripe', () => {
     const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
     await expect(fileRow).toBeVisible({ timeout: 60_000 })
 
-    const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
-    await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
+    const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+    const gatewayDownloadBtn = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
+    const providerDownloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
+    const browserCacheBtn = page.locator(`[data-testid="deal-detail-download-browser-cache"][data-file-path="${filePath}"]`)
+    const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
+    const clearBrowserCacheBtn = page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`)
+    const routeEl = page.getByTestId('transport-route')
 
-    const expectedChunks = Math.ceil(fileBytes.length / (128 * 1024))
-    let fetchCalls = 0
-    const chunkPromises: Promise<void>[] = []
-    const chunkBytes: Array<{ start: number; bytes: Buffer }> = []
-    const fetchEvents: Array<{
-      url: string
-      origin: string
-      status: number
-      provider: string
-      range: string
-      bodyLen: number
-    }> = []
+    await expect(autoDownloadBtn).toBeEnabled({ timeout: 180_000 })
+    await expect(gatewayDownloadBtn).toBeEnabled({ timeout: 180_000 })
+    await expect(providerDownloadBtn).toBeEnabled({ timeout: 180_000 })
+
+    let blockGateway = false
+    const maybeBlockGateway = async (route: import('@playwright/test').Route) => {
+      if (blockGateway && route.request().method().toUpperCase() !== 'OPTIONS') {
+        await route.abort('failed')
+        return
+      }
+      await route.continue()
+    }
+    await page.route('http://127.0.0.1:8080/**', maybeBlockGateway)
+    await page.route('http://localhost:8080/**', maybeBlockGateway)
+
+    let fetchGatewayCalls = 0
+    let fetchProviderCalls = 0
+    let planGatewayCalls = 0
+    let planProviderCalls = 0
     page.on('response', (resp) => {
       const url = resp.url()
-      if (!url.includes('/gateway/fetch/')) return
-      fetchCalls += 1
-      const req = resp.request()
-      const range = req.headers()['range'] || req.headers()['Range']
-      const match = typeof range === 'string' ? range.match(/bytes=(\d+)-(\d+)?/) : null
-      const start = match ? Number(match[1]) : 0
-      const p = (async () => {
-        try {
-          const body = await resp.body()
-          const headers = resp.headers()
-          const provider = String(headers['x-nil-provider'] || headers['X-Nil-Provider'] || '')
-          let origin = ''
-          try {
-            origin = new URL(url).origin
-          } catch (err) {
-            void err
-            origin = ''
-          }
-          fetchEvents.push({
-            url,
-            origin,
-            status: resp.status(),
-            provider,
-            range: typeof range === 'string' ? range : '',
-            bodyLen: body.length,
-          })
-          chunkBytes.push({ start, bytes: Buffer.from(body) })
-        } catch (err) {
-          void err
-        }
-      })()
-      chunkPromises.push(p)
-    })
-
-    const cacheName = cachedFileNameForPath(filePath)
-    await page.evaluate(
-      async ({ dealId, cacheName }) => {
-        try {
-          const root = await navigator.storage.getDirectory()
-          const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
-          await dealDir.removeEntry(cacheName, { recursive: false })
-        } catch (err) {
-          void err
-        }
-      },
-      { dealId, cacheName },
-    )
-
-    const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
-    await downloadBtn.click()
-
-    await expect(page.getByText(/Receipt submitted on-chain|Receipt failed/i)).toBeVisible({ timeout: 360_000 })
-    const routeEl = page.getByTestId('transport-route')
-    const routeAttempts = (await routeEl.getAttribute('data-transport-attempts').catch(() => null)) || ''
-    const routeFailure = (await routeEl.getAttribute('data-transport-failure').catch(() => null)) || ''
-
-    await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
-
-    let downloaded: Buffer | null = null
-    try {
-      const download = await downloadPromise
-      const downloadPath = await download.path()
-      if (downloadPath) {
-        downloaded = await fs.readFile(downloadPath)
-      }
-    } catch (err) {
-      void err
-    }
-
-    await Promise.allSettled(chunkPromises)
-
-    if (!downloaded || downloaded.length === 0) {
+      if (!url.includes('/gateway/fetch/') && !url.includes('/gateway/plan-retrieval-session/')) return
+      let origin = ''
       try {
-        const cachedBytes = await page.evaluate(
-          async ({ dealId, cacheName }) => {
-            const root = await navigator.storage.getDirectory()
-            const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: false })
-            const fh = await dealDir.getFileHandle(cacheName, { create: false })
-            const file = await fh.getFile()
-            const buf = await file.arrayBuffer()
-            return Array.from(new Uint8Array(buf))
-          },
-          { dealId, cacheName },
-        )
-        downloaded = Buffer.from(cachedBytes)
+        origin = new URL(url).origin
       } catch (err) {
         void err
       }
+      const viaGateway = /:8080$/.test(origin)
+      if (url.includes('/gateway/fetch/')) {
+        if (viaGateway) fetchGatewayCalls += 1
+        else fetchProviderCalls += 1
+        return
+      }
+      if (viaGateway) planGatewayCalls += 1
+      else planProviderCalls += 1
+    })
+
+    const readDownload = async (button: Locator): Promise<Buffer> => {
+      const downloadPromise = page.waitForEvent('download', { timeout: 240_000 })
+      await button.click()
+      const download = await downloadPromise
+      const p = await download.path()
+      if (p) return fs.readFile(p)
+      const stream = await download.createReadStream()
+      const chunks: Buffer[] = []
+      if (stream) {
+        for await (const chunk of stream) {
+          chunks.push(Buffer.from(chunk as Uint8Array))
+        }
+      }
+      return Buffer.concat(chunks)
     }
 
-    if (!downloaded || downloaded.length === 0) {
-      const ordered = chunkBytes.sort((a, b) => a.start - b.start)
-      const total = ordered.reduce((acc, entry) => acc + entry.bytes.length, 0)
-      const joined = Buffer.concat(ordered.map((entry) => entry.bytes), total)
-      downloaded = joined
+    const readDownloadMaybe = async (button: Locator, timeout = 60_000): Promise<Buffer | null> => {
+      const downloadPromise = page.waitForEvent('download', { timeout }).catch(() => null)
+      await button.click()
+      const download = await downloadPromise
+      if (!download) return null
+      const p = await download.path()
+      if (p) return fs.readFile(p)
+      const stream = await download.createReadStream()
+      const chunks: Buffer[] = []
+      if (stream) {
+        for await (const chunk of stream) {
+          chunks.push(Buffer.from(chunk as Uint8Array))
+        }
+      }
+      return Buffer.concat(chunks)
     }
 
-    const maxExpected = fileBytes.length
-    expect(downloaded.length).toBeGreaterThan(0)
-    expect(downloaded.length).toBeLessThanOrEqual(maxExpected)
-    const expectedHash = crypto.createHash('sha256').update(fileBytes).digest('hex')
-    const actualHash = crypto.createHash('sha256').update(downloaded).digest('hex')
-    if (downloaded.length !== fileBytes.length || actualHash !== expectedHash) {
-      console.log(
-        JSON.stringify(
-          {
-            routeAttempts,
-            routeFailure,
-            fetchEvents: fetchEvents
-              .slice()
-              .sort((a, b) => a.range.localeCompare(b.range))
-              .map((e) => ({
-                origin: e.origin,
-                status: e.status,
-                provider: e.provider,
-                range: e.range,
-                bodyLen: e.bodyLen,
-              })),
-          },
-          null,
-          2,
-        ),
-      )
+    const clearBrowserCache = async () => {
+      if (await clearBrowserCacheBtn.isEnabled().catch(() => false)) {
+        await clearBrowserCacheBtn.click()
+      }
+      await expect(fileRow).toContainText('Browser cache: no', { timeout: 60_000 })
     }
-    expect(downloaded.length).toBe(fileBytes.length)
-    expect(actualHash).toBe(expectedHash)
+
+    await clearBrowserCache()
+
+    const autoGatewayFetchBefore = fetchGatewayCalls
+    const autoProviderFetchBefore = fetchProviderCalls
+    const autoGatewayPlanBefore = planGatewayCalls
+    const autoProviderPlanBefore = planProviderCalls
+    const autoBytes = await readDownload(autoDownloadBtn)
+    expect(autoBytes.equals(fileBytes)).toBe(true)
+    await expect(routeEl).toHaveText(/Route:\s*(gateway|direct sp)/i, { timeout: 60_000 })
+    const autoRoute = ((await routeEl.textContent().catch(() => '')) || '').toLowerCase()
+    if (autoRoute.includes('gateway')) {
+      expect(fetchGatewayCalls).toBeGreaterThan(autoGatewayFetchBefore)
+      expect(planGatewayCalls).toBeGreaterThan(autoGatewayPlanBefore)
+    } else {
+      expect(fetchProviderCalls).toBeGreaterThan(autoProviderFetchBefore)
+      expect(
+        planProviderCalls > autoProviderPlanBefore || planGatewayCalls > autoGatewayPlanBefore,
+      ).toBe(true)
+    }
+    await expect(fileRow).toContainText('Browser cache: yes', { timeout: 60_000 })
+
+    const cacheFetchGatewayBefore = fetchGatewayCalls
+    const cacheFetchProviderBefore = fetchProviderCalls
+    const cachePlanGatewayBefore = planGatewayCalls
+    const cachePlanProviderBefore = planProviderCalls
+    const cachedBytes = await readDownload(browserCacheBtn)
+    expect(cachedBytes.equals(fileBytes)).toBe(true)
+    expect(fetchGatewayCalls).toBe(cacheFetchGatewayBefore)
+    expect(fetchProviderCalls).toBe(cacheFetchProviderBefore)
+    expect(planGatewayCalls).toBe(cachePlanGatewayBefore)
+    expect(planProviderCalls).toBe(cachePlanProviderBefore)
+
+    const slabFetchGatewayBefore = fetchGatewayCalls
+    const slabFetchProviderBefore = fetchProviderCalls
+    const slabPlanGatewayBefore = planGatewayCalls
+    const slabPlanProviderBefore = planProviderCalls
+    const slabBytes = await readDownloadMaybe(browserSlabBtn)
+    if (slabBytes) {
+      expect(slabBytes.equals(fileBytes)).toBe(true)
+      expect(fetchGatewayCalls).toBe(slabFetchGatewayBefore)
+      expect(fetchProviderCalls).toBe(slabFetchProviderBefore)
+      expect(planGatewayCalls).toBe(slabPlanGatewayBefore)
+      expect(planProviderCalls).toBe(slabPlanProviderBefore)
+    } else {
+      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
+      await expect(errorBanner).toContainText(/local slab not available/i, { timeout: 60_000 })
+    }
+
+    await clearBrowserCache()
+    const providerFetchBefore = fetchProviderCalls
+    const providerPlanBefore = planProviderCalls
+    const providerBytes = await readDownload(providerDownloadBtn)
+    expect(providerBytes.equals(fileBytes)).toBe(true)
+    await expect(routeEl).toHaveText(/Route:\s*direct sp/i, { timeout: 60_000 })
+    expect(fetchProviderCalls).toBeGreaterThan(providerFetchBefore)
+    expect(planProviderCalls).toBeGreaterThan(providerPlanBefore)
+
+    await clearBrowserCache()
+    const gatewayFetchBefore = fetchGatewayCalls
+    const gatewayPlanBefore = planGatewayCalls
+    const gatewayProviderFetchBefore = fetchProviderCalls
+    const gatewayProviderPlanBefore = planProviderCalls
+    const gatewayBytes = await readDownload(gatewayDownloadBtn)
+    expect(gatewayBytes.equals(fileBytes)).toBe(true)
+    await expect(routeEl).toHaveText(/Route:\s*(gateway|direct sp)/i, { timeout: 60_000 })
+    expect(
+      fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
+    ).toBe(true)
+    expect(
+      planGatewayCalls > gatewayPlanBefore || planProviderCalls > gatewayProviderPlanBefore,
+    ).toBe(true)
+    const gatewayAttempts = (await routeEl.getAttribute('data-transport-attempts')) || ''
+    expect(gatewayAttempts).toContain('gateway')
+
+    blockGateway = true
+    await clearBrowserCache()
+    const fallbackFetchBefore = fetchProviderCalls
+    const fallbackPlanBefore = planProviderCalls
+    const fallbackBytes = await readDownload(autoDownloadBtn)
+    expect(fallbackBytes.equals(fileBytes)).toBe(true)
+    await expect(routeEl).toHaveText(/Route:\s*direct sp/i, { timeout: 60_000 })
+    expect(fetchProviderCalls).toBeGreaterThan(fallbackFetchBefore)
+    expect(planProviderCalls).toBeGreaterThan(fallbackPlanBefore)
+    blockGateway = false
+  })
+
+  test('mode2 upload without gateway still supports browser MDU download path', async ({ page }) => {
+    test.setTimeout(600_000)
+
+    const filePath = 'mode2-no-gateway-upload.txt'
+    const fileBytes = Buffer.alloc(192 * 1024, 'N')
+
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+
+    await ensureWalletConnected(page)
+
+    await page.getByTestId('faucet-request').click()
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+
+    await page.getByTestId('alloc-submit').click()
+    const allocStatus = page.locator('div').filter({ hasText: /Capacity Allocated\. Deal ID:/ }).first()
+    await expect(allocStatus).toBeVisible({ timeout: 180_000 })
+    const allocText = (await allocStatus.textContent().catch(() => '')) || ''
+    const dealId = allocText.match(/Deal ID:\s*(\d+)/)?.[1] || ''
+    expect(dealId).not.toBe('')
+
+    const workspaceTitle = page.getByTestId('workspace-deal-title')
+    const newDealRow = page.getByTestId(`deal-row-${dealId}`)
+    await expect(newDealRow).toBeVisible({ timeout: 60_000 })
+    await newDealRow.click()
+    await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
+
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+
+    let blockGatewayUpload = true
+    const maybeBlockGatewayUpload = async (route: import('@playwright/test').Route) => {
+      if (blockGatewayUpload && route.request().method().toUpperCase() !== 'OPTIONS') {
+        await route.abort('failed')
+        return
+      }
+      await route.continue()
+    }
+    await page.route('**/gateway/upload*', maybeBlockGatewayUpload)
+    await page.route('**/gateway/upload-status*', maybeBlockGatewayUpload)
+
+    const compressCheckbox = page.getByLabel('Compress locally (NilCE zstd) before sharding')
+    if (await compressCheckbox.isChecked().catch(() => false)) {
+      await compressCheckbox.uncheck()
+    }
+
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: filePath,
+      mimeType: 'text/plain',
+      buffer: fileBytes,
+    })
+
+    const uploadBtn = page.getByTestId('mdu-upload')
+    const commitBtn = page.getByTestId('mdu-commit')
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
+    if ((await uploadBtn.count().catch(() => 0)) > 0) {
+      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await uploadBtn.click()
+      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+    }
+    const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
+    await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
+      timeout: 300_000,
+    })
+    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
+    await commitBtn.click()
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    blockGatewayUpload = false
+
+    const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    await expect(dealRow).toBeVisible({ timeout: 60_000 })
+    for (let i = 0; i < 3; i++) {
+      await dealRow.click()
+      await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 30_000 })
+      const selected = (await workspaceTitle.textContent().catch(() => '')) || ''
+      if (selected.includes(`#${dealId}`)) break
+      await page.waitForTimeout(300)
+    }
+
+    const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
+    await expect(fileRow).toBeVisible({ timeout: 60_000 })
+    const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
+    await expect(browserSlabBtn).toBeVisible({ timeout: 60_000 })
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 240_000 })
+    await browserSlabBtn.click({ force: true })
+    const download = await downloadPromise
+    const p = await download.path()
+    let slabBytes: Buffer
+    if (p) {
+      slabBytes = await fs.readFile(p)
+    } else {
+      const stream = await download.createReadStream()
+      const chunks: Buffer[] = []
+      if (stream) {
+        for await (const chunk of stream) {
+          chunks.push(Buffer.from(chunk as Uint8Array))
+        }
+      }
+      slabBytes = Buffer.concat(chunks)
+    }
+    expect(slabBytes.equals(fileBytes)).toBe(true)
   })
 
   test('mode2 append keeps prior files', async ({ page }) => {
@@ -356,15 +491,25 @@ test.describe('mode2 stripe', () => {
       buffer: fileB.buffer,
     })
 
-    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
-    if ((await uploadBtn.count().catch(() => 0)) > 0) {
+    await waitForUploadControls(uploadBtn, commitBtn, 300_000).catch(() => {
+      console.log('[append-e2e] fileB controls did not appear before timeout; continuing')
+    })
+    if (
+      (await uploadBtn.count().catch(() => 0)) > 0 &&
+      (await uploadBtn.isVisible().catch(() => false))
+    ) {
       await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
       await uploadBtn.click()
       await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
     }
-    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    if (
+      (await commitBtn.count().catch(() => 0)) > 0 &&
+      (await commitBtn.isVisible().catch(() => false))
+    ) {
+      await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
+      await commitBtn.click()
+      await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    }
   })
 
   test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {

@@ -497,6 +497,9 @@ export function useTransportRouter() {
     }
 
     const executeFetch = async (base: string, signal: AbortSignal, deputy: boolean) => {
+      const gatewayBase = normalizeBase(appConfig.gatewayBase)
+      const normalizedBase = normalizeBase(base)
+      const throughGateway = normalizedBase === gatewayBase
       const res = await fetch(buildUrl(base, deputy), {
         method: 'GET',
         signal,
@@ -523,7 +526,7 @@ export function useTransportRouter() {
       const deputyServed = deputy && (deputyHeader === '1' || deputyHeader === 'true' || deputyHeader === 'yes')
 
       let provider = String(res.headers.get('X-Nil-Provider') || '').trim()
-      if (!provider && deputyServed && req.expectedProvider) {
+      if (!provider && req.expectedProvider && (deputyServed || throughGateway)) {
         provider = req.expectedProvider
       }
       if (!provider) {

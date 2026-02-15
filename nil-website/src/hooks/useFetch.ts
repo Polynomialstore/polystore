@@ -50,6 +50,7 @@ export interface FetchInput {
   mduSizeBytes?: number
   blobSizeBytes?: number
   sponsoredAuth?: SponsoredRetrievalAuth
+  routePreference?: RoutePreference
 }
 
 export type FetchPhase =
@@ -219,9 +220,10 @@ export function useFetch() {
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
       const preferenceOverride: RoutePreference | undefined =
-        serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
+        input.routePreference ??
+        (serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
           ? 'prefer_direct_sp'
-          : undefined
+          : undefined)
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase

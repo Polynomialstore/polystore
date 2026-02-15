@@ -119,16 +119,9 @@ export async function executeWithFallback<T>(
         })
 
         if (isTerminal(errorClass)) {
-          const finishedAtMs = Date.now()
-          const trace: DecisionTrace = {
-            op,
-            preference: opts.preference,
-            startedAtMs,
-            finishedAtMs,
-            attempts,
-            chosen: null,
-          }
-          throw new TransportTraceError(`Terminal ${op} failure`, trace)
+          // Terminal errors should stop retrying the current backend attempt chain,
+          // but we still want cross-backend fallback (gateway -> direct SP -> libp2p).
+          break
         }
 
         if (!isRetryable(errorClass)) {
