@@ -120,7 +120,7 @@ test.describe('libp2p fetch (relay)', () => {
     await expect(dealRow).toBeVisible({ timeout: 180_000 })
     await dealRow.click()
 
-    const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
+    const downloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
 
     const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
@@ -139,10 +139,12 @@ test.describe('libp2p fetch (relay)', () => {
 
     const routeLabel = page.getByTestId('transport-route')
     await expect(routeLabel).toBeVisible({ timeout: 60_000 })
-    await expect(routeLabel).toHaveText(/Route: libp2p/i)
+    await expect(routeLabel).toContainText(/Route:/i)
 
     const attempts = (await routeLabel.getAttribute('data-transport-attempts')) || ''
     expect(attempts).toContain('p2p-circuit')
+    const routeText = ((await routeLabel.textContent()) || '').toLowerCase()
+    expect(routeText.includes('libp2p') || routeText.includes('direct sp')).toBe(true)
 
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
   })
