@@ -73,6 +73,21 @@ const PROOFS_HIDDEN_POLL_MS = 600_000
 const RPC_HEALTH_POLL_MS = 60_000
 const RPC_HEALTH_HIDDEN_POLL_MS = 300_000
 
+const DURATION_PRESETS = [
+  { value: '1d', label: '1 day', seconds: 24 * 60 * 60 },
+  { value: '1w', label: '1 week', seconds: 7 * 24 * 60 * 60 },
+  { value: '1m', label: '1 month', seconds: 30 * 24 * 60 * 60 },
+  { value: '3m', label: '3 months', seconds: 90 * 24 * 60 * 60 },
+  { value: '6m', label: '6 months', seconds: 182 * 24 * 60 * 60 },
+  { value: '1y', label: '1 year', seconds: 365 * 24 * 60 * 60 },
+  { value: '2y', label: '2 years', seconds: 2 * 365 * 24 * 60 * 60 },
+  { value: 'custom', label: 'Custom' },
+] as const
+
+const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
+  DURATION_PRESETS.filter((preset) => preset.value !== 'custom').map((preset) => [preset.value, preset.seconds]),
+)
+
 export function Dashboard() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
@@ -208,7 +223,8 @@ export function Dashboard() {
 
 
   // Step 1: Alloc State
-  const [duration, setDuration] = useState('100')
+  const [duration, setDuration] = useState('31536000')
+  const [durationPreset, setDurationPreset] = useState('1y')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
   const [placementProfile, setPlacementProfile] = useState<'auto' | 'custom'>('auto')
@@ -499,6 +515,17 @@ export function Dashboard() {
   }, [rpcHeight, targetDealEndBlock, targetDealExpired])
   const isTargetDealMode2 = targetDealService.mode === 'mode2' || targetDealService.mode === 'auto'
   const hasSelectedDeal = Boolean(targetDealId)
+
+  const setDurationFromPreset = useCallback(
+    (preset: string) => {
+      setDurationPreset(preset)
+      const matched = DURATION_PRESET_BY_SECONDS[preset]
+      if (typeof matched === 'number') {
+        setDuration(String(matched))
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (hasSelectedDeal && !isTargetDealMode2) {
@@ -2502,11 +2529,29 @@ export function Dashboard() {
 
             <div className="mt-4 space-y-3 text-sm">
               <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration</span>
+                <select
+                  value={durationPreset}
+                  onChange={(e) => {
+                    setDurationFromPreset(e.target.value)
+                  }}
+                  data-testid="alloc-duration"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                >
+                  {DURATION_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (seconds)</span>
                 <input
-                  defaultValue={duration ?? ''}
+                  value={duration ?? ''}
                   onChange={(e) => setDuration(e.target.value ?? '')}
-                  data-testid="alloc-duration"
+                  readOnly={durationPreset !== 'custom'}
+                  data-testid="alloc-duration-seconds"
                   className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                 />
               </label>

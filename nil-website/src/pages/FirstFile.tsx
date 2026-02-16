@@ -20,6 +20,21 @@ import { toHexFromBase64OrHex } from '../domain/hex'
 import { classifyWalletError } from '../lib/walletErrors'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 
+const DURATION_PRESETS = [
+  { value: '1d', label: '1 day', seconds: 24 * 60 * 60 },
+  { value: '1w', label: '1 week', seconds: 7 * 24 * 60 * 60 },
+  { value: '1m', label: '1 month', seconds: 30 * 24 * 60 * 60 },
+  { value: '3m', label: '3 months', seconds: 90 * 24 * 60 * 60 },
+  { value: '6m', label: '6 months', seconds: 182 * 24 * 60 * 60 },
+  { value: '1y', label: '1 year', seconds: 365 * 24 * 60 * 60 },
+  { value: '2y', label: '2 years', seconds: 2 * 365 * 24 * 60 * 60 },
+  { value: 'custom', label: 'Custom' },
+] as const
+
+const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
+  DURATION_PRESETS.filter((preset) => preset.value !== 'custom').map((preset) => [preset.value, preset.seconds]),
+)
+
 function bytesToHex(bytes: Uint8Array): string {
   let out = ''
   for (const b of bytes) out += b.toString(16).padStart(2, '0')
@@ -49,7 +64,8 @@ export function FirstFile() {
     refresh: refreshWalletNetwork,
   } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
 
-  const [duration, setDuration] = useState('100')
+  const [duration, setDuration] = useState('31536000')
+  const [durationPreset, setDurationPreset] = useState('1y')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
 
@@ -393,8 +409,8 @@ export function FirstFile() {
         </div>
       )}
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="flex items-center justify-between gap-4">
+    <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               1
@@ -481,10 +497,32 @@ export function FirstFile() {
 
         <div className="grid md:grid-cols-3 gap-3 text-sm">
           <label className="block">
+            <div className="text-xs text-muted-foreground">Duration</div>
+            <select
+              value={durationPreset}
+              onChange={(e) => {
+                const preset = e.target.value
+                setDurationPreset(preset)
+                const presetSeconds = DURATION_PRESET_BY_SECONDS[preset]
+                if (typeof presetSeconds === 'number') {
+                  setDuration(String(presetSeconds))
+                }
+              }}
+              className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+            >
+              {DURATION_PRESETS.map((preset) => (
+                <option key={preset.value} value={preset.value}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
             <div className="text-xs text-muted-foreground">Duration (seconds)</div>
             <input
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
+              readOnly={durationPreset !== 'custom'}
               className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
             />
           </label>
