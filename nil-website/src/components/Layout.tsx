@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 
@@ -33,6 +33,7 @@ export const Layout = () => {
         { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         { name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
         { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Rocket className="w-5 h-5" /> },
+        { name: "SP Onboarding", path: "/sp-onboarding", description: "Desktop + remote provider launch companion.", icon: <Server className="w-5 h-5" /> },
         { name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
         { name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
         { name: "Devnet Join", path: "/devnet", description: "Join a multi-provider devnet.", icon: <Terminal className="w-5 h-5" /> },
@@ -236,6 +237,7 @@ export const Layout = () => {
               <h4 className="font-bold mb-4 text-foreground">Resources</h4>
               <ul className="space-y-3">
                 <li><Link to="/testnet" className="hover:text-primary transition-colors">Testnet Guide</Link></li>
+                <li><Link to="/sp-onboarding" className="hover:text-primary transition-colors">SP Onboarding</Link></li>
                 <li><a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub</a></li>
               </ul>
             </div>

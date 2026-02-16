@@ -23,6 +23,7 @@ import { TransportProvider } from "./context/TransportContext";
 import { Dashboard } from "./components/Dashboard";
 import { Devnet } from "./pages/Devnet";
 import { FirstFile } from "./pages/FirstFile";
+import { SpOnboarding } from "./pages/SpOnboarding";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
               <Route index element={<Home />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="first-file" element={<FirstFile />} />
+              <Route path="sp-onboarding" element={<SpOnboarding />} />
               <Route path="devnet" element={<Devnet />} />
               <Route path="testnet" element={<TestnetDocs />} />
               <Route path="leaderboard" element={<Leaderboard />} />

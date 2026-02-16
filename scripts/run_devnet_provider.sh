@@ -39,8 +39,47 @@ LOG_DIR="$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY"
 PID_DIR="$LOG_DIR/pids"
 
 GO_BIN="${GO_BIN:-$(command -v go)}"
+NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
+
+find_nil_core_lib_dir() {
+  local candidate
+  local candidates=(
+    "$NIL_CORE_LIB_DIR"
+    "$ROOT_DIR/nilchain/lib"
+    "$ROOT_DIR/nil_core/target/release"
+    "$ROOT_DIR/nil_gateway_gui/src-tauri/bin"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    [ -n "$candidate" ] || continue
+    if [ -f "$candidate/libnil_core.so" ] || [ -f "$candidate/libnil_core.dylib" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+ensure_nil_core_runtime() {
+  local lib_dir
+  lib_dir="$(find_nil_core_lib_dir || true)"
+
+  if [ -z "$lib_dir" ]; then
+    echo "==> Building nil_core runtime library..."
+    (cd "$ROOT_DIR/nil_core" && cargo build --release >/dev/null)
+    lib_dir="$ROOT_DIR/nil_core/target/release"
+  fi
+
+  if [ -f "$lib_dir/libnil_core.so" ]; then
+    export LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
+  if [ -f "$lib_dir/libnil_core.dylib" ]; then
+    export DYLD_LIBRARY_PATH="$lib_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+  fi
+}
 
 ensure_nilchaind() {
   if [ -x "$NILCHAIND_BIN" ]; then
@@ -192,6 +231,8 @@ stop_provider() {
   echo "Stopped provider (pid $pid)"
 }
 
+ensure_nil_core_runtime
+
 case "$ACTION" in
   init) init_provider ;;
   register) register_provider ;;
@@ -202,4 +243,3 @@ case "$ACTION" in
     exit 1
     ;;
 esac
-

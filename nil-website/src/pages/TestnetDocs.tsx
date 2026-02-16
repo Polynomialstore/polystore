@@ -38,6 +38,10 @@ export const TestnetDocs = () => {
         <p className="mt-3 text-sm text-muted-foreground">
           For the multi-provider devnet join flow, see <a className="text-primary underline" href="/#/devnet">Devnet Join</a>.
         </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          For the full provider onboarding companion (desktop + remote, downloads, health checks), see{" "}
+          <a className="text-primary underline" href="/#/sp-onboarding">SP Onboarding Companion</a>.
+        </p>
       </div>
 
       <div className="grid gap-12">

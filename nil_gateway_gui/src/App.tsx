@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import logoDark from "./assets/nilstore-dark.png";
+import { SpLaunchpad } from "./components/SpLaunchpad";
 import {
   fetchFile,
   gatewayAttach,
@@ -193,6 +194,7 @@ export default function App() {
   const [storageDealFilter, setStorageDealFilter] = useState<string>("all");
   const [storageFileQuery, setStorageFileQuery] = useState("");
   const [activePanel, setActivePanel] = useState<"overview" | "storage" | "diagnostics">("overview");
+  const [workspace, setWorkspace] = useState<"gateway" | "sp">("gateway");
 
   const baseHost = useMemo(() => hostFromBaseUrl(gatewayBaseUrl), [gatewayBaseUrl]);
   const baseIsLoopback = useMemo(() => isLoopbackHost(baseHost), [baseHost]);
@@ -870,6 +872,16 @@ export default function App() {
       activePanel === panel ? "panel-tab-active" : "",
     ].join(" ");
 
+  if (workspace === "sp") {
+    return (
+      <div className="gateway-app min-h-screen">
+        <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
+          <SpLaunchpad onBack={() => setWorkspace("gateway")} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="gateway-app min-h-screen">
       <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
@@ -921,6 +933,13 @@ export default function App() {
                 onClick={() => setActivePanel("diagnostics")}
               >
                 Diagnostics
+              </button>
+              <button
+                type="button"
+                className="control-btn"
+                onClick={() => setWorkspace("sp")}
+              >
+                SP Launchpad
               </button>
             </div>
           </div>

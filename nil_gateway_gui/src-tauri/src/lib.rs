@@ -1,6 +1,7 @@
 pub mod api;
 pub mod bridge;
 pub mod sidecar;
+pub mod sp;
 
 use api::{
     GatewayListFilesResponse, GatewayStatusResponse, GatewayTxResponse, GatewayUploadResponse,
@@ -150,6 +151,65 @@ async fn gateway_local_storage(
     sidecar::local_storage_summary(&app)
 }
 
+#[tauri::command]
+async fn sp_network_defaults() -> Result<sp::SpNetworkDefaults, String> {
+    Ok(sp::network_defaults())
+}
+
+#[tauri::command]
+async fn sp_key_create(alias: String) -> Result<sp::SpKeyInfo, String> {
+    sp::key_create(alias).await
+}
+
+#[tauri::command]
+async fn sp_balance_check(
+    req: sp::SpBalanceCheckRequest,
+) -> Result<sp::SpBalanceCheckResponse, String> {
+    sp::balance_check(req).await
+}
+
+#[tauri::command]
+async fn sp_validate_endpoint(
+    req: sp::SpEndpointValidateRequest,
+) -> Result<sp::SpEndpointValidateResponse, String> {
+    sp::endpoint_validate(req).await
+}
+
+#[tauri::command]
+async fn sp_register_provider(
+    req: sp::SpRegisterProviderRequest,
+) -> Result<sp::SpCommandResponse, String> {
+    sp::register_provider(req).await
+}
+
+#[tauri::command]
+async fn sp_start_provider_local(
+    req: sp::SpStartProviderRequest,
+) -> Result<sp::SpCommandResponse, String> {
+    sp::start_provider_local(req).await
+}
+
+#[tauri::command]
+async fn sp_stop_provider_local(
+    req: sp::SpStopProviderRequest,
+) -> Result<sp::SpCommandResponse, String> {
+    sp::stop_provider_local(req).await
+}
+
+#[tauri::command]
+async fn sp_health_snapshot(
+    req: sp::SpHealthSnapshotRequest,
+) -> Result<sp::SpHealthSnapshot, String> {
+    sp::health_snapshot(req).await
+}
+
+#[tauri::command]
+async fn sp_generate_remote_bundle(
+    req: sp::SpRemoteBundleRequest,
+) -> Result<sp::SpRemoteBundleResponse, String> {
+    Ok(sp::generate_remote_bundle(req))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // On some Linux GPU stacks (notably mixed/transitioning NVIDIA setups),
@@ -178,7 +238,16 @@ pub fn run() {
             deal_create_evm,
             deal_update_content_evm,
             deal_list_files,
-            deal_fetch_file
+            deal_fetch_file,
+            sp_network_defaults,
+            sp_key_create,
+            sp_balance_check,
+            sp_validate_endpoint,
+            sp_register_provider,
+            sp_start_provider_local,
+            sp_stop_provider_local,
+            sp_health_snapshot,
+            sp_generate_remote_bundle
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

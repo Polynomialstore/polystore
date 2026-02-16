@@ -103,6 +103,153 @@ export type BridgeStartResponse = {
   url: string;
 };
 
+export type SpDeploymentMode = "local" | "remote";
+export type SpEndpointMode = "direct" | "cloudflare_tunnel";
+
+export type SpNetworkDefaults = {
+  chain_id: string;
+  hub_lcd: string;
+  hub_node: string;
+  provider_listen: string;
+  provider_base_url: string;
+  provider_capabilities: string;
+  provider_total_storage: string;
+  endpoint_mode_default: SpEndpointMode;
+};
+
+export type SpKeyInfo = {
+  alias: string;
+  address: string;
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+};
+
+export type SpBalanceCheckRequest = {
+  hub_lcd: string;
+  address: string;
+  denom?: string;
+  min_recommended?: string;
+};
+
+export type SpBalanceCheckResponse = {
+  ok: boolean;
+  address: string;
+  denom: string;
+  amount: string;
+  min_recommended: string;
+  sufficient: boolean;
+  detail: string;
+};
+
+export type SpCheckResult = {
+  name: string;
+  ok: boolean;
+  detail: string;
+  severity: "info" | "warn" | "error";
+};
+
+export type SpEndpointValidateRequest = {
+  endpoint: string;
+  mode?: SpEndpointMode;
+  provider_base_url?: string;
+  timeout_secs?: number;
+};
+
+export type SpEndpointValidateResponse = {
+  valid: boolean;
+  normalized_endpoint: string;
+  checks: SpCheckResult[];
+};
+
+export type SpRegisterProviderRequest = {
+  provider_key: string;
+  chain_id: string;
+  hub_lcd: string;
+  hub_node: string;
+  provider_endpoint: string;
+  provider_capabilities?: string;
+  provider_total_storage?: string;
+  gas_prices?: string;
+};
+
+export type SpStartProviderRequest = {
+  provider_key: string;
+  chain_id: string;
+  hub_lcd: string;
+  hub_node: string;
+  provider_listen: string;
+  shared_auth: string;
+};
+
+export type SpStopProviderRequest = {
+  provider_key: string;
+};
+
+export type SpCommandResponse = {
+  ok: boolean;
+  action: string;
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+};
+
+export type SpIssue = {
+  code:
+    | "chain_unreachable"
+    | "chain_id_mismatch"
+    | "provider_unregistered"
+    | "endpoint_unreachable"
+    | "service_down"
+    | "auth_mismatch"
+    | "insufficient_gas"
+    | "endpoint_drift";
+  severity: "critical" | "degraded";
+  message: string;
+  recommended_action: string;
+};
+
+export type SpHealthSnapshotRequest = {
+  chain_id?: string;
+  hub_lcd: string;
+  provider_base_url: string;
+  provider_addr?: string;
+  provider_key?: string;
+  shared_auth_present?: boolean;
+};
+
+export type SpHealthSnapshot = {
+  status: "healthy" | "degraded" | "critical";
+  captured_at_unix: number;
+  checks: SpCheckResult[];
+  issues: SpIssue[];
+  provider_base_url: string;
+  provider_addr?: string;
+  provider_key?: string;
+};
+
+export type SpRemoteBundleRequest = {
+  provider_key: string;
+  chain_id: string;
+  hub_lcd: string;
+  hub_node: string;
+  provider_endpoint: string;
+  provider_listen: string;
+  shared_auth: string;
+};
+
+export type SpRemoteBundleResponse = {
+  env_block: string;
+  init_command: string;
+  register_command: string;
+  start_command: string;
+  stop_command: string;
+  healthcheck_command: string;
+  systemd_unit: string;
+  systemd_env: string;
+};
+
 export async function gatewayStart(config?: {
   listen_addr?: string;
   env?: Record<string, string>;
@@ -180,4 +327,54 @@ export async function fetchFile(params: {
   output_path: string;
 }): Promise<void> {
   return invoke("deal_fetch_file", params);
+}
+
+export async function spNetworkDefaults(): Promise<SpNetworkDefaults> {
+  return invoke("sp_network_defaults");
+}
+
+export async function spKeyCreate(alias: string): Promise<SpKeyInfo> {
+  return invoke("sp_key_create", { alias });
+}
+
+export async function spBalanceCheck(
+  req: SpBalanceCheckRequest,
+): Promise<SpBalanceCheckResponse> {
+  return invoke("sp_balance_check", { req });
+}
+
+export async function spValidateEndpoint(
+  req: SpEndpointValidateRequest,
+): Promise<SpEndpointValidateResponse> {
+  return invoke("sp_validate_endpoint", { req });
+}
+
+export async function spRegisterProvider(
+  req: SpRegisterProviderRequest,
+): Promise<SpCommandResponse> {
+  return invoke("sp_register_provider", { req });
+}
+
+export async function spStartProviderLocal(
+  req: SpStartProviderRequest,
+): Promise<SpCommandResponse> {
+  return invoke("sp_start_provider_local", { req });
+}
+
+export async function spStopProviderLocal(
+  req: SpStopProviderRequest,
+): Promise<SpCommandResponse> {
+  return invoke("sp_stop_provider_local", { req });
+}
+
+export async function spHealthSnapshot(
+  req: SpHealthSnapshotRequest,
+): Promise<SpHealthSnapshot> {
+  return invoke("sp_health_snapshot", { req });
+}
+
+export async function spGenerateRemoteBundle(
+  req: SpRemoteBundleRequest,
+): Promise<SpRemoteBundleResponse> {
+  return invoke("sp_generate_remote_bundle", { req });
 }
