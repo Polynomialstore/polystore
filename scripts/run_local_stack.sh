@@ -369,6 +369,24 @@ wait_for_ports_clear() {
   done
 }
 
+wait_for_local_gateway_health() {
+  local name="$1"
+  local url="$2"
+  local log_file="$3"
+  local attempts="${4:-20}"
+  local i
+  for i in $(seq 1 "$attempts"); do
+    if timeout 5s curl -sS -o /dev/null -w "%{http_code}" "$url" 2>/dev/null | grep -q "^200$"; then
+      echo "$name healthy at $url"
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "$name failed health check at $url; check $log_file"
+  tail -n 60 "$log_file" || true
+  exit 1
+}
+
 ensure_nilchaind() {
   ensure_nil_core_shared
   banner "Building and installing nilchaind (via $GO_BIN)"
@@ -861,6 +879,7 @@ start_sp_gateway() {
       exit 1
     fi
     echo "SP gateway ($key_name) pid $(cat "$PID_DIR/$pid_name.pid"), port $port, logs: $LOG_DIR/$log_name"
+    wait_for_local_gateway_health "SP gateway ($key_name)" "http://127.0.0.1:${port}/health" "$LOG_DIR/$log_name" 20
   done
 }
 
@@ -911,6 +930,7 @@ start_user_gateway() {
     exit 1
   fi
   echo "User gateway pid $(cat "$PID_DIR/gateway_user.pid"), logs: $LOG_DIR/gateway_user.log"
+  wait_for_local_gateway_health "User gateway" "http://127.0.0.1:8080/health" "$LOG_DIR/gateway_user.log" 20
 }
 
 start_bridge() {

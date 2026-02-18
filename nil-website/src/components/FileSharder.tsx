@@ -145,6 +145,27 @@ function isGatewayNetworkError(msg: string): boolean {
   )
 }
 
+function isProviderUploadConnectivityError(msg: string): boolean {
+  const text = String(msg || '')
+  const lower = text.toLowerCase()
+  const providerPath =
+    lower.includes('provider upload failed') ||
+    lower.includes('mode2 provider upload failed') ||
+    lower.includes('/sp/upload_mdu') ||
+    lower.includes('/sp/upload')
+  if (!providerPath) return false
+  return (
+    lower.includes('connection refused') ||
+    lower.includes('econnrefused') ||
+    lower.includes('dial tcp') ||
+    lower.includes('failed to fetch') ||
+    lower.includes('load failed') ||
+    lower.includes('networkerror') ||
+    lower.includes('timeout') ||
+    lower.includes('connect refused')
+  )
+}
+
 function formatGatewayError(error: unknown): string {
   if (error instanceof Error) {
     const name = String(error.name || '').trim()
@@ -1544,6 +1565,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const gatewayBases = localGatewayCandidates(gatewaySeed)
         let gatewayErrorMessage = ''
         let gatewayUnreachable = false
+        let providerUploadUnavailable = false
 
         for (let i = 0; i < gatewayBases.length; i++) {
           const gatewayBase = gatewayBases[i]
@@ -1588,7 +1610,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               }
             }
 
-            const unreachable = isGatewayNetworkError(msg)
+            const providerPathUnavailable = isProviderUploadConnectivityError(msg)
+            if (providerPathUnavailable) {
+              providerUploadUnavailable = true
+              addLog('> Storage Provider path is unavailable (SP endpoint refused/timeout). Ensure SP gateways are running on 127.0.0.1:8082-8084.')
+            }
+            const unreachable = isGatewayNetworkError(msg) && !providerPathUnavailable
             gatewayErrorMessage = msg
             gatewayUnreachable = unreachable
             if (unreachable && i < gatewayBases.length - 1) {
@@ -1599,6 +1626,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         }
 
+        if (providerUploadUnavailable && gatewayErrorMessage) {
+          const errorMessage = `Storage Provider upload path unavailable: ${gatewayErrorMessage}`
+          setMode2UploadError(errorMessage)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'error',
+            label: errorMessage,
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+          setProcessing(false)
+          return
+        }
         if (gatewayUnreachable) {
           if (file.size > gatewayFallbackWasmMaxFileBytes) {
             const sizeLabel = formatBytes(file.size)
