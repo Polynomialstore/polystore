@@ -8,7 +8,7 @@ PID_DIR="$LOG_DIR/pids"
 GUI_LOG="$LOG_DIR/gateway_gui.log"
 GUI_PID_FILE="$PID_DIR/gateway_gui.pid"
 
-PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
+PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 START_WEB="${START_WEB:-1}"
 START_GUI="${START_GUI:-1}"
 GUI_CMD="${GUI_CMD:-npm run tauri dev}"
