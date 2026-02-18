@@ -493,6 +493,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     let manifestRoot = String((await readManifestRoot(dealId)) || '').trim()
     if (!manifestRoot) {
+      manifestRoot = String(lastCommitRef.current || '').trim()
+    }
+    if (!manifestRoot) {
       try {
         const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
         manifestRoot = String(deal?.cid || '').trim()
@@ -502,7 +505,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
     const manifestKey = manifestRoot.replace(/^0x/i, '').trim()
     if (!manifestKey || /^0+$/.test(manifestKey)) {
-      addLog('> Gateway rehydrate skipped: no committed manifest root found in browser state.')
+      addLog('> Gateway rehydrate skipped: no committed manifest root found in browser/on-chain state.')
       return false
     }
 

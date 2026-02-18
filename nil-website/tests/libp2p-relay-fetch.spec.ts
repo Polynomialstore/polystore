@@ -122,6 +122,22 @@ test.describe('libp2p fetch (relay)', () => {
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
+    const clearBrowserCacheBtn = page.locator(
+      `[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`,
+    )
+    if (await clearBrowserCacheBtn.isEnabled().catch(() => false)) {
+      await clearBrowserCacheBtn.click()
+    }
+
+    const blockGatewayCacheFetch = async (route: import('@playwright/test').Route) => {
+      if (route.request().method().toUpperCase() === 'OPTIONS') {
+        await route.continue()
+        return
+      }
+      await route.abort('failed')
+    }
+    await page.route('http://127.0.0.1:8080/gateway/fetch/**', blockGatewayCacheFetch)
+    await page.route('http://localhost:8080/gateway/fetch/**', blockGatewayCacheFetch)
 
     const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
     await downloadBtn.click()
