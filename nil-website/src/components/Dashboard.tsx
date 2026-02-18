@@ -123,6 +123,7 @@ export function Dashboard() {
   const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   const activeChainId = walletChainId ?? chainId
   const isWrongNetwork = isConnected && walletIsWrongNetwork
+  const walletReady = Boolean(isConnected && address && !accountPermissionMismatch && !isWrongNetwork)
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
@@ -310,7 +311,7 @@ export function Dashboard() {
   useEffect(() => {
     if (!accountPermissionMismatch) return
     setStatusTone('error')
-    setStatusMsg('MetaMask account changed. Reconnect and approve access for the active account.')
+    setStatusMsg('Wallet access is required. Unlock MetaMask (if needed), then click Connect Wallet and approve access for the active account.')
   }, [accountPermissionMismatch])
 
   useEffect(() => {
@@ -1182,6 +1183,10 @@ export function Dashboard() {
     }
 
     try {
+      if (accountPermissionMismatch) {
+        await requestWalletReconnect()
+        return
+      }
       if (!isConnected || !address) {
         openConnectModal?.()
         return
@@ -1892,7 +1897,11 @@ export function Dashboard() {
                   {walletAddressShort}
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {isWrongNetwork ? `Wrong chain (${activeChainId})` : `Chain ${activeChainId}`}
+                  {accountPermissionMismatch
+                    ? 'Wallet access required'
+                    : isWrongNetwork
+                      ? `Wrong chain (${activeChainId})`
+                      : `Chain ${activeChainId}`}
                 </div>
               </div>
               {walletReconnectHint ? (
@@ -2654,16 +2663,24 @@ export function Dashboard() {
                   )}
                 </div>
                 <button
-                  onClick={isWrongNetwork ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch }) : handleCreateDealClick}
+                  onClick={
+                    accountPermissionMismatch
+                      ? () => void requestWalletReconnect()
+                      : isWrongNetwork
+                        ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch })
+                        : handleCreateDealClick
+                  }
                   disabled={dealLoading || (placementProfile === 'custom' && Boolean(mode2Config.error))}
                   data-testid="alloc-submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                 >
                   {dealLoading
                     ? 'Creating...'
-                    : isWrongNetwork
+                    : accountPermissionMismatch
+                      ? 'Reconnect wallet'
+                      : isWrongNetwork
                       ? 'Switch network'
-                      : !isConnected || !address
+                      : !walletReady
                           ? 'Connect wallet'
                           : 'Create deal'}
                 </button>

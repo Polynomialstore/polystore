@@ -4,6 +4,7 @@ import { appConfig } from '../config'
 import { useAccount, useChainId } from 'wagmi'
 import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
+import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 import { CheckCircle2, Copy, RefreshCw } from 'lucide-react'
 
 const STATUS_POLL_MS = 60_000
@@ -55,6 +56,7 @@ export function StatusBar() {
   const chainId = useChainId()
   const { isConnected } = useAccount()
   const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 15_000 })
+  const { accountPermissionMismatch } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
   const isLocked = isConnected && unlockState === 'locked'
   const { preference, setPreference, lastTrace } = useTransportContext()
   const [height, setHeight] = useState<number | undefined>(undefined)
@@ -145,7 +147,9 @@ export function StatusBar() {
   }, [])
 
   const walletBadge =
-    isLocked
+    accountPermissionMismatch
+      ? <Badge label="Wallet: Access required" status="warn" />
+      : isLocked
       ? <Badge label="Wallet: Locked" status="warn" />
       : isConnected && chainId
       ? chainId === appConfig.chainId
@@ -190,6 +194,7 @@ export function StatusBar() {
         wallet: {
           connected: isConnected,
           locked: isLocked,
+          accessMismatch: accountPermissionMismatch,
           walletChainId: chainId ?? null,
         },
         status: {
