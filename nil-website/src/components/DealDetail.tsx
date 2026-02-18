@@ -32,6 +32,42 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   return out
 }
 
+function decodeGatewayHttpError(status: number, bodyText: string): string {
+  const trimmed = String(bodyText ?? '').trim()
+  if (!trimmed) return `Gateway fetch failed (${status})`
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>
+    const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
+    const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
+    const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
+    if (err && hint) return `${err} (${hint})`
+    if (err) return err
+    if (message) return message
+  } catch {
+    // Ignore and use raw text.
+  }
+  return trimmed
+}
+
+function localGatewayBaseCandidates(rawBase: string): string[] {
+  const trimmed = String(rawBase || '').trim().replace(/\/$/, '')
+  const out: string[] = []
+  if (trimmed) out.push(trimmed)
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'localhost') {
+      parsed.hostname = '127.0.0.1'
+      out.push(parsed.toString().replace(/\/$/, ''))
+    } else if (parsed.hostname === '127.0.0.1') {
+      parsed.hostname = 'localhost'
+      out.push(parsed.toString().replace(/\/$/, ''))
+    }
+  } catch {
+    // Ignore malformed configured base; caller will surface fetch failure.
+  }
+  return Array.from(new Set(out))
+}
+
 async function ensureWasmReady(): Promise<void> {
   if (wasmReadyPromise) return wasmReadyPromise
   wasmReadyPromise = (async () => {
@@ -199,6 +235,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'heat'>('files')
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
+  const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
     listFiles: listFilesTransport,
@@ -466,6 +503,94 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     a.click()
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
+
+  const downloadViaGatewayCache = useCallback(async ({
+    manifestRoot,
+    dealId,
+    owner,
+    filePath,
+    rangeStart,
+    rangeLen,
+    fileSizeBytes,
+  }: {
+    manifestRoot: string
+    dealId: string
+    owner: string
+    filePath: string
+    rangeStart?: number
+    rangeLen?: number
+    fileSizeBytes?: number
+  }): Promise<Blob> => {
+    const normalizedManifest = String(manifestRoot || '').trim()
+    if (!normalizedManifest) throw new Error('manifestRoot is required')
+    const normalizedDealId = String(dealId || '').trim()
+    if (!normalizedDealId) throw new Error('dealId is required')
+    const normalizedOwner = String(owner || '').trim()
+    if (!normalizedOwner) throw new Error('owner is required')
+    const normalizedFilePath = String(filePath || '').trim()
+    if (!normalizedFilePath) throw new Error('filePath is required')
+
+    const safeStart = Math.max(0, Number(rangeStart || 0) || 0)
+    let safeLen = Math.max(0, Number(rangeLen || 0) || 0)
+    const sizeBytes = Math.max(0, Number(fileSizeBytes || 0) || 0)
+    if (safeLen === 0) {
+      if (sizeBytes <= 0) throw new Error('file size is required for full gateway cache download')
+      if (safeStart >= sizeBytes) throw new Error('rangeStart beyond EOF')
+      safeLen = sizeBytes - safeStart
+    }
+    if (safeLen <= 0) throw new Error('rangeLen must be positive')
+
+    const blobSizeBytes = Math.max(1, Number(slab?.blob_size_bytes ?? 128 * 1024))
+    const search = new URLSearchParams({
+      deal_id: normalizedDealId,
+      owner: normalizedOwner,
+      file_path: normalizedFilePath,
+      deputy: '1',
+    })
+    const query = search.toString()
+
+    let lastError: Error | null = null
+    for (const gatewayBase of gatewayDownloadBases) {
+      try {
+        let cursor = safeStart
+        const endExclusive = safeStart + safeLen
+        const parts: ArrayBuffer[] = []
+
+        while (cursor < endExclusive) {
+          const offsetInBlob = cursor % blobSizeBytes
+          const remainingInBlob = blobSizeBytes - offsetInBlob
+          const remainingTotal = endExclusive - cursor
+          const chunkLen = Math.max(1, Math.min(remainingInBlob, remainingTotal))
+          const chunkEnd = cursor + chunkLen - 1
+          const url = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${query}`
+          const res = await fetch(url, {
+            method: 'GET',
+            headers: { Range: `bytes=${cursor}-${chunkEnd}` },
+          })
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '')
+            throw new Error(decodeGatewayHttpError(res.status, txt))
+          }
+          const buf = await res.arrayBuffer()
+          if (buf.byteLength === 0) {
+            throw new Error('gateway returned empty chunk')
+          }
+          const clampedLen = Math.min(buf.byteLength, chunkLen)
+          parts.push(buf.byteLength === clampedLen ? buf : buf.slice(0, clampedLen))
+          cursor += clampedLen
+          if (clampedLen < chunkLen && cursor < endExclusive) {
+            throw new Error('gateway returned short chunk')
+          }
+        }
+
+        return new Blob(parts, { type: 'application/octet-stream' })
+      } catch (e: unknown) {
+        lastError = e instanceof Error ? e : new Error(String(e))
+      }
+    }
+
+    throw lastError ?? new Error('gateway cache download failed')
+  }, [gatewayDownloadBases, slab?.blob_size_bytes])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<boolean> => {
     const normalizedChainRoot = String(chainManifestRoot || '').trim().toLowerCase()
@@ -1334,6 +1459,39 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               action: 'download',
                                               status: 'pending',
                                             })
+                                            if (gatewayCached) {
+                                              try {
+                                                const gatewayBlob = await downloadViaGatewayCache({
+                                                  manifestRoot: manifestHex,
+                                                  dealId,
+                                                  owner: nilAddress,
+                                                  filePath: f.path,
+                                                  rangeStart: safeStart,
+                                                  rangeLen: safeLen,
+                                                  fileSizeBytes: f.size_bytes,
+                                                })
+                                                const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
+                                                await writeCachedFile(dealId, f.path, bytes)
+                                                setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
+                                                downloadBlobAsFile(gatewayBlob, f.path)
+                                                onFileActivity?.({
+                                                  dealId,
+                                                  filePath: f.path,
+                                                  sizeBytes: f.size_bytes,
+                                                  manifestRoot: manifestHex,
+                                                  action: 'download',
+                                                  status: 'success',
+                                                })
+                                                return
+                                              } catch (gatewayErr) {
+                                                const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
+                                                console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
+                                                  dealId,
+                                                  filePath: f.path,
+                                                  error: fallbackReason,
+                                                })
+                                              }
+                                            }
                                             const autoServiceBase = resolveProviderHttpBase()
                                             const autoRoutePreference =
                                               transportPreference === 'prefer_p2p'
@@ -1419,26 +1577,19 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               action: 'download',
                                               status: 'pending',
                                             })
-                                            const result = await fetchFile({
-                                              dealId,
+                                            const gatewayBlob = await downloadViaGatewayCache({
                                               manifestRoot: manifestHex,
+                                              dealId,
                                               owner: nilAddress,
                                               filePath: f.path,
-                                              serviceBase: appConfig.gatewayBase,
-                                              routePreference: 'prefer_gateway',
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
-                                              fileStartOffset: f.start_offset,
                                               fileSizeBytes: f.size_bytes,
-                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                              sponsoredAuth,
                                             })
-                                            if (!result) throw new Error('download failed')
-                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
+                                            const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
                                             await writeCachedFile(dealId, f.path, bytes)
                                             setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBlobAsFile(result.blob, f.path)
+                                            downloadBlobAsFile(gatewayBlob, f.path)
                                             onFileActivity?.({
                                               dealId,
                                               filePath: f.path,

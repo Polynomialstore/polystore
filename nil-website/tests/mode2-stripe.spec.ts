@@ -253,6 +253,8 @@ test.describe('mode2 stripe', () => {
     }
 
     await clearBrowserCache()
+    const gatewayCacheText = ((await fileRow.textContent().catch(() => '')) || '').toLowerCase()
+    const gatewayCacheAvailable = gatewayCacheText.includes('gateway cache: yes')
 
     const autoGatewayFetchBefore = fetchGatewayCalls
     const autoProviderFetchBefore = fetchProviderCalls
@@ -260,11 +262,10 @@ test.describe('mode2 stripe', () => {
     const autoProviderPlanBefore = planProviderCalls
     const autoBytes = await readDownload(autoDownloadBtn)
     expect(autoBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toHaveText(/Route:\s*(gateway|direct sp)/i, { timeout: 60_000 })
-    const autoRoute = ((await routeEl.textContent().catch(() => '')) || '').toLowerCase()
-    if (autoRoute.includes('gateway')) {
+    if (gatewayCacheAvailable) {
       expect(fetchGatewayCalls).toBeGreaterThan(autoGatewayFetchBefore)
-      expect(planGatewayCalls).toBeGreaterThan(autoGatewayPlanBefore)
+      expect(planGatewayCalls).toBe(autoGatewayPlanBefore)
+      expect(planProviderCalls).toBe(autoProviderPlanBefore)
     } else {
       expect(fetchProviderCalls).toBeGreaterThan(autoProviderFetchBefore)
       expect(
@@ -316,15 +317,13 @@ test.describe('mode2 stripe', () => {
     const gatewayProviderPlanBefore = planProviderCalls
     const gatewayBytes = await readDownload(gatewayDownloadBtn)
     expect(gatewayBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toHaveText(/Route:\s*(gateway|direct sp)/i, { timeout: 60_000 })
     expect(
       fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
     ).toBe(true)
-    expect(
-      planGatewayCalls > gatewayPlanBefore || planProviderCalls > gatewayProviderPlanBefore,
-    ).toBe(true)
-    const gatewayAttempts = (await routeEl.getAttribute('data-transport-attempts')) || ''
-    expect(gatewayAttempts).toContain('gateway')
+    if (gatewayCacheAvailable && fetchGatewayCalls > gatewayFetchBefore) {
+      expect(planGatewayCalls).toBe(gatewayPlanBefore)
+      expect(planProviderCalls).toBe(gatewayProviderPlanBefore)
+    }
 
     blockGateway = true
     await clearBrowserCache()

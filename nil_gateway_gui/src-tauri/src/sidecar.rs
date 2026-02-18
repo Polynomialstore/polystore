@@ -142,6 +142,9 @@ impl SidecarManager {
             // Local desktop Gateway default: keep libp2p disabled unless explicitly enabled.
             // This avoids startup collisions on hosts already running router/provider daemons.
             .env("NIL_P2P_ENABLED", "0")
+            // Desktop local-cache UX: allow sessionless chunked /gateway/fetch downloads.
+            // Browser "auto source" uses this for cached files to avoid on-chain retrieval tx popups.
+            .env("NIL_REQUIRE_ONCHAIN_SESSION", "0")
             // Local desktop mode should import directly from user-selected files by default.
             .env("NIL_LOCAL_IMPORT_ENABLED", "1")
             .env("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
