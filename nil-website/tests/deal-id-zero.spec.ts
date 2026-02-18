@@ -104,6 +104,8 @@ test('repro bug: download from commit content widget', async ({
     const w = window as any
     if (w.ethereum) return
 
+    let activeChainId = chainIdHex
+
     w.ethereum = {
       isMetaMask: true,
       isNilStoreE2E: true,
@@ -122,15 +124,21 @@ test('repro bug: download from commit content widget', async ({
             return [address]
 
           case 'eth_chainId':
-            return chainIdHex
+            return activeChainId
 
           case 'net_version':
-            return String(parseInt(chainIdHex, 16))
+            return String(parseInt(activeChainId, 16))
 
           case 'wallet_addEthereumChain':
+            if (Array.isArray(params) && params[0]?.chainId) {
+              activeChainId = String(params[0].chainId)
+            }
             return null
 
           case 'wallet_switchEthereumChain':
+            if (Array.isArray(params) && params[0]?.chainId) {
+              activeChainId = String(params[0].chainId)
+            }
             return null
 
           case 'eth_signTypedData_v4': {
@@ -383,7 +391,14 @@ test('repro bug: download from commit content widget', async ({
   }
 
   await placementSelect.selectOption('auto')
-  await page.getByTestId('alloc-submit').click()
+  const allocSubmit = page.getByTestId('alloc-submit')
+  const allocLabel = ((await allocSubmit.textContent().catch(() => '')) || '').toLowerCase()
+  if (allocLabel.includes('switch network')) {
+    await allocSubmit.click()
+    await expect(allocSubmit).not.toContainText(/switch network/i, { timeout: 30_000 })
+  }
+  await expect(allocSubmit).toBeEnabled({ timeout: 60_000 })
+  await allocSubmit.click()
   
   // Check for any visible error message
   const errorToast = page.locator('.text-destructive').first()
