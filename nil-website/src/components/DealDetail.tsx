@@ -1464,7 +1464,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                 const gatewayBlob = await downloadViaGatewayCache({
                                                   manifestRoot: manifestHex,
                                                   dealId,
-                                                  owner: nilAddress,
+                                                  owner: String(deal.owner || nilAddress || ''),
                                                   filePath: f.path,
                                                   rangeStart: safeStart,
                                                   rangeLen: safeLen,
@@ -1502,7 +1502,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
-                                              owner: nilAddress,
+                                              owner: String(deal.owner || nilAddress || ''),
                                               filePath: f.path,
                                               serviceBase: autoServiceBase,
                                               routePreference: autoRoutePreference,
@@ -1580,7 +1580,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const gatewayBlob = await downloadViaGatewayCache({
                                               manifestRoot: manifestHex,
                                               dealId,
-                                              owner: nilAddress,
+                                              owner: String(deal.owner || nilAddress || ''),
                                               filePath: f.path,
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
@@ -1651,7 +1651,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
-                                              owner: nilAddress,
+                                              owner: String(deal.owner || nilAddress || ''),
                                               filePath: f.path,
                                               serviceBase: resolveProviderHttpBase(),
                                               routePreference: 'prefer_direct_sp',

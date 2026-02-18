@@ -262,11 +262,11 @@ test.describe('mode2 stripe', () => {
     const autoBytes = await readDownload(autoDownloadBtn)
     expect(autoBytes.equals(fileBytes)).toBe(true)
     if (gatewayCacheAvailable) {
-      expect(fetchGatewayCalls + fetchProviderCalls).toBeGreaterThan(
-        autoGatewayFetchBefore + autoProviderFetchBefore,
+      expect(fetchGatewayCalls).toBeGreaterThan(autoGatewayFetchBefore)
+      expect(fetchProviderCalls).toBe(autoProviderFetchBefore)
+      expect(planGatewayCalls + planProviderCalls).toBe(
+        autoGatewayPlanBefore + autoProviderPlanBefore,
       )
-      expect(planGatewayCalls).toBeGreaterThanOrEqual(autoGatewayPlanBefore)
-      expect(planProviderCalls).toBeGreaterThanOrEqual(autoProviderPlanBefore)
     } else {
       expect(fetchProviderCalls).toBeGreaterThan(autoProviderFetchBefore)
       expect(
@@ -318,12 +318,16 @@ test.describe('mode2 stripe', () => {
     const gatewayProviderPlanBefore = planProviderCalls
     const gatewayBytes = await readDownload(gatewayDownloadBtn)
     expect(gatewayBytes.equals(fileBytes)).toBe(true)
-    expect(
-      fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
-    ).toBe(true)
-    if (gatewayCacheAvailable && fetchGatewayCalls > gatewayFetchBefore) {
-      expect(planGatewayCalls).toBeGreaterThanOrEqual(gatewayPlanBefore)
-      expect(planProviderCalls).toBeGreaterThanOrEqual(gatewayProviderPlanBefore)
+    if (gatewayCacheAvailable) {
+      expect(fetchGatewayCalls).toBeGreaterThan(gatewayFetchBefore)
+      expect(fetchProviderCalls).toBe(gatewayProviderFetchBefore)
+      expect(planGatewayCalls + planProviderCalls).toBe(
+        gatewayPlanBefore + gatewayProviderPlanBefore,
+      )
+    } else {
+      expect(
+        fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
+      ).toBe(true)
     }
 
     blockGateway = true
