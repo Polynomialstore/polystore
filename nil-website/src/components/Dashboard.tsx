@@ -573,6 +573,7 @@ export function Dashboard() {
     return null
   }, [defaultMode2Slots, placementProfile, providerCount])
   const createDealProviderError = placementProfile === 'custom' ? mode2Config.error : autoMode2ProviderError
+  const createDealRequiredSlots = placementProfile === 'custom' ? mode2Config.slots : defaultMode2Slots
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -2698,7 +2699,7 @@ export function Dashboard() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-start justify-between gap-3 pt-1">
                 <div className="text-xs text-muted-foreground">
                   {createTx && (
                     <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -2706,28 +2707,37 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
-                <button
-                  onClick={
-                    accountPermissionMismatch
-                      ? () => void requestWalletReconnect()
-                      : isWrongNetwork
-                        ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch })
-                        : handleCreateDealClick
-                  }
-                  disabled={dealLoading || Boolean(createDealProviderError)}
-                  data-testid="alloc-submit"
-                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
-                >
-                  {dealLoading
-                    ? 'Creating...'
-                    : accountPermissionMismatch
-                      ? 'Reconnect wallet'
-                      : isWrongNetwork
-                      ? 'Switch network'
-                      : !walletReady
-                          ? 'Connect wallet'
-                          : 'Create deal'}
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={
+                      accountPermissionMismatch
+                        ? () => void requestWalletReconnect()
+                        : isWrongNetwork
+                          ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch })
+                          : handleCreateDealClick
+                    }
+                    disabled={dealLoading || Boolean(createDealProviderError)}
+                    data-testid="alloc-submit"
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                  >
+                    {dealLoading
+                      ? 'Creating...'
+                      : accountPermissionMismatch
+                        ? 'Reconnect wallet'
+                        : isWrongNetwork
+                        ? 'Switch network'
+                        : !walletReady
+                            ? 'Connect wallet'
+                            : 'Create deal'}
+                  </button>
+                  <div
+                    data-testid="alloc-provider-guard"
+                    className={createDealProviderError ? 'text-[11px] text-red-500 text-right' : 'text-[11px] text-muted-foreground text-right'}
+                  >
+                    Need {createDealRequiredSlots ?? '—'} providers • Found {providerCount || 0}
+                    {createDealProviderError ? ` • ${createDealProviderError}` : ''}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

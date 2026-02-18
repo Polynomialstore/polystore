@@ -27,6 +27,8 @@ FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride commo
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 GATEWAY_BIN="$LOG_DIR/nil_gateway"
+NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/nil_core/target/release}"
+NIL_CORE_LIB_SO="$NIL_CORE_LIB_DIR/libnil_core.so"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
@@ -50,6 +52,10 @@ NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
 NIL_START_WEB="${NIL_START_WEB:-1}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
+fi
+
+if [ -d "$NIL_CORE_LIB_DIR" ]; then
+  export LD_LIBRARY_PATH="$NIL_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -364,6 +370,7 @@ wait_for_ports_clear() {
 }
 
 ensure_nilchaind() {
+  ensure_nil_core_shared
   banner "Building and installing nilchaind (via $GO_BIN)"
   
   # Reconstruct vendor directory to handle partial vendoring strategy
@@ -388,6 +395,7 @@ ensure_nil_cli() {
 }
 
 ensure_nil_gateway() {
+  ensure_nil_core_shared
   # Rebuild when sources changed; the stack script reuses a single binary path
   # under _artifacts/, so a simple "exists" check can lead to stale behavior.
   if [ -x "$GATEWAY_BIN" ]; then
@@ -397,6 +405,22 @@ ensure_nil_gateway() {
   fi
   banner "Building nil_gateway (via $GO_BIN)"
   (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
+}
+
+ensure_nil_core_shared() {
+  if [ -f "$NIL_CORE_LIB_SO" ]; then
+    return 0
+  fi
+  banner "Building nil_core shared library (release)"
+  (
+    cd "$ROOT_DIR/nil_core"
+    cargo build --release
+  )
+  if [ ! -f "$NIL_CORE_LIB_SO" ]; then
+    echo "ERROR: nil_core shared library missing after build: $NIL_CORE_LIB_SO" >&2
+    exit 1
+  fi
+  export LD_LIBRARY_PATH="$NIL_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 }
 
 register_demo_provider() {
@@ -853,14 +877,22 @@ start_user_gateway() {
   banner "Starting User gateway service (Port 8080)"
   ensure_nil_cli
   ensure_nil_gateway
+  local user_p2p_enabled="${NIL_P2P_ENABLED:-1}"
+  local user_p2p_listen="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
+  if [ "$user_p2p_enabled" = "1" ] && echo "$user_p2p_listen" | grep -q '/tcp/9100/'; then
+    if ss -ltn '( sport = :9100 )' 2>/dev/null | tail -n +2 | grep -q .; then
+      user_p2p_listen="${user_p2p_listen//\/tcp\/9100\//\/tcp\/19100\/}"
+      echo "User gateway p2p port 9100 already in use; using fallback $user_p2p_listen"
+    fi
+  fi
   (
     cd "$ROOT_DIR/nil_gateway"
     # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
     NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-    NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
-    NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}" \
+    NIL_P2P_ENABLED="$user_p2p_enabled" \
+    NIL_P2P_LISTEN_ADDRS="$user_p2p_listen" \
     NIL_P2P_IDENTITY_PATH="${NIL_P2P_IDENTITY_PATH:-}" \
     NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64:-}" \
     NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS:-}" \
