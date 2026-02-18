@@ -554,14 +554,20 @@ export function Dashboard() {
     if (64 % k !== 0) {
       return { slots, error: 'K must divide 64.' }
     }
-    if (providerCount > 0 && slots > providerCount) {
+    if (providerCount <= 0) {
+      return { slots, error: 'Provider list not loaded yet. Retry in a few seconds.' }
+    }
+    if (slots > providerCount) {
       return { slots, error: `Need ${slots} providers (K+M); only ${providerCount} available.` }
     }
     return { slots, error: null }
   }, [placementProfile, providerCount, rsK, rsM])
   const autoMode2ProviderError = useMemo(() => {
     if (placementProfile !== 'auto') return null
-    if (providerCount > 0 && defaultMode2Slots > providerCount) {
+    if (providerCount <= 0) {
+      return 'Provider list not loaded yet. Retry in a few seconds.'
+    }
+    if (defaultMode2Slots > providerCount) {
       return `Default Mode 2 profile requires ${defaultMode2Slots} providers (K+M), but only ${providerCount} are available.`
     }
     return null
@@ -1125,6 +1131,13 @@ export function Dashboard() {
       let serviceHint = ''
       // Default trusted-devnet profile: explicit 2+1 (overridable in Advanced).
       serviceHint = buildServiceHint('General', { rsK: appConfig.defaultRsK, rsM: appConfig.defaultRsM })
+
+      if (createDealProviderError) {
+        setStatusTone('error')
+        setStatusMsg(createDealProviderError)
+        setTargetDealId(previousTargetDealId)
+        return
+      }
 
       // Optional: explicit RS profile.
       if (placementProfile === 'custom') {
