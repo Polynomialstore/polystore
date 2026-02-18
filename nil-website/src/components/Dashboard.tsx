@@ -120,6 +120,7 @@ export function Dashboard() {
   const localGateway = useLocalGateway(60_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
+  const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
   const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   const activeChainId = walletChainId ?? chainId
   const isWrongNetwork = isConnected && walletIsWrongNetwork
@@ -558,6 +559,14 @@ export function Dashboard() {
     }
     return { slots, error: null }
   }, [placementProfile, providerCount, rsK, rsM])
+  const autoMode2ProviderError = useMemo(() => {
+    if (placementProfile !== 'auto') return null
+    if (providerCount > 0 && defaultMode2Slots > providerCount) {
+      return `Default Mode 2 profile requires ${defaultMode2Slots} providers (K+M), but only ${providerCount} are available.`
+    }
+    return null
+  }, [defaultMode2Slots, placementProfile, providerCount])
+  const createDealProviderError = placementProfile === 'custom' ? mode2Config.error : autoMode2ProviderError
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -1147,6 +1156,12 @@ export function Dashboard() {
           return
         }
         serviceHint = buildServiceHint('General', { rsK: k, rsM: m })
+      }
+      if (autoMode2ProviderError) {
+        setStatusTone('error')
+        setStatusMsg(autoMode2ProviderError)
+        setTargetDealId(previousTargetDealId)
+        return
       }
 
       const res = await submitDeal({
@@ -2592,8 +2607,13 @@ export function Dashboard() {
                     </span>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Providers available:{' '}
+                    Slots required:{' '}
+                    <span className="font-mono text-foreground">{defaultMode2Slots}</span>
+                    {' '}• Providers available:{' '}
                     <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                    {autoMode2ProviderError && (
+                      <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -2651,6 +2671,17 @@ export function Dashboard() {
                       )}
                     </div>
                   )}
+                  {placementProfile === 'auto' && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Slots required:{' '}
+                      <span className="font-mono text-foreground">{defaultMode2Slots}</span>
+                      {' '}• Providers available:{' '}
+                      <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                      {autoMode2ProviderError && (
+                        <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2670,7 +2701,7 @@ export function Dashboard() {
                         ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch })
                         : handleCreateDealClick
                   }
-                  disabled={dealLoading || (placementProfile === 'custom' && Boolean(mode2Config.error))}
+                  disabled={dealLoading || Boolean(createDealProviderError)}
                   data-testid="alloc-submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
                 >
