@@ -242,6 +242,14 @@ test('repro bug: download from commit content widget', async ({
             address: 'nil1provider',
             endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
           },
+          {
+            address: 'nil1provider2',
+            endpoints: ['/ip4/127.0.0.1/tcp/8083/http'],
+          },
+          {
+            address: 'nil1provider3',
+            endpoints: ['/ip4/127.0.0.1/tcp/8084/http'],
+          },
         ],
       }),
     })
