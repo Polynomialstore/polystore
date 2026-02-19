@@ -78,6 +78,7 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
 
 	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	req.Header.Set("Range", "bytes=0-0")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -95,6 +96,89 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "deal_id=1") {
 		t.Fatalf("expected provider query forwarded, got %q", gotQuery)
+	}
+}
+
+func TestRouterGatewayFetch_UnsignedMissingRangeRejected(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
+
+	r := mux.NewRouter()
+	r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Range header is required") {
+		t.Fatalf("expected Range header error, got: %s", w.Body.String())
+	}
+}
+
+func TestRouterGatewayFetch_SignedModeMissingRangeAllowedAtProxy(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	dealProviderCache = sync.Map{}
+	dealProvidersCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = true
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
+
+	providerAddr := "nil1provider"
+	var gotPath string
+	providerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer providerSrv.Close()
+
+	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"providers": []string{providerAddr},
+				},
+			})
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"provider": map[string]any{
+					"endpoints": []string{maddr},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := mux.NewRouter()
+	r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code == http.StatusBadRequest {
+		t.Fatalf("expected signed mode missing Range not to be rejected at proxy layer, got 400 (%s)", w.Body.String())
+	}
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected request to reach provider path, got %d (%s)", w.Code, w.Body.String())
+	}
+	if gotPath != "/gateway/fetch/0xabc" {
+		t.Fatalf("expected provider path forwarded, got %q", gotPath)
 	}
 }
 
@@ -219,6 +303,7 @@ func TestRouterGatewayFetch_FailsOverWhenPrimaryUnavailable(t *testing.T) {
 	r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
 
 	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	req.Header.Set("Range", "bytes=0-0")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

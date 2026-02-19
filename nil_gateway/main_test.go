@@ -361,6 +361,51 @@ func TestGatewayFetch_MissingParams(t *testing.T) {
 	}
 }
 
+func TestGatewayFetch_UnsignedMissingRangeRejected(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	useTempUploadDir(t)
+
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
+
+	manifestRoot := mustTestManifestRoot(t, "unsigned-missing-range")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+
+	owner := testDealOwner(t)
+	dealID := uint64(7)
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: manifestRoot.Canonical},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	q := url.Values{}
+	q.Set("deal_id", strconv.FormatUint(dealID, 10))
+	q.Set("owner", owner)
+	q.Set("file_path", "note.txt")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+
+	testRouter().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsigned fetch without Range, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Range header is required") {
+		t.Fatalf("expected Range header error, got: %s", w.Body.String())
+	}
+}
+
 func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	r := testRouter()
@@ -827,6 +872,9 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = true
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
 
 	// 1. Build a minimal slab manually
 	fileContent := []byte("This is some test data for Deal ID 0.")
