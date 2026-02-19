@@ -3472,6 +3472,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, content)
 }
 
+var resolveProviderForRetrievalPlanFn = resolveProviderForRetrievalPlan
+
 // GatewayPlanRetrievalSession plans an on-chain RetrievalSession for a file byte-range by
 // mapping it to a contiguous blob interval over the NilFS slab.
 func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
@@ -3657,38 +3659,39 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	}
 	blobCount := endGlobal - startGlobal + 1
 
-	providerAddr := ""
-	if stripe.mode == 2 {
-		slots, err := resolveDealMode2Slots(r.Context(), dealID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to resolve providers", err.Error())
-			return
+	providerResolution, perr := resolveProviderForRetrievalPlanFn(r.Context(), dealID, stripe, startSlot)
+	if perr != nil {
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(perr, ErrDealNotFound):
+			status = http.StatusNotFound
+		case errors.Is(perr, ErrProviderResolutionSlotOutOfRange):
+			status = http.StatusBadRequest
+		case errors.Is(perr, ErrProviderResolutionMetadataUnavailable):
+			status = http.StatusBadGateway
+		case errors.Is(perr, ErrProviderResolutionMetadataInvalid):
+			status = http.StatusConflict
 		}
-		if int(startSlot) >= len(slots) {
-			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
-			return
-		}
-		assign := slots[startSlot]
-		providerAddr = strings.TrimSpace(assign.Provider)
-		// Make-before-break: route retrieval sessions around repairing slots by preferring the
-		// pending provider when present.
-		if assign.Status == 2 && strings.TrimSpace(assign.PendingProvider) != "" {
-			providerAddr = strings.TrimSpace(assign.PendingProvider)
-		}
-	} else {
-		providerAddr = cachedProviderAddress(r.Context())
-		if strings.TrimSpace(providerAddr) == "" {
-			providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
-			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
-				return
-			}
-			if len(providers) == 0 {
-				writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "deal has no assigned providers")
-				return
-			}
-			providerAddr = strings.TrimSpace(providers[0])
-		}
+		log.Printf(
+			"GatewayPlanRetrievalSession: provider_resolution_failed deal_id=%d stripe_mode=%d start_slot=%d err=%v",
+			dealID,
+			stripe.mode,
+			startSlot,
+			perr,
+		)
+		writeJSONError(w, status, "failed to resolve provider for retrieval session", perr.Error())
+		return
+	}
+	providerAddr := providerResolution.Provider
+	if providerResolution.UsedLocalFallback {
+		log.Printf(
+			"GatewayPlanRetrievalSession: provider_resolution_fallback deal_id=%d stripe_mode=%d start_slot=%d provider=%s source=%s",
+			dealID,
+			stripe.mode,
+			startSlot,
+			providerAddr,
+			providerResolution.Source,
+		)
 	}
 
 	type response struct {
