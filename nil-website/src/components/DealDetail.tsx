@@ -315,7 +315,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
 
   useEffect(() => {
     if (!progress.route && !progress.cacheSource && !progress.cacheFreshness) return
-    if (progress.route) setRouteOverride(progress.route.replaceAll('_', ' '))
+    if (progress.route) setRouteOverride(progress.route.replace(/_/g, ' '))
     if (progress.cacheSource) setCacheSourceOverride(progress.cacheSource)
     if (progress.cacheFreshness) setCacheFreshnessOverride(progress.cacheFreshness)
   }, [progress.route, progress.cacheSource, progress.cacheFreshness])
