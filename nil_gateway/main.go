@@ -3315,28 +3315,26 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Resolve Provider Address for the Header (for Client-Side Signing).
-	// In deputy mode, a gateway may serve cached bytes on behalf of the assigned provider
-	// even when no local provider key exists.
-	providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
-	if providerAddr == "" && allowDeputy {
+	// Resolve Provider Address for response/proof headers.
+	// User-gateway (deputy mode) must not depend on local provider identity;
+	// derive provider from deal metadata/session context whenever possible.
+	localProviderAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
+	providerAddr := localProviderAddr
+	if providerAddr == "" {
 		switch {
 		case isOnchainSession && onchainSession != nil && strings.TrimSpace(onchainSession.Provider) != "":
 			providerAddr = strings.TrimSpace(onchainSession.Provider)
-			w.Header().Set("X-Nil-Deputy", "1")
+			if allowDeputy {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
 		case isDownloadSession && !isOnchainSession && strings.TrimSpace(dlSession.Provider) != "":
 			providerAddr = strings.TrimSpace(dlSession.Provider)
-			w.Header().Set("X-Nil-Deputy", "1")
+			if allowDeputy {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
 		}
 	}
-	if providerAddr == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
-		return
-	}
-	if isDownloadSession && !allowDeputy && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
-		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
-		return
-	}
+
 	if stripe.mode == 2 {
 		slot, serr := slotForLeafIndex(leafIndex, stripe)
 		if serr != nil {
@@ -3352,20 +3350,33 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		if !allowDeputy {
-			assign := slots[slot]
-			expectedActive := strings.TrimSpace(assign.Provider)
-			expectedPending := ""
-			if assign.Status == 2 {
-				expectedPending = strings.TrimSpace(assign.PendingProvider)
-			}
 
-			localProvider := strings.TrimSpace(providerAddr)
+		assign := slots[slot]
+		expectedActive := strings.TrimSpace(assign.Provider)
+		expectedPending := ""
+		if assign.Status == 2 {
+			expectedPending = strings.TrimSpace(assign.PendingProvider)
+		}
+		expectedForSlot := expectedActive
+		if expectedPending != "" {
+			expectedForSlot = expectedPending
+		}
+
+		if !allowDeputy {
+			if strings.TrimSpace(localProviderAddr) == "" {
+				writeJSONError(
+					w,
+					http.StatusInternalServerError,
+					"provider address unavailable",
+					"provider-daemon mode requires NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY",
+				)
+				return
+			}
 			allowed := false
-			if expectedPending != "" && localProvider == expectedPending {
+			if expectedPending != "" && localProviderAddr == expectedPending {
 				allowed = true
 			}
-			if !allowed && expectedActive != "" && localProvider == expectedActive {
+			if !allowed && expectedActive != "" && localProviderAddr == expectedActive {
 				allowed = true
 			}
 
@@ -3377,9 +3388,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", hint)
 				return
 			}
-		} else {
+			providerAddr = localProviderAddr
+		} else if providerAddr == "" && expectedForSlot != "" {
+			providerAddr = expectedForSlot
 			w.Header().Set("X-Nil-Deputy", "1")
 		}
+	}
+
+	if providerAddr == "" && allowDeputy {
+		providers, err := resolveDealProviders(r.Context(), dealID)
+		if err == nil && len(providers) > 0 {
+			providerAddr = strings.TrimSpace(providers[0])
+			if providerAddr != "" {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
+		}
+	}
+	if providerAddr == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "unable to resolve provider from deal/session metadata")
+		return
+	}
+	if isDownloadSession && !allowDeputy && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
+		return
 	}
 
 	epochID := currentEpochID(r.Context())
