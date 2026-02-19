@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -244,6 +245,23 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move new User MDU %d: %w", mdu.Index, err)
 		}
+	}
+
+	witnessMdus := witnessMduCount
+	userMdus := uint64(len(userRoots))
+	totalMdus := uint64(1) + witnessMdus + userMdus
+	meta, err := buildSlabMetadataFromBuilder(b, slabMetadataBuildOptions{
+		GenerationID: parsedNewRoot.Key,
+		ManifestRoot: parsedNewRoot.Canonical,
+		Source:       "gateway_mode1_append",
+		WitnessMdus:  &witnessMdus,
+		UserMdus:     &userMdus,
+		TotalMdus:    &totalMdus,
+	})
+	if err != nil {
+		log.Printf("IngestAppendToDeal: warning: failed to build slab metadata for manifest_root=%s: %v", parsedNewRoot.Canonical, err)
+	} else if err := writeSlabMetadataFile(newDir, meta); err != nil {
+		log.Printf("IngestAppendToDeal: warning: failed to write slab metadata for manifest_root=%s: %v", parsedNewRoot.Canonical, err)
 	}
 
 	allocatedLength := uint64(len(allRoots))

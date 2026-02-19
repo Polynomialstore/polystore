@@ -16,6 +16,7 @@ import {
   writeManifestBlob,
   writeManifestRoot,
   writeMdu,
+  writeSlabMetadata,
   writeShard,
 } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
@@ -182,7 +183,7 @@ const gatewayUploadHeartbeatStaleMs = 15_000
 const gatewayFallbackWasmMaxFileBytes = 32 * 1024 * 1024
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
   const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
@@ -323,6 +324,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const mdus = collectedMdus.slice()
     const shards = mode2Shards.slice()
     const witnessCount = shardProgress.totalWitnessMdus
+    const safeWitnessCount = Number.isFinite(witnessCount) && witnessCount > 0 ? Math.floor(witnessCount) : 0
 
     const persistPromise = (async () => {
       const safeRoot = String(manifestRoot || '').trim()
@@ -358,6 +360,42 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         }
 
+        const mdu0Bytes = mdus.find((mdu) => mdu.index === 0)?.data
+        const parsedFiles = mdu0Bytes ? parseNilfsFilesFromMdu0(mdu0Bytes) : []
+        const fileRecords = parsedFiles.map((file) => ({
+          path: file.path,
+          start_offset: Number(file.start_offset) || 0,
+          size_bytes: Number(file.size_bytes) || 0,
+          flags: Number(file.flags) || 0,
+        }))
+        const maxEnd = fileRecords.reduce((max, file) => {
+          const end = file.start_offset + file.size_bytes
+          return end > max ? end : max
+        }, 0)
+        const userMdusByOffsets = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
+        const userMdusByIndices = mdus.reduce((count, mdu) => (mdu.index > safeWitnessCount ? count + 1 : count), 0)
+        const userMdus = Math.max(userMdusByOffsets, userMdusByIndices)
+        const totalMdus = 1 + safeWitnessCount + userMdus
+        const generationId = safeRoot.replace(/^0x/i, '').trim() || safeRoot
+        await writeSlabMetadata(dealId, {
+          schema_version: 1,
+          generation_id: generationId,
+          deal_id: dealId,
+          manifest_root: safeRoot,
+          owner: address || undefined,
+          redundancy:
+            isMode2 && stripeParams
+              ? { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m }
+              : undefined,
+          source: isMode2 ? 'browser_mode2_commit' : 'browser_mode1_commit',
+          created_at: new Date().toISOString(),
+          last_validated_at: null,
+          witness_mdus: safeWitnessCount,
+          user_mdus: userMdus,
+          total_mdus: totalMdus,
+          file_records: fileRecords,
+        })
+
         lastPersistedManifestRootRef.current = safeRoot
         addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.')
       } catch (e: unknown) {
@@ -384,6 +422,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     mode2Shards,
     onCommitSuccess,
     shardProgress.totalWitnessMdus,
+    address,
+    stripeParams,
   ]);
 
   const uploadMode2 = useCallback(async () => {

@@ -160,6 +160,35 @@ test('OpfsAdapter: writeManifestBlob and readManifestBlob', async () => {
     assert.deepStrictEqual(readBlob, blob, 'Read manifest blob should match written manifest blob');
 });
 
+test('OpfsAdapter: write/read/delete slab metadata', async () => {
+    const dealId = 'test-deal-slab-meta';
+    const metadata: OpfsAdapter.SlabMetadata = {
+        schema_version: 1,
+        generation_id: 'abcd',
+        deal_id: dealId,
+        manifest_root: '0x' + '11'.repeat(48),
+        owner: 'nil1owner',
+        redundancy: { k: 8, m: 4, n: 12 },
+        source: 'browser_test',
+        created_at: new Date().toISOString(),
+        last_validated_at: null,
+        witness_mdus: 2,
+        user_mdus: 3,
+        total_mdus: 6,
+        file_records: [
+            { path: 'a.txt', start_offset: 0, size_bytes: 12, flags: 1 },
+            { path: 'b.txt', start_offset: 1024, size_bytes: 34, flags: 0 },
+        ],
+    };
+
+    await OpfsAdapter.writeSlabMetadata(dealId, metadata);
+    const readMeta = await OpfsAdapter.readSlabMetadata(dealId);
+    assert.deepStrictEqual(readMeta, metadata, 'Read slab metadata should match written metadata');
+
+    await OpfsAdapter.deleteSlabMetadata(dealId);
+    assert.strictEqual(await OpfsAdapter.readSlabMetadata(dealId), null, 'Slab metadata should be deleted');
+});
+
 test('OpfsAdapter: readMdu returns null for non-existent file', async () => {
     const dealId = 'test-deal-non-existent';
     const mduIndex = 1;
@@ -201,6 +230,27 @@ test('OpfsAdapter: delete non-existent directory', async () => {
     // Should not throw an error
     await OpfsAdapter.deleteDealDirectory(dealId);
     assert.ok(true, 'Deleting a non-existent directory should not throw an error');
+});
+
+test('OpfsAdapter: slab metadata removed when deleting deal directory', async () => {
+    const dealId = 'test-deal-slab-meta-cleanup';
+    await OpfsAdapter.writeSlabMetadata(dealId, {
+        schema_version: 1,
+        generation_id: 'deadbeef',
+        deal_id: dealId,
+        manifest_root: '0x' + '22'.repeat(48),
+        source: 'browser_test',
+        created_at: new Date().toISOString(),
+        last_validated_at: null,
+        witness_mdus: 0,
+        user_mdus: 1,
+        total_mdus: 2,
+        file_records: [{ path: 'cleanup.txt', start_offset: 0, size_bytes: 7, flags: 0 }],
+    });
+    assert.ok(await OpfsAdapter.readSlabMetadata(dealId), 'Metadata should exist before deleting directory');
+
+    await OpfsAdapter.deleteDealDirectory(dealId);
+    assert.strictEqual(await OpfsAdapter.readSlabMetadata(dealId), null, 'Metadata should be gone after deleting directory');
 });
 
 test('OpfsAdapter: cached file write/read/clear', async () => {

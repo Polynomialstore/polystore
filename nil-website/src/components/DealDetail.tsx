@@ -10,7 +10,7 @@ import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
-import { deleteCachedFile, deleteDealDirectory, hasCachedFile, readCachedFile, readMdu, readManifestRoot, writeCachedFile } from '../lib/storage/OpfsAdapter'
+import { deleteCachedFile, deleteDealDirectory, hasCachedFile, readCachedFile, readMdu, readManifestRoot, readSlabMetadata, writeCachedFile } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
@@ -449,6 +449,33 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
     try {
+      const normalizeManifestRoot = (value: string | null | undefined): string => {
+        const trimmed = String(value || '').trim().toLowerCase()
+        if (!trimmed) return ''
+        return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`
+      }
+      const localMeta = await readSlabMetadata(String(dealId))
+      const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(String(dealId)))
+      const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
+      const metadataFresh = persistedManifestRoot !== '' && metadataManifestRoot !== '' && metadataManifestRoot === persistedManifestRoot
+      if (localMeta && metadataFresh && localMeta.file_records.length > 0) {
+        setFiles(
+          localMeta.file_records.map((rec) => ({
+            path: rec.path,
+            size_bytes: rec.size_bytes,
+            start_offset: rec.start_offset,
+            flags: rec.flags,
+          })),
+        )
+        return
+      }
+      if (localMeta && !metadataFresh) {
+        console.warn('Local slab metadata is stale for file listing; reparsing MDU #0', {
+          dealId,
+          metadataManifestRoot: localMeta.manifest_root,
+          persistedManifestRoot,
+        })
+      }
       const mdu0 = await readMdu(String(dealId), 0)
       if (!mdu0) {
         setFiles([])
@@ -654,11 +681,59 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
         if (!dealId) return
         const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
         if (!canUseLocalSlab) return
-        const mdu0 = await readMdu(String(dealId), 0)
-        if (!mdu0) return
-        const localFiles = parseNilfsFilesFromMdu0(mdu0)
-        const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
-        const totalSizeBytes = localFiles.reduce((acc, f) => acc + (Number(f.size_bytes) || 0), 0)
+
+        const localMeta = await readSlabMetadata(String(dealId))
+        const normalizeManifestRoot = (value: string | null | undefined): string => {
+          const trimmed = String(value || '').trim().toLowerCase()
+          if (!trimmed) return ''
+          return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`
+        }
+        const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(String(dealId)))
+        const expectedManifestRoot = normalizeManifestRoot(cid)
+        const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
+        const metadataFresh =
+          !!localMeta &&
+          persistedManifestRoot !== '' &&
+          metadataManifestRoot === persistedManifestRoot &&
+          (expectedManifestRoot === '' || metadataManifestRoot === expectedManifestRoot)
+
+        let localFiles: NilfsFileEntry[] = []
+        let witnessCount = 0
+        let totalMdus = 0
+        let userCount = 0
+        let fileRecords = 0
+        let totalSizeBytes = 0
+        if (localMeta && metadataFresh) {
+          localFiles = localMeta.file_records.map((rec) => ({
+            path: rec.path,
+            size_bytes: rec.size_bytes,
+            start_offset: rec.start_offset,
+            flags: rec.flags,
+          }))
+          witnessCount = localMeta.witness_mdus
+          totalMdus = localMeta.total_mdus
+          userCount = localMeta.user_mdus
+          fileRecords = localMeta.file_records.length
+          totalSizeBytes = localMeta.file_records.reduce((acc, rec) => acc + (Number(rec.size_bytes) || 0), 0)
+        } else {
+          if (localMeta && !metadataFresh) {
+            console.warn('Local slab metadata is stale; reparsing MDU #0', {
+              dealId,
+              metadataManifestRoot: localMeta.manifest_root,
+              persistedManifestRoot,
+              expectedManifestRoot: cid,
+            })
+          }
+          const mdu0 = await readMdu(String(dealId), 0)
+          if (!mdu0) return
+          localFiles = parseNilfsFilesFromMdu0(mdu0)
+          const inferred = await inferWitnessCountFromOpfs(String(dealId), localFiles)
+          witnessCount = inferred.witnessCount
+          totalMdus = inferred.totalMdus
+          userCount = inferred.userCount
+          fileRecords = localFiles.length
+          totalSizeBytes = localFiles.reduce((acc, f) => acc + (Number(f.size_bytes) || 0), 0)
+        }
         const mduSizeBytes = 8 * 1024 * 1024
         const blobSizeBytes = 128 * 1024
         const segments = [
@@ -669,13 +744,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
             : []),
         ] as SlabLayoutData['segments']
         setSlab({
-          manifest_root: cid,
+          manifest_root: localMeta?.manifest_root || cid,
           mdu_size_bytes: mduSizeBytes,
           blob_size_bytes: blobSizeBytes,
           total_mdus: totalMdus,
           witness_mdus: witnessCount,
           user_mdus: userCount,
-          file_records: localFiles.length,
+          file_records: fileRecords,
           file_count: localFiles.length,
           total_size_bytes: totalSizeBytes,
           segments,
@@ -789,7 +864,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
         }
 
         setManifestInfo({
-          manifest_root: cid || computedRoot,
+          manifest_root: computedRoot || cid,
           manifest_blob_hex: blobHex,
           total_mdus: totalMdus,
           witness_mdus: witnessCount,

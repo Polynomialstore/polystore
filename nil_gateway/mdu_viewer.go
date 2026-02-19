@@ -16,7 +16,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
 )
 
 type manifestInfoResponse struct {
@@ -59,6 +58,11 @@ func (s *slabMeta) Close() {
 }
 
 func loadSlabMeta(dealDir string) (*slabMeta, error) {
+	metaDoc, err := loadSlabMetadataWithFallback(dealDir)
+	if err != nil {
+		return nil, err
+	}
+
 	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	mdu0Data, err := os.ReadFile(mdu0Path)
 	if err != nil {
@@ -69,110 +73,12 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	var maxEnd uint64
-	count := b.GetRecordCount()
-	for i := uint32(0); i < count; i++ {
-		rec, err := b.GetRecord(i)
-		if err != nil {
-			continue
-		}
-		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		end := rec.StartOffset + length
-		if end > maxEnd {
-			maxEnd = end
-		}
-	}
-
-	userMdus := uint64(0)
-	if maxEnd > 0 {
-		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
-	}
-
-	rootTableBytes := 16 * uint64(types.BLOB_SIZE)
-	totalRoots := 0
-	if uint64(len(mdu0Data)) >= rootTableBytes {
-		for off := uint64(0); off+32 <= rootTableBytes; off += 32 {
-			chunk := mdu0Data[off : off+32]
-			allZero := true
-			for _, v := range chunk {
-				if v != 0 {
-					allZero = false
-					break
-				}
-			}
-			if !allZero {
-				totalRoots++
-			}
-		}
-	}
-
-	if totalRoots > 0 {
-		if uint64(totalRoots) < userMdus {
-			b.Free()
-			return nil, fmt.Errorf("invalid slab layout: root table < user mdus")
-		}
-		witnessMdus := uint64(totalRoots) - userMdus
-		totalMdus := 1 + witnessMdus + userMdus
-		return &slabMeta{
-			dealDir:     dealDir,
-			builder:     b,
-			totalMdus:   totalMdus,
-			witnessMdus: witnessMdus,
-			userMdus:    userMdus,
-		}, nil
-	}
-
-	entries, err := os.ReadDir(dealDir)
-	if err != nil {
-		b.Free()
-		return nil, err
-	}
-
-	idxSet := map[uint64]struct{}{}
-	var maxIdx uint64
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasPrefix(name, "mdu_") || !strings.HasSuffix(name, ".bin") {
-			continue
-		}
-		idxStr := strings.TrimSuffix(strings.TrimPrefix(name, "mdu_"), ".bin")
-		idx, err := strconv.ParseUint(idxStr, 10, 64)
-		if err != nil {
-			continue
-		}
-		idxSet[idx] = struct{}{}
-		if idx > maxIdx {
-			maxIdx = idx
-		}
-	}
-
-	if len(idxSet) == 0 {
-		b.Free()
-		return nil, os.ErrNotExist
-	}
-	if _, ok := idxSet[0]; !ok {
-		b.Free()
-		return nil, fmt.Errorf("invalid slab layout: mdu_0.bin missing")
-	}
-
-	totalMdus := maxIdx + 1
-	if uint64(len(idxSet)) != totalMdus {
-		b.Free()
-		return nil, fmt.Errorf("invalid slab layout: non-contiguous mdu files")
-	}
-	if totalMdus-1 < userMdus {
-		b.Free()
-		return nil, fmt.Errorf("invalid slab layout: file table exceeds user mdus")
-	}
-
-	witnessMdus := (totalMdus - 1) - userMdus
 	return &slabMeta{
 		dealDir:     dealDir,
 		builder:     b,
-		totalMdus:   totalMdus,
-		witnessMdus: witnessMdus,
-		userMdus:    userMdus,
+		totalMdus:   metaDoc.TotalMdus,
+		witnessMdus: metaDoc.WitnessMdus,
+		userMdus:    metaDoc.UserMdus,
 	}, nil
 }
 
