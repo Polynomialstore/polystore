@@ -270,10 +270,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
   const isDealOwner = Boolean(nilAddress && deal.owner === nilAddress)
+  const [routeOverride, setRouteOverride] = useState<string>('')
+  const [routeModeOverride, setRouteModeOverride] = useState<string>('')
+  const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
+  const [cacheFreshnessOverride, setCacheFreshnessOverride] = useState<string>('')
   const lastRouteLabel = useMemo(() => {
+    if (routeOverride) return routeOverride
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
-  }, [lastTrace])
+  }, [lastTrace, routeOverride])
   const lastAttemptSummary = useMemo(() => {
     if (!lastTrace?.attempts?.length) return ''
     return lastTrace.attempts
@@ -287,13 +292,40 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     return `${failed.backend}${msg}`
   }, [lastTrace])
   const lastRouteMode = useMemo(() => {
+    if (routeModeOverride) return routeModeOverride
     const pref = lastTrace?.preference || ''
     if (pref === 'prefer_gateway') return 'gateway_mode'
     if (pref === 'prefer_direct_sp') return 'fallback_direct'
     if (pref === 'prefer_p2p') return 'p2p'
     if (pref === 'auto') return 'auto'
     return ''
-  }, [lastTrace])
+  }, [lastTrace, routeModeOverride])
+  const displayCacheSource = cacheSourceOverride || progress.cacheSource || ''
+  const displayCacheFreshness = cacheFreshnessOverride || progress.cacheFreshness || ''
+
+  const markDownloadPath = useCallback(
+    (route: string, mode: string, cacheSource: string, freshness: string) => {
+      setRouteOverride(route)
+      setRouteModeOverride(mode)
+      setCacheSourceOverride(cacheSource)
+      setCacheFreshnessOverride(freshness)
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!progress.route && !progress.cacheSource && !progress.cacheFreshness) return
+    if (progress.route) setRouteOverride(progress.route.replaceAll('_', ' '))
+    if (progress.cacheSource) setCacheSourceOverride(progress.cacheSource)
+    if (progress.cacheFreshness) setCacheFreshnessOverride(progress.cacheFreshness)
+  }, [progress.route, progress.cacheSource, progress.cacheFreshness])
+
+  useEffect(() => {
+    setRouteOverride('')
+    setRouteModeOverride('')
+    setCacheSourceOverride('')
+    setCacheFreshnessOverride('')
+  }, [deal.id, deal.cid])
 
   const resolveProviderHttpBase = useCallback((): string => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -632,6 +664,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
           }
         }
 
+        markDownloadPath('gateway', 'gateway_cache', 'gateway_mdu_cache', 'fresh')
         return new Blob(parts, { type: 'application/octet-stream' })
       } catch (e: unknown) {
         lastError = e instanceof Error ? e : new Error(String(e))
@@ -639,7 +672,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     }
 
     throw lastError ?? new Error('gateway cache download failed')
-  }, [gatewayDownloadBases, slab?.blob_size_bytes])
+  }, [gatewayDownloadBases, markDownloadPath, slab?.blob_size_bytes])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
     const localManifestRoot = await readManifestRoot(String(dealId)).catch(() => null)
@@ -1201,6 +1234,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                           >
                             Route: {lastRouteLabel || '—'}{lastRouteMode ? ` · Mode: ${lastRouteMode}` : ''}
                           </div>
+                          <div className="text-[11px] text-muted-foreground" data-testid="transport-cache-source">
+                            Cache source: {displayCacheSource || '—'}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground" data-testid="transport-cache-freshness">
+                            Freshness: {displayCacheFreshness || '—'}
+                          </div>
                         </div>
                         {fileActionError && (
                           <div className="text-[11px] text-red-500 dark:text-red-400">
@@ -1494,6 +1533,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const cachedBytes = await readCachedFile(dealId, f.path)
                                             if (!cachedBytes) throw new Error('not cached in browser')
                                             downloadBytesAsFile(cachedBytes, f.path)
+                                            markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
                                           } catch (e: unknown) {
                                             const msg = e instanceof Error ? e.message : String(e)
                                             setFileActionError(msg)
@@ -1531,6 +1571,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             await writeCachedFile(dealId, f.path, bytes)
                                             setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
                                             downloadBytesAsFile(bytes, f.path)
+                                            markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
                                           } catch (e: unknown) {
                                             const msg = e instanceof Error ? e.message : String(e)
                                             setFileActionError(msg)
@@ -1582,6 +1623,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               const cachedBytes = await readCachedFile(dealId, f.path)
                                               if (cachedBytes) {
                                                 downloadBytesAsFile(cachedBytes, f.path)
+                                                markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
                                                 return
                                               }
                                             }

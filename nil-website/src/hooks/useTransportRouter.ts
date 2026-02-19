@@ -104,6 +104,14 @@ type FetchRangeRequest = {
   preference?: RoutePreference
 }
 
+type FetchRangeOutcome = {
+  bytes: Uint8Array
+  provider: string
+  cacheFreshness?: string
+  cacheFreshnessReason?: string
+  deputy?: boolean
+}
+
 export function useTransportRouter() {
   const { preference, lastTrace, setLastTrace, setPreference } = useTransportContext()
 
@@ -484,7 +492,7 @@ export function useTransportRouter() {
     }
   }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
-  const fetchRange = useCallback(async (req: FetchRangeRequest): Promise<TransportOutcome<{ bytes: Uint8Array; provider: string }>> => {
+  const fetchRange = useCallback(async (req: FetchRangeRequest): Promise<TransportOutcome<FetchRangeOutcome>> => {
     if (!Number.isFinite(req.rangeLen) || req.rangeLen <= 0) {
       throw new Error('rangeLen must be > 0')
     }
@@ -505,7 +513,7 @@ export function useTransportRouter() {
       return `${normalizeBase(base)}/gateway/fetch/${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
     }
 
-    const executeFetch = async (base: string, signal: AbortSignal, deputy: boolean) => {
+    const executeFetch = async (base: string, signal: AbortSignal, deputy: boolean): Promise<FetchRangeOutcome> => {
       const gatewayBase = normalizeBase(appConfig.gatewayBase)
       const normalizedBase = normalizeBase(base)
       const throughGateway = normalizedBase === gatewayBase
@@ -552,10 +560,19 @@ export function useTransportRouter() {
         }
       }
 
-      return { bytes: new Uint8Array(await res.arrayBuffer()), provider }
+      const cacheFreshness = String(res.headers.get('X-Nil-Cache-Freshness') || '').trim().toLowerCase()
+      const cacheFreshnessReason = String(res.headers.get('X-Nil-Cache-Freshness-Reason') || '').trim().toLowerCase()
+
+      return {
+        bytes: new Uint8Array(await res.arrayBuffer()),
+        provider,
+        deputy: deputyServed,
+        cacheFreshness: cacheFreshness || undefined,
+        cacheFreshnessReason: cacheFreshnessReason || undefined,
+      }
     }
 
-    const candidates: TransportCandidate<{ bytes: Uint8Array; provider: string }>[] = [
+    const candidates: TransportCandidate<FetchRangeOutcome>[] = [
       ...(!appConfig.gatewayDisabled
         ? [{
             backend: 'gateway' as const,
@@ -611,7 +628,16 @@ export function useTransportRouter() {
             )
           }
 
-          return { bytes: result.body, provider }
+          const cacheFreshness = String(result.headers['X-Nil-Cache-Freshness'] || '').trim().toLowerCase()
+          const cacheFreshnessReason = String(result.headers['X-Nil-Cache-Freshness-Reason'] || '').trim().toLowerCase()
+          const deputyHeader = String(result.headers['X-Nil-Deputy'] || '').trim().toLowerCase()
+          return {
+            bytes: result.body,
+            provider,
+            deputy: deputyHeader === '1' || deputyHeader === 'true' || deputyHeader === 'yes',
+            cacheFreshness: cacheFreshness || undefined,
+            cacheFreshnessReason: cacheFreshnessReason || undefined,
+          }
         },
       })
     }
