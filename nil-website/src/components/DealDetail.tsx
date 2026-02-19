@@ -10,7 +10,17 @@ import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
-import { deleteCachedFile, deleteDealDirectory, hasCachedFile, readCachedFile, readMdu, readManifestRoot, readSlabMetadata, writeCachedFile } from '../lib/storage/OpfsAdapter'
+import {
+  deleteCachedFile,
+  deleteDealDirectory,
+  hasCachedFile,
+  readCachedFile,
+  readMdu,
+  readManifestRoot,
+  readSlabMetadata,
+  writeCachedFile,
+  writeSlabMetadata,
+} from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
@@ -18,6 +28,7 @@ import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
+import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -113,6 +124,14 @@ interface FileActivity {
   action: 'download'
   status: 'pending' | 'success' | 'failed'
   error?: string
+}
+
+interface LocalCacheFreshnessResult {
+  usable: boolean
+  status: 'fresh' | 'stale' | 'unknown'
+  reason: string
+  localManifestRoot: string
+  chainManifestRoot: string
 }
 
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
@@ -449,11 +468,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
     try {
-      const normalizeManifestRoot = (value: string | null | undefined): string => {
-        const trimmed = String(value || '').trim().toLowerCase()
-        if (!trimmed) return ''
-        return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`
-      }
       const localMeta = await readSlabMetadata(String(dealId))
       const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(String(dealId)))
       const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
@@ -627,28 +641,57 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     throw lastError ?? new Error('gateway cache download failed')
   }, [gatewayDownloadBases, slab?.blob_size_bytes])
 
-  const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<boolean> => {
-    const normalizedChainRoot = String(chainManifestRoot || '').trim().toLowerCase()
-    if (!normalizedChainRoot) return false
-
-    const localManifest = await readManifestRoot(String(dealId)).catch(() => null)
-    if (!localManifest) return false
-
-    const normalizedLocalRoot = localManifest.trim().toLowerCase()
-    if (normalizedLocalRoot === normalizedChainRoot) return true
-
-    try {
-      await deleteDealDirectory(String(dealId))
-      setBrowserCachedByPath({})
-      console.info('Cleared stale browser MDU cache', {
-        dealId,
-        localManifestRoot: normalizedLocalRoot,
-        chainManifestRoot: normalizedChainRoot,
-      })
-    } catch (e) {
-      console.warn('Failed to clear stale browser MDU cache', { dealId, error: e })
+  const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
+    const localManifestRoot = await readManifestRoot(String(dealId)).catch(() => null)
+    const freshness = evaluateCacheFreshness(localManifestRoot, chainManifestRoot)
+    const base: LocalCacheFreshnessResult = {
+      usable: freshness.status === 'fresh',
+      status: freshness.status,
+      reason: freshness.reason,
+      localManifestRoot: freshness.localManifestRoot,
+      chainManifestRoot: freshness.chainManifestRoot,
     }
-    return false
+
+    if (freshness.status === 'fresh') {
+      try {
+        const localMeta = await readSlabMetadata(String(dealId))
+        if (localMeta) {
+          await writeSlabMetadata(String(dealId), {
+            ...localMeta,
+            last_validated_at: new Date().toISOString(),
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to update local slab metadata freshness timestamp', { dealId, error: e })
+      }
+      return base
+    }
+
+    if (freshness.status === 'stale') {
+      try {
+        await deleteDealDirectory(String(dealId))
+        setBrowserCachedByPath({})
+        console.info('Cleared stale browser MDU cache', {
+          dealId,
+          reason: freshness.reason,
+          localManifestRoot: freshness.localManifestRoot,
+          chainManifestRoot: freshness.chainManifestRoot,
+        })
+      } catch (e) {
+        console.warn('Failed to clear stale browser MDU cache', {
+          dealId,
+          reason: freshness.reason,
+          error: e,
+        })
+        return {
+          ...base,
+          status: 'unknown',
+          reason: 'stale_cleanup_failed',
+          usable: false,
+        }
+      }
+    }
+    return base
   }, [])
 
   const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
@@ -679,15 +722,10 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Fall back to local OPFS slab layout if available (thick client / multi-tab).
       try {
         if (!dealId) return
-        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
-        if (!canUseLocalSlab) return
+        const cacheFreshness = await reconcileLocalMduCache(String(dealId), cid)
+        if (!cacheFreshness.usable) return
 
         const localMeta = await readSlabMetadata(String(dealId))
-        const normalizeManifestRoot = (value: string | null | undefined): string => {
-          const trimmed = String(value || '').trim().toLowerCase()
-          if (!trimmed) return ''
-          return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`
-        }
         const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(String(dealId)))
         const expectedManifestRoot = normalizeManifestRoot(cid)
         const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
@@ -783,8 +821,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
         return
       }
 
-      const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
-      if (!canUseLocalSlab) {
+      const cacheFreshness = await reconcileLocalMduCache(String(dealId), cid)
+      if (!cacheFreshness.usable) {
         setFiles(list)
         return
       }
@@ -826,8 +864,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Local OPFS fallback: compute manifest info from locally stored MDUs.
       try {
         if (!dealId) throw new Error('missing deal id')
-        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
-        if (!canUseLocalSlab) throw new Error('local slab not available')
+        const cacheFreshness = await reconcileLocalMduCache(String(dealId), cid)
+        if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
 
         const mdu0 = await readMdu(String(dealId), 0)
         if (!mdu0) throw new Error('missing local MDU #0')
@@ -905,8 +943,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       // Local OPFS fallback.
       try {
         if (!dealId) throw new Error('missing deal id')
-        const canUseLocalSlab = await reconcileLocalMduCache(String(dealId), cid)
-        if (!canUseLocalSlab) throw new Error('local slab not available')
+        const cacheFreshness = await reconcileLocalMduCache(String(dealId), cid)
+        if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
 
         const bytes = await readMdu(String(dealId), mduIndex)
         if (!bytes) throw new Error(`missing local MDU #${mduIndex}`)
@@ -1446,6 +1484,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                           setBusyFilePath(f.path)
                                           const dealId = String(deal.id)
                                           try {
+                                            const chainCid = String(deal.cid || '').trim()
+                                            if (chainCid) {
+                                              const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
+                                              if (!cacheFreshness.usable) {
+                                                throw new Error(`browser cache unavailable (${cacheFreshness.reason})`)
+                                              }
+                                            }
                                             const cachedBytes = await readCachedFile(dealId, f.path)
                                             if (!cachedBytes) throw new Error('not cached in browser')
                                             downloadBytesAsFile(cachedBytes, f.path)
@@ -1473,8 +1518,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                             const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                           try {
                                             const chainCid = String(deal.cid || '').trim()
-                                            const canUseLocalSlab = await reconcileLocalMduCache(dealId, chainCid)
-                                            if (!canUseLocalSlab) throw new Error('local slab not available')
+                                            const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
+                                            if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
 
                                             const bytes = await readNilfsFileFromOpfs({
                                               dealId,
@@ -1530,14 +1575,16 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                           const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
                                           const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
                                           try {
-                                            const cachedBytes = await readCachedFile(dealId, f.path)
-                                            if (cachedBytes) {
-                                              downloadBytesAsFile(cachedBytes, f.path)
-                                              return
-                                            }
-
                                             if (!deal.cid) throw new Error('commit required (no on-chain CID)')
                                             const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+                                            const cacheFreshness = await reconcileLocalMduCache(dealId, manifestHex)
+                                            if (cacheFreshness.usable) {
+                                              const cachedBytes = await readCachedFile(dealId, f.path)
+                                              if (cachedBytes) {
+                                                downloadBytesAsFile(cachedBytes, f.path)
+                                                return
+                                              }
+                                            }
                                             onFileActivity?.({
                                               dealId,
                                               filePath: f.path,
