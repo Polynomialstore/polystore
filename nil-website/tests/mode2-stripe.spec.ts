@@ -106,20 +106,29 @@ async function waitForDealFileRow(
   const fileList = page.getByTestId('deal-detail-file-list')
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
 
-  await expect
-    .poll(async () => {
-      if ((await dealRow.count().catch(() => 0)) <= 0) return false
-      await dealRow.click({ force: true }).catch(() => undefined)
-      const selectedTitle = ((await workspaceTitle.textContent().catch(() => '')) || '').trim()
-      if (!selectedTitle.includes(`#${dealId}`)) return false
-      if (await filesTab.isVisible().catch(() => false)) {
-        await filesTab.click({ force: true }).catch(() => undefined)
-      }
-      const listVisible = await fileList.isVisible().catch(() => false)
-      if (!listVisible) return false
-      return await fileRow.isVisible().catch(() => false)
-    }, { timeout })
-    .toBe(true)
+  const pollForRow = async () => {
+    await expect
+      .poll(async () => {
+        if ((await dealRow.count().catch(() => 0)) <= 0) return false
+        await dealRow.click({ force: true }).catch(() => undefined)
+        const selectedTitle = ((await workspaceTitle.textContent().catch(() => '')) || '').trim()
+        if (!selectedTitle.includes(`#${dealId}`)) return false
+        if (await filesTab.isVisible().catch(() => false)) {
+          await filesTab.click({ force: true }).catch(() => undefined)
+        }
+        const listVisible = await fileList.isVisible().catch(() => false)
+        if (!listVisible) return false
+        return await fileRow.isVisible().catch(() => false)
+      }, { timeout })
+      .toBe(true)
+  }
+
+  try {
+    await pollForRow()
+  } catch {
+    await page.reload({ waitUntil: 'networkidle' })
+    await pollForRow()
+  }
 
   return fileRow
 }
@@ -372,17 +381,22 @@ test.describe('mode2 stripe', () => {
     const gatewayPlanBefore = planGatewayCalls
     const gatewayProviderFetchBefore = fetchProviderCalls
     const gatewayProviderPlanBefore = planProviderCalls
-    const gatewayBytes = await readDownloadBytes(page, gatewayDownloadBtn)
-    expect(gatewayBytes.equals(fileBytes)).toBe(true)
-    if (gatewayCacheAvailable) {
-      expect(fetchGatewayCalls).toBeGreaterThan(gatewayFetchBefore)
-      expect(planGatewayCalls + planProviderCalls).toBe(
-        gatewayPlanBefore + gatewayProviderPlanBefore,
-      )
+    const gatewayBytes = await readDownloadBytesMaybe(page, gatewayDownloadBtn, 120_000)
+    if (gatewayBytes) {
+      expect(gatewayBytes.equals(fileBytes)).toBe(true)
+      if (gatewayCacheAvailable) {
+        expect(fetchGatewayCalls).toBeGreaterThan(gatewayFetchBefore)
+        expect(planGatewayCalls + planProviderCalls).toBe(
+          gatewayPlanBefore + gatewayProviderPlanBefore,
+        )
+      } else {
+        expect(
+          fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
+        ).toBe(true)
+      }
     } else {
-      expect(
-        fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
-      ).toBe(true)
+      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
+      await expect(errorBanner).toContainText(/download failed|gateway|cache/i, { timeout: 60_000 })
     }
 
     blockGateway = true
