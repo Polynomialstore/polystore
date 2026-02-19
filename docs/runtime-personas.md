@@ -50,3 +50,27 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 - Desktop GUI owns/manages the local `user-gateway` when running in managed mode.
 - Provider processes are separate daemons and should be treated as independent personas, even on localhost.
 - Any change that affects runtime role boundaries must update this file and any referenced runbooks/specs in the same PR.
+
+## Local command mapping (authoritative shortcuts)
+
+From repo root:
+
+- `./scripts/run_local_stack.sh restart-gateway-user`
+  - Starts/restarts the external `user-gateway` persona (`127.0.0.1:8080`).
+- `./scripts/run_local_stack.sh restart-gateway-sp`
+  - Starts/restarts `provider-daemon` persona processes for local SP ports.
+- `./scripts/run_local_stack.sh stop-gateway-user`
+  - Stops external `user-gateway`.
+- `./scripts/run_local_stack.sh stop-gateway-sp`
+  - Stops local `provider-daemon` processes.
+- `./scripts/ensure_stack.sh`
+  - Full local stack bring-up (chain/faucet/providers/user-gateway/web) for devnet-style testing.
+
+From `nil_gateway_gui/`:
+
+- `npm run desktop` (`desktop:user`)
+  - GUI-managed `user-gateway` mode. Stops external user-gateway first, then launches desktop app.
+- `npm run desktop:with-sp`
+  - Ensures SP daemons are running, then launches GUI-managed desktop mode.
+- `npm run sp:ensure` / `npm run sp:stop`
+  - Manage only local provider-daemon processes.

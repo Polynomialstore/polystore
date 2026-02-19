@@ -56,6 +56,25 @@ On Linux and macOS, the sidecar build stamps a runtime library search path
 (`$ORIGIN` / `@loader_path`) into `nil_gateway` so it can find `libnil_core`
 next to the binary without manual `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`.
 
+## Local Development Commands
+
+From `nil_gateway_gui/`:
+
+- `npm run desktop` or `npm run desktop:user`
+  - Stops externally managed user-gateway on `:8080`, then launches Tauri so the GUI owns the local `user-gateway`.
+- `npm run desktop:with-sp`
+  - Ensures local SP daemons are running, then launches GUI-managed desktop mode.
+- `npm run sp:ensure` / `npm run sp:stop`
+  - Start/stop only provider-daemon processes for local dev.
+- `npm run user:ensure` / `npm run user:stop`
+  - Start/stop only externally managed user-gateway process on `:8080`.
+
+From repo root (`nil-store/`):
+
+- `./scripts/ensure_stack.sh`
+  - Brings up the local dev stack (chain + faucet + providers + user-gateway + optional web) with health checks.
+  - This is for local stack orchestration and E2E-style workflows, not GUI-managed ownership mode.
+
 ## Notes
 
 - Runtime persona contract reference: `docs/runtime-personas.md` (authoritative naming/ownership for `user-gateway` and `provider-daemon`).

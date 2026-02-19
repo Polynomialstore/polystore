@@ -36,3 +36,6 @@ nil_bridge/broadcast/
 
 # Import-only staging (not meant to be committed)
 update/
+
+# Local draft issue text scratchpad
+.tmp_issue_bodies/
