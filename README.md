@@ -1,14 +1,15 @@
 # NilStore Network
 
-NilStore is a verifiable decentralized storage network (Cosmos-SDK chain + gateway router + web UI).
+NilStore is a verifiable decentralized storage network (Cosmos-SDK chain + user-gateway + provider-daemon + web UI).
 
 This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**:
-- A hub operator runs the chain + router gateway + faucet + website on a VPS.
+- A hub operator runs the chain + user-gateway + faucet + website on a VPS.
 - Invite-only collaborators test end-to-end flows (website) and optionally run Storage Provider gateways on WAN hosts.
 
 ## Start here (canonical docs)
 
 - Documentation index: `DOCS.md`
+- Runtime persona contract (authoritative naming/ownership): `docs/runtime-personas.md`
 - Local runbook (fast): `HAPPY_PATH.md`
 - Spec ↔ code ↔ CI gap matrix (what CI proves / doesn’t): `docs/GAP_REPORT_REPO_ANCHORED.md`
 - Testnet readiness gates + one-command suites: `docs/TESTNET_READINESS_REPORT.md`
@@ -34,7 +35,7 @@ scripts/run_local_stack.sh stop
 Browser E2E (Playwright; wallet-first via in-page E2E wallet when `VITE_E2E=1`):
 
 ```bash
-# Mode 2 (StripeReplica): 12 providers + router + browser sharding
+# Mode 2 (StripeReplica): 12 providers + user-gateway + browser sharding
 scripts/e2e_mode2_stripe_multi_sp.sh
 
 # Gateway absent: upload falls back to direct SP paths
@@ -62,7 +63,7 @@ To build the full release bundle locally:
 - `nilchain` (L1): Cosmos-SDK chain (deals, proofs, economics, retrieval sessions)
 - `nil_core` (Rust): cryptographic primitives (KZG, Merkle, Reed-Solomon), exposed via C-FFI and WASM
 - `nil_cli`: client tooling (sharding / commitment generation)
-- `nil_gateway`: router + provider gateway (HTTP APIs; retrieval/session enforcement)
+- `nil_gateway`: user-gateway and provider-daemon HTTP APIs (retrieval/session enforcement)
 - `nil_faucet`: devnet faucet service (token-auth capable)
 - `nil-website`: web UI (React/Vite) for onboarding + deal flows
 

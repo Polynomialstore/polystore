@@ -36,7 +36,7 @@ BRIDGE_STATUS="not deployed"
 NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
 NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
 export NIL_EVM_DEV_PRIVKEY
-# Shared auth between router and provider for /sp/session-proof forwarding.
+# Shared auth between user-gateway and provider-daemon for /sp/session-proof forwarding.
 NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
 NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
@@ -1007,27 +1007,58 @@ start_web() {
 }
 
 restart_gateway() {
-  banner "Restarting gateway services"
-  for svc in gateway_sp gateway_user; do
-    pid_file="$PID_DIR/$svc.pid"
-    if [ -f "$pid_file" ]; then
-      pid=$(cat "$pid_file")
-      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        kill "$pid" 2>/dev/null || true
-        sleep 0.5
-        if kill -0 "$pid" 2>/dev/null; then
-          kill -9 "$pid" 2>/dev/null || true
-        fi
-        echo "Stopped $svc (pid $pid)"
+  banner "Restarting gateway services (user + SP)"
+  restart_gateway_sp
+  restart_gateway_user
+}
+
+stop_user_gateway_only() {
+  local pid_file="$PID_DIR/gateway_user.pid"
+  if [ -f "$pid_file" ]; then
+    pid=$(cat "$pid_file" 2>/dev/null || true)
+    if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
       fi
-      rm -f "$pid_file"
+      echo "Stopped gateway_user (pid $pid)"
     fi
-  done
+    rm -f "$pid_file"
+  fi
+
+  local gw_pids gw_pids2
+  gw_pids=$(lsof -ti :8080 2>/dev/null || true)
+  if [ -n "$gw_pids" ]; then
+    kill $gw_pids 2>/dev/null || true
+    sleep 0.5
+    gw_pids2=$(lsof -ti :8080 2>/dev/null || true)
+    if [ -n "$gw_pids2" ]; then
+      kill -9 $gw_pids2 2>/dev/null || true
+    fi
+  fi
+}
+
+stop_sp_gateway_only() {
+  local pid_file pid
+  pid_file="$PID_DIR/gateway_sp.pid"
+  if [ -f "$pid_file" ]; then
+    pid=$(cat "$pid_file" 2>/dev/null || true)
+    if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+      echo "Stopped gateway_sp (pid $pid)"
+    fi
+    rm -f "$pid_file"
+  fi
 
   for pid_file in "$PID_DIR"/gateway_sp_*.pid; do
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file" 2>/dev/null || true)
-      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
         kill "$pid" 2>/dev/null || true
         sleep 0.5
         if kill -0 "$pid" 2>/dev/null; then
@@ -1038,41 +1069,47 @@ restart_gateway() {
       rm -f "$pid_file"
     fi
   done
-  
-  # Ensure ports are free
+
   local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
 
-  for port in 8080; do
-    gw_pids=$(lsof -ti :$port 2>/dev/null || true)
-    if [ -n "$gw_pids" ]; then
-      kill $gw_pids 2>/dev/null || true
-      sleep 0.5
-      gw_pids2=$(lsof -ti :$port 2>/dev/null || true)
-      if [ -n "$gw_pids2" ]; then
-        kill -9 $gw_pids2 2>/dev/null || true
-      fi
-    fi
-  done
-
-  local idx
+  local idx port gw_pids gw_pids2
   for idx in $(seq 0 $((provider_count - 1))); do
     port=$((8082 + idx))
-    gw_pids=$(lsof -ti :$port 2>/dev/null || true)
+    gw_pids=$(lsof -ti :"$port" 2>/dev/null || true)
     if [ -n "$gw_pids" ]; then
       kill $gw_pids 2>/dev/null || true
       sleep 0.5
-      gw_pids2=$(lsof -ti :$port 2>/dev/null || true)
+      gw_pids2=$(lsof -ti :"$port" 2>/dev/null || true)
       if [ -n "$gw_pids2" ]; then
         kill -9 $gw_pids2 2>/dev/null || true
       fi
     fi
   done
+}
 
+restart_gateway_sp() {
+  banner "Restarting SP gateway services"
+  stop_sp_gateway_only
   start_sp_gateway
+}
+
+restart_gateway_user() {
+  banner "Restarting User gateway service"
+  stop_user_gateway_only
   start_user_gateway
+}
+
+stop_gateway_sp() {
+  banner "Stopping SP gateway services"
+  stop_sp_gateway_only
+}
+
+stop_gateway_user() {
+  banner "Stopping User gateway service"
+  stop_user_gateway_only
 }
 
 start_all() {
@@ -1180,9 +1217,13 @@ cmd="${1:-start}"
 case "$cmd" in
   start) start_all ;;
   stop) stop_all ;;
+  stop-gateway-sp) stop_gateway_sp ;;
+  stop-gateway-user) stop_gateway_user ;;
+  restart-gateway-sp) restart_gateway_sp ;;
+  restart-gateway-user) restart_gateway_user ;;
   restart-gateway) restart_gateway ;;
   *)
-    echo "Usage: $0 [start|stop|restart-gateway]"
+    echo "Usage: $0 [start|stop|stop-gateway-sp|stop-gateway-user|restart-gateway|restart-gateway-sp|restart-gateway-user]"
     exit 1
     ;;
 esac

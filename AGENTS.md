@@ -26,6 +26,11 @@
 
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
+## Runtime Persona Source of Truth
+- Canonical runtime role naming and ownership is defined in `docs/runtime-personas.md`.
+- Use `user-gateway` and `provider-daemon` terminology in new docs, logs, and UX text.
+- If compatibility requires legacy "router" naming, explicitly label it as a legacy alias and keep `docs/runtime-personas.md` updated in the same PR.
+
 ## Phase 1: The "Localhost" Prototype (Months 1-3)
 **Goal:** Prove the math works on a single machine. Don't worry about the network yet.
 

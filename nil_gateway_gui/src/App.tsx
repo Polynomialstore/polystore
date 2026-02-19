@@ -796,19 +796,19 @@ export default function App() {
   );
 
   const gatewaySourceLabel = useMemo(() => {
-    if (gatewayManaged === true) return "managed by GUI";
-    if (gatewayManaged === false) return "attached (external)";
-    return "unknown";
+    if (gatewayManaged === true) return "user-gateway managed by GUI";
+    if (gatewayManaged === false) return "user-gateway attached (external)";
+    return "user-gateway source unknown";
   }, [gatewayManaged]);
 
   const gatewayLogMessage = useMemo(() => {
     if (gatewayManaged === true) {
-      return "Waiting for gateway logs. Start a local upload now to stream upload activity.";
+      return "Waiting for user-gateway logs. Start a local upload now to stream upload activity.";
     }
     if (gatewayManaged === false) {
-      return "Connected to an external Gateway endpoint; GUI log streaming is unavailable.";
+      return "Connected to an external user-gateway endpoint; GUI log streaming is unavailable.";
     }
-    return "Start the local Gateway to begin managed log streaming.";
+    return "Start the local user-gateway to begin managed log streaming.";
   }, [gatewayManaged]);
 
   const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);

@@ -1,6 +1,6 @@
 # Nil Gateway GUI (Local Gateway)
 
-`nil_gateway_gui` is the desktop local Gateway app for browser users on trusted devnet. It runs a local NilStore gateway on `http://localhost:8080` so the website can use local routing/cache flows without relying on a hosted relay gateway.
+`nil_gateway_gui` is the desktop local Gateway app for browser users on trusted devnet. It runs a local NilStore **user-gateway** on `http://localhost:8080` so the website can use local routing/cache flows without relying on a hosted relay gateway.
 
 ## Download
 
@@ -58,6 +58,7 @@ next to the binary without manual `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`.
 
 ## Notes
 
+- Runtime persona contract reference: `docs/runtime-personas.md` (authoritative naming/ownership for `user-gateway` and `provider-daemon`).
 - The website local Gateway model expects gateway access through localhost.
 - Storage provider public endpoints (`sp1/sp2/sp3...`) remain separate and are discovered from on-chain provider records.
 - Linux GUI default sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` when not explicitly provided.

@@ -8,6 +8,7 @@
 *   **Name:** `nil-website`
 *   **Type:** Single Page Application (SPA)
 *   **Core Stack:** React 18, Vite, TypeScript, Tailwind CSS.
+*   **Runtime persona contract:** `docs/runtime-personas.md` (`user-gateway` vs `provider-daemon` ownership and routing boundaries).
 *   **Routing:** `react-router-dom` (HashRouter).
 *   **State:** React Context + React Query (via Wagmi).
 *   **Design System:** "Cyberpunk/Scientific" aesthetic (Dark mode default, glassmorphism, neon accents).

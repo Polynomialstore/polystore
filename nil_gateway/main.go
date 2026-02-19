@@ -597,6 +597,12 @@ func main() {
 
 	routerMode := isGatewayRouterMode()
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	if routerMode {
+		log.Printf("Runtime persona: user-gateway (proxy mode enabled; provider-daemon APIs expected on separate processes).")
+		log.Printf("Compatibility note: this behavior is historically called \"router mode\" in env/code paths.")
+	} else {
+		log.Printf("Runtime persona: combined user-gateway + provider-daemon APIs (single-process profile).")
+	}
 
 	configureDefaultUploadDir(routerMode, listenAddr)
 

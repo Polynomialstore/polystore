@@ -86,7 +86,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
 
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
-    *   **Role:** Optional browser-side mirroring into a local gateway/router cache (used when the gateway is running in router mode and `/sp/*` endpoints are not exposed).
+    *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
 
 #### Health & Status
 *   **`GET /health`**

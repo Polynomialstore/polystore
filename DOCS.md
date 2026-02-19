@@ -5,6 +5,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 ## Canonical (Protocol)
 
 - `spec.md`: Canonical protocol specification. If anything else conflicts with `spec.md`, `spec.md` wins.
+- `docs/runtime-personas.md`: Canonical runtime persona naming/ownership contract (`user-gateway` vs `provider-daemon`).
 
 ## RFCs (Design Proposals / Deep Dives)
 
