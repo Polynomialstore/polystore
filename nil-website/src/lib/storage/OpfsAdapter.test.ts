@@ -127,6 +127,30 @@ test.beforeEach(() => {
     mockRootDirectoryHandle.entries.clear();
 });
 
+function makeMetadata(opts: {
+    dealId: string
+    manifestRoot: string
+    generationId: string
+    witnessMdus?: number
+    userMdus?: number
+}): OpfsAdapter.SlabMetadata {
+    const witness = opts.witnessMdus ?? 0
+    const user = opts.userMdus ?? 1
+    return {
+        schema_version: 1,
+        generation_id: opts.generationId,
+        deal_id: opts.dealId,
+        manifest_root: opts.manifestRoot,
+        source: 'browser_test',
+        created_at: new Date().toISOString(),
+        last_validated_at: null,
+        witness_mdus: witness,
+        user_mdus: user,
+        total_mdus: 1 + witness + user,
+        file_records: [{ path: 'test.bin', start_offset: 0, size_bytes: 3, flags: 0 }],
+    }
+}
+
 test('OpfsAdapter: writeMdu and readMdu', async () => {
     const dealId = 'test-deal-write-read';
     const mduIndex = 0;
@@ -280,3 +304,88 @@ test('OpfsAdapter: cached file write/read/clear', async () => {
     assert.strictEqual(await OpfsAdapter.hasCachedFile(dealId, filePathB), false);
     assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([9]));
 });
+
+test('OpfsAdapter: atomic slab generation swap preserves prior active generation on failed write', async () => {
+    const dealId = 'test-deal-atomic-swap-failure'
+    const rootA = '0x' + 'aa'.repeat(48)
+    const rootB = '0x' + 'bb'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootA,
+        manifestBlob: new Uint8Array([1, 2, 3]),
+        mdus: [
+            { index: 0, data: new Uint8Array([10]) },
+            { index: 1, data: new Uint8Array([11]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootA,
+            generationId: rootA.slice(2),
+        }),
+    })
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([10]))
+    assert.strictEqual(await OpfsAdapter.readManifestRoot(dealId), rootA)
+
+    await assert.rejects(async () => {
+        await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+            manifestRoot: rootB,
+            manifestBlob: new Uint8Array([4, 5, 6]),
+            mdus: [{ index: 0, data: new Uint8Array([20]) }],
+            metadata: makeMetadata({
+                dealId,
+                manifestRoot: rootB,
+                generationId: rootB.slice(2),
+            }),
+        })
+    })
+
+    // Active generation remains unchanged after failed write.
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([10]))
+    assert.strictEqual(await OpfsAdapter.readManifestRoot(dealId), rootA)
+})
+
+test('OpfsAdapter: atomic slab generation swap serves new generation and cleans stale ones', async () => {
+    const dealId = 'test-deal-atomic-swap-success'
+    const rootA = '0x' + 'cc'.repeat(48)
+    const rootB = '0x' + 'dd'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootA,
+        manifestBlob: new Uint8Array([1, 1, 1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([30]) },
+            { index: 1, data: new Uint8Array([31]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootA,
+            generationId: rootA.slice(2),
+        }),
+    })
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 1), new Uint8Array([31]))
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootB,
+        manifestBlob: new Uint8Array([2, 2, 2]),
+        mdus: [
+            { index: 0, data: new Uint8Array([40]) },
+            { index: 1, data: new Uint8Array([41]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootB,
+            generationId: rootB.slice(2),
+        }),
+    })
+
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([40]))
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 1), new Uint8Array([41]))
+    assert.strictEqual(await OpfsAdapter.readManifestRoot(dealId), rootB)
+    assert.strictEqual((await OpfsAdapter.readSlabMetadata(dealId))?.manifest_root, rootB)
+
+    // Listing should expose active generation files only.
+    const files = await OpfsAdapter.listDealFiles(dealId)
+    assert.ok(files.includes('mdu_0.bin'))
+    assert.ok(files.includes('mdu_1.bin'))
+    assert.ok(files.includes('manifest.bin'))
+})

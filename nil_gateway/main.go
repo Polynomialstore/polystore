@@ -620,6 +620,7 @@ func main() {
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
 	}
+	recoverDealGenerationStateOnStartup()
 
 	if !routerMode {
 		if err := initSessionDB(sessionDBPath); err != nil {
@@ -2391,6 +2392,16 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealGenerationNotReady) {
+			setCacheFreshnessHeaders(w, "unknown", "generation_not_ready")
+			writeJSONError(
+				w,
+				http.StatusServiceUnavailable,
+				"slab generation not ready yet",
+				"reason=generation_not_ready; retry shortly while cache refresh finalizes",
+			)
 			return
 		}
 		if errors.Is(err, ErrDealDirConflict) {

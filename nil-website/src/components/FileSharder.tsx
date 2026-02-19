@@ -13,11 +13,7 @@ import {
   readManifestRoot,
   readMdu,
   readShard,
-  writeManifestBlob,
-  writeManifestRoot,
-  writeMdu,
-  writeSlabMetadata,
-  writeShard,
+  writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
@@ -342,24 +338,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       try {
         addLog('> Saving committed slab to OPFS...')
-        await writeManifestRoot(dealId, safeRoot)
-        if (manifestBlob && manifestBlob.byteLength > 0) {
-          await writeManifestBlob(dealId, manifestBlob)
-        }
-        for (const mdu of mdus) {
-          await writeMdu(dealId, mdu.index, mdu.data)
-        }
-        if (isMode2 && shards.length > 0) {
-          for (const mdu of shards) {
-            const slabIndex = 1 + witnessCount + mdu.index
-            for (let slot = 0; slot < mdu.shards.length; slot++) {
-              const shard = mdu.shards[slot]
-              if (!shard) continue
-              await writeShard(dealId, slabIndex, slot, shard)
-            }
-          }
-        }
-
         const mdu0Bytes = mdus.find((mdu) => mdu.index === 0)?.data
         const parsedFiles = mdu0Bytes ? parseNilfsFilesFromMdu0(mdu0Bytes) : []
         const fileRecords = parsedFiles.map((file) => ({
@@ -377,23 +355,38 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const userMdus = Math.max(userMdusByOffsets, userMdusByIndices)
         const totalMdus = 1 + safeWitnessCount + userMdus
         const generationId = safeRoot.replace(/^0x/i, '').trim() || safeRoot
-        await writeSlabMetadata(dealId, {
-          schema_version: 1,
-          generation_id: generationId,
-          deal_id: dealId,
-          manifest_root: safeRoot,
-          owner: address || undefined,
-          redundancy:
-            isMode2 && stripeParams
-              ? { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m }
-              : undefined,
-          source: isMode2 ? 'browser_mode2_commit' : 'browser_mode1_commit',
-          created_at: new Date().toISOString(),
-          last_validated_at: null,
-          witness_mdus: safeWitnessCount,
-          user_mdus: userMdus,
-          total_mdus: totalMdus,
-          file_records: fileRecords,
+        const shardWrites =
+          isMode2 && shards.length > 0
+            ? shards.flatMap((mdu) => {
+                const slabIndex = 1 + witnessCount + mdu.index
+                return mdu.shards.flatMap((shard, slot) =>
+                  shard ? [{ mduIndex: slabIndex, slot, data: shard }] : [],
+                )
+              })
+            : []
+        await writeSlabGenerationAtomically(dealId, {
+          manifestRoot: safeRoot,
+          manifestBlob,
+          mdus: mdus.map((mdu) => ({ index: mdu.index, data: mdu.data })),
+          shards: shardWrites,
+          metadata: {
+            schema_version: 1,
+            generation_id: generationId,
+            deal_id: dealId,
+            manifest_root: safeRoot,
+            owner: address || undefined,
+            redundancy:
+              isMode2 && stripeParams
+                ? { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m }
+                : undefined,
+            source: isMode2 ? 'browser_mode2_commit' : 'browser_mode1_commit',
+            created_at: new Date().toISOString(),
+            last_validated_at: null,
+            witness_mdus: safeWitnessCount,
+            user_mdus: userMdus,
+            total_mdus: totalMdus,
+            file_records: fileRecords,
+          },
         })
 
         lastPersistedManifestRootRef.current = safeRoot

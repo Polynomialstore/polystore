@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrInvalidManifestRoot = errors.New("invalid manifest_root")
-	ErrDealDirConflict     = errors.New("deal directory conflict")
+	ErrInvalidManifestRoot    = errors.New("invalid manifest_root")
+	ErrDealDirConflict        = errors.New("deal directory conflict")
+	ErrDealGenerationNotReady = errors.New("deal generation not ready")
 )
 
 type ManifestRoot struct {
@@ -104,12 +105,225 @@ func dealScopedDir(dealID uint64, root ManifestRoot) string {
 	return filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10), root.Key)
 }
 
-func resolveDealDirForDeal(dealID uint64, root ManifestRoot, rawParam string) (string, error) {
-	cand := dealScopedDir(dealID, root)
-	if info, err := os.Stat(cand); err == nil && info.IsDir() {
-		return cand, nil
+func dealScopedBaseDir(dealID uint64) string {
+	return filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
+}
+
+func activeDealGenerationPointerPath(dealID uint64) string {
+	return filepath.Join(dealScopedBaseDir(dealID), ".active_generation")
+}
+
+func readActiveDealGeneration(dealID uint64) (ManifestRoot, error) {
+	data, err := os.ReadFile(activeDealGenerationPointerPath(dealID))
+	if err != nil {
+		return ManifestRoot{}, err
 	}
-	return resolveDealDir(root, rawParam)
+	raw := strings.TrimSpace(string(data))
+	if raw == "" {
+		return ManifestRoot{}, os.ErrNotExist
+	}
+	if !strings.HasPrefix(strings.ToLower(raw), "0x") {
+		raw = "0x" + raw
+	}
+	return parseManifestRoot(raw)
+}
+
+func writeActiveDealGeneration(dealID uint64, root ManifestRoot) error {
+	base := dealScopedBaseDir(dealID)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return err
+	}
+	tmpPath := filepath.Join(base, fmt.Sprintf(".active_generation.%d.tmp", time.Now().UnixNano()))
+	if err := os.WriteFile(tmpPath, []byte(root.Canonical+"\n"), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, activeDealGenerationPointerPath(dealID)); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
+func clearActiveDealGeneration(dealID uint64) {
+	_ = os.Remove(activeDealGenerationPointerPath(dealID))
+}
+
+func validateDealGenerationReadyStrict(dealDir string) error {
+	if !mode2DirLooksComplete(dealDir) {
+		return fmt.Errorf("slab core files are incomplete")
+	}
+	meta, err := loadSlabMetadataWithFallback(dealDir)
+	if err != nil {
+		return fmt.Errorf("failed to load slab metadata: %w", err)
+	}
+	if !slabMetadataManifestMatchesDealDir(meta.ManifestRoot, dealDir) {
+		return fmt.Errorf("slab metadata manifest_root does not match generation directory")
+	}
+	requiredLocalMdus := uint64(1) + meta.WitnessMdus
+	if requiredLocalMdus == 0 {
+		requiredLocalMdus = 1
+	}
+	for i := uint64(0); i < requiredLocalMdus; i++ {
+		path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", i))
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return fmt.Errorf("missing mdu_%d.bin: %w", i, statErr)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("mdu_%d.bin is not a regular file", i)
+		}
+	}
+	return nil
+}
+
+func validateDealGenerationReadyBestEffort(dealDir string) error {
+	if mode2DirLooksComplete(dealDir) {
+		return validateDealGenerationReadyStrict(dealDir)
+	}
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+	info, err := os.Stat(mdu0Path)
+	if err != nil {
+		return fmt.Errorf("missing mdu_0.bin: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("mdu_0.bin is not a regular file")
+	}
+	return nil
+}
+
+func cleanupInterruptedDealGenerations(dealID uint64) {
+	baseDealDir := dealScopedBaseDir(dealID)
+	entries, err := os.ReadDir(baseDealDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Gateway cache recovery: failed to list deal dir deal_id=%d err=%v", dealID, err)
+		}
+		return
+	}
+
+	activeRoot := ""
+	if root, err := readActiveDealGeneration(dealID); err == nil {
+		activeRoot = root.Key
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Printf("Gateway cache recovery: invalid active pointer deal_id=%d err=%v", dealID, err)
+		clearActiveDealGeneration(dealID)
+	}
+
+	for _, entry := range entries {
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		fullPath := filepath.Join(baseDealDir, name)
+		if !entry.IsDir() && strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".lock") {
+			lockInfo, statErr := os.Stat(fullPath)
+			if statErr != nil || lockInfo.IsDir() {
+				continue
+			}
+			targetRoot := strings.TrimSuffix(strings.TrimPrefix(name, "."), ".lock")
+			targetDir := filepath.Join(baseDealDir, targetRoot)
+			if time.Since(lockInfo.ModTime()) > 2*time.Minute && !mode2DirLooksComplete(targetDir) {
+				_ = os.Remove(fullPath)
+			}
+			continue
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(name, "staging-") || strings.HasPrefix(name, ".staging-") || strings.HasPrefix(name, ".tmp-") {
+			if err := os.RemoveAll(fullPath); err != nil && !os.IsNotExist(err) {
+				log.Printf("Gateway cache recovery: failed to remove staging dir deal_id=%d dir=%s err=%v", dealID, name, err)
+			}
+			continue
+		}
+		if !isManifestRootDirName(name) {
+			continue
+		}
+		if activeRoot != "" && name == activeRoot {
+			continue
+		}
+		if _, markerErr := os.Stat(filepath.Join(fullPath, mode2SlabCompleteMarker)); markerErr != nil {
+			continue
+		}
+		if err := validateDealGenerationReadyStrict(fullPath); err != nil {
+			if rmErr := os.RemoveAll(fullPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				log.Printf("Gateway cache recovery: failed to remove incomplete generation deal_id=%d generation=%s err=%v", dealID, name, rmErr)
+			}
+		}
+	}
+}
+
+func recoverDealGenerationStateOnStartup() {
+	baseDealsDir := filepath.Join(uploadDir, "deals")
+	entries, err := os.ReadDir(baseDealsDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Gateway cache recovery: failed to list base deal dir %s err=%v", baseDealsDir, err)
+		}
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dealID, parseErr := strconv.ParseUint(strings.TrimSpace(entry.Name()), 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		cleanupInterruptedDealGenerations(dealID)
+	}
+}
+
+func resolveDealDirForDeal(dealID uint64, root ManifestRoot, rawParam string) (string, error) {
+	cleanupInterruptedDealGenerations(dealID)
+	requestedDir := dealScopedDir(dealID, root)
+
+	if activeRoot, err := readActiveDealGeneration(dealID); err == nil {
+		activeDir := dealScopedDir(dealID, activeRoot)
+		if _, markerErr := os.Stat(filepath.Join(activeDir, mode2SlabCompleteMarker)); markerErr == nil {
+			if activeRoot.Key != root.Key {
+				if info, statErr := os.Stat(requestedDir); statErr == nil && info.IsDir() {
+					if readyErr := validateDealGenerationReadyStrict(requestedDir); readyErr != nil {
+						return "", fmt.Errorf("%w: %v", ErrDealGenerationNotReady, readyErr)
+					}
+					if setErr := writeActiveDealGeneration(dealID, root); setErr != nil {
+						return "", fmt.Errorf("failed to update active generation pointer: %w", setErr)
+					}
+					return requestedDir, nil
+				}
+				return "", os.ErrNotExist
+			}
+
+			if info, statErr := os.Stat(activeDir); statErr == nil && info.IsDir() {
+				if readyErr := validateDealGenerationReadyStrict(activeDir); readyErr != nil {
+					return "", fmt.Errorf("%w: %v", ErrDealGenerationNotReady, readyErr)
+				}
+				return activeDir, nil
+			}
+		}
+		clearActiveDealGeneration(dealID)
+	}
+
+	if info, err := os.Stat(requestedDir); err == nil && info.IsDir() {
+		if readyErr := validateDealGenerationReadyBestEffort(requestedDir); readyErr != nil {
+			return "", fmt.Errorf("%w: %v", ErrDealGenerationNotReady, readyErr)
+		}
+		if _, markerErr := os.Stat(filepath.Join(requestedDir, mode2SlabCompleteMarker)); markerErr == nil {
+			if setErr := writeActiveDealGeneration(dealID, root); setErr != nil {
+				return "", fmt.Errorf("failed to set active generation pointer: %w", setErr)
+			}
+		}
+		return requestedDir, nil
+	}
+
+	legacyDir, err := resolveDealDir(root, rawParam)
+	if err != nil {
+		return "", err
+	}
+	if readyErr := validateDealGenerationReadyBestEffort(legacyDir); readyErr != nil {
+		return "", fmt.Errorf("%w: %v", ErrDealGenerationNotReady, readyErr)
+	}
+	return legacyDir, nil
 }
 
 func isManifestRootDirName(name string) bool {
@@ -174,5 +388,9 @@ func cleanupStaleDealGenerations(dealID uint64, keepRoot ManifestRoot) {
 			name,
 			keepRoot.Key,
 		)
+	}
+
+	if err := writeActiveDealGeneration(dealID, keepRoot); err != nil {
+		log.Printf("Gateway cache cleanup: failed to persist active generation pointer deal_id=%d manifest_root=%s err=%v", dealID, keepRoot.Key, err)
 	}
 }
