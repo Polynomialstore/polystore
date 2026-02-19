@@ -314,7 +314,6 @@ test.describe('mode2 stripe', () => {
     }
 
     await clearBrowserCache()
-    const gatewayCacheAvailable = ((await fileRow.getAttribute('data-cache-gateway')) || '') === 'yes'
 
     const autoGatewayFetchBefore = fetchGatewayCalls
     const autoProviderFetchBefore = fetchProviderCalls
@@ -322,22 +321,9 @@ test.describe('mode2 stripe', () => {
     const autoProviderPlanBefore = planProviderCalls
     const autoBytes = await readDownloadBytes(page, autoDownloadBtn)
     expect(autoBytes.equals(fileBytes)).toBe(true)
-    if (gatewayCacheAvailable) {
-      const routeValue = ((await routeEl.getAttribute('data-download-route').catch(() => '')) || '').toLowerCase()
-      expect(
-        fetchGatewayCalls > autoGatewayFetchBefore || fetchProviderCalls > autoProviderFetchBefore,
-      ).toBe(true)
-      if (routeValue.includes('gateway')) {
-        expect(planGatewayCalls + planProviderCalls).toBe(
-          autoGatewayPlanBefore + autoProviderPlanBefore,
-        )
-      }
-    } else {
-      expect(fetchProviderCalls).toBeGreaterThan(autoProviderFetchBefore)
-      expect(
-        planProviderCalls > autoProviderPlanBefore || planGatewayCalls > autoGatewayPlanBefore,
-      ).toBe(true)
-    }
+    expect(fetchGatewayCalls > autoGatewayFetchBefore || planGatewayCalls > autoGatewayPlanBefore).toBe(true)
+    expect(fetchProviderCalls).toBe(autoProviderFetchBefore)
+    expect(planProviderCalls).toBe(autoProviderPlanBefore)
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
 
     const cacheFetchGatewayBefore = fetchGatewayCalls
@@ -384,16 +370,9 @@ test.describe('mode2 stripe', () => {
     const gatewayBytes = await readDownloadBytesMaybe(page, gatewayDownloadBtn, 120_000)
     if (gatewayBytes) {
       expect(gatewayBytes.equals(fileBytes)).toBe(true)
-      if (gatewayCacheAvailable) {
-        expect(fetchGatewayCalls).toBeGreaterThan(gatewayFetchBefore)
-        expect(planGatewayCalls + planProviderCalls).toBe(
-          gatewayPlanBefore + gatewayProviderPlanBefore,
-        )
-      } else {
-        expect(
-          fetchGatewayCalls > gatewayFetchBefore || fetchProviderCalls > gatewayProviderFetchBefore,
-        ).toBe(true)
-      }
+      expect(fetchGatewayCalls > gatewayFetchBefore || planGatewayCalls > gatewayPlanBefore).toBe(true)
+      expect(fetchProviderCalls).toBe(gatewayProviderFetchBefore)
+      expect(planProviderCalls).toBe(gatewayProviderPlanBefore)
     } else {
       const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
       await expect(errorBanner).toContainText(/download failed|gateway|cache/i, { timeout: 60_000 })

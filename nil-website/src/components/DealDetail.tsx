@@ -267,6 +267,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     const msg = failed.errorMessage ? `:${failed.errorMessage}` : ''
     return `${failed.backend}${msg}`
   }, [lastTrace])
+  const lastRouteMode = useMemo(() => {
+    const pref = lastTrace?.preference || ''
+    if (pref === 'prefer_gateway') return 'gateway_mode'
+    if (pref === 'prefer_direct_sp') return 'fallback_direct'
+    if (pref === 'prefer_p2p') return 'p2p'
+    if (pref === 'auto') return 'auto'
+    return ''
+  }, [lastTrace])
 
   const resolveProviderHttpBase = useCallback((): string => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -1074,10 +1082,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                             className="text-[11px] text-muted-foreground"
                             data-testid="transport-route"
                             data-download-route={lastTrace?.chosen?.backend || ''}
+                            data-route-mode={lastTrace?.preference || ''}
                             data-transport-attempts={lastAttemptSummary}
                             data-transport-failure={lastFailureSummary}
                           >
-                            Route: {lastRouteLabel || '—'}
+                            Route: {lastRouteLabel || '—'}{lastRouteMode ? ` · Mode: ${lastRouteMode}` : ''}
                           </div>
                         </div>
                         {fileActionError && (
@@ -1495,19 +1504,17 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                 })
                                               }
                                             }
-                                            const autoServiceBase = resolveProviderHttpBase()
                                             const autoRoutePreference =
                                               transportPreference === 'prefer_p2p'
                                                 ? 'prefer_p2p'
-                                                : gatewaySlabStatus === 'present'
-                                                  ? 'prefer_gateway'
-                                                  : 'prefer_direct_sp'
+                                                : transportPreference === 'prefer_direct_sp'
+                                                  ? 'prefer_direct_sp'
+                                                  : undefined
                                             const result = await fetchFile({
                                               dealId,
                                               manifestRoot: manifestHex,
                                               owner: String(deal.owner || nilAddress || ''),
                                               filePath: f.path,
-                                              serviceBase: autoServiceBase,
                                               routePreference: autoRoutePreference,
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,

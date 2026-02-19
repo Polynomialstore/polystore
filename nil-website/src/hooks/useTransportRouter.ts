@@ -16,6 +16,18 @@ import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreferen
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange } from '../lib/transport/libp2pClient'
 import type { P2pTarget } from '../lib/multiaddr'
+import { allowNonGatewayBackends, resolveTransportPreference } from '../lib/transport/mode'
+
+const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+
+function readLocalGatewayConnectedHint(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(LOCAL_GATEWAY_CONNECTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 type ListFilesRequest = {
   manifestRoot: string
@@ -121,21 +133,12 @@ export function useTransportRouter() {
   const resolvePreference = useCallback(
     (override?: RoutePreference): RoutePreference => {
       const candidate = override ?? preference
-      if (appConfig.gatewayDisabled) {
-        if (candidate === 'prefer_p2p' && appConfig.p2pEnabled) return 'prefer_p2p'
-        return 'prefer_direct_sp'
-      }
-      if (candidate === 'auto' && typeof window !== 'undefined') {
-        try {
-          if (window.localStorage.getItem('nil_local_gateway_connected') === '1') {
-            return 'prefer_gateway'
-          }
-        } catch {
-          // Ignore storage access failures; fallback to default auto behavior.
-        }
-      }
-      if (candidate === 'prefer_p2p' && !appConfig.p2pEnabled) return 'auto'
-      return candidate
+      return resolveTransportPreference({
+        candidate,
+        gatewayDisabled: appConfig.gatewayDisabled,
+        p2pEnabled: appConfig.p2pEnabled,
+        localGatewayConnected: readLocalGatewayConnectedHint(),
+      })
     },
     [preference],
   )
@@ -150,6 +153,7 @@ export function useTransportRouter() {
   }, [])
 
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       ...(!appConfig.gatewayDisabled
@@ -168,7 +172,7 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
@@ -189,7 +193,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('list_files', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -202,6 +206,7 @@ export function useTransportRouter() {
   }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<SlabLayoutData>[] = [
       ...(!appConfig.gatewayDisabled
@@ -220,7 +225,7 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
@@ -241,7 +246,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('slab', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -254,6 +259,7 @@ export function useTransportRouter() {
   }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       ...(!appConfig.gatewayDisabled
@@ -275,7 +281,7 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
@@ -299,7 +305,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('plan', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -367,6 +373,7 @@ export function useTransportRouter() {
   }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<ManifestInfoData>[] = [
       ...(!appConfig.gatewayDisabled
@@ -386,7 +393,7 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
@@ -408,7 +415,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('manifest_info', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 10_000,
         maxAttemptsPerBackend: 2,
       })
@@ -421,6 +428,7 @@ export function useTransportRouter() {
   }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const candidates: TransportCandidate<MduKzgData>[] = [
       ...(!appConfig.gatewayDisabled
@@ -441,7 +449,7 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
@@ -464,7 +472,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('mdu_kzg', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 30_000,
         maxAttemptsPerBackend: 2,
       })
@@ -481,6 +489,7 @@ export function useTransportRouter() {
       throw new Error('rangeLen must be > 0')
     }
 
+    const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const directP2p = req.p2pTarget?.multiaddr?.trim()
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
@@ -556,14 +565,14 @@ export function useTransportRouter() {
         : []),
     ]
 
-    if (directBase) {
+    if (directBase && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
         execute: async (signal) => executeFetch(directBase, signal, false),
       })
     }
-    if (directP2p && appConfig.p2pEnabled) {
+    if (directP2p && appConfig.p2pEnabled && allowNonGatewayBackends(effectivePreference)) {
       candidates.push({
         backend: 'libp2p' as const,
         endpoint: directP2p,
@@ -612,7 +621,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('fetch', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: effectivePreference,
         timeoutMs: 30_000,
         maxAttemptsPerBackend: 2,
       })

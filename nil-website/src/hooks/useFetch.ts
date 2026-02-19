@@ -92,6 +92,17 @@ export type SponsoredRetrievalAuth =
   | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
   | { type: 'voucher'; voucher: VoucherAuthInput }
 
+const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+
+function readLocalGatewayConnectedHint(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(LOCAL_GATEWAY_CONNECTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
   if (chunks.length === 0) return new Uint8Array(0)
   if (chunks.length === 1) return chunks[0]
@@ -219,14 +230,17 @@ export function useFetch() {
       }
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
-      const preferenceOverride: RoutePreference | undefined =
-        input.routePreference ??
-        (serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
-          ? 'prefer_direct_sp'
-          : undefined)
+      const preferenceOverride: RoutePreference | undefined = input.routePreference
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
+      const gatewayModeActive =
+        !appConfig.gatewayDisabled &&
+        (preferenceOverride === 'prefer_gateway' ||
+          (preferenceOverride === undefined &&
+            transport.preference !== 'prefer_direct_sp' &&
+            transport.preference !== 'prefer_p2p' &&
+            readLocalGatewayConnectedHint()))
 
       let gatewayP2pTarget: P2pTarget | undefined
       if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && !p2pEndpoint?.target) {
@@ -623,7 +637,9 @@ export function useFetch() {
         }
 
         for (const c of group.chunks) {
-          const candidateProviders = [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
+          const candidateProviders = gatewayModeActive
+            ? [provider]
+            : [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
           let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>> | null = null
           let selectedProvider = provider
           let selectedSessionId: Hex | null = primarySessionId
@@ -666,7 +682,10 @@ export function useFetch() {
               expectedProvider: candidateProvider,
               directBase: candidateDirectBase,
               p2pTarget: candidateP2pTarget,
-              preference: candidateProvider === provider ? preferenceOverride : ('prefer_direct_sp' as RoutePreference),
+              preference:
+                candidateProvider === provider
+                  ? preferenceOverride
+                  : (gatewayModeActive ? 'prefer_gateway' : ('prefer_direct_sp' as RoutePreference)),
             }
 
             try {
