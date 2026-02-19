@@ -20,6 +20,7 @@ libnil_core.dylib
 .nilchain_retrieval_fees/
 nil_s3/uploads/
 uploads/sessions.db
+uploads/
 .gemini
 nil-website/test-results/
 nil-website/playwright-report/

@@ -1073,6 +1073,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                           <div
                             className="text-[11px] text-muted-foreground"
                             data-testid="transport-route"
+                            data-download-route={lastTrace?.chosen?.backend || ''}
                             data-transport-attempts={lastAttemptSummary}
                             data-transport-failure={lastFailureSummary}
                           >
@@ -1333,6 +1334,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                 key={`${f.path}:${f.start_offset}`}
                                 data-testid="deal-detail-file-row"
                                 data-file-path={f.path}
+                                data-cache-browser={browserCached ? 'yes' : 'no'}
+                                data-cache-gateway={gatewayCached ? 'yes' : 'no'}
                                 className="rounded-lg border border-border bg-background/60 px-3 py-2 space-y-2"
                               >
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

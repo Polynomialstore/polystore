@@ -2430,6 +2430,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     isCommitConfirming ||
     isAlreadyCommitted ||
     hasError;
+  const uploadPhase = useMemo(() => {
+    if (hasError) return 'error'
+    if (isAlreadyCommitted) return 'done'
+    if (isCommitPending || isCommitConfirming) return 'committing'
+    if (readyToCommit) return 'ready_to_commit'
+    if (activeUploading) return isMode2 ? 'gateway_uploading' : 'uploading'
+    if (processing) return shardProgress.phase || 'processing'
+    if (readyToUpload) return 'ready_to_upload'
+    if (hasManifestRoot) return 'manifest_ready'
+    return 'idle'
+  }, [
+    activeUploading,
+    hasError,
+    hasManifestRoot,
+    isAlreadyCommitted,
+    isCommitConfirming,
+    isCommitPending,
+    isMode2,
+    processing,
+    readyToCommit,
+    readyToUpload,
+    shardProgress.phase,
+  ])
 
   useEffect(() => {
     const node = logContainerRef.current;
@@ -2533,7 +2556,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           )}
 
       {showStatusPanel && (
-        <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
+        <div
+          className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm"
+          data-testid="mdu-status-panel"
+          data-upload-phase={uploadPhase}
+        >
           <p className="font-bold text-foreground mb-2">Current Activity:</p>
           <div className="space-y-2">
             {hasError ? (

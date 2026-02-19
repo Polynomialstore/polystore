@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Mode 2 (StripeReplica) E2E: 12+ SPs, browser sharding, shard uploads, commit, retrieval.
+# Mode 2 (StripeReplica) E2E harness.
+# Defaults to a fast profile (3 SPs); override PROVIDER_COUNT=12 for heavy/nightly runs.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STACK_SCRIPT="$ROOT_DIR/scripts/run_devnet_alpha_multi_sp.sh"
+STACK_UP_SCRIPT="$ROOT_DIR/scripts/e2e_stack_up.sh"
+STACK_DOWN_SCRIPT="$ROOT_DIR/scripts/e2e_stack_down.sh"
 
 cleanup() {
   echo "==> Stopping devnet alpha multi-SP stack..."
-  "$STACK_SCRIPT" stop || true
+  "$STACK_DOWN_SCRIPT" || true
 }
 trap cleanup EXIT
 
@@ -38,11 +40,13 @@ wait_for_http() {
 export VITE_E2E=1
 export E2E_LOCAL_STACK=1
 export VITE_ENABLE_FAUCET=1
-export PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
+export PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export NIL_ENABLE_TX_RELAY=0
+export E2E_MODE2_SPEC="${E2E_MODE2_SPEC:-tests/mode2-stripe.spec.ts}"
+export E2E_MODE2_GREP="${E2E_MODE2_GREP:-}"
 
 # Keep CI deterministic: the system liveness prover can contend with Mode 2
 # upload/append and trigger timeouts on shared runners.
@@ -53,7 +57,14 @@ export NIL_DISABLE_SYSTEM_LIVENESS="${NIL_DISABLE_SYSTEM_LIVENESS:-1}"
 export NIL_MODE2_UPLOAD_PARALLELISM="${NIL_MODE2_UPLOAD_PARALLELISM:-16}"
 
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
-"$STACK_SCRIPT" start
+if [ -z "${E2E_STACK_PROFILE:-}" ]; then
+  if [ "$PROVIDER_COUNT" -ge 12 ]; then
+    export E2E_STACK_PROFILE=heavy
+  else
+    export E2E_STACK_PROFILE=fast
+  fi
+fi
+"$STACK_UP_SCRIPT"
 
 wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
 wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
@@ -73,4 +84,8 @@ echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
   (cd "$ROOT_DIR/nil-website" && npx playwright install --with-deps chromium)
 fi
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/mode2-stripe.spec.ts)
+playwright_args=("$E2E_MODE2_SPEC")
+if [ -n "$E2E_MODE2_GREP" ]; then
+  playwright_args+=(--grep "$E2E_MODE2_GREP")
+fi
+(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- "${playwright_args[@]}")
