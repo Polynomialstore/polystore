@@ -477,6 +477,7 @@ fi
 DIRECT_PROVIDER_FETCH="${NIL_FORCE_DIRECT_FETCH:-${NIL_DISABLE_GATEWAY:-0}}"
 FETCH_GATEWAY_BASE="$GATEWAY_BASE"
 FETCH_PATH_PREFIX="/gateway/fetch"
+FETCH_EXTRA_QUERY="&deputy=1"
 if [ "$DIRECT_PROVIDER_FETCH" = "1" ]; then
   PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/providers/$PROVIDER_ADDR" || echo "{}")"
   FETCH_GATEWAY_BASE="$(echo "$PROVIDER_JSON" | python3 -c '
@@ -508,6 +509,7 @@ for pat in (
     exit 1
   fi
   FETCH_PATH_PREFIX="/sp/retrieval/fetch"
+  FETCH_EXTRA_QUERY=""
 fi
 
 HEIGHT=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
@@ -532,7 +534,7 @@ if [ -z "$SESSION_ID" ]; then
   exit 1
 fi
 
-FETCH_URL="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
+FETCH_URL="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
 FETCH_RANGE_START=0
 FETCH_RANGE_LEN="$FILE_LEN"
 FETCH_RANGE_END=$((FETCH_RANGE_START + FETCH_RANGE_LEN - 1))
@@ -839,8 +841,8 @@ REQ_SIG_JSON_2=$(
 )
 REQ_SIG_2=$(echo "$REQ_SIG_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 
-FETCH_URL_1="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md"
-FETCH_URL_2="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md"
+FETCH_URL_1="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
+FETCH_URL_2="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md$FETCH_EXTRA_QUERY"
 
 if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.bin "$FETCH_URL_1" \
   -H "X-Nil-Session-Id: $SESSION_ID_1" \
