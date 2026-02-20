@@ -92,6 +92,34 @@ function isLoopbackHost(host: string): boolean {
   );
 }
 
+function normalizePersonaValue(value: string | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function statusHasGatewayRouteFamily(status: GatewayStatusResponse): boolean {
+  const families = Array.isArray(status.allowed_route_families)
+    ? status.allowed_route_families
+    : [];
+  if (families.length === 0) return true;
+  return families.some((family) =>
+    String(family ?? "").toLowerCase().includes("gateway"),
+  );
+}
+
+function gatewayStatusBoundaryError(
+  status: GatewayStatusResponse,
+  baseUrl: string,
+): string | null {
+  const persona = normalizePersonaValue(status.persona);
+  if (persona === "provider-daemon" || persona === "provider_daemon") {
+    return `Endpoint ${baseUrl} reports provider-daemon persona. Trusted local user-gateway on :8080 is required.`;
+  }
+  if (!statusHasGatewayRouteFamily(status)) {
+    return `Endpoint ${baseUrl} does not expose gateway routes. Trusted local user-gateway on :8080 is required.`;
+  }
+  return null;
+}
+
 function statusBadgeClass(phase: GatewayPhase): string {
   if (phase === "online") return "bg-emerald-100 text-emerald-700";
   if (phase === "starting" || phase === "checking" || phase === "booting") {
@@ -260,9 +288,13 @@ export default function App() {
 
   const probeStatus = useCallback(async () => {
     const status = await gatewayStatus();
+    const boundaryError = gatewayStatusBoundaryError(status, gatewayBaseUrl);
+    if (boundaryError) {
+      throw new Error(boundaryError);
+    }
     applyOnlineStatus(status);
     return status;
-  }, [applyOnlineStatus]);
+  }, [applyOnlineStatus, gatewayBaseUrl]);
 
   const attachAndProbe = useCallback(
     async (baseUrl: string) => {

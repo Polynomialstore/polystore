@@ -46,6 +46,7 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 - Canonical terms are:
   - `user-gateway`
   - `provider-daemon`
+- Legacy mixed route aliases (`/gateway/*` on provider-daemon or `/sp/*` on user-gateway) are no longer enabled.
 - Legacy env/code names may remain temporarily for compatibility, but new docs/logs/UI should use canonical terms and explicitly note legacy aliases when needed.
 
 ## Operational expectations

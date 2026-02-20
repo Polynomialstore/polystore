@@ -12,7 +12,9 @@ pub struct GatewayStatusResponse {
     pub version: String,
     pub git_sha: String,
     pub build_time: String,
+    pub persona: Option<String>,
     pub mode: String,
+    pub allowed_route_families: Option<Vec<String>>,
     pub listening_addr: String,
     pub managed: Option<bool>,
     pub provider_base: Option<String>,
@@ -174,9 +176,12 @@ impl GatewayClient {
         if !resp.status().is_success() {
             return Err(format!("status failed: {}", resp.status()));
         }
-        resp.json::<GatewayStatusResponse>()
+        let status = resp
+            .json::<GatewayStatusResponse>()
             .await
-            .map_err(|err| format!("invalid status payload: {err}"))
+            .map_err(|err| format!("invalid status payload: {err}"))?;
+        enforce_trusted_user_gateway_status(&self.base_url, &status)?;
+        Ok(status)
     }
 
     pub async fn upload_file(
@@ -551,4 +556,43 @@ impl GatewayClient {
             .await
             .map_err(|err| format!("invalid intent payload: {err}"))
     }
+}
+
+fn normalize_persona(value: Option<&String>) -> String {
+    value
+        .map(|raw| raw.trim().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn has_gateway_route_family(status: &GatewayStatusResponse) -> bool {
+    let Some(families) = status.allowed_route_families.as_ref() else {
+        // Backward compatibility for older gateway binaries without route family reporting.
+        return true;
+    };
+    if families.is_empty() {
+        return true;
+    }
+    families
+        .iter()
+        .any(|item| item.to_ascii_lowercase().contains("gateway"))
+}
+
+fn enforce_trusted_user_gateway_status(
+    base_url: &str,
+    status: &GatewayStatusResponse,
+) -> Result<(), String> {
+    let persona = normalize_persona(status.persona.as_ref());
+    if persona == "provider-daemon" || persona == "provider_daemon" {
+        return Err(format!(
+            "endpoint {} reports persona=provider-daemon; trusted local user-gateway is required on :8080",
+            base_url.trim_end_matches('/')
+        ));
+    }
+    if !has_gateway_route_family(status) {
+        return Err(format!(
+            "endpoint {} does not expose gateway route family; expected user-gateway routes on trusted local boundary",
+            base_url.trim_end_matches('/')
+        ));
+    }
+    Ok(())
 }

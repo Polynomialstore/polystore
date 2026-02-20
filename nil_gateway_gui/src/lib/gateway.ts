@@ -4,7 +4,9 @@ export type GatewayStatusResponse = {
   version: string;
   git_sha: string;
   build_time: string;
+  persona?: string;
   mode: string;
+  allowed_route_families?: string[];
   listening_addr: string;
   managed?: boolean;
   provider_base?: string;

@@ -21,10 +21,6 @@ func (p runtimePersona) String() string {
 	return string(p)
 }
 
-func isLegacyMixedRoutesEnabled() bool {
-	return envDefault("NIL_LEGACY_MIXED_ROUTES", "0") == "1"
-}
-
 func hasProviderIdentityConfigured() bool {
 	return strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY")) != "" || strings.TrimSpace(os.Getenv("NIL_PROVIDER_ADDRESS")) != ""
 }
@@ -67,8 +63,8 @@ func listenPortFromAddr(addr string) string {
 func validateRuntimePersona(persona runtimePersona, routerMode bool, listenAddr string) error {
 	switch persona {
 	case runtimePersonaUserGateway:
-		if hasProviderIdentityConfigured() && !isLegacyMixedRoutesEnabled() {
-			return fmt.Errorf("user-gateway persona does not allow provider identity env; unset NIL_PROVIDER_KEY/NIL_PROVIDER_ADDRESS or enable NIL_LEGACY_MIXED_ROUTES=1 temporarily")
+		if hasProviderIdentityConfigured() {
+			return fmt.Errorf("user-gateway persona does not allow provider identity env; unset NIL_PROVIDER_KEY/NIL_PROVIDER_ADDRESS")
 		}
 		return nil
 	case runtimePersonaProviderDaemon:
@@ -90,14 +86,8 @@ func validateRuntimePersona(persona runtimePersona, routerMode bool, listenAddr 
 func allowedRouteFamiliesForPersona(persona runtimePersona) []string {
 	switch persona {
 	case runtimePersonaProviderDaemon:
-		if isLegacyMixedRoutesEnabled() {
-			return []string{"sp", "gateway (legacy alias)"}
-		}
-		return []string{"sp"}
+		return []string{"sp", "sp/retrieval"}
 	default:
-		if isLegacyMixedRoutesEnabled() {
-			return []string{"gateway", "sp (legacy alias)"}
-		}
 		return []string{"gateway"}
 	}
 }

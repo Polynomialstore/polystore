@@ -254,21 +254,6 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/retrieval/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 }
 
-func registerLegacyMixedRouteAliases(r *mux.Router, routerMode bool, persona runtimePersona) {
-	if !isLegacyMixedRoutesEnabled() {
-		return
-	}
-	if persona == runtimePersonaProviderDaemon {
-		// Legacy alias: provider-daemon also serves /gateway/* for older clients.
-		registerUserGatewayRoutes(r, false)
-		return
-	}
-	if persona == runtimePersonaUserGateway && !routerMode {
-		// Legacy alias: standalone user-gateway also serves /sp/*.
-		registerProviderDaemonRoutes(r)
-	}
-}
-
 // runCommand executes an external command, respecting mockCombinedOutput if set.
 func runCommand(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
 	if mockCombinedOutput != nil {
@@ -701,10 +686,6 @@ func main() {
 	default:
 		log.Printf("Runtime persona: %s", persona.String())
 	}
-	if isLegacyMixedRoutesEnabled() {
-		log.Printf("WARNING: NIL_LEGACY_MIXED_ROUTES=1 enabled; legacy mixed route aliases are active.")
-	}
-
 	configureDefaultUploadDir(routerMode, listenAddr)
 
 	if resolvedTrustedSetup := resolveTrustedSetupPath(trustedSetup); resolvedTrustedSetup != trustedSetup {
@@ -759,8 +740,6 @@ func main() {
 	default:
 		log.Fatalf("unsupported runtime persona %q", persona)
 	}
-	registerLegacyMixedRouteAliases(r, routerMode, persona)
-
 	p2pServer, err := startLibp2pServerFromEnv(context.Background())
 	if err != nil {
 		log.Fatalf("failed to start libp2p server: %v", err)
