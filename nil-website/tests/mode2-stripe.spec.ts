@@ -418,12 +418,17 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     let planProviderCalls = 0
     let fetchGatewayRequests = 0
     let planGatewayRequests = 0
+    let downloadGatewayCalls = 0
+    let downloadProviderCalls = 0
+    let downloadGatewayRequests = 0
+    let downloadProviderRequests = 0
     const unsignedMissingRangeRequests: string[] = []
     page.on('response', (resp) => {
       const url = resp.url()
       const isFetchPath = url.includes('/gateway/fetch/') || url.includes('/sp/retrieval/fetch/')
       const isPlanPath = url.includes('/plan-retrieval-session/')
-      if (!isFetchPath && !isPlanPath) return
+      const isDownloadPath = url.includes('/gateway/download/') || url.includes('/sp/retrieval/download/')
+      if (!isFetchPath && !isPlanPath && !isDownloadPath) return
       let origin = ''
       try {
         origin = new URL(url).origin
@@ -431,6 +436,13 @@ async function ensureWalletConnected(page: Page): Promise<void> {
         void err
       }
       const viaGateway = /:8080$/.test(origin)
+      if (isDownloadPath) {
+        if (resp.request().method().toUpperCase() === 'GET') {
+          if (viaGateway) downloadGatewayCalls += 1
+          else downloadProviderCalls += 1
+        }
+        return
+      }
       if (isFetchPath) {
         if (viaGateway) fetchGatewayCalls += 1
         else fetchProviderCalls += 1
@@ -443,7 +455,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       const url = req.url()
       const isFetchPath = url.includes('/gateway/fetch/') || url.includes('/sp/retrieval/fetch/')
       const isPlanPath = url.includes('/plan-retrieval-session/')
-      if (!isFetchPath && !isPlanPath) return
+      const isDownloadPath = url.includes('/gateway/download/') || url.includes('/sp/retrieval/download/')
+      if (!isFetchPath && !isPlanPath && !isDownloadPath) return
       let origin = ''
       try {
         origin = new URL(url).origin
@@ -451,6 +464,13 @@ async function ensureWalletConnected(page: Page): Promise<void> {
         void err
       }
       const viaGateway = /:8080$/.test(origin)
+      if (isDownloadPath) {
+        if (req.method().toUpperCase() === 'GET') {
+          if (viaGateway) downloadGatewayRequests += 1
+          else downloadProviderRequests += 1
+        }
+        return
+      }
       if (viaGateway && isPlanPath) {
         planGatewayRequests += 1
       }
@@ -539,10 +559,19 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const gatewayPlanBefore = planGatewayCalls
     const gatewayProviderFetchBefore = fetchProviderCalls
     const gatewayProviderPlanBefore = planProviderCalls
+    const gatewayDownloadCallsBefore = downloadGatewayCalls
+    const gatewayDownloadReqBefore = downloadGatewayRequests
+    const providerDownloadCallsBefore = downloadProviderCalls
+    const providerDownloadReqBefore = downloadProviderRequests
     const gatewayBytes = await readDownloadBytesMaybe(page, gatewayDownloadBtn, 120_000)
     if (gatewayBytes) {
       expect(gatewayBytes.equals(fileBytes)).toBe(true)
-      expect(fetchGatewayCalls > gatewayFetchBefore || planGatewayCalls > gatewayPlanBefore).toBe(true)
+      expect(downloadGatewayCalls - gatewayDownloadCallsBefore).toBe(1)
+      expect(downloadGatewayRequests - gatewayDownloadReqBefore).toBe(1)
+      expect(downloadProviderCalls).toBe(providerDownloadCallsBefore)
+      expect(downloadProviderRequests).toBe(providerDownloadReqBefore)
+      expect(fetchGatewayCalls).toBe(gatewayFetchBefore)
+      expect(planGatewayCalls).toBe(gatewayPlanBefore)
       expect(fetchProviderCalls).toBe(gatewayProviderFetchBefore)
       expect(planProviderCalls).toBe(gatewayProviderPlanBefore)
       assertUnsignedRangeInvariant('gateway retrieval button')
