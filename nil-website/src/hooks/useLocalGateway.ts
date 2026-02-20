@@ -1,6 +1,7 @@
 // nil-website/src/hooks/useLocalGateway.ts
 import { useState, useEffect, useRef } from 'react';
 import { appConfig } from '../config';
+import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
 
 type GatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -26,6 +27,7 @@ const GATEWAY_HEALTH_ENDPOINT = '/health';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const HIDDEN_POLL_INTERVAL_MS = 300_000;
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected';
+const DEFAULT_LOCAL_GATEWAY_BASE = 'http://127.0.0.1:8080';
 
 function swapLoopbackHost(baseUrl: string): string | null {
   const raw = String(baseUrl || '').trim();
@@ -53,14 +55,23 @@ function buildGatewayBaseCandidates(primary: string): string[] {
   const push = (value: string | null | undefined) => {
     const clean = String(value || '').trim().replace(/\/$/, '');
     if (!clean) return;
+    if (!isTrustedLocalGatewayBase(clean)) return;
     if (!candidates.includes(clean)) candidates.push(clean);
   };
 
   push(seed);
-  push(swapLoopbackHost(seed));
-  push('http://localhost:8080');
   push('http://127.0.0.1:8080');
+  push('http://localhost:8080');
+  if (isTrustedLocalGatewayBase(seed)) {
+    push(swapLoopbackHost(seed));
+  }
   return candidates;
+}
+
+function normalizeGatewaySeed(value: string | null | undefined): string {
+  const clean = String(value || '').trim().replace(/\/$/, '');
+  if (isTrustedLocalGatewayBase(clean)) return clean;
+  return DEFAULT_LOCAL_GATEWAY_BASE;
 }
 
 function persistLocalGatewayConnected(connected: boolean) {
@@ -76,8 +87,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
   const [status, setStatus] = useState<GatewayStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<LocalGatewayDetails | null>(null);
-  const [activeUrl, setActiveUrl] = useState<string>(appConfig.gatewayBase);
-  const activeUrlRef = useRef<string>(appConfig.gatewayBase);
+  const [activeUrl, setActiveUrl] = useState<string>(normalizeGatewaySeed(appConfig.gatewayBase));
+  const activeUrlRef = useRef<string>(normalizeGatewaySeed(appConfig.gatewayBase));
   const statusRef = useRef<GatewayStatus>('disconnected');
   const errorRef = useRef<string | null>(null);
   const detailsRef = useRef<LocalGatewayDetails | null>(null);
@@ -87,8 +98,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       setStatus('disconnected');
       setError('Gateway disabled');
       setDetails(null);
-      setActiveUrl(appConfig.gatewayBase);
-      activeUrlRef.current = appConfig.gatewayBase;
+      setActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
+      activeUrlRef.current = normalizeGatewaySeed(appConfig.gatewayBase);
       statusRef.current = 'disconnected';
       errorRef.current = 'Gateway disabled';
       detailsRef.current = null;
@@ -152,7 +163,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       let lastErr: unknown = null;
 
       try {
-        const preferred = (activeUrlRef.current || appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
+        const preferred = normalizeGatewaySeed(activeUrlRef.current || appConfig.gatewayBase || DEFAULT_LOCAL_GATEWAY_BASE);
         const baseCandidates = buildGatewayBaseCandidates(preferred);
         for (const baseUrl of baseCandidates) {
           try {
@@ -215,12 +226,12 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
           } else {
             updateError(err.message || 'Unknown error during connection');
           }
-          updateActiveUrl(appConfig.gatewayBase);
+          updateActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
           return;
         }
 
         updateError('Could not connect to local gateway');
-        updateActiveUrl(appConfig.gatewayBase);
+        updateActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
       } finally {
         inFlight = false;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {

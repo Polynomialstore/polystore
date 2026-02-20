@@ -22,6 +22,7 @@ import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
+import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
 
 interface ShardItem {
   id: number;
@@ -110,12 +111,15 @@ function localGatewayCandidates(baseUrl: string): string[] {
   const push = (value: string | null | undefined) => {
     const clean = String(value || '').trim().replace(/\/$/, '')
     if (!clean) return
+    if (!isTrustedLocalGatewayBase(clean)) return
     if (!candidates.includes(clean)) candidates.push(clean)
   }
   push(seed)
-  push(alternateLoopbackBase(seed))
-  push('http://localhost:8080')
   push('http://127.0.0.1:8080')
+  push('http://localhost:8080')
+  if (isTrustedLocalGatewayBase(seed)) {
+    push(alternateLoopbackBase(seed))
+  }
   return candidates
 }
 
@@ -518,9 +522,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   }, [collectedMdus, currentManifestBlob, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams])
 
   const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
-    const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
+    const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
+    const gatewayBases = localGatewayCandidates(gatewaySeed)
     const spBase = appConfig.spBase.replace(/\/$/, '')
-    if (!gatewayBase || gatewayBase === spBase || appConfig.gatewayDisabled) {
+    const gatewayBase = gatewayBases.find((base) => base !== spBase) || ''
+    if (!gatewayBase || appConfig.gatewayDisabled) {
       return false
     }
 
@@ -696,7 +702,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       addLog(`> Gateway rehydrate failed: ${msg}`)
       return false
     }
-  }, [addLog, dealId])
+  }, [addLog, dealId, localGateway.url])
 
   useEffect(() => {
     if (!processing) return;
@@ -845,9 +851,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (!currentManifestBlob || currentManifestBlob.byteLength === 0) return
     if (!collectedMdus || collectedMdus.length === 0) return
 
-    const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
+    const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
+    const gatewayBases = localGatewayCandidates(gatewaySeed)
     const spBase = appConfig.spBase.replace(/\/$/, '')
-    if (!gatewayBase || gatewayBase === spBase) return
+    const gatewayBase = gatewayBases.find((base) => base !== spBase) || ''
+    if (!gatewayBase) return
     if (appConfig.gatewayDisabled) {
       setMirrorStatus('skipped')
       setMirrorError('Gateway disabled')
@@ -978,6 +986,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     dealId,
     isMode2,
     mode2Shards,
+    localGateway.url,
     shardProgress.totalWitnessMdus,
   ]);
 

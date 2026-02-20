@@ -29,6 +29,7 @@ import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
+import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -70,20 +71,28 @@ function isGatewaySessionRequiredError(message: string): boolean {
 function localGatewayBaseCandidates(rawBase: string): string[] {
   const trimmed = String(rawBase || '').trim().replace(/\/$/, '')
   const out: string[] = []
-  if (trimmed) out.push(trimmed)
+  const pushTrusted = (candidate: string | null | undefined) => {
+    const clean = String(candidate || '').trim().replace(/\/$/, '')
+    if (!clean) return
+    if (!isTrustedLocalGatewayBase(clean)) return
+    if (!out.includes(clean)) out.push(clean)
+  }
+  pushTrusted(trimmed)
   try {
     const parsed = new URL(trimmed)
     if (parsed.hostname === 'localhost') {
       parsed.hostname = '127.0.0.1'
-      out.push(parsed.toString().replace(/\/$/, ''))
+      pushTrusted(parsed.toString().replace(/\/$/, ''))
     } else if (parsed.hostname === '127.0.0.1') {
       parsed.hostname = 'localhost'
-      out.push(parsed.toString().replace(/\/$/, ''))
+      pushTrusted(parsed.toString().replace(/\/$/, ''))
     }
   } catch {
     // Ignore malformed configured base; caller will surface fetch failure.
   }
-  return Array.from(new Set(out))
+  pushTrusted('http://127.0.0.1:8080')
+  pushTrusted('http://localhost:8080')
+  return out
 }
 
 async function ensureWasmReady(): Promise<void> {

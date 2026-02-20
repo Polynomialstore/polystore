@@ -18,7 +18,9 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 
 ### `provider-daemon`
 - Purpose: storage-provider-facing process that serves provider data-plane/control-plane APIs.
-- Primary APIs: `/sp/*` (and provider-side receipt/session endpoints as configured).
+- Primary APIs:
+  - `/sp/*` (provider data/control plane)
+  - `/sp/retrieval/*` (provider retrieval APIs used by user-gateway and browser direct fallback)
 - Typical local endpoints: provider ports (for example `8082+` in local stack scripts, `8091+` in multi-SP devnet scripts).
 - Responsibilities:
   - store/serve shards and MDUs
@@ -35,7 +37,7 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 - `user-gateway` -> `provider-daemon` as needed for SP operations.
 
 ### Fallback mode (when `user-gateway` is unavailable)
-- Browser may call `provider-daemon` endpoints directly.
+- Browser may call `provider-daemon` retrieval endpoints directly (`/sp/retrieval/*`).
 
 ## Terminology migration and compatibility
 

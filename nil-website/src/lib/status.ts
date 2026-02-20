@@ -1,4 +1,5 @@
 import { appConfig } from '../config'
+import { isTrustedLocalGatewayBase } from './transport/mode'
 
 export type ServiceStatus = 'ok' | 'warn' | 'error'
 
@@ -61,14 +62,17 @@ async function probeGateway(base: string): Promise<ServiceStatus> {
 }
 
 export async function fetchStatus(expectedChainId: number, options: FetchStatusOptions = {}): Promise<StatusSummary> {
+  const gatewayTrusted = isTrustedLocalGatewayBase(appConfig.gatewayBase)
   if (appConfig.gatewayDisabled) {
+    cachedGatewayStatus = 'warn'
+  } else if (!gatewayTrusted) {
     cachedGatewayStatus = 'warn'
   }
   const summary: StatusSummary = {
     lcd: 'warn',
     evm: 'warn',
     faucet: appConfig.faucetEnabled ? 'ok' : 'warn',
-    gateway: appConfig.gatewayDisabled ? 'warn' : cachedGatewayStatus,
+    gateway: appConfig.gatewayDisabled || !gatewayTrusted ? 'warn' : cachedGatewayStatus,
     chainIdMatch: 'warn',
   }
   try {
@@ -116,7 +120,7 @@ export async function fetchStatus(expectedChainId: number, options: FetchStatusO
     summary.evm = 'error'
   }
 
-  if (options.probeOptionalHealth && !appConfig.gatewayDisabled) {
+  if (options.probeOptionalHealth && !appConfig.gatewayDisabled && gatewayTrusted) {
     try {
       summary.gateway = await probeGateway(appConfig.gatewayBase)
       cachedGatewayStatus = summary.gateway
@@ -124,6 +128,9 @@ export async function fetchStatus(expectedChainId: number, options: FetchStatusO
       summary.gateway = 'error'
       cachedGatewayStatus = 'error'
     }
+  } else if (options.probeOptionalHealth && (!gatewayTrusted || appConfig.gatewayDisabled)) {
+    summary.gateway = 'warn'
+    cachedGatewayStatus = 'warn'
   }
 
   if (options.probeOptionalHealth && appConfig.faucetEnabled) {

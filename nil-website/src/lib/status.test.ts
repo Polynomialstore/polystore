@@ -60,3 +60,45 @@ test('fetchStatus keeps last known gateway state when optional probe is skipped'
     globalThis.fetch = originalFetch
   }
 })
+
+test('fetchStatus skips gateway probe when configured gateway base is untrusted', async () => {
+  const originalFetch = globalThis.fetch
+  const originalGatewayBase = appConfig.gatewayBase
+  const mutableConfig = appConfig as { gatewayBase: string }
+  let gatewayProbeCalls = 0
+
+  try {
+    mutableConfig.gatewayBase = 'http://localhost:8081'
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url === `${appConfig.lcdBase}/cosmos/base/tendermint/v1beta1/blocks/latest`) {
+        return jsonResponse(200, {
+          block: { header: { height: '1', chain_id: appConfig.cosmosChainId } },
+        })
+      }
+
+      if (url === `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`) {
+        return jsonResponse(200, { providers: [] })
+      }
+
+      if (url === appConfig.evmRpc && (init?.method ?? 'GET').toUpperCase() === 'POST') {
+        return jsonResponse(200, { jsonrpc: '2.0', id: 1, result: `0x${appConfig.chainId.toString(16)}` })
+      }
+
+      if (url.includes('/status') || url.includes('/health')) {
+        gatewayProbeCalls += 1
+        return jsonResponse(200, { mode: 'standalone' })
+      }
+
+      throw new Error(`unexpected url: ${url}`)
+    }) as typeof fetch
+
+    const summary = await fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
+    assert.equal(summary.gateway, 'warn')
+    assert.equal(gatewayProbeCalls, 0)
+  } finally {
+    mutableConfig.gatewayBase = originalGatewayBase
+    globalThis.fetch = originalFetch
+  }
+})
