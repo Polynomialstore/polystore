@@ -131,6 +131,9 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	resetProviderAddressCacheForTest(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "")
 	t.Setenv("NIL_PROVIDER_KEY", "")
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
 	owner := testDealOwner(t)
 
 	if err := crypto_ffi.Init(trustedSetup); err != nil {
@@ -210,9 +213,11 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 
 	r := testRouter()
 
+	reqRangeStart := uint64(0)
+	reqRangeLen := uint64(len(fileContent))
 	nonce := uint64(2)
 	expiresAt := uint64(time.Now().Unix()) + 120
-	reqSig := signRetrievalRequest(t, dealID, "video.mp4", 0, 0, nonce, expiresAt)
+	reqSig := signRetrievalRequest(t, dealID, "video.mp4", reqRangeStart, reqRangeLen, nonce, expiresAt)
 	u := fmt.Sprintf(
 		"/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=video.mp4&deputy=1",
 		manifestRoot.Canonical,
@@ -223,13 +228,14 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	req.Header.Set("X-Nil-Req-Sig", reqSig)
 	req.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", nonce))
 	req.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
-	req.Header.Set("X-Nil-Req-Range-Start", "0")
-	req.Header.Set("X-Nil-Req-Range-Len", "0")
+	req.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
+	req.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", reqRangeStart, reqRangeStart+reqRangeLen-1))
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusPartialContent {
 		t.Fatalf("Fetch failed: %d, body: %s", w.Code, w.Body.String())
 	}
 	if got := strings.TrimSpace(w.Header().Get("X-Nil-Provider")); got != metadataProvider {
