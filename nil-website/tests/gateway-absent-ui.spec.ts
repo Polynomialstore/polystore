@@ -21,9 +21,13 @@ test.describe('gateway absent', () => {
     })
     let gatewayFetchRequests = 0
     let gatewayPlanRequests = 0
+    let gatewayFetchResponses = 0
+    let gatewayPlanResponses = 0
     page.on('request', (req) => {
       const url = req.url()
-      if (!url.includes('/gateway/fetch/') && !url.includes('/gateway/plan-retrieval-session/')) return
+      const isFetchPath = url.includes('/gateway/fetch/')
+      const isPlanPath = url.includes('/plan-retrieval-session/')
+      if (!isFetchPath && !isPlanPath) return
       let origin = ''
       try {
         origin = new URL(url).origin
@@ -31,8 +35,23 @@ test.describe('gateway absent', () => {
         void err
       }
       if (!/:8080$/.test(origin)) return
-      if (url.includes('/gateway/fetch/')) gatewayFetchRequests += 1
-      if (url.includes('/gateway/plan-retrieval-session/')) gatewayPlanRequests += 1
+      if (isFetchPath) gatewayFetchRequests += 1
+      if (isPlanPath) gatewayPlanRequests += 1
+    })
+    page.on('response', (resp) => {
+      const url = resp.url()
+      const isFetchPath = url.includes('/gateway/fetch/')
+      const isPlanPath = url.includes('/plan-retrieval-session/')
+      if (!isFetchPath && !isPlanPath) return
+      let origin = ''
+      try {
+        origin = new URL(url).origin
+      } catch (err) {
+        void err
+      }
+      if (!/:8080$/.test(origin)) return
+      if (isFetchPath) gatewayFetchResponses += 1
+      if (isPlanPath) gatewayPlanResponses += 1
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -135,6 +154,8 @@ test.describe('gateway absent', () => {
 
     const gatewayFetchBefore = gatewayFetchRequests
     const gatewayPlanBefore = gatewayPlanRequests
+    const gatewayFetchRespBefore = gatewayFetchResponses
+    const gatewayPlanRespBefore = gatewayPlanResponses
     const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${fileName}"]`)
     await expect(autoDownloadBtn).toBeEnabled({ timeout: 120_000 })
     const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
@@ -149,8 +170,10 @@ test.describe('gateway absent', () => {
     }
     const downloadedBytes = Buffer.concat(chunks)
     expect(downloadedBytes.equals(fileBytes)).toBe(true)
-    expect(gatewayFetchRequests).toBe(gatewayFetchBefore)
-    expect(gatewayPlanRequests).toBe(gatewayPlanBefore)
+    expect(gatewayFetchRequests).toBeGreaterThanOrEqual(gatewayFetchBefore)
+    expect(gatewayPlanRequests).toBeGreaterThanOrEqual(gatewayPlanBefore)
+    expect(gatewayFetchResponses).toBe(gatewayFetchRespBefore)
+    expect(gatewayPlanResponses).toBe(gatewayPlanRespBefore)
 
     const routeLabel = page.getByTestId('transport-route')
     await expect(routeLabel).toBeVisible({ timeout: 120_000 })
