@@ -203,9 +203,23 @@ jobs:
         run: nil-website/node_modules/.bin/tsx tools/parity/compare_parity.ts
 
   e2e-smoke-test:
-    name: E2E Smoke Test (Local Stack)
+    name: E2E Smoke (${{ matrix.smoke_name }})
     runs-on: ubuntu-latest
     needs: [go-test, rust-test, frontend-build] # Ensure components are tested individually first
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - smoke_name: lifecycle-gateway
+            smoke_script: scripts/e2e_lifecycle.sh
+          - smoke_name: lifecycle-no-gateway
+            smoke_script: scripts/e2e_lifecycle_no_gateway.sh
+          - smoke_name: retrieval-fees
+            smoke_script: ./e2e_retrieval_fees.sh
+          - smoke_name: retrieval-session-cli
+            smoke_script: ./e2e_open_retrieval_session_cli.sh
+          - smoke_name: retrieval-session-mode2
+            smoke_script: ./e2e_open_retrieval_session_mode2_cli.sh
     steps:
       - uses: actions/checkout@v4
         with:
@@ -256,30 +270,10 @@ jobs:
       - name: Build nil_core (native)
         run: cd nil_core && cargo build --release
 
-      - name: Run E2E Lifecycle Script
+      - name: Run smoke script (${{ matrix.smoke_name }})
         run: |
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
-          scripts/e2e_lifecycle.sh
-
-      - name: Run E2E Lifecycle Script (No Local Gateway)
-        run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
-          scripts/e2e_lifecycle_no_gateway.sh
-
-      - name: Run Retrieval Fees E2E Script
-        run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
-          ./e2e_retrieval_fees.sh
-
-      - name: Run Retrieval Session CLI E2E Script
-        run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
-          ./e2e_open_retrieval_session_cli.sh
-
-      - name: Run Retrieval Session CLI E2E Script (Mode2 Slot-Aware)
-        run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
-          ./e2e_open_retrieval_session_mode2_cli.sh
+          ${{ matrix.smoke_script }}
 
   e2e-browser-no-gateway:
     name: Playwright (Gateway Absent)
