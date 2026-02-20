@@ -17,9 +17,11 @@ if ! command -v cast >/dev/null 2>&1; then
 fi
 
 if [ -z "$PRIVATE_KEY" ]; then
-  # Prefer the shared dev EVM key (used in e2e tests and pre-funded in genesis)
-  # if provided, otherwise derive from the local mnemonic.
-  if [ -n "${NIL_EVM_DEV_PRIVKEY:-}" ]; then
+  # Prefer the shared gateway/e2e EVM key when present (also pre-funded by local stack),
+  # then the explicit bridge dev key, otherwise derive from mnemonic.
+  if [ -n "${EVM_PRIVKEY:-}" ]; then
+    PRIVATE_KEY="${EVM_PRIVKEY}"
+  elif [ -n "${NIL_EVM_DEV_PRIVKEY:-}" ]; then
     PRIVATE_KEY="${NIL_EVM_DEV_PRIVKEY}"
   else
     # Derive the faucet dev key used by the local stack (index 0).

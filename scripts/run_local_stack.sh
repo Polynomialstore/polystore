@@ -655,23 +655,41 @@ init_chain() {
   # Pre-fund additional EVM demo account (0xf7931ff7fc55d19ef4a8139fa7e4b3f06e03f2e2).
   "$NILCHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
 
-  # Also pre-fund the EVM signer account used by gateway/e2e (derived from EVM_PRIVKEY if set).
+  # Also pre-fund EVM signer accounts used by gateway/e2e/bridge deployment.
   # This avoids relying on the faucet, which uses nilchaind CLI txs that can hang on some setups.
   if command -v python3 >/dev/null 2>&1; then
-    local signer_nil_addr
-    signer_nil_addr=$(python3 - <<'PY' 2>/dev/null || true
+    local signer_nil_addrs
+    signer_nil_addrs=$(python3 - <<'PY' 2>/dev/null || true
 from eth_account import Account
 import bech32, os
-priv = os.environ.get("EVM_PRIVKEY", "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1")
-acct = Account.from_key(priv)
-data = bytes.fromhex(acct.address[2:])
-five = bech32.convertbits(data, 8, 5)
-print(bech32.bech32_encode("nil", five))
+
+keys = []
+keys.append(os.environ.get("EVM_PRIVKEY", "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"))
+alt = os.environ.get("NIL_EVM_DEV_PRIVKEY", "").strip()
+if alt:
+    keys.append(alt)
+
+seen = set()
+for priv in keys:
+    try:
+        acct = Account.from_key(priv)
+        data = bytes.fromhex(acct.address[2:])
+        five = bech32.convertbits(data, 8, 5)
+        addr = bech32.bech32_encode("nil", five)
+        if addr and addr not in seen:
+            seen.add(addr)
+            print(addr)
+    except Exception:
+        pass
 PY
     )
-    if [ -n "$signer_nil_addr" ]; then
-      "$NILCHAIND_BIN" genesis add-genesis-account "$signer_nil_addr" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
-      echo "Pre-funded EVM signer account $signer_nil_addr"
+    if [ -n "$signer_nil_addrs" ]; then
+      while IFS= read -r signer_nil_addr; do
+        [ -z "$signer_nil_addr" ] && continue
+        if "$NILCHAIND_BIN" genesis add-genesis-account "$signer_nil_addr" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
+          echo "Pre-funded EVM signer account $signer_nil_addr"
+        fi
+      done <<< "$signer_nil_addrs"
     fi
   fi
   "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
@@ -1039,7 +1057,7 @@ start_bridge() {
   fi
 
   banner "Deploying NilBridge to local EVM"
-  if "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
+  if env -u PRIVATE_KEY EVM_PRIVKEY= NIL_EVM_DEV_PRIVKEY="$NIL_EVM_DEV_PRIVKEY" "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
     if [ -f "$BRIDGE_ADDR_FILE" ]; then
       BRIDGE_ADDRESS="$(cat "$BRIDGE_ADDR_FILE" | tr -d '\n' | tr -d '\r')"
       echo "NilBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
