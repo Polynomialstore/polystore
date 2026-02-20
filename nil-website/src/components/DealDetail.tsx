@@ -47,7 +47,7 @@ function bytesTo0xHex(bytes: Uint8Array): string {
 
 function decodeGatewayHttpError(status: number, bodyText: string): string {
   const trimmed = String(bodyText ?? '').trim()
-  if (!trimmed) return `Gateway fetch failed (${status})`
+  if (!trimmed) return `Gateway download failed (${status})`
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>
     const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
@@ -71,7 +71,10 @@ function isGatewaySessionRequiredError(message: string): boolean {
 
 function isGatewayOutdatedDownloadError(message: string): boolean {
   const text = String(message || '')
-  return /Range header is required/i.test(text) && /unsigned fetches must be chunked/i.test(text)
+  if (/Range header is required/i.test(text) && /unsigned fetches must be chunked/i.test(text)) return true
+  if (/Gateway download failed\s*\((404|405)\)/i.test(text)) return true
+  if (/not found/i.test(text) && /gateway/i.test(text)) return true
+  return false
 }
 
 function localGatewayBaseCandidates(rawBase: string): string[] {
@@ -710,8 +713,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
       deal_id: normalizedDealId,
       owner: normalizedOwner,
       file_path: normalizedFilePath,
-      deputy: '1',
-      gateway_download: '1',
     })
     search.set('range_start', String(safeStart))
     search.set('range_len', String(safeLen))
@@ -761,7 +762,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     let lastError: Error | null = null
     for (const gatewayBase of gatewayDownloadBases) {
       try {
-        const url = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${query}`
+        const url = `${gatewayBase}/gateway/download/${encodeURIComponent(normalizedManifest)}?${query}`
         const res = await fetch(url, {
           method: 'GET',
         })
