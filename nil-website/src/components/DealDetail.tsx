@@ -30,6 +30,7 @@ import { parseServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -655,6 +656,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     rangeStart,
     rangeLen,
     fileSizeBytes,
+    fileStartOffset,
+    mduSizeBytes,
+    blobSizeBytes,
   }: {
     manifestRoot: string
     dealId: string
@@ -663,6 +667,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     rangeStart?: number
     rangeLen?: number
     fileSizeBytes?: number
+    fileStartOffset?: number
+    mduSizeBytes?: number
+    blobSizeBytes?: number
   }): Promise<Blob> => {
     const normalizedManifest = String(manifestRoot || '').trim()
     if (!normalizedManifest) throw new Error('manifestRoot is required')
@@ -683,6 +690,22 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     }
     if (safeLen <= 0) throw new Error('rangeLen must be positive')
 
+    const effectiveBlobSizeBytes = Math.max(1, Number(blobSizeBytes ?? slab?.blob_size_bytes ?? 128 * 1024))
+    const effectiveMduSizeBytes = Math.max(1, Number(mduSizeBytes ?? slab?.mdu_size_bytes ?? 8 * 1024 * 1024))
+    const hasChunkMeta = Number.isFinite(Number(fileStartOffset)) && sizeBytes > 0
+    const legacyChunks = hasChunkMeta
+      ? planNilfsFileRangeChunks({
+          fileStartOffset: Number(fileStartOffset),
+          fileSizeBytes: sizeBytes,
+          rangeStart: safeStart,
+          rangeLen: safeLen,
+          mduSizeBytes: effectiveMduSizeBytes,
+          blobSizeBytes: effectiveBlobSizeBytes,
+        })
+      : safeLen <= effectiveBlobSizeBytes
+        ? [{ rangeStart: safeStart, rangeLen: safeLen }]
+        : []
+
     const search = new URLSearchParams({
       deal_id: normalizedDealId,
       owner: normalizedOwner,
@@ -694,6 +717,47 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     search.set('range_len', String(safeLen))
     const query = search.toString()
 
+    const downloadViaLegacyChunkedFetch = async (gatewayBase: string): Promise<Blob> => {
+      if (legacyChunks.length === 0) {
+        throw new Error('Gateway compatibility mode requires NILFS metadata for multi-blob ranges')
+      }
+      const legacySearch = new URLSearchParams({
+        deal_id: normalizedDealId,
+        owner: normalizedOwner,
+        file_path: normalizedFilePath,
+        deputy: '1',
+      })
+      const legacyQuery = legacySearch.toString()
+      const parts: ArrayBuffer[] = []
+      for (const chunk of legacyChunks) {
+        const chunkStart = Number(chunk.rangeStart)
+        const chunkLen = Number(chunk.rangeLen)
+        if (!Number.isFinite(chunkStart) || !Number.isFinite(chunkLen) || chunkLen <= 0) {
+          throw new Error('invalid gateway cache chunk')
+        }
+        const chunkEnd = chunkStart + chunkLen - 1
+        const legacyUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${legacyQuery}`
+        const legacyRes = await fetch(legacyUrl, {
+          method: 'GET',
+          headers: { Range: `bytes=${chunkStart}-${chunkEnd}` },
+        })
+        if (!legacyRes.ok) {
+          const txt = await legacyRes.text().catch(() => '')
+          throw new Error(decodeGatewayHttpError(legacyRes.status, txt))
+        }
+        const buf = await legacyRes.arrayBuffer()
+        if (buf.byteLength === 0) {
+          throw new Error('gateway returned empty chunk')
+        }
+        const clampedLen = Math.min(buf.byteLength, chunkLen)
+        parts.push(buf.byteLength === clampedLen ? buf : buf.slice(0, clampedLen))
+        if (clampedLen < chunkLen) {
+          throw new Error('gateway returned short chunk')
+        }
+      }
+      return new Blob(parts, { type: 'application/octet-stream' })
+    }
+
     let lastError: Error | null = null
     for (const gatewayBase of gatewayDownloadBases) {
       try {
@@ -703,7 +767,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
         })
         if (!res.ok) {
           const txt = await res.text().catch(() => '')
-          throw new Error(decodeGatewayHttpError(res.status, txt))
+          const decoded = decodeGatewayHttpError(res.status, txt)
+          if (isGatewayOutdatedDownloadError(decoded)) {
+            const legacyBlob = await downloadViaLegacyChunkedFetch(gatewayBase)
+            markDownloadPath('gateway', 'gateway_cache', 'gateway_mdu_cache', 'fresh')
+            return legacyBlob
+          }
+          throw new Error(decoded)
         }
         const blob = await res.blob()
         if (!blob || blob.size === 0) throw new Error('gateway returned empty payload')
@@ -716,7 +786,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     }
 
     throw lastError ?? new Error('gateway cache download failed')
-  }, [gatewayDownloadBases, markDownloadPath])
+  }, [gatewayDownloadBases, markDownloadPath, slab?.blob_size_bytes, slab?.mdu_size_bytes])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
     const localManifestRoot = await readManifestRoot(String(dealId)).catch(() => null)
@@ -1697,6 +1767,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                   rangeStart: safeStart,
                                                   rangeLen: safeLen,
                                                   fileSizeBytes: f.size_bytes,
+                                                  fileStartOffset: f.start_offset,
+                                                  mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                                  blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
                                                 })
                                                 const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
                                                 await writeCachedFile(dealId, f.path, bytes)
@@ -1713,11 +1786,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                 return
                                               } catch (gatewayErr) {
                                                 const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
-                                                if (isGatewayOutdatedDownloadError(fallbackReason)) {
-                                                  throw new Error(
-                                                    'Local gateway is running an older retrieval API. Restart your local gateway/stack so /gateway/fetch supports gateway_download=1.',
-                                                  )
-                                                }
                                                 if (isGatewaySessionRequiredError(fallbackReason)) {
                                                   console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
                                                     dealId,
@@ -1823,6 +1891,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
                                               fileSizeBytes: f.size_bytes,
+                                              fileStartOffset: f.start_offset,
+                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
                                             })
                                             const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
                                             await writeCachedFile(dealId, f.path, bytes)
