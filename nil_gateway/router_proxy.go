@@ -301,11 +301,16 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if requireOnchainSession && strings.HasPrefix(r.URL.Path, "/gateway/fetch/") {
+	isFetch := strings.HasPrefix(r.URL.Path, "/gateway/fetch/")
+	if requireOnchainSession && isFetch {
 		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
 			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
 			return
 		}
+	}
+	if isFetch && !requireRetrievalReqSig && strings.TrimSpace(r.Header.Get("Range")) == "" {
+		writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
+		return
 	}
 
 	dealID, ok := requireDealIDQuery(w, r)
@@ -328,7 +333,6 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 	// providers reject with a slot mismatch (or if the correct provider is down),
 	// fall back to "deputy" mode which allows any provider to reconstruct from K
 	// shards and serve the request.
-	isFetch := strings.HasPrefix(r.URL.Path, "/gateway/fetch/")
 	origRawQuery := r.URL.RawQuery
 
 	var lastErr error

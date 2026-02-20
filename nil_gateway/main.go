@@ -3147,30 +3147,19 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// MetaMask-only tx mode: require a standard HTTP Range header (no request signatures).
 			if rangeHeader == "" {
-				// Allow non-range fetches only if the file fits within a single blob; otherwise
-				// require chunking so we can provide a single per-blob proof header.
-				if entry, eerr := loadSlabIndex(dealDir); eerr == nil {
-					if info, ok := entry.files[filePath]; ok {
-						if info.Length > uint64(types.BLOB_SIZE) {
-							writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
-							return
-						}
-					}
-				}
-				reqRangeStart = 0
-				reqRangeLen = 0
-			} else {
-				if rangeHeaderLen == 0 {
-					writeJSONError(w, http.StatusBadRequest, "invalid Range header", "range length must be non-zero")
-					return
-				}
-				if rangeHeaderLen > uint64(types.BLOB_SIZE) {
-					writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("range must be <= %d", types.BLOB_SIZE))
-					return
-				}
-				reqRangeStart = rangeHeaderStart
-				reqRangeLen = rangeHeaderLen
+				writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
+				return
 			}
+			if rangeHeaderLen == 0 {
+				writeJSONError(w, http.StatusBadRequest, "invalid Range header", "range length must be non-zero")
+				return
+			}
+			if rangeHeaderLen > uint64(types.BLOB_SIZE) {
+				writeJSONError(w, http.StatusBadRequest, "range too large", fmt.Sprintf("range must be <= %d", types.BLOB_SIZE))
+				return
+			}
+			reqRangeStart = rangeHeaderStart
+			reqRangeLen = rangeHeaderLen
 		}
 	}
 
@@ -3243,15 +3232,6 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
 		return
 	}
-	implicitRange := !requireRetrievalReqSig && !isDownloadSession && rangeHeader == ""
-	// If this was a non-range fetch in unsigned mode, only allow it when the
-	// full response fits within a single blob; otherwise require chunking.
-	if implicitRange {
-		if servedLen > uint64(types.BLOB_SIZE) {
-			writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
-			return
-		}
-	}
 
 	// Generate Proof Details payload (for receipt submission).
 	manifestPath := filepath.Join(dealDir, "manifest.bin")
@@ -3265,7 +3245,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		blobIndex = 0
 	}
 	// Range requests must stay within a single physical MDU and blob for now.
-	if reqRangeLen > 0 || implicitRange {
+	if reqRangeLen > 0 {
 		endAbs := absOffset + servedLen - 1
 		if absOffset/RawMduCapacity != endAbs/RawMduCapacity {
 			writeJSONError(w, http.StatusBadRequest, "range crosses MDU boundary", "split into multiple requests")

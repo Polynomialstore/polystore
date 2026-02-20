@@ -99,21 +99,24 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	r := testRouter()
 
 	// Request
+	reqRangeStart := uint64(0)
+	reqRangeLen := uint64(len(fileContent))
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
-	reqSig := signRetrievalRequest(t, dealID, "video.mp4", 0, 0, nonce, expiresAt)
+	reqSig := signRetrievalRequest(t, dealID, "video.mp4", reqRangeStart, reqRangeLen, nonce, expiresAt)
 	u := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=video.mp4", manifestRoot.Canonical, dealID, owner)
 	req := httptest.NewRequest("GET", u, nil)
 	req.Header.Set("X-Nil-Req-Sig", reqSig)
 	req.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", nonce))
 	req.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
-	req.Header.Set("X-Nil-Req-Range-Start", "0")
-	req.Header.Set("X-Nil-Req-Range-Len", "0")
+	req.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
+	req.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", reqRangeStart, reqRangeStart+reqRangeLen-1))
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusPartialContent {
 		t.Fatalf("Fetch failed: %d, body: %s", w.Code, w.Body.String())
 	}
 

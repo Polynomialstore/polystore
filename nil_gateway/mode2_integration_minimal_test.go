@@ -271,9 +271,10 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 	_ = os.Remove(filepath.Join(dealDir, "mdu_2_slot_0.bin"))
 
 	fetchReq := httptest.NewRequest(http.MethodGet, "/gateway/fetch/"+root.Canonical+"?deal_id="+strconv.FormatUint(dealID, 10)+"&owner="+owner+"&file_path=fixture.bin", nil)
+	fetchReq.Header.Set("Range", "bytes=0-"+strconv.Itoa(len(payload)-1))
 	fetchW := httptest.NewRecorder()
 	testRouter().ServeHTTP(fetchW, fetchReq)
-	if fetchW.Code != http.StatusOK {
+	if fetchW.Code != http.StatusPartialContent {
 		t.Fatalf("GatewayFetch failed: %d %s", fetchW.Code, fetchW.Body.String())
 	}
 
