@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 )
@@ -47,7 +48,23 @@ func resolveRuntimePersona(routerMode bool) runtimePersona {
 	return runtimePersonaUserGateway
 }
 
-func validateRuntimePersona(persona runtimePersona, routerMode bool) error {
+func listenPortFromAddr(addr string) string {
+	raw := strings.TrimSpace(addr)
+	if raw == "" {
+		return ""
+	}
+	// Common short form ":8080"
+	if strings.HasPrefix(raw, ":") {
+		return strings.TrimPrefix(raw, ":")
+	}
+	if host, port, err := net.SplitHostPort(raw); err == nil {
+		_ = host
+		return strings.TrimSpace(port)
+	}
+	return ""
+}
+
+func validateRuntimePersona(persona runtimePersona, routerMode bool, listenAddr string) error {
 	switch persona {
 	case runtimePersonaUserGateway:
 		if hasProviderIdentityConfigured() && !isLegacyMixedRoutesEnabled() {
@@ -60,6 +77,9 @@ func validateRuntimePersona(persona runtimePersona, routerMode bool) error {
 		}
 		if !hasProviderIdentityConfigured() {
 			return fmt.Errorf("provider-daemon persona requires NIL_PROVIDER_KEY or NIL_PROVIDER_ADDRESS")
+		}
+		if listenPortFromAddr(listenAddr) == "8080" && envDefault("NIL_ALLOW_PROVIDER_ON_USER_PORT", "0") != "1" {
+			return fmt.Errorf("provider-daemon persona cannot listen on :8080 (reserved for trusted user-gateway). set NIL_LISTEN_ADDR to a provider port (e.g. :8082) or set NIL_ALLOW_PROVIDER_ON_USER_PORT=1 only for legacy compatibility")
 		}
 		return nil
 	default:

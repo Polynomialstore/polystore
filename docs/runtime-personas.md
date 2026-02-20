@@ -22,6 +22,7 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
   - `/sp/*` (provider data/control plane)
   - `/sp/retrieval/*` (provider retrieval APIs used by user-gateway and browser direct fallback)
 - Typical local endpoints: provider ports (for example `8082+` in local stack scripts, `8091+` in multi-SP devnet scripts).
+- Port reservation: provider-daemon must not bind `:8080` by default. `:8080` is reserved as the trusted user-gateway boundary for browser/Desktop UX.
 - Responsibilities:
   - store/serve shards and MDUs
   - provider-side session/receipt/proof handling

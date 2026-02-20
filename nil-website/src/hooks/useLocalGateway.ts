@@ -9,7 +9,9 @@ interface LocalGatewayDetails {
   version?: string;
   git_sha?: string;
   build_time?: string;
+  persona?: string;
   mode?: string;
+  allowed_route_families?: string[];
   capabilities?: Record<string, boolean>;
   deps?: Record<string, boolean>;
   p2p_addrs?: string[];
@@ -81,6 +83,18 @@ function persistLocalGatewayConnected(connected: boolean) {
   } catch {
     // best-effort only
   }
+}
+
+function parseGatewayPersona(details: LocalGatewayDetails | null): string {
+  if (!details) return '';
+  return String(details.persona || '').trim().toLowerCase();
+}
+
+function hasGatewayRouteFamily(details: LocalGatewayDetails | null): boolean {
+  if (!details) return false;
+  const families = Array.isArray(details.allowed_route_families) ? details.allowed_route_families : [];
+  if (families.length === 0) return true;
+  return families.some((family) => String(family || '').toLowerCase().includes('gateway'));
 }
 
 export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS): LocalGatewayInfo {
@@ -161,6 +175,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       updateError(null); // Clear previous errors
       let lastHttpStatus: number | null = null;
       let lastErr: unknown = null;
+      let lastPersonaError: string | null = null;
 
       try {
         const preferred = normalizeGatewaySeed(activeUrlRef.current || appConfig.gatewayBase || DEFAULT_LOCAL_GATEWAY_BASE);
@@ -175,7 +190,17 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
             if (response.ok) {
               const payload = await response.json().catch(() => null);
               if (payload && typeof payload === 'object') {
-                updateDetails(payload as LocalGatewayDetails);
+                const parsed = payload as LocalGatewayDetails;
+                const persona = parseGatewayPersona(parsed);
+                if (persona === 'provider-daemon' || persona === 'provider_daemon') {
+                  lastPersonaError = 'Endpoint on :8080 is provider-daemon; user-gateway required';
+                  continue;
+                }
+                if (!hasGatewayRouteFamily(parsed)) {
+                  lastPersonaError = 'Endpoint on :8080 does not expose gateway routes';
+                  continue;
+                }
+                updateDetails(parsed);
               } else {
                 updateDetails(null);
               }
@@ -215,6 +240,11 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
         updateDetails(null);
         if (lastHttpStatus !== null) {
           updateError(`Gateway responded with status: ${lastHttpStatus}`);
+          return;
+        }
+        if (lastPersonaError) {
+          updateError(lastPersonaError);
+          updateActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
           return;
         }
         if (lastErr) {

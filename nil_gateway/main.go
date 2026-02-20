@@ -683,11 +683,11 @@ func main() {
 	applyDesktopSidecarDefaults()
 
 	routerMode := isGatewayRouterMode()
+	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	persona := resolveRuntimePersona(routerMode)
-	if err := validateRuntimePersona(persona, routerMode); err != nil {
+	if err := validateRuntimePersona(persona, routerMode, listenAddr); err != nil {
 		log.Fatalf("invalid runtime persona configuration: %v", err)
 	}
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	switch persona {
 	case runtimePersonaProviderDaemon:
 		log.Printf("Runtime persona: provider-daemon.")

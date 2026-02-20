@@ -102,3 +102,48 @@ test('fetchStatus skips gateway probe when configured gateway base is untrusted'
     globalThis.fetch = originalFetch
   }
 })
+
+test('fetchStatus treats provider-daemon status on 8080 as non-gateway', async () => {
+  const originalFetch = globalThis.fetch
+  let gatewayStatusCalls = 0
+
+  try {
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url === `${appConfig.lcdBase}/cosmos/base/tendermint/v1beta1/blocks/latest`) {
+        return jsonResponse(200, {
+          block: { header: { height: '1', chain_id: appConfig.cosmosChainId } },
+        })
+      }
+
+      if (url === `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`) {
+        return jsonResponse(200, { providers: [] })
+      }
+
+      if (url === appConfig.evmRpc && (init?.method ?? 'GET').toUpperCase() === 'POST') {
+        return jsonResponse(200, { jsonrpc: '2.0', id: 1, result: `0x${appConfig.chainId.toString(16)}` })
+      }
+
+      if (url === `${appConfig.gatewayBase}/status`) {
+        gatewayStatusCalls += 1
+        return jsonResponse(200, {
+          persona: 'provider-daemon',
+          allowed_route_families: ['sp', 'sp/retrieval'],
+        })
+      }
+
+      if (url === `${appConfig.gatewayBase}/health`) {
+        return jsonResponse(200, { ok: true })
+      }
+
+      throw new Error(`unexpected url: ${url}`)
+    }) as typeof fetch
+
+    const summary = await fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
+    assert.equal(summary.gateway, 'warn')
+    assert.equal(gatewayStatusCalls, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

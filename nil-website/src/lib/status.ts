@@ -28,8 +28,24 @@ let cachedGatewayStatus: ServiceStatus = 'warn'
 
 async function probeGateway(base: string): Promise<ServiceStatus> {
   const baseUrl = String(base || '').replace(/\/$/, '')
+  const parseStatusPersona = async (res: Response): Promise<ServiceStatus> => {
+    if (!res.ok) return 'warn'
+    const payload = (await res.json().catch(() => null)) as { persona?: unknown; allowed_route_families?: unknown } | null
+    const persona = String(payload?.persona || '').trim().toLowerCase()
+    if (persona === 'provider-daemon' || persona === 'provider_daemon') return 'warn'
+    if (Array.isArray(payload?.allowed_route_families) && payload!.allowed_route_families.length > 0) {
+      const hasGateway = payload!.allowed_route_families.some((item) =>
+        String(item || '').toLowerCase().includes('gateway'),
+      )
+      if (!hasGateway) return 'warn'
+    }
+    return 'ok'
+  }
   const probe = async (path: typeof GATEWAY_STATUS_PATH | typeof GATEWAY_HEALTH_PATH): Promise<ServiceStatus> => {
     const res = await fetch(`${baseUrl}${path}`)
+    if (path === GATEWAY_STATUS_PATH) {
+      return parseStatusPersona(res)
+    }
     return res.ok ? 'ok' : 'warn'
   }
 
