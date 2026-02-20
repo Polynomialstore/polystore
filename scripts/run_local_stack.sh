@@ -792,12 +792,36 @@ PY
 
 start_chain() {
   banner "Starting nilchaind"
+  local grpc_flags=()
+  if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
+    grpc_flags+=(--grpc.enable=true)
+    if [ "${NIL_GRPC_WEB_ENABLE:-1}" = "1" ]; then
+      grpc_flags+=(--grpc-web.enable=true)
+    else
+      grpc_flags+=(--grpc-web.enable=false)
+    fi
+  else
+    # Keep local stacks resilient when port 9090 is already occupied by another
+    # service on a developer machine. gRPC is not required for browser/gateway flows.
+    grpc_flags+=(--grpc.enable=false --grpc-web.enable=false)
+  fi
+  local json_rpc_addr="127.0.0.1:${EVM_RPC_PORT}"
+  local json_rpc_ws_addr="127.0.0.1:8546"
+  if [ "$NIL_BIND_ALL" = "1" ]; then
+    json_rpc_addr="0.0.0.0:${EVM_RPC_PORT}"
+    json_rpc_ws_addr="0.0.0.0:8546"
+  fi
   nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" \
     "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
     --api.enable \
+    "${grpc_flags[@]}" \
+    --json-rpc.enable=true \
+    --json-rpc.address "$json_rpc_addr" \
+    --json-rpc.ws-address "$json_rpc_ws_addr" \
+    --json-rpc.api eth,net,web3 \
     >"$LOG_DIR/nilchaind.log" 2>&1 &
   echo $! > "$PID_DIR/nilchaind.pid"
   sleep 1
