@@ -8,6 +8,8 @@ test.describe('gateway absent', () => {
 
   test('gateway absent: dashboard upload falls back to direct SP', async ({ page }) => {
     test.setTimeout(300_000)
+    const fileName = 'gateway-absent.txt'
+    const fileBytes = Buffer.from('gateway-absent-upload')
 
     page.on('pageerror', (err) => {
       console.log(`[pageerror] ${err.message}`)
@@ -16,6 +18,21 @@ test.describe('gateway absent', () => {
       if (msg.type() === 'error') {
         console.log(`[console:${msg.type()}] ${msg.text()}`)
       }
+    })
+    let gatewayFetchRequests = 0
+    let gatewayPlanRequests = 0
+    page.on('request', (req) => {
+      const url = req.url()
+      if (!url.includes('/gateway/fetch/') && !url.includes('/gateway/plan-retrieval-session/')) return
+      let origin = ''
+      try {
+        origin = new URL(url).origin
+      } catch (err) {
+        void err
+      }
+      if (!/:8080$/.test(origin)) return
+      if (url.includes('/gateway/fetch/')) gatewayFetchRequests += 1
+      if (url.includes('/gateway/plan-retrieval-session/')) gatewayPlanRequests += 1
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -86,9 +103,9 @@ test.describe('gateway absent', () => {
     }
     await expect(mode2FileInput).toHaveCount(1, { timeout: 180_000 })
     await mode2FileInput.setInputFiles({
-      name: 'gateway-absent.txt',
+      name: fileName,
       mimeType: 'text/plain',
-      buffer: Buffer.from('gateway-absent-upload'),
+      buffer: fileBytes,
     })
 
     const uploadBtn = page.getByTestId('mdu-upload')
@@ -103,6 +120,37 @@ test.describe('gateway absent', () => {
 
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
+
+    const filesTab = page.getByRole('button', { name: /^Files$/i }).first()
+    if (await filesTab.isVisible().catch(() => false)) {
+      await filesTab.click({ force: true })
+    }
+    const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${fileName}"]`)
+    await expect(fileRow).toBeVisible({ timeout: 120_000 })
+
+    await page.evaluate(() => {
+      window.localStorage.setItem('nil_local_gateway_connected', '0')
+      window.localStorage.setItem('nil_transport_preference', 'auto')
+    })
+
+    const gatewayFetchBefore = gatewayFetchRequests
+    const gatewayPlanBefore = gatewayPlanRequests
+    const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${fileName}"]`)
+    await expect(autoDownloadBtn).toBeEnabled({ timeout: 120_000 })
+    const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
+    await autoDownloadBtn.click()
+    const download = await downloadPromise
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    if (stream) {
+      for await (const chunk of stream) {
+        chunks.push(Buffer.from(chunk as Uint8Array))
+      }
+    }
+    const downloadedBytes = Buffer.concat(chunks)
+    expect(downloadedBytes.equals(fileBytes)).toBe(true)
+    expect(gatewayFetchRequests).toBe(gatewayFetchBefore)
+    expect(gatewayPlanRequests).toBe(gatewayPlanBefore)
 
     const routeLabel = page.getByTestId('transport-route')
     await expect(routeLabel).toBeVisible({ timeout: 120_000 })
