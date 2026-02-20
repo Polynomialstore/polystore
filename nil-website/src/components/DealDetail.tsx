@@ -51,6 +51,9 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
     const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
     const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
     const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
+    if (/missing X-Nil-Session-Id/i.test(err)) {
+      return 'Gateway requires an on-chain retrieval session. Use Onchain Retrieval (or Auto source) and approve wallet access.'
+    }
     if (err && hint) return `${err} (${hint})`
     if (err) return err
     if (message) return message
@@ -58,6 +61,10 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
     // Ignore and use raw text.
   }
   return trimmed
+}
+
+function isGatewaySessionRequiredError(message: string): boolean {
+  return /missing X-Nil-Session-Id/i.test(String(message || ''))
 }
 
 function localGatewayBaseCandidates(rawBase: string): string[] {
@@ -134,6 +141,8 @@ interface LocalCacheFreshnessResult {
   chainManifestRoot: string
 }
 
+type GatewayRuntimeMode = 'unknown' | 'standalone' | 'router'
+
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
@@ -183,6 +192,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
+  const [gatewayRuntimeMode, setGatewayRuntimeMode] = useState<GatewayRuntimeMode>('unknown')
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
@@ -263,6 +273,44 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     lastTrace,
     preference: transportPreference,
   } = useTransportRouter()
+
+  useEffect(() => {
+    let cancelled = false
+    async function detectGatewayRuntimeMode() {
+      for (const gatewayBase of gatewayDownloadBases) {
+        try {
+          const res = await fetch(`${gatewayBase}/status`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2500),
+          })
+          if (!res.ok) continue
+          const payload = (await res.json().catch(() => null)) as { mode?: unknown } | null
+          const mode = typeof payload?.mode === 'string' ? payload.mode.trim().toLowerCase() : ''
+          if (cancelled) return
+          if (mode === 'router') {
+            setGatewayRuntimeMode('router')
+            return
+          }
+          if (mode === 'standalone') {
+            setGatewayRuntimeMode('standalone')
+            return
+          }
+          if (mode) {
+            setGatewayRuntimeMode('standalone')
+            return
+          }
+        } catch {
+          // Try the next base candidate.
+        }
+      }
+      if (!cancelled) setGatewayRuntimeMode('unknown')
+    }
+
+    void detectGatewayRuntimeMode()
+    return () => {
+      cancelled = true
+    }
+  }, [gatewayDownloadBases])
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
@@ -1489,6 +1537,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                           {files.map((f) => {
                             const browserCached = !!browserCachedByPath[f.path]
                             const gatewayCached = f.cache_present === true
+                            const gatewayCacheLabel =
+                              gatewayRuntimeMode === 'router'
+                                ? gatewayCached
+                                  ? 'provider-backed (router mode)'
+                                  : 'not reported (router mode)'
+                                : gatewayCached
+                                  ? 'yes'
+                                  : 'no'
                             const isBusy = busyFilePath === f.path
                             return (
                               <div
@@ -1509,7 +1565,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                       <span className="text-border">|</span>
                                       <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
                                       <span className="text-border">|</span>
-                                      <span>Gateway cache: {gatewayCached ? 'yes' : 'no'}</span>
+                                      <span>Gateway cache: {gatewayCacheLabel}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1661,11 +1717,18 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                 return
                                               } catch (gatewayErr) {
                                                 const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
-                                                console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
-                                                  dealId,
-                                                  filePath: f.path,
-                                                  error: fallbackReason,
-                                                })
+                                                if (isGatewaySessionRequiredError(fallbackReason)) {
+                                                  console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
+                                                    dealId,
+                                                    filePath: f.path,
+                                                  })
+                                                } else {
+                                                  console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
+                                                    dealId,
+                                                    filePath: f.path,
+                                                    error: fallbackReason,
+                                                  })
+                                                }
                                               }
                                             }
                                             const autoRoutePreference =
