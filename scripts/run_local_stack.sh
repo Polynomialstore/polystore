@@ -50,6 +50,9 @@ NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139f
 NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
 # Start the web UI (optional). Set to 0 for headless stacks / CI.
 NIL_START_WEB="${NIL_START_WEB:-1}"
+# User gateway mode (0=standalone local-cache user-gateway, 1=proxy/router compatibility mode).
+# Standalone is the default for local developer UX so auto-download can use local gateway MDU cache.
+NIL_USER_GATEWAY_PROXY_MODE="${NIL_USER_GATEWAY_PROXY_MODE:-${NIL_GATEWAY_ROUTER:-0}}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
@@ -908,6 +911,10 @@ start_user_gateway() {
   banner "Starting User gateway service (Port 8080)"
   ensure_nil_cli
   ensure_nil_gateway
+  local user_gateway_proxy_mode="$NIL_USER_GATEWAY_PROXY_MODE"
+  if [ "$user_gateway_proxy_mode" != "1" ]; then
+    user_gateway_proxy_mode="0"
+  fi
   local user_p2p_enabled="${NIL_P2P_ENABLED:-1}"
   local user_p2p_listen="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
   if [ "$user_p2p_enabled" = "1" ] && echo "$user_p2p_listen" | grep -q '/tcp/9100/'; then
@@ -918,10 +925,13 @@ start_user_gateway() {
   fi
   (
     cd "$ROOT_DIR/nil_gateway"
-    # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
+    # user-gateway persona on :8080.
+    # Default is standalone mode (local slab/cache + orchestration).
+    # Set NIL_USER_GATEWAY_PROXY_MODE=1 for legacy proxy/router compatibility.
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_RUNTIME_PERSONA="user-gateway" \
-      NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
+      NIL_LISTEN_ADDR=":8080" \
+      NIL_GATEWAY_ROUTER="$user_gateway_proxy_mode" NIL_GATEWAY_ROUTER_MODE="$user_gateway_proxy_mode" \
     NIL_REQUIRE_ONCHAIN_SESSION="${NIL_REQUIRE_ONCHAIN_SESSION:-0}" \
     NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
     NIL_P2P_ENABLED="$user_p2p_enabled" \
@@ -943,7 +953,11 @@ start_user_gateway() {
     tail -n 20 "$LOG_DIR/gateway_user.log" || true
     exit 1
   fi
-  echo "User gateway pid $(cat "$PID_DIR/gateway_user.pid"), logs: $LOG_DIR/gateway_user.log"
+  local mode_label="standalone"
+  if [ "$user_gateway_proxy_mode" = "1" ]; then
+    mode_label="proxy"
+  fi
+  echo "User gateway pid $(cat "$PID_DIR/gateway_user.pid"), mode=$mode_label, logs: $LOG_DIR/gateway_user.log"
   wait_for_local_gateway_health "User gateway" "http://127.0.0.1:8080/health" "$LOG_DIR/gateway_user.log" 20
 }
 
