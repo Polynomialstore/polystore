@@ -678,58 +678,40 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     }
     if (safeLen <= 0) throw new Error('rangeLen must be positive')
 
-    const blobSizeBytes = Math.max(1, Number(slab?.blob_size_bytes ?? 128 * 1024))
     const search = new URLSearchParams({
       deal_id: normalizedDealId,
       owner: normalizedOwner,
       file_path: normalizedFilePath,
       deputy: '1',
+      gateway_download: '1',
     })
+    search.set('range_start', String(safeStart))
+    search.set('range_len', String(safeLen))
     const query = search.toString()
 
     let lastError: Error | null = null
     for (const gatewayBase of gatewayDownloadBases) {
       try {
-        let cursor = safeStart
-        const endExclusive = safeStart + safeLen
-        const parts: ArrayBuffer[] = []
-
-        while (cursor < endExclusive) {
-          const offsetInBlob = cursor % blobSizeBytes
-          const remainingInBlob = blobSizeBytes - offsetInBlob
-          const remainingTotal = endExclusive - cursor
-          const chunkLen = Math.max(1, Math.min(remainingInBlob, remainingTotal))
-          const chunkEnd = cursor + chunkLen - 1
-          const url = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${query}`
-          const res = await fetch(url, {
-            method: 'GET',
-            headers: { Range: `bytes=${cursor}-${chunkEnd}` },
-          })
-          if (!res.ok) {
-            const txt = await res.text().catch(() => '')
-            throw new Error(decodeGatewayHttpError(res.status, txt))
-          }
-          const buf = await res.arrayBuffer()
-          if (buf.byteLength === 0) {
-            throw new Error('gateway returned empty chunk')
-          }
-          const clampedLen = Math.min(buf.byteLength, chunkLen)
-          parts.push(buf.byteLength === clampedLen ? buf : buf.slice(0, clampedLen))
-          cursor += clampedLen
-          if (clampedLen < chunkLen && cursor < endExclusive) {
-            throw new Error('gateway returned short chunk')
-          }
+        const url = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${query}`
+        const res = await fetch(url, {
+          method: 'GET',
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(decodeGatewayHttpError(res.status, txt))
         }
+        const blob = await res.blob()
+        if (!blob || blob.size === 0) throw new Error('gateway returned empty payload')
 
         markDownloadPath('gateway', 'gateway_cache', 'gateway_mdu_cache', 'fresh')
-        return new Blob(parts, { type: 'application/octet-stream' })
+        return blob
       } catch (e: unknown) {
         lastError = e instanceof Error ? e : new Error(String(e))
       }
     }
 
     throw lastError ?? new Error('gateway cache download failed')
-  }, [gatewayDownloadBases, markDownloadPath, slab?.blob_size_bytes])
+  }, [gatewayDownloadBases, markDownloadPath])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
     const localManifestRoot = await readManifestRoot(String(dealId)).catch(() => null)

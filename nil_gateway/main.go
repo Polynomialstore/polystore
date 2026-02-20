@@ -195,6 +195,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/download/{cid}", RouterGatewayDownload).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
@@ -215,6 +216,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/download/{cid}", GatewayDownload).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
@@ -244,6 +246,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/retrieval/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/download/{cid}", GatewayDownload).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/plan/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
@@ -2551,6 +2554,17 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
+	gatewayDownloadMode := false
+	if raw := strings.TrimSpace(q.Get("gateway_download")); raw != "" {
+		switch strings.ToLower(raw) {
+		case "1", "true", "yes", "y":
+			gatewayDownloadMode = true
+		}
+	}
+	if gatewayDownloadMode {
+		GatewayDownload(w, r)
+		return
+	}
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
 	filePath, err := validateNilfsFilePath(q.Get("file_path"))
@@ -3546,6 +3560,250 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 	_, _ = io.Copy(w, content)
+}
+
+// GatewayDownload serves a file (or byte-range) from the trusted local user-gateway cache.
+// Unlike /gateway/fetch, this endpoint owns internal chunk planning and does not require the
+// browser to split requests along blob boundaries.
+func GatewayDownload(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
+		return
+	}
+
+	q := r.URL.Query()
+	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
+	owner := strings.TrimSpace(q.Get("owner"))
+	filePath, ferr := validateNilfsFilePath(q.Get("file_path"))
+	if dealIDStr == "" || owner == "" {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
+		return
+	}
+	if ferr != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid file_path",
+			"List files via GET /gateway/list-files/<manifest_root>?deal_id=<id>&owner=<owner>",
+		)
+		return
+	}
+	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid deal_id", "")
+		return
+	}
+
+	meta, err := fetchDealMeta(dealID)
+	if err != nil {
+		if errors.Is(err, ErrDealNotFound) {
+			setCacheFreshnessHeaders(w, "unknown", "deal_not_found")
+			writeJSONError(w, http.StatusNotFound, "deal not found", "")
+			return
+		}
+		setCacheFreshnessHeaders(w, "unknown", "chain_lookup_failed")
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"cache freshness unknown",
+			"reason=chain_lookup_failed; unable to validate deal owner/manifest_root against chain",
+		)
+		return
+	}
+	if meta.Owner == "" || meta.Owner != owner {
+		setCacheFreshnessHeaders(w, "unknown", "owner_mismatch")
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "reason=owner_mismatch")
+		return
+	}
+	if strings.TrimSpace(meta.ManifestRoot) == "" {
+		setCacheFreshnessHeaders(w, "unknown", "deal_manifest_missing")
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"deal has no committed manifest_root yet",
+			"reason=deal_manifest_missing; commit content before downloading",
+		)
+		return
+	}
+	dealRoot, err := parseManifestRoot(meta.ManifestRoot)
+	if err != nil {
+		setCacheFreshnessHeaders(w, "unknown", "chain_lookup_failed")
+		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+		return
+	}
+	if dealRoot.Canonical != manifestRoot.Canonical {
+		setCacheFreshnessHeaders(w, "stale", "stale_manifest_mismatch")
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"stale manifest_root (does not match on-chain deal state)",
+			fmt.Sprintf("reason=stale_manifest_mismatch; query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+		)
+		return
+	}
+	setCacheFreshnessHeaders(w, freshnessReasonFresh, freshnessReasonFresh)
+	cleanupStaleDealGenerations(dealID, dealRoot)
+
+	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
+	if serr != nil {
+		log.Printf("GatewayDownload: failed to fetch service hint: %v", serr)
+		serviceHint = ""
+	}
+	stripe, serr := stripeParamsFromHint(serviceHint)
+	if serr != nil {
+		log.Printf("GatewayDownload: invalid service hint: %v", serr)
+		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
+	}
+
+	dealDir, err := resolveDealDirForDeal(dealID, dealRoot, dealRoot.Canonical)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	startOffset, fileLen, witnessCount, err := GetFileMetaByPath(dealDir, filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "file not found in deal", "")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file metadata", err.Error())
+		return
+	}
+	if fileLen == 0 {
+		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+		return
+	}
+
+	var rangeStart uint64
+	var rangeLen uint64
+	if raw := strings.TrimSpace(q.Get("range_start")); raw != "" {
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid range_start", "")
+			return
+		}
+		rangeStart = v
+	}
+	if raw := strings.TrimSpace(q.Get("range_len")); raw != "" {
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid range_len", "")
+			return
+		}
+		rangeLen = v
+	}
+	if rangeStart >= fileLen {
+		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+		return
+	}
+	if rangeLen == 0 || rangeLen > fileLen-rangeStart {
+		rangeLen = fileLen - rangeStart
+	}
+	if rangeLen == 0 {
+		writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+		return
+	}
+
+	absStart := startOffset + rangeStart
+	absEnd := absStart + rangeLen - 1
+	if stripe.mode == 2 {
+		startMdu := uint64(1) + witnessCount + (absStart / RawMduCapacity)
+		endMdu := uint64(1) + witnessCount + (absEnd / RawMduCapacity)
+		for mduIdx := startMdu; mduIdx <= endMdu; mduIdx++ {
+			if _, err := ensureMode2MduOnDisk(r.Context(), dealID, dealRoot, mduIdx, dealDir, stripe, ""); err != nil {
+				writeJSONError(w, http.StatusBadGateway, "failed to reconstruct Mode2 MDU", err.Error())
+				return
+			}
+		}
+	}
+
+	isPartial := rangeStart > 0 || rangeLen < fileLen
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("X-Nil-Download-Source", "gateway_cache")
+	w.Header().Set("X-Nil-Manifest-Root", dealRoot.Canonical)
+	w.Header().Set("X-Nil-Range-Start", strconv.FormatUint(rangeStart, 10))
+	w.Header().Set("X-Nil-Range-Len", strconv.FormatUint(rangeLen, 10))
+	w.Header().Set("Content-Length", strconv.FormatUint(rangeLen, 10))
+	if isPartial {
+		rangeEnd := rangeStart + rangeLen - 1
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", rangeStart, rangeEnd, fileLen))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if stripe.mode != 2 {
+		reader, _, _, _, servedLen, _, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+		if err != nil {
+			return
+		}
+		defer reader.Close()
+		written, err := io.Copy(w, reader)
+		if err != nil {
+			return
+		}
+		if uint64(written) != servedLen {
+			log.Printf("GatewayDownload short write (mode1): deal_id=%d file=%s wrote=%d expected=%d", dealID, filePath, written, servedLen)
+		}
+		return
+	}
+
+	var cursor uint64
+	for cursor < rangeLen {
+		chunkRangeStart := rangeStart + cursor
+		absOffset := startOffset + chunkRangeStart
+		mduRemaining := RawMduCapacity - (absOffset % RawMduCapacity)
+		remaining := rangeLen - cursor
+		chunkLen := remaining
+		if chunkLen > mduRemaining {
+			chunkLen = mduRemaining
+		}
+		if chunkLen == 0 {
+			return
+		}
+
+		reader, _, _, _, servedLen, _, err := resolveNilfsFileSegmentForFetchDecoded(dealDir, filePath, chunkRangeStart, chunkLen)
+		if err != nil {
+			return
+		}
+		written, copyErr := io.Copy(w, reader)
+		_ = reader.Close()
+		if copyErr != nil {
+			return
+		}
+		if written <= 0 {
+			return
+		}
+		cursor += uint64(written)
+		if uint64(written) < servedLen {
+			log.Printf("GatewayDownload short chunk write (mode2): deal_id=%d file=%s wrote=%d expected=%d start=%d", dealID, filePath, written, servedLen, chunkRangeStart)
+			return
+		}
+	}
 }
 
 var resolveProviderForRetrievalPlanFn = resolveProviderForRetrievalPlan

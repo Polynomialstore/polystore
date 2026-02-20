@@ -53,6 +53,8 @@ func mapGatewayPathToProviderPath(path string) string {
 		return "/sp/retrieval/upload"
 	case path == "/gateway/upload-status":
 		return "/sp/retrieval/upload-status"
+	case strings.HasPrefix(path, "/gateway/download/"):
+		return "/sp/retrieval/download/" + strings.TrimPrefix(path, "/gateway/download/")
 	case strings.HasPrefix(path, "/gateway/fetch/"):
 		return "/sp/retrieval/fetch/" + strings.TrimPrefix(path, "/gateway/fetch/")
 	case strings.HasPrefix(path, "/gateway/debug/raw-fetch/"):
@@ -334,13 +336,20 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isFetch := strings.HasPrefix(r.URL.Path, "/gateway/fetch/")
+	gatewayDownloadMode := false
+	if raw := strings.TrimSpace(r.URL.Query().Get("gateway_download")); raw != "" {
+		switch strings.ToLower(raw) {
+		case "1", "true", "yes", "y":
+			gatewayDownloadMode = true
+		}
+	}
 	if requireOnchainSession && isFetch {
-		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
+		if !gatewayDownloadMode && strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
 			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
 			return
 		}
 	}
-	if isFetch && !requireRetrievalReqSig && strings.TrimSpace(r.Header.Get("Range")) == "" {
+	if isFetch && !gatewayDownloadMode && !requireRetrievalReqSig && strings.TrimSpace(r.Header.Get("Range")) == "" {
 		writeJSONError(w, http.StatusBadRequest, "Range header is required", "unsigned fetches must be chunked")
 		return
 	}
@@ -440,6 +449,7 @@ func RouterGatewaySlab(w http.ResponseWriter, r *http.Request)      { RouterGate
 func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
+func RouterGatewayDownload(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	if requireOnchainSession {
