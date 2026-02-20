@@ -452,8 +452,6 @@ register_demo_provider() {
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
-  local provider_funding_amount="${NIL_PROVIDER_FUNDING_AMOUNT:-$NIL_AMOUNT}"
-
   # Use the faucet key as a General-capability provider with a large capacity,
   # plus (provider_count-1) additional providers.
   # We retry a few times to avoid races with node startup.
@@ -539,7 +537,8 @@ register_demo_provider() {
       for idx in $(seq 1 $((provider_count - 1))); do
         local key_name="provider${idx}"
         if ! "$NILCHAIND_BIN" keys show "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
-          "$NILCHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
+          echo "Warning: missing key $key_name in local keyring; skipping provider registration for this key."
+          continue
         fi
         local addr
         addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
@@ -584,14 +583,6 @@ register_demo_provider() {
             done
           fi
 
-          # Fund provider so it can pay fees in the configured gas denom (aatom).
-          "$NILCHAIND_BIN" tx bank send faucet "$addr" "$provider_funding_amount" \
-            --chain-id "$CHAIN_ID" \
-            --yes \
-            --home "$CHAIN_HOME" \
-            --keyring-backend test \
-            --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
-
           "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
             --from "$key_name" \
             "${endpoint_args_child[@]}" \
@@ -626,6 +617,25 @@ init_chain() {
 
   # Import faucet key (deterministic for local use)
   printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+
+  # Pre-create and pre-fund provider keys in genesis for deterministic local
+  # Mode 2 availability (avoids runtime funding/sequence races).
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+  if [ "$provider_count" -gt 1 ]; then
+    local idx
+    for idx in $(seq 1 $((provider_count - 1))); do
+      local key_name="provider${idx}"
+      "$NILCHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+      local addr
+      addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
+      if [ -n "$addr" ]; then
+        "$NILCHAIND_BIN" genesis add-genesis-account "$addr" "$NIL_AMOUNT" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
+      fi
+    done
+  fi
 
   # Fund faucet + create validator
   "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
