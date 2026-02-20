@@ -51,10 +51,9 @@ test('resolveTransportPreference keeps prefer_p2p only when enabled', () => {
   assert.equal(downgrade, 'auto')
 })
 
-test('allowNonGatewayBackends blocks direct/p2p fallback in prefer_gateway mode', () => {
-  assert.equal(allowNonGatewayBackends('prefer_gateway'), false)
+test('allowNonGatewayBackends keeps fallback candidates for all preferences', () => {
+  assert.equal(allowNonGatewayBackends('prefer_gateway'), true)
   assert.equal(allowNonGatewayBackends('auto'), true)
   assert.equal(allowNonGatewayBackends('prefer_direct_sp'), true)
   assert.equal(allowNonGatewayBackends('prefer_p2p'), true)
 })
-
