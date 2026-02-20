@@ -675,6 +675,11 @@ start_web() {
   (
     cd "$ROOT_DIR/nil-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
+    VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-1}" \
+    VITE_API_BASE="${VITE_API_BASE:-http://localhost:8081}" \
+    VITE_LCD_BASE="${VITE_LCD_BASE:-http://localhost:1317}" \
+    VITE_EVM_RPC="${VITE_EVM_RPC:-http://localhost:$EVM_RPC_PORT}" \
+    VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:8080}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
     VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \

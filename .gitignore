@@ -39,3 +39,6 @@ update/
 
 # Local draft issue text scratchpad
 .tmp_issue_bodies/
+
+# Local PR body scratchpad
+.pr_body_ci_smoke.md
