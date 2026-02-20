@@ -7,6 +7,12 @@ export interface ResolveTransportPreferenceInput {
   localGatewayConnected: boolean
 }
 
+export interface GatewayTransportEnabledInput {
+  gatewayDisabled: boolean
+  gatewayBase: string
+  localGatewayConnected: boolean
+}
+
 export function resolveTransportPreference(input: ResolveTransportPreferenceInput): RoutePreference {
   const { candidate, gatewayDisabled, p2pEnabled, localGatewayConnected } = input
 
@@ -51,4 +57,11 @@ export function isTrustedLocalGatewayBase(base: string): boolean {
   } catch {
     return false
   }
+}
+
+export function isGatewayTransportEnabled(input: GatewayTransportEnabledInput): boolean {
+  const { gatewayDisabled, gatewayBase, localGatewayConnected } = input
+  if (gatewayDisabled) return false
+  if (!localGatewayConnected) return false
+  return isTrustedLocalGatewayBase(gatewayBase)
 }

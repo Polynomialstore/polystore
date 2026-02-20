@@ -150,7 +150,7 @@ interface LocalCacheFreshnessResult {
   chainManifestRoot: string
 }
 
-type GatewayRuntimeMode = 'unknown' | 'standalone' | 'router'
+type GatewayRuntimeMode = 'unknown' | 'standalone' | 'proxy'
 
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
@@ -296,8 +296,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
           const payload = (await res.json().catch(() => null)) as { mode?: unknown } | null
           const mode = typeof payload?.mode === 'string' ? payload.mode.trim().toLowerCase() : ''
           if (cancelled) return
-          if (mode === 'router') {
-            setGatewayRuntimeMode('router')
+          if (mode === 'router' || mode === 'proxy') {
+            setGatewayRuntimeMode('proxy')
             return
           }
           if (mode === 'standalone') {
@@ -1547,10 +1547,10 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                             const browserCached = !!browserCachedByPath[f.path]
                             const gatewayCached = f.cache_present === true
                             const gatewayCacheLabel =
-                              gatewayRuntimeMode === 'router'
+                              gatewayRuntimeMode === 'proxy'
                                 ? gatewayCached
-                                  ? 'provider-backed (router mode)'
-                                  : 'not reported (router mode)'
+                                  ? 'provider-backed (proxy mode; legacy "router" alias)'
+                                  : 'not reported (proxy mode; legacy "router" alias)'
                                 : gatewayCached
                                   ? 'yes'
                                   : 'no'

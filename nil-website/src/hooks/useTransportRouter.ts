@@ -24,7 +24,12 @@ import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreferen
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange } from '../lib/transport/libp2pClient'
 import type { P2pTarget } from '../lib/multiaddr'
-import { allowNonGatewayBackends, isTrustedLocalGatewayBase, resolveTransportPreference } from '../lib/transport/mode'
+import {
+  allowNonGatewayBackends,
+  isGatewayTransportEnabled,
+  isTrustedLocalGatewayBase,
+  resolveTransportPreference,
+} from '../lib/transport/mode'
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
 
@@ -172,7 +177,11 @@ export function useTransportRouter() {
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       ...(gatewayEnabled
         ? [{
@@ -226,7 +235,11 @@ export function useTransportRouter() {
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<SlabLayoutData>[] = [
       ...(gatewayEnabled
         ? [{
@@ -280,7 +293,11 @@ export function useTransportRouter() {
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       ...(gatewayEnabled
         ? [{
@@ -339,7 +356,11 @@ export function useTransportRouter() {
 
   const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
     const directBase = resolveDirectBase(req.directBase) ?? appConfig.spBase
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<UploadResult>[] = [
       ...(gatewayEnabled
         ? [{
@@ -396,7 +417,11 @@ export function useTransportRouter() {
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<ManifestInfoData>[] = [
       ...(gatewayEnabled
         ? [{
@@ -452,7 +477,11 @@ export function useTransportRouter() {
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    const gatewayEnabled = isGatewayTransportEnabled({
+      gatewayDisabled: appConfig.gatewayDisabled,
+      gatewayBase: appConfig.gatewayBase,
+      localGatewayConnected: readLocalGatewayConnectedHint(),
+    })
     const candidates: TransportCandidate<MduKzgData>[] = [
       ...(gatewayEnabled
         ? [{

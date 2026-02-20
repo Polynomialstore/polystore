@@ -602,11 +602,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       })
       if (statusRes.ok) {
         const payload = await statusRes.json().catch(() => null)
-        if (payload && typeof payload === 'object' && payload.mode === 'router') {
+        const mode = payload && typeof payload === 'object' && typeof payload.mode === 'string'
+          ? payload.mode.trim().toLowerCase()
+          : ''
+        if (mode === 'router' || mode === 'proxy') {
           mirrorMduPath = '/gateway/mirror_mdu'
           mirrorShardPath = '/gateway/mirror_shard'
           mirrorManifestPath = '/gateway/mirror_manifest'
-          addLog('> Gateway router detected; rehydrate will use mirror endpoints.')
+          addLog('> Gateway proxy mode detected (legacy "router" alias); rehydrate will use mirror endpoints.')
         }
       } else if (statusRes.status !== 404) {
         addLog(`> Gateway rehydrate skipped: gateway unavailable (${statusRes.status}).`)
@@ -875,11 +878,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
       if (statusRes.ok) {
         const payload = await statusRes.json().catch(() => null)
-        if (payload && typeof payload === 'object' && payload.mode === 'router') {
+        const mode = payload && typeof payload === 'object' && typeof payload.mode === 'string'
+          ? payload.mode.trim().toLowerCase()
+          : ''
+        if (mode === 'router' || mode === 'proxy') {
           mirrorMduPath = '/gateway/mirror_mdu'
           mirrorShardPath = '/gateway/mirror_shard'
           mirrorManifestPath = '/gateway/mirror_manifest'
-          addLog('> Gateway router detected; using mirror endpoints.')
+          addLog('> Gateway proxy mode detected (legacy "router" alias); using mirror endpoints.')
         }
       } else if (statusRes.status !== 404) {
         setMirrorStatus('skipped')

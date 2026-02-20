@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { allowNonGatewayBackends, isTrustedLocalGatewayBase, resolveTransportPreference } from './mode'
+import {
+  allowNonGatewayBackends,
+  isGatewayTransportEnabled,
+  isTrustedLocalGatewayBase,
+  resolveTransportPreference,
+} from './mode'
 
 test('resolveTransportPreference maps auto+connected to prefer_gateway', () => {
   const resolved = resolveTransportPreference({
@@ -77,4 +82,42 @@ test('isTrustedLocalGatewayBase only allows loopback :8080', () => {
   assert.equal(isTrustedLocalGatewayBase('http://127.0.0.1:8091'), false)
   assert.equal(isTrustedLocalGatewayBase('http://nilstore.org:8080'), false)
   assert.equal(isTrustedLocalGatewayBase('not-a-url'), false)
+})
+
+test('isGatewayTransportEnabled requires trusted local gateway and positive connection attestation', () => {
+  assert.equal(
+    isGatewayTransportEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://localhost:8080',
+      localGatewayConnected: true,
+    }),
+    true,
+  )
+
+  assert.equal(
+    isGatewayTransportEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://localhost:8080',
+      localGatewayConnected: false,
+    }),
+    false,
+  )
+
+  assert.equal(
+    isGatewayTransportEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://127.0.0.1:8091',
+      localGatewayConnected: true,
+    }),
+    false,
+  )
+
+  assert.equal(
+    isGatewayTransportEnabled({
+      gatewayDisabled: true,
+      gatewayBase: 'http://localhost:8080',
+      localGatewayConnected: true,
+    }),
+    false,
+  )
 })
