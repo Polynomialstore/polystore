@@ -91,7 +91,7 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	if strings.TrimSpace(w.Body.String()) != "ok" {
 		t.Fatalf("expected ok body, got %q", w.Body.String())
 	}
-	if gotPath != "/gateway/fetch/0xabc" {
+	if gotPath != "/sp/retrieval/fetch/0xabc" {
 		t.Fatalf("expected provider path forwarded, got %q", gotPath)
 	}
 	if !strings.Contains(gotQuery, "deal_id=1") {
@@ -177,7 +177,7 @@ func TestRouterGatewayFetch_SignedModeMissingRangeAllowedAtProxy(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected request to reach provider path, got %d (%s)", w.Code, w.Body.String())
 	}
-	if gotPath != "/gateway/fetch/0xabc" {
+	if gotPath != "/sp/retrieval/fetch/0xabc" {
 		t.Fatalf("expected provider path forwarded, got %q", gotPath)
 	}
 }

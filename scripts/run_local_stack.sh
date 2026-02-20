@@ -865,6 +865,7 @@ start_sp_gateway() {
       cd "$ROOT_DIR/nil_gateway"
       # SP Mode (default). Each instance listens on its own port but can share the upload dir.
       nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
+        NIL_RUNTIME_PERSONA="provider-daemon" \
         NIL_SESSION_DB_PATH="$LOG_DIR/sessions_sp_${key_name}.db" \
         NIL_PROVIDER_KEY="$key_name" \
         NIL_LISTEN_ADDR=":${port}" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
@@ -919,6 +920,7 @@ start_user_gateway() {
     cd "$ROOT_DIR/nil_gateway"
     # Router Mode (1), Listen on 8080, Uploads to uploads_user (staging)
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
+      NIL_RUNTIME_PERSONA="user-gateway" \
       NIL_LISTEN_ADDR=":8080" NIL_GATEWAY_ROUTER="1" NIL_GATEWAY_ROUTER_MODE="1" \
     NIL_REQUIRE_ONCHAIN_SESSION="${NIL_REQUIRE_ONCHAIN_SESSION:-0}" \
     NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \

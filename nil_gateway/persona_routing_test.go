@@ -1,0 +1,69 @@
+package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gorilla/mux"
+)
+
+func TestValidateRuntimePersona(t *testing.T) {
+	t.Run("provider requires provider identity", func(t *testing.T) {
+		t.Setenv("NIL_PROVIDER_KEY", "")
+		t.Setenv("NIL_PROVIDER_ADDRESS", "")
+		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
+		if err := validateRuntimePersona(runtimePersonaProviderDaemon, false); err == nil {
+			t.Fatalf("expected validation failure when provider identity is missing")
+		}
+	})
+
+	t.Run("user rejects provider identity in strict mode", func(t *testing.T) {
+		t.Setenv("NIL_PROVIDER_KEY", "provider1")
+		t.Setenv("NIL_PROVIDER_ADDRESS", "")
+		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
+		if err := validateRuntimePersona(runtimePersonaUserGateway, true); err == nil {
+			t.Fatalf("expected validation failure when user-gateway has provider identity env")
+		}
+	})
+}
+
+func TestProviderDaemonRoutes_DoNotExposeGatewaySurface(t *testing.T) {
+	r := mux.NewRouter()
+	registerProviderDaemonRoutes(r)
+
+	wGateway := httptest.NewRecorder()
+	reqGateway := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	r.ServeHTTP(wGateway, reqGateway)
+	if wGateway.Code != http.StatusNotFound {
+		t.Fatalf("expected provider daemon to return 404 on /gateway/*, got %d", wGateway.Code)
+	}
+
+	wSp := httptest.NewRecorder()
+	reqSp := httptest.NewRequest(http.MethodGet, "/sp/retrieval/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	r.ServeHTTP(wSp, reqSp)
+	if wSp.Code == http.StatusNotFound {
+		t.Fatalf("expected provider daemon to expose /sp/retrieval/* routes")
+	}
+}
+
+func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {
+	r := mux.NewRouter()
+	registerGatewayDealLifecycleRoutes(r)
+	registerUserGatewayRoutes(r, true)
+
+	wSp := httptest.NewRecorder()
+	reqSp := httptest.NewRequest(http.MethodGet, "/sp/shard?deal_id=1&mdu_index=0&slot=0&manifest_root=0x01", nil)
+	r.ServeHTTP(wSp, reqSp)
+	if wSp.Code != http.StatusNotFound {
+		t.Fatalf("expected user gateway to return 404 on /sp/*, got %d", wSp.Code)
+	}
+
+	wGateway := httptest.NewRecorder()
+	reqGateway := httptest.NewRequest(http.MethodGet, "/gateway/fetch/0xabc?deal_id=1&owner=nil1x&file_path=a.txt", nil)
+	reqGateway.Header.Set("Range", "bytes=0-0")
+	r.ServeHTTP(wGateway, reqGateway)
+	if wGateway.Code == http.StatusNotFound {
+		t.Fatalf("expected user gateway to expose /gateway/* routes")
+	}
+}

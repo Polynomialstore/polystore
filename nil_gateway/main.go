@@ -183,6 +183,92 @@ func configureDefaultUploadDir(routerMode bool, listenAddr string) {
 	}
 }
 
+func registerGatewayDealLifecycleRoutes(r *mux.Router) {
+	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
+}
+
+func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
+	if routerMode {
+		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/manifest-info/{cid}", RouterGatewayManifestInfo).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", RouterGatewayMduKzg).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/receipt", RouterGatewaySubmitReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/session-proof", RouterGatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+		return
+	}
+
+	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/gateway/session-proof", GatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+}
+
+func registerProviderDaemonRoutes(r *mux.Router) {
+	// Provider-native APIs.
+	r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+
+	// Provider retrieval APIs consumed by trusted user-gateway and direct browser fallbacks.
+	r.HandleFunc("/sp/retrieval/upload", GatewayUpload).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/plan/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
+}
+
+func registerLegacyMixedRouteAliases(r *mux.Router, routerMode bool, persona runtimePersona) {
+	if !isLegacyMixedRoutesEnabled() {
+		return
+	}
+	if persona == runtimePersonaProviderDaemon {
+		// Legacy alias: provider-daemon also serves /gateway/* for older clients.
+		registerUserGatewayRoutes(r, false)
+		return
+	}
+	if persona == runtimePersonaUserGateway && !routerMode {
+		// Legacy alias: standalone user-gateway also serves /sp/*.
+		registerProviderDaemonRoutes(r)
+	}
+}
+
 // runCommand executes an external command, respecting mockCombinedOutput if set.
 func runCommand(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
 	if mockCombinedOutput != nil {
@@ -597,12 +683,26 @@ func main() {
 	applyDesktopSidecarDefaults()
 
 	routerMode := isGatewayRouterMode()
+	persona := resolveRuntimePersona(routerMode)
+	if err := validateRuntimePersona(persona, routerMode); err != nil {
+		log.Fatalf("invalid runtime persona configuration: %v", err)
+	}
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
-	if routerMode {
-		log.Printf("Runtime persona: user-gateway (proxy mode enabled; provider-daemon APIs expected on separate processes).")
-		log.Printf("Compatibility note: this behavior is historically called \"router mode\" in env/code paths.")
-	} else {
-		log.Printf("Runtime persona: combined user-gateway + provider-daemon APIs (single-process profile).")
+	switch persona {
+	case runtimePersonaProviderDaemon:
+		log.Printf("Runtime persona: provider-daemon.")
+	case runtimePersonaUserGateway:
+		if routerMode {
+			log.Printf("Runtime persona: user-gateway (proxy mode enabled; provider-daemon APIs expected on separate processes).")
+			log.Printf("Compatibility note: this behavior is historically called \"router mode\" in env/code paths.")
+		} else {
+			log.Printf("Runtime persona: user-gateway (standalone mode).")
+		}
+	default:
+		log.Printf("Runtime persona: %s", persona.String())
+	}
+	if isLegacyMixedRoutesEnabled() {
+		log.Printf("WARNING: NIL_LEGACY_MIXED_ROUTES=1 enabled; legacy mixed route aliases are active.")
 	}
 
 	configureDefaultUploadDir(routerMode, listenAddr)
@@ -643,66 +743,23 @@ func main() {
 
 	r := mux.NewRouter()
 	// Legacy S3-style interface
-	r.HandleFunc("/api/v1/object/{key}", PutObject).Methods("PUT")
-	r.HandleFunc("/api/v1/object/{key}", GetObject).Methods("GET")
-
-	// Gateway endpoints used by the web UI
-	r.HandleFunc("/gateway/create-deal", GatewayCreateDeal).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/update-deal-content", GatewayUpdateDealContent).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/create-deal-evm", GatewayCreateDealFromEvm).Methods("POST", "OPTIONS")
-	r.HandleFunc("/gateway/update-deal-content-evm", GatewayUpdateDealContentFromEvm).Methods("POST", "OPTIONS")
 	r.HandleFunc("/health", HealthCheck).Methods("GET", "OPTIONS")
 	r.HandleFunc("/status", GatewayStatus).Methods("GET", "OPTIONS")
 
-	if routerMode {
-		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/open-session/{cid}", RouterGatewayOpenSession).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/fetch/{cid}", RouterGatewayFetch).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", RouterGatewayDebugRawFetch).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", RouterGatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/manifest-info/{cid}", RouterGatewayManifestInfo).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", RouterGatewayMduKzg).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/receipt", RouterGatewaySubmitReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/session-proof", RouterGatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
-	} else {
-		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/upload-status", GatewayUploadStatus).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
-		r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/session-receipt", GatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/session-proof", GatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/receipt", SpSubmitReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
-		r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
-		r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+	switch persona {
+	case runtimePersonaProviderDaemon:
+		registerProviderDaemonRoutes(r)
+	case runtimePersonaUserGateway:
+		registerGatewayDealLifecycleRoutes(r)
+		registerUserGatewayRoutes(r, routerMode)
+		// S3 compatibility routes (deal-backed buckets) are user-gateway only.
+		r.HandleFunc("/api/v1/object/{key}", PutObject).Methods("PUT")
+		r.HandleFunc("/api/v1/object/{key}", GetObject).Methods("GET")
+		registerS3Routes(r)
+	default:
+		log.Fatalf("unsupported runtime persona %q", persona)
 	}
-
-	// S3 compatibility routes (deal-backed buckets).
-	registerS3Routes(r)
+	registerLegacyMixedRouteAliases(r, routerMode, persona)
 
 	p2pServer, err := startLibp2pServerFromEnv(context.Background())
 	if err != nil {
@@ -832,10 +889,14 @@ func buildStatusURL(r *http.Request, dealID uint64, uploadID string) string {
 	if host == "" {
 		host = "localhost:8080"
 	}
+	path := "/gateway/upload-status"
+	if r != nil && strings.HasPrefix(r.URL.Path, "/sp/retrieval/upload") {
+		path = "/sp/retrieval/upload-status"
+	}
 	values := url.Values{}
 	values.Set("deal_id", strconv.FormatUint(dealID, 10))
 	values.Set("upload_id", strings.TrimSpace(uploadID))
-	return (&url.URL{Scheme: scheme, Host: host, Path: "/gateway/upload-status", RawQuery: values.Encode()}).String()
+	return (&url.URL{Scheme: scheme, Host: host, Path: path, RawQuery: values.Encode()}).String()
 }
 
 // GatewayUpload is used by the web UI to upload a file and derive a Root CID + size.

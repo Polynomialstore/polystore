@@ -9,6 +9,14 @@ import {
   gatewayUpload,
 } from '../api/gatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
+import {
+  providerFetchSlabLayout,
+  providerFetchManifestInfo,
+  providerFetchMduKzg,
+  providerListFiles,
+  providerPlanRetrievalSession,
+  providerUpload,
+} from '../api/providerClient'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
@@ -16,7 +24,7 @@ import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreferen
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange } from '../lib/transport/libp2pClient'
 import type { P2pTarget } from '../lib/multiaddr'
-import { allowNonGatewayBackends, resolveTransportPreference } from '../lib/transport/mode'
+import { allowNonGatewayBackends, isTrustedLocalGatewayBase, resolveTransportPreference } from '../lib/transport/mode'
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
 
@@ -141,9 +149,10 @@ export function useTransportRouter() {
   const resolvePreference = useCallback(
     (override?: RoutePreference): RoutePreference => {
       const candidate = override ?? preference
+      const gatewayTrusted = isTrustedLocalGatewayBase(appConfig.gatewayBase)
       return resolveTransportPreference({
         candidate,
-        gatewayDisabled: appConfig.gatewayDisabled,
+        gatewayDisabled: appConfig.gatewayDisabled || !gatewayTrusted,
         p2pEnabled: appConfig.p2pEnabled,
         localGatewayConnected: readLocalGatewayConnectedHint(),
       })
@@ -163,8 +172,9 @@ export function useTransportRouter() {
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -187,7 +197,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayListFiles(directBase, req.manifestRoot, {
+            providerListFiles(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
             }),
@@ -216,8 +226,9 @@ export function useTransportRouter() {
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<SlabLayoutData>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -240,7 +251,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayFetchSlabLayout(directBase, req.manifestRoot, {
+            providerFetchSlabLayout(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
             }),
@@ -269,8 +280,9 @@ export function useTransportRouter() {
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -296,7 +308,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayPlanRetrievalSession(directBase, req.manifestRoot, {
+            providerPlanRetrievalSession(directBase, req.manifestRoot, {
               dealId: req.dealId,
               owner: req.owner,
               filePath: req.filePath,
@@ -327,8 +339,9 @@ export function useTransportRouter() {
 
   const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
     const directBase = resolveDirectBase(req.directBase) ?? appConfig.spBase
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<UploadResult>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -353,7 +366,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayUpload(directBase, {
+            providerUpload(directBase, {
               file: req.file,
               owner: req.owner,
               dealId: req.dealId,
@@ -383,8 +396,9 @@ export function useTransportRouter() {
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<ManifestInfoData>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -408,7 +422,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayFetchManifestInfo(
+            providerFetchManifestInfo(
               directBase,
               req.manifestRoot,
               req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
@@ -438,8 +452,9 @@ export function useTransportRouter() {
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const candidates: TransportCandidate<MduKzgData>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
@@ -464,7 +479,7 @@ export function useTransportRouter() {
         execute: async (signal) => {
           void signal
           return wrapExecute(() =>
-            gatewayFetchMduKzg(
+            providerFetchMduKzg(
               directBase,
               req.manifestRoot,
               req.mduIndex,
@@ -500,24 +515,29 @@ export function useTransportRouter() {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const directP2p = req.p2pTarget?.multiaddr?.trim()
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
-    const buildUrl = (base: string, deputy: boolean) => {
+    const buildUrl = (base: string, backend: 'gateway' | 'direct_sp', deputy: boolean) => {
       const q = new URLSearchParams({
         deal_id: req.dealId,
         owner: req.owner,
         file_path: req.filePath,
       })
       if (deputy) q.set('deputy', '1')
-      return `${normalizeBase(base)}/gateway/fetch/${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
+      const path = backend === 'gateway' ? '/gateway/fetch/' : '/sp/retrieval/fetch/'
+      return `${normalizeBase(base)}${path}${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
     }
 
-    const executeFetch = async (base: string, signal: AbortSignal, deputy: boolean): Promise<FetchRangeOutcome> => {
-      const gatewayBase = normalizeBase(appConfig.gatewayBase)
-      const normalizedBase = normalizeBase(base)
-      const throughGateway = normalizedBase === gatewayBase
-      const res = await fetch(buildUrl(base, deputy), {
+    const executeFetch = async (
+      base: string,
+      backend: 'gateway' | 'direct_sp',
+      signal: AbortSignal,
+      deputy: boolean,
+    ): Promise<FetchRangeOutcome> => {
+      const throughGateway = backend === 'gateway'
+      const res = await fetch(buildUrl(base, backend, deputy), {
         method: 'GET',
         signal,
         headers: {
@@ -573,11 +593,11 @@ export function useTransportRouter() {
     }
 
     const candidates: TransportCandidate<FetchRangeOutcome>[] = [
-      ...(!appConfig.gatewayDisabled
+      ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
             endpoint: appConfig.gatewayBase,
-            execute: async (signal: AbortSignal) => executeFetch(appConfig.gatewayBase, signal, true),
+            execute: async (signal: AbortSignal) => executeFetch(appConfig.gatewayBase, 'gateway', signal, true),
           }]
         : []),
     ]
@@ -586,7 +606,7 @@ export function useTransportRouter() {
       candidates.push({
         backend: 'direct_sp' as const,
         endpoint: directBase,
-        execute: async (signal) => executeFetch(directBase, signal, false),
+        execute: async (signal) => executeFetch(directBase, 'direct_sp', signal, false),
       })
     }
     if (directP2p && appConfig.p2pEnabled && allowNonGatewayBackends(effectivePreference)) {

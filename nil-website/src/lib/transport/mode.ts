@@ -32,3 +32,18 @@ export function allowNonGatewayBackends(preference: RoutePreference): boolean {
   // connection-refused/timeouts can fail over instead of hard failing.
   return true
 }
+
+export function isTrustedLocalGatewayBase(base: string): boolean {
+  const raw = String(base || '').trim()
+  if (!raw) return false
+  try {
+    const parsed = new URL(raw)
+    const host = parsed.hostname.toLowerCase()
+    const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+    if (!isLoopback) return false
+    if (parsed.port === '') return false
+    return parsed.port === '8080'
+  } catch {
+    return false
+  }
+}

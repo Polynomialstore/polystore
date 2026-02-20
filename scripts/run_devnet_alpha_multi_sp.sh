@@ -631,6 +631,7 @@ start_provider() {
   (
     cd "$ROOT_DIR/nil_gateway"
     nohup env \
+      NIL_RUNTIME_PERSONA="provider-daemon" \
       NIL_LISTEN_ADDR=":$port" \
       NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
@@ -655,6 +656,7 @@ start_router() {
   (
     cd "$ROOT_DIR/nil_gateway"
     nohup env \
+      NIL_RUNTIME_PERSONA="user-gateway" \
       NIL_GATEWAY_ROUTER="1" \
       NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \

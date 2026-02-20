@@ -13,7 +13,9 @@ type gatewayStatusResponse struct {
 	Version       string            `json:"version"`
 	GitSHA        string            `json:"git_sha"`
 	BuildTime     string            `json:"build_time"`
+	Persona       string            `json:"persona"`
 	Mode          string            `json:"mode"`
+	RouteFamilies []string          `json:"allowed_route_families"`
 	ListeningAddr string            `json:"listening_addr"`
 	ProviderBase  string            `json:"provider_base,omitempty"`
 	P2PAddrs      []string          `json:"p2p_addrs,omitempty"`
@@ -67,13 +69,16 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 	if isGatewayRouterMode() {
 		mode = "router"
 	}
+	persona := currentRuntimePersona()
 
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
 	status := gatewayStatusResponse{
 		Version:       version,
 		GitSHA:        gitSHA,
 		BuildTime:     buildTime,
+		Persona:       persona.String(),
 		Mode:          mode,
+		RouteFamilies: allowedRouteFamiliesForPersona(persona),
 		ListeningAddr: listenAddr,
 		ProviderBase:  strings.TrimSpace(providerBase),
 		Capabilities: map[string]bool{

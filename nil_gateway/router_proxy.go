@@ -47,6 +47,35 @@ func copyUpstreamResponseHeaders(dst http.Header, src http.Header) {
 	}
 }
 
+func mapGatewayPathToProviderPath(path string) string {
+	switch {
+	case path == "/gateway/upload":
+		return "/sp/retrieval/upload"
+	case path == "/gateway/upload-status":
+		return "/sp/retrieval/upload-status"
+	case strings.HasPrefix(path, "/gateway/fetch/"):
+		return "/sp/retrieval/fetch/" + strings.TrimPrefix(path, "/gateway/fetch/")
+	case strings.HasPrefix(path, "/gateway/debug/raw-fetch/"):
+		return "/sp/retrieval/debug/raw-fetch/" + strings.TrimPrefix(path, "/gateway/debug/raw-fetch/")
+	case strings.HasPrefix(path, "/gateway/plan-retrieval-session/"):
+		return "/sp/retrieval/plan/" + strings.TrimPrefix(path, "/gateway/plan-retrieval-session/")
+	case strings.HasPrefix(path, "/gateway/list-files/"):
+		return "/sp/retrieval/list-files/" + strings.TrimPrefix(path, "/gateway/list-files/")
+	case strings.HasPrefix(path, "/gateway/slab/"):
+		return "/sp/retrieval/slab/" + strings.TrimPrefix(path, "/gateway/slab/")
+	case strings.HasPrefix(path, "/gateway/manifest-info/"):
+		return "/sp/retrieval/manifest-info/" + strings.TrimPrefix(path, "/gateway/manifest-info/")
+	case strings.HasPrefix(path, "/gateway/mdu-kzg/"):
+		return "/sp/retrieval/mdu-kzg/" + strings.TrimPrefix(path, "/gateway/mdu-kzg/")
+	case strings.HasPrefix(path, "/gateway/open-session/"):
+		return "/sp/retrieval/open-session/" + strings.TrimPrefix(path, "/gateway/open-session/")
+	case path == "/gateway/prove-retrieval":
+		return "/sp/retrieval/prove-retrieval"
+	default:
+		return path
+	}
+}
+
 func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -60,7 +89,8 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 		return
 	}
 
-	target := base + r.URL.Path
+	targetPath := mapGatewayPathToProviderPath(r.URL.Path)
+	target := base + targetPath
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
@@ -99,7 +129,8 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 		return false, fmt.Errorf("provider base url is empty")
 	}
 
-	target := base + r.URL.Path
+	targetPath := mapGatewayPathToProviderPath(r.URL.Path)
+	target := base + targetPath
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
@@ -219,7 +250,8 @@ func tryProxyUploadToProviderBaseURL(w http.ResponseWriter, r *http.Request, pro
 	// across provider retries.
 	bodyReader := io.NewSectionReader(bodyFile, 0, contentLength)
 
-	target := base + r.URL.Path
+	targetPath := mapGatewayPathToProviderPath(r.URL.Path)
+	target := base + targetPath
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
