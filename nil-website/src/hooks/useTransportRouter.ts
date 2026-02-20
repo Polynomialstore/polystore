@@ -550,7 +550,7 @@ export function useTransportRouter() {
         throw new TransportError('missing X-Nil-Provider', 'invalid_response')
       }
       if (req.expectedProvider && provider !== req.expectedProvider) {
-        if (deputyServed) {
+        if (deputyServed || throughGateway) {
           provider = req.expectedProvider
         } else {
           throw new TransportError(
