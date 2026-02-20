@@ -68,6 +68,11 @@ function isGatewaySessionRequiredError(message: string): boolean {
   return /missing X-Nil-Session-Id/i.test(String(message || ''))
 }
 
+function isGatewayOutdatedDownloadError(message: string): boolean {
+  const text = String(message || '')
+  return /Range header is required/i.test(text) && /unsigned fetches must be chunked/i.test(text)
+}
+
 function localGatewayBaseCandidates(rawBase: string): string[] {
   const trimmed = String(rawBase || '').trim().replace(/\/$/, '')
   const out: string[] = []
@@ -1708,6 +1713,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                                 return
                                               } catch (gatewayErr) {
                                                 const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
+                                                if (isGatewayOutdatedDownloadError(fallbackReason)) {
+                                                  throw new Error(
+                                                    'Local gateway is running an older retrieval API. Restart your local gateway/stack so /gateway/fetch supports gateway_download=1.',
+                                                  )
+                                                }
                                                 if (isGatewaySessionRequiredError(fallbackReason)) {
                                                   console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
                                                     dealId,
