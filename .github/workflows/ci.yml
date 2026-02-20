@@ -206,6 +206,8 @@ jobs:
     name: E2E Smoke (${{ matrix.smoke_name }})
     runs-on: ubuntu-latest
     needs: [go-test, rust-test, frontend-build] # Ensure components are tested individually first
+    env:
+      GOFLAGS: -mod=mod
     strategy:
       fail-fast: false
       matrix:
