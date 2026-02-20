@@ -75,6 +75,14 @@ echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
+listener_pids_for_port() {
+  local port="$1"
+  # Only return server listeners bound on this local port.
+  # This avoids killing unrelated client processes (e.g. browsers with ESTABLISHED
+  # outbound sockets to localhost:8080/5173).
+  lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+}
+
 chain_home_is_under_artifacts() {
   if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 is required for this script (missing python3 in PATH)" >&2
@@ -364,7 +372,7 @@ wait_for_ports_clear() {
   for port in "${ports[@]}"; do
     local i
     for i in $(seq 1 "$attempts"); do
-      if [ -z "$(lsof -ti :"$port" 2>/dev/null || true)" ]; then
+      if [ -z "$(listener_pids_for_port "$port")" ]; then
         break
       fi
       sleep "$delay"
@@ -1088,11 +1096,11 @@ stop_user_gateway_only() {
   fi
 
   local gw_pids gw_pids2
-  gw_pids=$(lsof -ti :8080 2>/dev/null || true)
+  gw_pids=$(listener_pids_for_port 8080)
   if [ -n "$gw_pids" ]; then
     kill $gw_pids 2>/dev/null || true
     sleep 0.5
-    gw_pids2=$(lsof -ti :8080 2>/dev/null || true)
+    gw_pids2=$(listener_pids_for_port 8080)
     if [ -n "$gw_pids2" ]; then
       kill -9 $gw_pids2 2>/dev/null || true
     fi
@@ -1138,11 +1146,11 @@ stop_sp_gateway_only() {
   local idx port gw_pids gw_pids2
   for idx in $(seq 0 $((provider_count - 1))); do
     port=$((8082 + idx))
-    gw_pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    gw_pids=$(listener_pids_for_port "$port")
     if [ -n "$gw_pids" ]; then
       kill $gw_pids 2>/dev/null || true
       sleep 0.5
-      gw_pids2=$(lsof -ti :"$port" 2>/dev/null || true)
+      gw_pids2=$(listener_pids_for_port "$port")
       if [ -n "$gw_pids2" ]; then
         kill -9 $gw_pids2 2>/dev/null || true
       fi
@@ -1238,12 +1246,12 @@ stop_all() {
   fi
 
   for port in 26657 26656 1317 8545 8080 8081 5173; do
-    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    pids=$(listener_pids_for_port "$port")
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
       sleep 0.5
       # If still alive, force kill.
-      pids2=$(lsof -ti :"$port" 2>/dev/null || true)
+      pids2=$(listener_pids_for_port "$port")
       if [ -n "$pids2" ]; then
         kill -9 $pids2 2>/dev/null || true
         echo "Force killed processes on port $port ($pids2)"
@@ -1257,11 +1265,11 @@ stop_all() {
   local idx
   for idx in $(seq 0 $((provider_count - 1))); do
     port=$((8082 + idx))
-    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    pids=$(listener_pids_for_port "$port")
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
       sleep 0.5
-      pids2=$(lsof -ti :"$port" 2>/dev/null || true)
+      pids2=$(listener_pids_for_port "$port")
       if [ -n "$pids2" ]; then
         kill -9 $pids2 2>/dev/null || true
         echo "Force killed processes on port $port ($pids2)"
