@@ -730,7 +730,7 @@ ensure_metadata() {
   GENESIS="$CHAIN_HOME/config/genesis.json"
   if [ ! -f "$GENESIS" ]; then return; fi
   python3 - "$GENESIS" <<'PY' || true
-import json, sys
+import json, os, sys
 path = sys.argv[1]
 data = json.load(open(path))
 bank = data.get("app_state", {}).get("bank", {})
@@ -772,6 +772,16 @@ pre = sorted(set(pre))
 params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
+
+# Keep nilchain EIP-712 domain chain id aligned with the local EVM chain id.
+nilchain = data.get("app_state", {}).get("nilchain", {})
+if isinstance(nilchain, dict):
+    nparams = nilchain.get("params", {})
+    raw = (os.getenv("EVM_CHAIN_ID") or "").strip()
+    if raw.isdigit():
+        nparams["eip712_chain_id"] = raw
+    nilchain["params"] = nparams
+    data["app_state"]["nilchain"] = nilchain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
@@ -1134,7 +1144,7 @@ start_all() {
   cat <<EOF
 RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Chain ID $CHAIN_ID / 31337)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:8081/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)

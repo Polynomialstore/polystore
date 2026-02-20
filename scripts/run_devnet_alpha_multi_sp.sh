@@ -446,6 +446,7 @@ def set_bool_param(key, env_key):
     return None
 
 # Existing uint64 overrides.
+set_uint_param("eip712_chain_id", "EVM_CHAIN_ID")
 set_uint_param("month_len_blocks", "NIL_MONTH_LEN_BLOCKS")
 set_uint_param("epoch_len_blocks", "NIL_EPOCH_LEN_BLOCKS")
 set_uint_param("quota_bps_per_epoch_hot", "NIL_QUOTA_BPS_PER_EPOCH_HOT")
@@ -772,7 +773,7 @@ start_all() {
   cat <<EOF
 RPC:         http://localhost:26657
 REST/LCD:    http://localhost:1317
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (Chain ID $CHAIN_ID / 31337)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:8081/faucet
 Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:5173/#/dashboard
