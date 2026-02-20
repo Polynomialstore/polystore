@@ -11,6 +11,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
+const TRUSTED_GATEWAY_PORT: u16 = 8080;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayConfig {
@@ -84,6 +85,11 @@ impl SidecarManager {
 
     pub fn set_base_url(&self, base_url: String) -> Result<(), String> {
         let normalized = normalize_base_url(base_url);
+        if !is_trusted_local_gateway_base(&normalized) {
+            return Err(format!(
+                "untrusted gateway endpoint {normalized}; expected localhost/127.0.0.1 on port {TRUSTED_GATEWAY_PORT}"
+            ));
+        }
         let mut guard = self
             .base_url
             .lock()
@@ -127,6 +133,11 @@ impl SidecarManager {
                 .clone()
                 .unwrap_or_else(|| DEFAULT_LISTEN_ADDR.to_string()),
         );
+        if !is_trusted_local_gateway_base(&base_url) {
+            return Err(format!(
+                "desktop gateway listen address must stay on localhost/127.0.0.1:{TRUSTED_GATEWAY_PORT}; got {base_url}"
+            ));
+        }
         if is_listening_addr_in_use(&listen_addr) {
             return Err(format!(
                 "address {listen_addr} is already in use by another process. Stop external gateway first or choose a different listen address."
@@ -139,6 +150,8 @@ impl SidecarManager {
         let mut cmd = Command::new(&binary);
         cmd.args(args)
             .env("NIL_LISTEN_ADDR", &listen_addr)
+            .env("NIL_RUNTIME_PERSONA", "user-gateway")
+            .env("NIL_ALLOW_PROVIDER_ON_USER_PORT", "0")
             // Local desktop Gateway default: keep libp2p disabled unless explicitly enabled.
             // This avoids startup collisions on hosts already running router/provider daemons.
             .env("NIL_P2P_ENABLED", "0")
@@ -151,6 +164,9 @@ impl SidecarManager {
             // Local desktop Gateway should not run synthetic system-liveness ticks unless
             // explicitly requested. Those ticks need provider key material and create noisy logs.
             .env("NIL_DISABLE_SYSTEM_LIVENESS", "1")
+            // Defensive: ensure leaked shell env cannot make this process behave like provider-daemon.
+            .env_remove("NIL_PROVIDER_KEY")
+            .env_remove("NIL_PROVIDER_ADDRESS")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -350,6 +366,19 @@ fn normalize_listen_addr(value: String) -> (String, String) {
         let base_url = format!("http://{value}");
         (value, base_url)
     }
+}
+
+fn is_trusted_local_gateway_base(value: &str) -> bool {
+    let parsed = match reqwest::Url::parse(value) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    let is_loopback = host == "localhost" || host == "127.0.0.1" || host == "::1";
+    if !is_loopback {
+        return false;
+    }
+    parsed.port_or_known_default() == Some(TRUSTED_GATEWAY_PORT)
 }
 
 fn binary_filename(name: &str) -> String {

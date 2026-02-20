@@ -97,3 +97,12 @@ fn sidecar_manager_normalizes_base_url() {
     let url = manager.base_url().expect("base_url");
     assert_eq!(url, "http://127.0.0.1:8080");
 }
+
+#[test]
+fn sidecar_manager_rejects_untrusted_base_url() {
+    let manager = SidecarManager::new();
+    let err = manager
+        .set_base_url("http://127.0.0.1:8081".to_string())
+        .expect_err("non-8080 endpoint must be rejected");
+    assert!(err.contains("untrusted gateway endpoint"));
+}
