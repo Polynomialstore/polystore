@@ -306,21 +306,22 @@ impl GatewayClient {
                 }
             };
 
-            let progress_marker = if let Some((done, total)) = status.steps_done.zip(status.steps_total) {
-                if total > 0 {
-                    Some(format!("steps:{done}/{total}"))
+            let progress_marker =
+                if let Some((done, total)) = status.steps_done.zip(status.steps_total) {
+                    if total > 0 {
+                        Some(format!("steps:{done}/{total}"))
+                    } else {
+                        None
+                    }
+                } else if let Some((done, total)) = status.bytes_done.zip(status.bytes_total) {
+                    if total > 0 {
+                        Some(format!("bytes:{done}/{total}"))
+                    } else {
+                        None
+                    }
                 } else {
                     None
-                }
-            } else if let Some((done, total)) = status.bytes_done.zip(status.bytes_total) {
-                if total > 0 {
-                    Some(format!("bytes:{done}/{total}"))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+                };
             if progress_marker != last_progress_marker {
                 last_progress_marker = progress_marker;
                 last_progress_at = Instant::now();
