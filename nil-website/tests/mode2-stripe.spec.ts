@@ -416,6 +416,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     let fetchProviderCalls = 0
     let planGatewayCalls = 0
     let planProviderCalls = 0
+    let fetchGatewayRequests = 0
+    let planGatewayRequests = 0
     const unsignedMissingRangeRequests: string[] = []
     page.on('response', (resp) => {
       const url = resp.url()
@@ -437,7 +439,19 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     })
     page.on('request', (req) => {
       const url = req.url()
+      if (!url.includes('/gateway/fetch/') && !url.includes('/gateway/plan-retrieval-session/')) return
+      let origin = ''
+      try {
+        origin = new URL(url).origin
+      } catch (err) {
+        void err
+      }
+      const viaGateway = /:8080$/.test(origin)
+      if (viaGateway && url.includes('/gateway/plan-retrieval-session/')) {
+        planGatewayRequests += 1
+      }
       if (!url.includes('/gateway/fetch/')) return
+      if (viaGateway) fetchGatewayRequests += 1
       const headers = req.headers()
       const hasAuth = Boolean(headers.authorization || headers['x-nil-auth'] || headers['x-nil-signature'] || headers['x-nil-voucher'])
       const range = String(headers.range || '').trim()
@@ -535,12 +549,20 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     }
 
     blockGateway = true
+    await page.evaluate(() => {
+      window.localStorage.setItem('nil_local_gateway_connected', '0')
+      window.localStorage.setItem('nil_transport_preference', 'auto')
+    })
     await clearBrowserCache()
+    const fallbackGatewayFetchReqBefore = fetchGatewayRequests
+    const fallbackGatewayPlanReqBefore = planGatewayRequests
     const fallbackFetchBefore = fetchProviderCalls
     const fallbackPlanBefore = planProviderCalls
     const fallbackBytes = await readDownloadBytes(page, autoDownloadBtn)
     expect(fallbackBytes.equals(fileBytes)).toBe(true)
     await expect(routeEl).toHaveAttribute('data-download-route', 'direct_sp', { timeout: 60_000 })
+    expect(fetchGatewayRequests).toBe(fallbackGatewayFetchReqBefore)
+    expect(planGatewayRequests).toBe(fallbackGatewayPlanReqBefore)
     expect(fetchProviderCalls).toBeGreaterThan(fallbackFetchBefore)
     expect(planProviderCalls).toBeGreaterThan(fallbackPlanBefore)
     assertUnsignedRangeInvariant('auto fallback retrieval')
