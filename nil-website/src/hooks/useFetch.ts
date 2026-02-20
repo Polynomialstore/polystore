@@ -241,17 +241,25 @@ export function useFetch() {
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
       const trustedGatewayBase = isTrustedLocalGatewayBase(appConfig.gatewayBase)
+      const localGatewayConnected = readLocalGatewayConnectedHint()
       const gatewayModeActive =
         !appConfig.gatewayDisabled &&
         trustedGatewayBase &&
+        localGatewayConnected &&
         (preferenceOverride === 'prefer_gateway' ||
           (preferenceOverride === undefined &&
             transport.preference !== 'prefer_direct_sp' &&
             transport.preference !== 'prefer_p2p' &&
-            readLocalGatewayConnectedHint()))
+            localGatewayConnected))
 
       let gatewayP2pTarget: P2pTarget | undefined
-      if (appConfig.p2pEnabled && !appConfig.gatewayDisabled && trustedGatewayBase && !p2pEndpoint?.target) {
+      if (
+        appConfig.p2pEnabled &&
+        !appConfig.gatewayDisabled &&
+        trustedGatewayBase &&
+        localGatewayConnected &&
+        !p2pEndpoint?.target
+      ) {
         const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
         for (const addr of addrs) {
           const target = multiaddrToP2pTarget(addr)
@@ -826,7 +834,7 @@ export function useFetch() {
           // `session-proof` forwarding currently relies on the local Gateway app.
           // Keep file download successful even when the local gateway is not running.
           try {
-            if (!trustedGatewayBase) {
+            if (!trustedGatewayBase || !localGatewayConnected) {
               throw new Error('trusted local gateway unavailable for session-proof forwarding')
             }
             const proofBase = appConfig.gatewayBase
