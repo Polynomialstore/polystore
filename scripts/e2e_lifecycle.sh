@@ -67,6 +67,68 @@ wait_for_http() {
   return 1
 }
 
+latest_height() {
+  timeout 10s curl -sS "http://127.0.0.1:26657/status" \
+    | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))"
+}
+
+wait_for_next_block() {
+  local max_attempts="${1:-20}"
+  local delay_secs="${2:-0.2}"
+  local start_h cur_h
+  start_h="$(latest_height || echo 0)"
+  for _ in $(seq 1 "$max_attempts"); do
+    cur_h="$(latest_height || echo 0)"
+    if [ "$cur_h" -gt "$start_h" ]; then
+      return 0
+    fi
+    sleep "$delay_secs"
+  done
+  return 1
+}
+
+wait_for_positive_balance() {
+  local addr="$1"
+  local lcd_base="$2"
+  local max_attempts="${3:-30}"
+  local delay_secs="${4:-0.5}"
+  local amt
+  for attempt in $(seq 1 "$max_attempts"); do
+    amt=$(timeout 10s curl -sS "$lcd_base/cosmos/bank/v1beta1/balances/$addr" \
+      | python3 -c "import sys, json; j=json.load(sys.stdin); b=(j.get('balances') or []); print(next((int(x.get('amount','0')) for x in b if x.get('denom')=='stake'), 0))" \
+      || echo 0)
+    if [ "$amt" -gt 0 ]; then
+      echo "    Balance detected for $addr: $amt stake"
+      return 0
+    fi
+    echo "    Waiting for funded balance (attempt $attempt/$max_attempts)..."
+    sleep "$delay_secs"
+  done
+  echo "ERROR: funded balance not observed for $addr" >&2
+  return 1
+}
+
+wait_for_manifest_root() {
+  local deal_id="$1"
+  local expected_root="$2"
+  local lcd_base="$3"
+  local max_attempts="${4:-40}"
+  local delay_secs="${5:-0.5}"
+  local observed_root
+  for attempt in $(seq 1 "$max_attempts"); do
+    observed_root=$(timeout 10s curl -sS "$lcd_base/nilchain/nilchain/v1/deals/$deal_id" \
+      | python3 -c "import sys, json, base64; j=json.load(sys.stdin); r=(j.get('deal') or {}).get('manifest_root') or ''; print(r if r.startswith('0x') else ('0x'+base64.b64decode(r).hex() if r else ''))" \
+      || echo "")
+    if [ "$observed_root" == "$expected_root" ]; then
+      return 0
+    fi
+    echo "    Waiting for manifest root index (attempt $attempt/$max_attempts)..."
+    sleep "$delay_secs"
+  done
+  echo "ERROR: manifest root did not index for deal $deal_id (expected $expected_root)" >&2
+  return 1
+}
+
 cleanup() {
   echo "==> Stopping local stack..."
   "$STACK_SCRIPT" stop || true
@@ -135,7 +197,7 @@ echo "    EVM: $EVM_ADDRESS"
 echo "    NIL: $NIL_ADDRESS"
 
 fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
-sleep 5 # Give chain time to process funding transaction
+wait_for_positive_balance "$NIL_ADDRESS" "$LCD_BASE" 30 0.5
 echo "==> Verifying balance for $NIL_ADDRESS..."
 BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
 echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
@@ -161,13 +223,13 @@ for i in $(seq 1 5); do
 
   if echo "$CREATE_RESP" | grep -q "account sequence mismatch"; then
     echo "    Account sequence mismatch, retrying (attempt $i/5)..."
-    sleep 1 # Give chain a moment
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   if echo "$CREATE_RESP" | grep -q "bridge nonce must be strictly increasing"; then
     echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
     EVM_NONCE=$((EVM_NONCE + 1))
-    sleep 1 # Give chain a moment
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   break
@@ -253,13 +315,13 @@ for i in $(seq 1 5); do
 
   if echo "$UPDATE_RESP" | grep -q "account sequence mismatch"; then
     echo "    Account sequence mismatch, retrying (attempt $i/5)..."
-    sleep 1 # Give chain a moment
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   if echo "$UPDATE_RESP" | grep -q "bridge nonce must be strictly increasing"; then
     echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
     EVM_NONCE=$((EVM_NONCE + 1))
-    sleep 1 # Give chain a moment
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   break
@@ -276,7 +338,7 @@ EVM_NONCE=$((EVM_NONCE + 1))
 
 # 5. Verify on LCD
 echo "==> Verifying Deal on LCD..."
-sleep 3 # Give it a moment to index if needed
+wait_for_manifest_root "$DEAL_ID" "$MANIFEST_ROOT" "$LCD_BASE" 40 0.5
 DEAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
 
 TMP_DEAL_JSON_FILE=$(mktemp)
@@ -543,13 +605,13 @@ for i in $(seq 1 5); do
 
   if echo "$UPDATE2_RESP" | grep -q "account sequence mismatch"; then
     echo "    Account sequence mismatch, retrying (attempt $i/5)..."
-    sleep 1
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   if echo "$UPDATE2_RESP" | grep -q "bridge nonce must be strictly increasing"; then
     echo "    Bridge nonce mismatch, retrying with incremented nonce (attempt $i/5)..."
     EVM_NONCE=$((EVM_NONCE + 1))
-    sleep 1
+    wait_for_next_block 20 0.2 || true
     continue
   fi
   break
@@ -566,7 +628,7 @@ EVM_NONCE=$((EVM_NONCE + 1))
 
 # 9. Verify on LCD (new manifest root)
 echo "==> Verifying Deal on LCD after append..."
-sleep 3
+wait_for_manifest_root "$DEAL_ID" "$MANIFEST_ROOT_2" "$LCD_BASE" 40 0.5
 DEAL_JSON_2=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
 
 TMP_DEAL_JSON_FILE_2=$(mktemp)

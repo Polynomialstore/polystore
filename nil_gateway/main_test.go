@@ -374,6 +374,15 @@ func TestGatewayFetch_UnsignedMissingRangeRejected(t *testing.T) {
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	mdu0Data, err := b.Bytes()
+	if err != nil {
+		t.Fatalf("build mdu0: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
 
 	owner := testDealOwner(t)
 	dealID := uint64(7)
@@ -493,6 +502,11 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 
 func TestGatewayFetch_ChainLookupFailureSetsFreshnessReason(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
+	oldRequireSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
+	clearDealMetaCache()
+	t.Cleanup(clearDealMetaCache)
 	r := testRouter()
 
 	owner := testDealOwner(t)
