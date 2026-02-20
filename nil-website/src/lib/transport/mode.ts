@@ -15,7 +15,12 @@ export function resolveTransportPreference(input: ResolveTransportPreferenceInpu
     return 'prefer_direct_sp'
   }
 
-  if (candidate === 'auto' && localGatewayConnected) {
+  if (!localGatewayConnected) {
+    if (candidate === 'prefer_p2p' && p2pEnabled) return 'prefer_p2p'
+    return 'prefer_direct_sp'
+  }
+
+  if (candidate === 'auto') {
     return 'prefer_gateway'
   }
 

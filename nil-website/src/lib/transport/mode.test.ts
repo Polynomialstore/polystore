@@ -13,14 +13,24 @@ test('resolveTransportPreference maps auto+connected to prefer_gateway', () => {
   assert.equal(resolved, 'prefer_gateway')
 })
 
-test('resolveTransportPreference keeps auto when gateway is not connected', () => {
+test('resolveTransportPreference falls back to direct_sp when gateway is not connected', () => {
   const resolved = resolveTransportPreference({
     candidate: 'auto',
     gatewayDisabled: false,
     p2pEnabled: true,
     localGatewayConnected: false,
   })
-  assert.equal(resolved, 'auto')
+  assert.equal(resolved, 'prefer_direct_sp')
+})
+
+test('resolveTransportPreference downgrades prefer_gateway when gateway is not connected', () => {
+  const resolved = resolveTransportPreference({
+    candidate: 'prefer_gateway',
+    gatewayDisabled: false,
+    p2pEnabled: true,
+    localGatewayConnected: false,
+  })
+  assert.equal(resolved, 'prefer_direct_sp')
 })
 
 test('resolveTransportPreference forces direct_sp when gateway is disabled', () => {
@@ -48,7 +58,7 @@ test('resolveTransportPreference keeps prefer_p2p only when enabled', () => {
     p2pEnabled: false,
     localGatewayConnected: false,
   })
-  assert.equal(downgrade, 'auto')
+  assert.equal(downgrade, 'prefer_direct_sp')
 })
 
 test('allowNonGatewayBackends keeps fallback candidates for all preferences', () => {

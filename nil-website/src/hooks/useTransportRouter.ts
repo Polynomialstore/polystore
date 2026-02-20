@@ -172,7 +172,7 @@ export function useTransportRouter() {
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
       ...(gatewayEnabled
         ? [{
@@ -226,7 +226,7 @@ export function useTransportRouter() {
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<SlabLayoutData>[] = [
       ...(gatewayEnabled
         ? [{
@@ -280,7 +280,7 @@ export function useTransportRouter() {
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<GatewayPlanResponse>[] = [
       ...(gatewayEnabled
         ? [{
@@ -339,7 +339,7 @@ export function useTransportRouter() {
 
   const uploadFile = useCallback(async (req: UploadRequest): Promise<TransportOutcome<UploadResult>> => {
     const directBase = resolveDirectBase(req.directBase) ?? appConfig.spBase
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<UploadResult>[] = [
       ...(gatewayEnabled
         ? [{
@@ -396,7 +396,7 @@ export function useTransportRouter() {
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<ManifestInfoData>[] = [
       ...(gatewayEnabled
         ? [{
@@ -452,7 +452,7 @@ export function useTransportRouter() {
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const candidates: TransportCandidate<MduKzgData>[] = [
       ...(gatewayEnabled
         ? [{
@@ -515,7 +515,7 @@ export function useTransportRouter() {
     const effectivePreference = resolvePreference(req.preference)
     const directBase = resolveDirectBase(req.directBase)
     const directP2p = req.p2pTarget?.multiaddr?.trim()
-    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase)
+    const gatewayEnabled = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
