@@ -284,6 +284,9 @@ impl GatewayClient {
         let deadline = Instant::now() + GATEWAY_UPLOAD_POLL_TIMEOUT;
         let mut last_error: Option<String> = None;
         let mut last_status_line: Option<String> = None;
+        let mut last_progress_marker: Option<String> = None;
+        let mut last_progress_at = Instant::now();
+        let mut last_heartbeat_at = Instant::now();
         loop {
             let status = match self.fetch_upload_status(status_url).await {
                 Ok(status) => status,
@@ -302,6 +305,28 @@ impl GatewayClient {
                     }
                 }
             };
+
+            let progress_marker =
+                if let Some((done, total)) = status.steps_done.zip(status.steps_total) {
+                    if total > 0 {
+                        Some(format!("steps:{done}/{total}"))
+                    } else {
+                        None
+                    }
+                } else if let Some((done, total)) = status.bytes_done.zip(status.bytes_total) {
+                    if total > 0 {
+                        Some(format!("bytes:{done}/{total}"))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+            if progress_marker != last_progress_marker {
+                last_progress_marker = progress_marker;
+                last_progress_at = Instant::now();
+            }
+
             if let Some(line) = Self::emit_upload_status_log(upload_id, &status) {
                 if last_status_line.as_ref() != Some(&line) {
                     let _ = app.emit("gateway_log", line.clone());
@@ -313,6 +338,34 @@ impl GatewayClient {
                 .clone()
                 .unwrap_or_else(|| "running".to_string())
                 .to_lowercase();
+            if matches!(
+                stage.as_str(),
+                "accepted" | "queued" | "running" | "receiving" | "encoding" | "uploading" | "done"
+            ) {
+                let now = Instant::now();
+                if now.duration_since(last_heartbeat_at) >= Duration::from_secs(10) {
+                    let stalled_for = now.duration_since(last_progress_at).as_secs();
+                    let phase = status
+                        .phase
+                        .as_deref()
+                        .unwrap_or("working")
+                        .trim()
+                        .to_string();
+                    let message = status
+                        .message
+                        .as_deref()
+                        .unwrap_or("working")
+                        .trim()
+                        .to_string();
+                    let _ = app.emit(
+                        "gateway_log",
+                        format!(
+                            "> Gateway upload heartbeat: upload_id={upload_id} status={stage} phase={phase} stalled_for={stalled_for}s message={message}"
+                        ),
+                    );
+                    last_heartbeat_at = now;
+                }
+            }
             match stage.as_str() {
                 "success" => {
                     if let Some(result) = status.result {

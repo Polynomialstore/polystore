@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/btcsuite/btcutil/bech32"
@@ -619,6 +620,7 @@ func main() {
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
 	}
+	recoverDealGenerationStateOnStartup()
 
 	if !routerMode {
 		if err := initSessionDB(sessionDBPath); err != nil {
@@ -2392,6 +2394,16 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
 			return
 		}
+		if errors.Is(err, ErrDealGenerationNotReady) {
+			setCacheFreshnessHeaders(w, "unknown", "generation_not_ready")
+			writeJSONError(
+				w,
+				http.StatusServiceUnavailable,
+				"slab generation not ready yet",
+				"reason=generation_not_ready; retry shortly while cache refresh finalizes",
+			)
+			return
+		}
 		if errors.Is(err, ErrDealDirConflict) {
 			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
 			return
@@ -2869,19 +2881,28 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 1) Guard: ensure the caller's owner matches the on-chain Deal owner.
+	// 1) Guard: ensure the caller's owner and manifest root are fresh against chain state
+	// before serving from local cache.
 	meta, err := fetchDealMeta(dealID)
 	if err != nil {
 		if errors.Is(err, ErrDealNotFound) {
+			setCacheFreshnessHeaders(w, "unknown", "deal_not_found")
 			writeJSONError(w, http.StatusNotFound, "deal not found", "")
 			return
 		}
 		log.Printf("GatewayFetch: failed to fetch deal %d: %v", dealID, err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to validate deal owner", "")
+		setCacheFreshnessHeaders(w, "unknown", "chain_lookup_failed")
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"cache freshness unknown",
+			"reason=chain_lookup_failed; unable to validate deal owner/manifest_root against chain",
+		)
 		return
 	}
 	if meta.Owner == "" || meta.Owner != owner {
-		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
+		setCacheFreshnessHeaders(w, "unknown", "owner_mismatch")
+		writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "reason=owner_mismatch")
 		return
 	}
 
@@ -2894,28 +2915,32 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.TrimSpace(meta.ManifestRoot) == "" {
+		setCacheFreshnessHeaders(w, "unknown", "deal_manifest_missing")
 		writeJSONError(
 			w,
 			http.StatusConflict,
 			"deal has no committed manifest_root yet",
-			"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
+			"reason=deal_manifest_missing; commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
 		)
 		return
 	}
 	dealRoot, err := parseManifestRoot(meta.ManifestRoot)
 	if err != nil {
+		setCacheFreshnessHeaders(w, "unknown", "chain_lookup_failed")
 		writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
 		return
 	}
 	if manifestRootFromPath && dealRoot.Canonical != manifestRoot.Canonical {
+		setCacheFreshnessHeaders(w, "stale", "stale_manifest_mismatch")
 		writeJSONError(
 			w,
 			http.StatusConflict,
 			"stale manifest_root (does not match on-chain deal state)",
-			fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+			fmt.Sprintf("reason=stale_manifest_mismatch; query the deal and retry with manifest_root=%s", dealRoot.Canonical),
 		)
 		return
 	}
+	setCacheFreshnessHeaders(w, freshnessReasonFresh, freshnessReasonFresh)
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 	cleanupStaleDealGenerations(dealID, manifestRoot)
@@ -3290,28 +3315,26 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Resolve Provider Address for the Header (for Client-Side Signing).
-	// In deputy mode, a gateway may serve cached bytes on behalf of the assigned provider
-	// even when no local provider key exists.
-	providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
-	if providerAddr == "" && allowDeputy {
+	// Resolve Provider Address for response/proof headers.
+	// User-gateway (deputy mode) must not depend on local provider identity;
+	// derive provider from deal metadata/session context whenever possible.
+	localProviderAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
+	providerAddr := localProviderAddr
+	if providerAddr == "" {
 		switch {
 		case isOnchainSession && onchainSession != nil && strings.TrimSpace(onchainSession.Provider) != "":
 			providerAddr = strings.TrimSpace(onchainSession.Provider)
-			w.Header().Set("X-Nil-Deputy", "1")
+			if allowDeputy {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
 		case isDownloadSession && !isOnchainSession && strings.TrimSpace(dlSession.Provider) != "":
 			providerAddr = strings.TrimSpace(dlSession.Provider)
-			w.Header().Set("X-Nil-Deputy", "1")
+			if allowDeputy {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
 		}
 	}
-	if providerAddr == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
-		return
-	}
-	if isDownloadSession && !allowDeputy && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
-		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
-		return
-	}
+
 	if stripe.mode == 2 {
 		slot, serr := slotForLeafIndex(leafIndex, stripe)
 		if serr != nil {
@@ -3327,20 +3350,33 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
 			return
 		}
-		if !allowDeputy {
-			assign := slots[slot]
-			expectedActive := strings.TrimSpace(assign.Provider)
-			expectedPending := ""
-			if assign.Status == 2 {
-				expectedPending = strings.TrimSpace(assign.PendingProvider)
-			}
 
-			localProvider := strings.TrimSpace(providerAddr)
+		assign := slots[slot]
+		expectedActive := strings.TrimSpace(assign.Provider)
+		expectedPending := ""
+		if assign.Status == 2 {
+			expectedPending = strings.TrimSpace(assign.PendingProvider)
+		}
+		expectedForSlot := expectedActive
+		if expectedPending != "" {
+			expectedForSlot = expectedPending
+		}
+
+		if !allowDeputy {
+			if strings.TrimSpace(localProviderAddr) == "" {
+				writeJSONError(
+					w,
+					http.StatusInternalServerError,
+					"provider address unavailable",
+					"provider-daemon mode requires NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY",
+				)
+				return
+			}
 			allowed := false
-			if expectedPending != "" && localProvider == expectedPending {
+			if expectedPending != "" && localProviderAddr == expectedPending {
 				allowed = true
 			}
-			if !allowed && expectedActive != "" && localProvider == expectedActive {
+			if !allowed && expectedActive != "" && localProviderAddr == expectedActive {
 				allowed = true
 			}
 
@@ -3352,9 +3388,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", hint)
 				return
 			}
-		} else {
+			providerAddr = localProviderAddr
+		} else if providerAddr == "" && expectedForSlot != "" {
+			providerAddr = expectedForSlot
 			w.Header().Set("X-Nil-Deputy", "1")
 		}
+	}
+
+	if providerAddr == "" && allowDeputy {
+		providers, err := resolveDealProviders(r.Context(), dealID)
+		if err == nil && len(providers) > 0 {
+			providerAddr = strings.TrimSpace(providers[0])
+			if providerAddr != "" {
+				w.Header().Set("X-Nil-Deputy", "1")
+			}
+		}
+	}
+	if providerAddr == "" {
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "unable to resolve provider from deal/session metadata")
+		return
+	}
+	if isDownloadSession && !allowDeputy && strings.TrimSpace(dlSession.Provider) != "" && strings.TrimSpace(providerAddr) != strings.TrimSpace(dlSession.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "download_session does not match this provider", "provider mismatch")
+		return
 	}
 
 	epochID := currentEpochID(r.Context())
@@ -4813,8 +4869,29 @@ type dealMeta struct {
 	EndBlock     uint64
 }
 
-// fetchDealMeta calls the LCD to retrieve the deal owner, manifest_root, and end_block.
-func fetchDealMeta(dealID uint64) (dealMeta, error) {
+type dealMetaCacheEntry struct {
+	meta      dealMeta
+	expiresAt time.Time
+}
+
+var (
+	dealMetaCache        sync.Map // map[uint64]dealMetaCacheEntry
+	dealMetaCacheTTL     = time.Duration(envInt("NIL_DEAL_META_CACHE_TTL_MS", 3000)) * time.Millisecond
+	freshnessMemoTTL     = time.Duration(envInt("NIL_MANIFEST_FRESHNESS_TTL_MS", 3000)) * time.Millisecond
+	freshnessReasonFresh = "fresh"
+)
+
+func clearDealMetaCache() {
+	dealMetaCache = sync.Map{}
+}
+
+func setCacheFreshnessHeaders(w http.ResponseWriter, status, reason string) {
+	w.Header().Set("X-Nil-Cache-Freshness", strings.TrimSpace(status))
+	w.Header().Set("X-Nil-Cache-Freshness-Reason", strings.TrimSpace(reason))
+}
+
+// fetchDealMetaUncached calls the LCD to retrieve the deal owner, manifest_root, and end_block.
+func fetchDealMetaUncached(dealID uint64) (dealMeta, error) {
 	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
 	resp, err := lcdHTTPClient.Get(url)
 	if err != nil {
@@ -4884,6 +4961,33 @@ func fetchDealMeta(dealID uint64) (dealMeta, error) {
 		}
 	}
 
+	return meta, nil
+}
+
+// fetchDealMeta returns deal metadata with short TTL memoization to avoid
+// repeated LCD calls across chunked retrieval flow.
+func fetchDealMeta(dealID uint64) (dealMeta, error) {
+	if freshnessMemoTTL <= 0 || dealMetaCacheTTL <= 0 {
+		return fetchDealMetaUncached(dealID)
+	}
+	now := time.Now()
+	if cachedAny, ok := dealMetaCache.Load(dealID); ok {
+		if cached, ok := cachedAny.(dealMetaCacheEntry); ok && now.Before(cached.expiresAt) {
+			return cached.meta, nil
+		}
+	}
+	meta, err := fetchDealMetaUncached(dealID)
+	if err != nil {
+		return dealMeta{}, err
+	}
+	ttl := dealMetaCacheTTL
+	if freshnessMemoTTL > 0 && freshnessMemoTTL < ttl {
+		ttl = freshnessMemoTTL
+	}
+	dealMetaCache.Store(dealID, dealMetaCacheEntry{
+		meta:      meta,
+		expiresAt: now.Add(ttl),
+	})
 	return meta, nil
 }
 

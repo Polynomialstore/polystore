@@ -464,6 +464,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const autoProviderPlanBefore = planProviderCalls
     const autoBytes = await readDownloadBytes(page, autoDownloadBtn)
     expect(autoBytes.equals(fileBytes)).toBe(true)
+    await expect(page.getByTestId('transport-cache-source')).toContainText(/gateway_mdu_cache|network_fetch/i, { timeout: 60_000 })
+    await expect(page.getByTestId('transport-cache-freshness')).toContainText(/fresh|unknown|stale/i, { timeout: 60_000 })
     expect(fetchGatewayCalls > autoGatewayFetchBefore || planGatewayCalls > autoGatewayPlanBefore).toBe(true)
     expect(fetchProviderCalls).toBe(autoProviderFetchBefore)
     expect(planProviderCalls).toBe(autoProviderPlanBefore)
@@ -510,6 +512,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const providerBytes = await readDownloadBytes(page, providerDownloadBtn)
     expect(providerBytes.equals(fileBytes)).toBe(true)
     await expect(routeEl).toHaveAttribute('data-download-route', 'direct_sp', { timeout: 60_000 })
+    await expect(page.getByTestId('transport-cache-source')).toContainText(/network_fetch/i, { timeout: 60_000 })
     expect(fetchProviderCalls).toBeGreaterThan(providerFetchBefore)
     expect(planProviderCalls).toBeGreaterThan(providerPlanBefore)
     assertUnsignedRangeInvariant('on-chain retrieval button')

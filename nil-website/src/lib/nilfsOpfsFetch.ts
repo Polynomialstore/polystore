@@ -1,5 +1,5 @@
 import type { NilfsFileEntry } from '../domain/nilfs'
-import { listDealFiles, readMdu } from './storage/OpfsAdapter'
+import { listDealFiles, readManifestRoot, readMdu, readSlabMetadata } from './storage/OpfsAdapter'
 
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const NILFS_SCALAR_BYTES = 32
@@ -29,6 +29,20 @@ function inferMaxEnd(files: NilfsFileEntry[]): number {
   return maxEnd
 }
 
+function normalizeManifestRoot(value: string | null | undefined): string {
+  const trimmed = String(value || '').trim().toLowerCase()
+  if (!trimmed) return ''
+  return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`
+}
+
+function hasContiguousMduRange(indices: Set<number>, totalMdus: number): boolean {
+  if (!Number.isFinite(totalMdus) || totalMdus <= 0) return false
+  for (let i = 0; i < totalMdus; i++) {
+    if (!indices.has(i)) return false
+  }
+  return true
+}
+
 export async function inferWitnessCountFromOpfs(dealId: string, files: NilfsFileEntry[]): Promise<{
   witnessCount: number
   slabStartIdx: number
@@ -37,11 +51,40 @@ export async function inferWitnessCountFromOpfs(dealId: string, files: NilfsFile
   maxEnd: number
 }> {
   const fileNames = await listDealFiles(dealId)
-  let totalMdus = 0
+  const mduIndices = new Set<number>()
   for (const name of fileNames) {
-    if (parseMduIndex(name) == null) continue
-    totalMdus += 1
+    const idx = parseMduIndex(name)
+    if (idx == null) continue
+    mduIndices.add(idx)
   }
+
+  const meta = await readSlabMetadata(dealId).catch(() => null)
+  if (meta) {
+    const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
+    const metadataManifestRoot = normalizeManifestRoot(meta.manifest_root)
+    const manifestMatches = persistedManifestRoot !== '' && persistedManifestRoot === metadataManifestRoot
+    const metadataCountsSane = meta.total_mdus === 1 + meta.witness_mdus + meta.user_mdus
+    const metadataMduLayoutSane = metadataCountsSane && hasContiguousMduRange(mduIndices, meta.total_mdus)
+
+    if (manifestMatches && metadataMduLayoutSane) {
+      const metadataFiles: NilfsFileEntry[] = meta.file_records.map((rec) => ({
+        path: rec.path,
+        size_bytes: rec.size_bytes,
+        start_offset: rec.start_offset,
+        flags: rec.flags,
+      }))
+      const maxEnd = Math.max(inferMaxEnd(files), inferMaxEnd(metadataFiles))
+      return {
+        witnessCount: meta.witness_mdus,
+        slabStartIdx: 1 + meta.witness_mdus,
+        totalMdus: meta.total_mdus,
+        userCount: meta.user_mdus,
+        maxEnd,
+      }
+    }
+  }
+
+  const totalMdus = mduIndices.size
   if (totalMdus === 0) throw new Error('no MDUs found in OPFS')
 
   const maxEnd = inferMaxEnd(files)
@@ -145,4 +188,3 @@ export async function readNilfsFileFromOpfs(opts: {
 
   return out
 }
-

@@ -386,6 +386,25 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
 		return nil, "", err
 	}
+	dealIDForMeta := dealID
+	meta, err := buildSlabMetadataFromBuilder(builder, slabMetadataBuildOptions{
+		GenerationID: parsedRoot.Key,
+		DealID:       &dealIDForMeta,
+		ManifestRoot: parsedRoot.Canonical,
+		Source:       "gateway_mode2_new",
+		Redundancy: &slabMetadataRedundancy{
+			K: stripe.k,
+			M: stripe.m,
+			N: stripe.slotCount,
+		},
+		WitnessMdus: &witnessCount,
+		UserMdus:    &userMdus,
+	})
+	if err != nil {
+		log.Printf("mode2BuildArtifacts: warning: failed to build slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
+	} else if err := writeSlabMetadataFile(stagingDir, meta); err != nil {
+		log.Printf("mode2BuildArtifacts: warning: failed to write slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
+	}
 	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
 		return nil, "", err
 	}
@@ -1132,6 +1151,25 @@ func mode2BuildArtifactsAppend(
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
 		return nil, "", err
+	}
+	dealIDForMeta := dealID
+	meta, err := buildSlabMetadataFromBuilder(builder, slabMetadataBuildOptions{
+		GenerationID: parsedRoot.Key,
+		DealID:       &dealIDForMeta,
+		ManifestRoot: parsedRoot.Canonical,
+		Source:       "gateway_mode2_append",
+		Redundancy: &slabMetadataRedundancy{
+			K: stripe.k,
+			M: stripe.m,
+			N: stripe.slotCount,
+		},
+		WitnessMdus: &witnessCount,
+		UserMdus:    &totalUserMdus,
+	})
+	if err != nil {
+		log.Printf("mode2BuildArtifactsAppend: warning: failed to build slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
+	} else if err := writeSlabMetadataFile(stagingDir, meta); err != nil {
+		log.Printf("mode2BuildArtifactsAppend: warning: failed to write slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
 		return nil, "", err

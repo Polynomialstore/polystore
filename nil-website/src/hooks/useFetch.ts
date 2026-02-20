@@ -72,6 +72,9 @@ export interface FetchProgress {
   receiptsSubmitted: number
   receiptsTotal: number
   message?: string
+  route?: string
+  cacheSource?: string
+  cacheFreshness?: string
 }
 
 export interface FetchResult {
@@ -91,6 +94,8 @@ export type SponsoredRetrievalAuth =
   | { type: 'none' }
   | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
   | { type: 'voucher'; voucher: VoucherAuthInput }
+
+const FETCH_STALL_HINT_MS = 20_000
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
 
@@ -294,6 +299,8 @@ export function useFetch() {
       let bytesFetched = 0
       let receiptsSubmitted = 0
       let chunksFetched = 0
+      let lastChunkProgressAt = Date.now()
+      let stallHintShown = false
 
       type PlannedChunk = {
         rangeStart: number
@@ -646,6 +653,13 @@ export function useFetch() {
           let lastFetchError: unknown = null
 
           for (const candidateProvider of candidateProviders) {
+            if (!stallHintShown && Date.now() - lastChunkProgressAt >= FETCH_STALL_HINT_MS) {
+              stallHintShown = true
+              setProgress((p) => ({
+                ...p,
+                message: `No chunk progress for ${Math.floor(FETCH_STALL_HINT_MS / 1000)}s; retrieval still in flight`,
+              }))
+            }
             const candidateSessionId =
               candidateProvider === provider
                 ? primarySessionId
@@ -737,12 +751,36 @@ export function useFetch() {
           parts.push(buf)
           bytesFetched += buf.byteLength
           chunksFetched += 1
+          lastChunkProgressAt = Date.now()
+          stallHintShown = false
+
+          const route = rangeResult.backend
+          const freshness = (rangeResult.data.cacheFreshness || '').trim()
+          const freshnessReason = (rangeResult.data.cacheFreshnessReason || '').trim()
+          const cacheSource =
+            route === 'gateway'
+              ? 'gateway_mdu_cache'
+              : route === 'direct_sp'
+                ? 'network_fetch'
+                : route === 'libp2p'
+                  ? 'network_fetch_p2p'
+                  : 'network_fetch'
+          const progressMessage =
+            freshness && freshnessReason
+              ? `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource} freshness=${freshness} (${freshnessReason})`
+              : freshness
+                ? `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource} freshness=${freshness}`
+                : `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource}`
 
           setProgress((p) => ({
             ...p,
             phase: 'fetching',
             chunksFetched: Math.min(p.chunkCount || chunks.length, chunksFetched),
             bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
+            route,
+            cacheSource,
+            cacheFreshness: freshness || undefined,
+            message: progressMessage,
           }))
         }
       }

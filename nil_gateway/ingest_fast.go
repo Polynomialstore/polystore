@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,23 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 			b.Free()
 			return nil, "", 0, fmt.Errorf("failed to move User MDU %d: %w", mdu.Index, err)
 		}
+	}
+
+	witnessMdus := witnessMduCount
+	userMdus := uint64(len(shardOut.Mdus))
+	totalMdus := uint64(1) + witnessMdus + userMdus
+	meta, err := buildSlabMetadataFromBuilder(b, slabMetadataBuildOptions{
+		GenerationID: parsedRoot.Key,
+		ManifestRoot: parsedRoot.Canonical,
+		Source:       "gateway_mode1_new_fast",
+		WitnessMdus:  &witnessMdus,
+		UserMdus:     &userMdus,
+		TotalMdus:    &totalMdus,
+	})
+	if err != nil {
+		log.Printf("IngestNewDealFast: warning: failed to build slab metadata for manifest_root=%s: %v", parsedRoot.Canonical, err)
+	} else if err := writeSlabMetadataFile(dealDir, meta); err != nil {
+		log.Printf("IngestNewDealFast: warning: failed to write slab metadata for manifest_root=%s: %v", parsedRoot.Canonical, err)
 	}
 
 	allocatedLength := uint64(len(mdu0Out.Mdus)) // Dummy length

@@ -20,25 +20,81 @@ type slabFileInfo struct {
 }
 
 type slabIndexEntry struct {
+	indexModTime int64
+	indexSource  string
+	metaModTime  int64
 	mdu0ModTime  int64
+	manifestKey  string
 	witnessCount uint64
 	files        map[string]slabFileInfo
 }
 
 var slabIndexCache sync.Map // map[string]*slabIndexEntry (key: dealDir)
 
+func slabIndexFilesFromMetadata(records []slabMetadataFileRecord) map[string]slabFileInfo {
+	files := make(map[string]slabFileInfo, len(records))
+	for _, rec := range records {
+		if rec.Path == "" {
+			continue
+		}
+		files[rec.Path] = slabFileInfo{
+			StartOffset: rec.StartOffset,
+			Length:      rec.SizeBytes,
+		}
+	}
+	return files
+}
+
 func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
+	metaPath := slabMetadataPathForDealDir(dealDir)
 	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	st, err := os.Stat(mdu0Path)
 	if err != nil {
 		return nil, err
 	}
-	mod := st.ModTime().UnixNano()
+	mdu0Mod := st.ModTime().UnixNano()
+	metaMod := int64(0)
+	if metaInfo, err := os.Stat(metaPath); err == nil {
+		metaMod = metaInfo.ModTime().UnixNano()
+	}
+
+	expectedManifestKey := ""
+	if key, ok := slabMetadataManifestKey(inferManifestRootForDealDir(dealDir)); ok {
+		expectedManifestKey = key
+	}
 
 	if cachedAny, ok := slabIndexCache.Load(dealDir); ok {
 		cached := cachedAny.(*slabIndexEntry)
-		if cached.mdu0ModTime == mod {
+		if cached.manifestKey == expectedManifestKey &&
+			((cached.indexSource == "meta" &&
+				cached.indexModTime == metaMod &&
+				cached.metaModTime == metaMod &&
+				cached.mdu0ModTime == mdu0Mod) ||
+				(cached.indexSource == "mdu0" &&
+					cached.indexModTime == mdu0Mod &&
+					cached.metaModTime == metaMod &&
+					cached.mdu0ModTime == mdu0Mod)) {
 			return cached, nil
+		}
+	}
+
+	if metaMod != 0 {
+		if meta, err := readSlabMetadataFile(dealDir); err == nil {
+			metaFresh := mdu0Mod <= metaMod
+			manifestMatches := slabMetadataManifestMatchesDealDir(meta.ManifestRoot, dealDir)
+			if metaFresh && manifestMatches {
+				entry := &slabIndexEntry{
+					indexModTime: metaMod,
+					indexSource:  "meta",
+					metaModTime:  metaMod,
+					mdu0ModTime:  mdu0Mod,
+					manifestKey:  expectedManifestKey,
+					witnessCount: meta.WitnessMdus,
+					files:        slabIndexFilesFromMetadata(meta.FileRecords),
+				}
+				slabIndexCache.Store(dealDir, entry)
+				return entry, nil
+			}
 		}
 	}
 
@@ -53,31 +109,31 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 	}
 	defer b.Free()
 
-	count := b.GetRecordCount()
-	files := make(map[string]slabFileInfo, count)
-	for i := uint32(0); i < count; i++ {
-		rec, err := b.GetRecord(i)
-		if err != nil {
-			continue
-		}
-		if rec.Path[0] == 0 {
-			continue
-		}
-		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
-		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		files[name] = slabFileInfo{
-			StartOffset: rec.StartOffset,
-			Length:      length,
-		}
-	}
+	records := slabMetadataFileRecordsFromBuilder(b)
+	files := slabIndexFilesFromMetadata(records)
 
 	witnessCount, err := inferWitnessCount(dealDir, b)
 	if err != nil {
 		return nil, err
 	}
 
+	if fallbackMeta, err := newSlabMetadataDocument(slabMetadataBuildOptions{
+		GenerationID: inferGenerationIDForDealDir(dealDir),
+		DealID:       inferDealIDFromDealDir(dealDir),
+		ManifestRoot: inferManifestRootForDealDir(dealDir),
+		Source:       "gateway_fallback_mdu0",
+		WitnessMdus:  &witnessCount,
+		FileRecords:  records,
+	}); err == nil {
+		_ = writeSlabMetadataFile(dealDir, fallbackMeta)
+	}
+
 	entry := &slabIndexEntry{
-		mdu0ModTime:  mod,
+		indexModTime: mdu0Mod,
+		indexSource:  "mdu0",
+		metaModTime:  metaMod,
+		mdu0ModTime:  mdu0Mod,
+		manifestKey:  expectedManifestKey,
 		witnessCount: witnessCount,
 		files:        files,
 	}

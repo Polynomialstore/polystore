@@ -438,6 +438,96 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for cid mismatch, got %d", w.Code)
 	}
+	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness")); got != "stale" {
+		t.Fatalf("expected stale cache freshness header, got %q", got)
+	}
+	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness-Reason")); got != "stale_manifest_mismatch" {
+		t.Fatalf("expected stale_manifest_mismatch reason, got %q", got)
+	}
+}
+
+func TestGatewayFetch_ChainLookupFailureSetsFreshnessReason(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	r := testRouter()
+
+	owner := testDealOwner(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	manifestRoot := mustTestManifestRoot(t, "chain-lookup-failure")
+	q := url.Values{}
+	q.Set("deal_id", "7")
+	q.Set("owner", owner)
+	q.Set("file_path", "missing.txt")
+	req := httptest.NewRequest("GET", "/gateway/fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	req.Header.Set("Range", "bytes=0-127")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 for chain lookup failure, got %d", w.Code)
+	}
+	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness")); got != "unknown" {
+		t.Fatalf("expected unknown cache freshness header, got %q", got)
+	}
+	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness-Reason")); got != "chain_lookup_failed" {
+		t.Fatalf("expected chain_lookup_failed reason, got %q", got)
+	}
+}
+
+func TestFetchDealMeta_UsesShortTTLCache(t *testing.T) {
+	clearDealMetaCache()
+	origTTL := dealMetaCacheTTL
+	origFreshnessTTL := freshnessMemoTTL
+	dealMetaCacheTTL = 30 * time.Millisecond
+	freshnessMemoTTL = 30 * time.Millisecond
+	t.Cleanup(func() {
+		dealMetaCacheTTL = origTTL
+		freshnessMemoTTL = origFreshnessTTL
+		clearDealMetaCache()
+	})
+
+	requestCount := 0
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "deal-meta-cache").Canonical
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"deal":{"id":"11","owner":"` + owner + `","cid":"` + manifestRoot + `","end_block":"100"}}`))
+	}))
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	meta1, err := fetchDealMeta(11)
+	if err != nil {
+		t.Fatalf("first fetchDealMeta failed: %v", err)
+	}
+	meta2, err := fetchDealMeta(11)
+	if err != nil {
+		t.Fatalf("second fetchDealMeta failed: %v", err)
+	}
+	if requestCount != 1 {
+		t.Fatalf("expected one LCD request within TTL, got %d", requestCount)
+	}
+	if meta1.ManifestRoot != manifestRoot || meta2.ManifestRoot != manifestRoot {
+		t.Fatalf("unexpected manifest roots: %q / %q", meta1.ManifestRoot, meta2.ManifestRoot)
+	}
+
+	time.Sleep(40 * time.Millisecond)
+	if _, err := fetchDealMeta(11); err != nil {
+		t.Fatalf("third fetchDealMeta after TTL failed: %v", err)
+	}
+	if requestCount < 2 {
+		t.Fatalf("expected cache expiry to trigger a new LCD request, got %d", requestCount)
+	}
 }
 
 // TestHelperProcess is used to mock exec.Command
