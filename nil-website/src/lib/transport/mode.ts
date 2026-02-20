@@ -27,6 +27,8 @@ export function resolveTransportPreference(input: ResolveTransportPreferenceInpu
 }
 
 export function allowNonGatewayBackends(preference: RoutePreference): boolean {
-  return preference !== 'prefer_gateway'
+  void preference
+  // Even when gateway is preferred, keep direct/p2p candidates available so
+  // connection-refused/timeouts can fail over instead of hard failing.
+  return true
 }
-

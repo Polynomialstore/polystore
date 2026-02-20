@@ -54,17 +54,26 @@ type mode2SlotAssignment struct {
 }
 
 var (
-	dealProviderCache   sync.Map // map[uint64]*dealProviderCacheEntry
-	dealProvidersCache  sync.Map // map[uint64]*dealProvidersCacheEntry
-	dealHintCache       sync.Map // map[uint64]*dealHintCacheEntry
-	dealMode2SlotsCache sync.Map // map[uint64]*dealMode2SlotsCacheEntry
-	providerBaseCache   sync.Map // map[string]*providerBaseCacheEntry
-	providerP2PCache    sync.Map // map[string]*providerP2PCacheEntry
-	providerCacheTTL    = 30 * time.Second
-	dealProviderTTL     = 10 * time.Second
-	dealHintTTL         = 10 * time.Second
-	errNoHTTPMultiaddr  = errors.New("no supported http multiaddr")
+	dealProviderCache                        sync.Map // map[uint64]*dealProviderCacheEntry
+	dealProvidersCache                       sync.Map // map[uint64]*dealProvidersCacheEntry
+	dealHintCache                            sync.Map // map[uint64]*dealHintCacheEntry
+	dealMode2SlotsCache                      sync.Map // map[uint64]*dealMode2SlotsCacheEntry
+	providerBaseCache                        sync.Map // map[string]*providerBaseCacheEntry
+	providerP2PCache                         sync.Map // map[string]*providerP2PCacheEntry
+	providerCacheTTL                         = 30 * time.Second
+	dealProviderTTL                          = 10 * time.Second
+	dealHintTTL                              = 10 * time.Second
+	errNoHTTPMultiaddr                       = errors.New("no supported http multiaddr")
+	ErrProviderResolutionMetadataUnavailable = errors.New("provider metadata unavailable")
+	ErrProviderResolutionMetadataInvalid     = errors.New("provider metadata invalid")
+	ErrProviderResolutionSlotOutOfRange      = errors.New("provider slot out of range")
 )
+
+type retrievalProviderResolution struct {
+	Provider          string
+	Source            string
+	UsedLocalFallback bool
+}
 
 func providerHTTPBaseOverrides() map[string]string {
 	raw := strings.TrimSpace(os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES"))
@@ -237,6 +246,103 @@ func parseMode2SlotStatus(raw json.RawMessage) int {
 		return int(statusFloat)
 	}
 	return 0
+}
+
+func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe stripeParams, mode2Slot uint64) (retrievalProviderResolution, error) {
+	fallbackToLocal := func(metadataErr error) (retrievalProviderResolution, error) {
+		localProvider := strings.TrimSpace(cachedProviderAddress(ctx))
+		if localProvider == "" {
+			if metadataErr != nil {
+				return retrievalProviderResolution{}, fmt.Errorf(
+					"%w: metadata lookup failed: %v; local provider fallback unavailable",
+					ErrProviderResolutionMetadataUnavailable,
+					metadataErr,
+				)
+			}
+			return retrievalProviderResolution{}, fmt.Errorf(
+				"%w: local provider fallback unavailable",
+				ErrProviderResolutionMetadataUnavailable,
+			)
+		}
+		return retrievalProviderResolution{
+			Provider:          localProvider,
+			Source:            "local_cached_provider_fallback",
+			UsedLocalFallback: true,
+		}, nil
+	}
+
+	if stripe.mode == 2 {
+		slots, err := resolveDealMode2Slots(ctx, dealID)
+		if err != nil {
+			return fallbackToLocal(fmt.Errorf("resolve mode2 slots for deal %d: %w", dealID, err))
+		}
+		if int(mode2Slot) >= len(slots) {
+			return retrievalProviderResolution{}, fmt.Errorf(
+				"%w: deal_id=%d slot=%d slots=%d",
+				ErrProviderResolutionSlotOutOfRange,
+				dealID,
+				mode2Slot,
+				len(slots),
+			)
+		}
+
+		assign := slots[mode2Slot]
+		provider := strings.TrimSpace(assign.Provider)
+		source := "mode2_slot_provider"
+		if assign.Status == 2 {
+			if pending := strings.TrimSpace(assign.PendingProvider); pending != "" {
+				provider = pending
+				source = "mode2_slot_pending_provider"
+			}
+		}
+		if provider == "" {
+			return retrievalProviderResolution{}, fmt.Errorf(
+				"%w: deal_id=%d slot=%d status=%d",
+				ErrProviderResolutionMetadataInvalid,
+				dealID,
+				mode2Slot,
+				assign.Status,
+			)
+		}
+
+		dealProviderCache.Store(dealID, &dealProviderCacheEntry{
+			provider: provider,
+			expires:  time.Now().Add(dealProviderTTL),
+		})
+		return retrievalProviderResolution{
+			Provider: provider,
+			Source:   source,
+		}, nil
+	}
+
+	providers, err := fetchDealProvidersFromLCD(ctx, dealID)
+	if err != nil {
+		return fallbackToLocal(fmt.Errorf("fetch deal providers for deal %d: %w", dealID, err))
+	}
+	if len(providers) == 0 {
+		return retrievalProviderResolution{}, fmt.Errorf(
+			"%w: deal_id=%d has no assigned providers",
+			ErrProviderResolutionMetadataInvalid,
+			dealID,
+		)
+	}
+	provider := strings.TrimSpace(providers[0])
+	if provider == "" {
+		return retrievalProviderResolution{}, fmt.Errorf(
+			"%w: deal_id=%d providers[0] is empty",
+			ErrProviderResolutionMetadataInvalid,
+			dealID,
+		)
+	}
+
+	dealProviderCache.Store(dealID, &dealProviderCacheEntry{
+		provider: provider,
+		expires:  time.Now().Add(dealProviderTTL),
+	})
+	return retrievalProviderResolution{
+		Provider: provider,
+		Source:   "deal_metadata_provider",
+	}, nil
 }
 
 func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, error) {

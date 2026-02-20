@@ -151,7 +151,17 @@ export async function executeWithFallback<T>(
     attempts,
     chosen: null,
   }
-  throw new TransportTraceError(`All ${op} attempts failed`, trace)
+  const recent = attempts
+    .slice(-3)
+    .map((attempt) => {
+      const status = typeof attempt.status === 'number' ? `(${attempt.status})` : ''
+      const errorClass = attempt.errorClass ? `:${attempt.errorClass}` : ''
+      const message = attempt.errorMessage ? `:${attempt.errorMessage}` : ''
+      return `${attempt.backend}${status}${errorClass}${message}`
+    })
+    .join(' | ')
+  const suffix = recent ? `: ${recent}` : ''
+  throw new TransportTraceError(`All ${op} attempts failed${suffix}`, trace)
 }
 
 export function attachTraceError(err: unknown, trace: DecisionTrace): TransportFailure {

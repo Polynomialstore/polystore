@@ -123,6 +123,7 @@ func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeSta
 func testRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/gateway/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/plan-retrieval-session/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
@@ -979,5 +980,273 @@ func TestGatewayOpenSession_UnsignedDoesNotRequireNonce(t *testing.T) {
 	}
 	if strings.TrimSpace(fmt.Sprint(out["download_session"])) == "" {
 		t.Fatalf("expected download_session in response, got: %v", out)
+	}
+}
+
+func resetProviderAddressCacheForTest(t *testing.T) {
+	t.Helper()
+	providerAddrMu.Lock()
+	prevCached := providerAddrCached
+	prevLastAttempt := providerAddrLastAttempt
+	providerAddrCached = ""
+	providerAddrLastAttempt = time.Time{}
+	providerAddrMu.Unlock()
+
+	t.Cleanup(func() {
+		providerAddrMu.Lock()
+		providerAddrCached = prevCached
+		providerAddrLastAttempt = prevLastAttempt
+		providerAddrMu.Unlock()
+	})
+}
+
+func preparePlanRetrievalTestSlab(t *testing.T, dealID uint64, root ManifestRoot, filePath string, fileLen uint64) {
+	t.Helper()
+	dealDir := dealScopedDir(dealID, root)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+
+	builder := crypto_ffi.NewMdu0Builder(1)
+	defer builder.Free()
+	builder.AppendFile(filePath, fileLen, 0)
+	mdu0, err := builder.Bytes()
+	if err != nil {
+		t.Fatalf("serialize mdu0: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), make([]byte, types.MDU_SIZE), 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
+}
+
+func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t *testing.T) {
+	useTempUploadDir(t)
+	resetProviderAddressCacheForTest(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "")
+	t.Setenv("NIL_PROVIDER_KEY", "missing-provider-key")
+
+	dealID := uint64(11)
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "plan-metadata-no-local-provider")
+	preparePlanRetrievalTestSlab(t, dealID, manifestRoot, "plan.txt", 512)
+
+	metadataProvider := "nil1metadataprovider"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/11" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"id":           "11",
+				"owner":        owner,
+				"cid":          manifestRoot.Canonical,
+				"service_hint": "",
+				"providers":    []string{metadataProvider, "nil1backupprovider"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	dealProviderCache.Delete(dealID)
+	dealProvidersCache.Delete(dealID)
+	dealMode2SlotsCache.Delete(dealID)
+	dealHintCache.Delete(dealID)
+
+	r := testRouter()
+	q := url.Values{}
+	q.Set("deal_id", "11")
+	q.Set("owner", owner)
+	q.Set("file_path", "plan.txt")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/plan-retrieval-session/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GatewayPlanRetrievalSession failed: %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Provider != metadataProvider {
+		t.Fatalf("expected metadata provider %q, got %q", metadataProvider, resp.Provider)
+	}
+}
+
+func TestGatewayPlanRetrievalSession_PrefersMetadataProviderOverLocalEnv(t *testing.T) {
+	useTempUploadDir(t)
+	resetProviderAddressCacheForTest(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localprovideroverride")
+
+	dealID := uint64(12)
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "plan-metadata-over-local")
+	preparePlanRetrievalTestSlab(t, dealID, manifestRoot, "plan.txt", 256)
+
+	metadataProvider := "nil1metadataproviderx"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/12" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"id":           "12",
+				"owner":        owner,
+				"cid":          manifestRoot.Canonical,
+				"service_hint": "",
+				"providers":    []string{metadataProvider},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	dealProviderCache.Delete(dealID)
+	dealProvidersCache.Delete(dealID)
+	dealMode2SlotsCache.Delete(dealID)
+	dealHintCache.Delete(dealID)
+
+	r := testRouter()
+	q := url.Values{}
+	q.Set("deal_id", "12")
+	q.Set("owner", owner)
+	q.Set("file_path", "plan.txt")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/plan-retrieval-session/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GatewayPlanRetrievalSession failed: %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Provider != metadataProvider {
+		t.Fatalf("expected metadata provider %q, got %q", metadataProvider, resp.Provider)
+	}
+	if resp.Provider == "nil1localprovideroverride" {
+		t.Fatalf("expected planner to ignore local provider override when deal metadata is available")
+	}
+}
+
+func setPlanResolverForTest(t *testing.T, resolver func(context.Context, uint64, stripeParams, uint64) (retrievalProviderResolution, error)) {
+	t.Helper()
+	prev := resolveProviderForRetrievalPlanFn
+	resolveProviderForRetrievalPlanFn = resolver
+	t.Cleanup(func() { resolveProviderForRetrievalPlanFn = prev })
+}
+
+func TestGatewayPlanRetrievalSession_ProviderResolutionStatusMapping(t *testing.T) {
+	useTempUploadDir(t)
+	resetProviderAddressCacheForTest(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "")
+
+	dealID := uint64(13)
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "plan-provider-status-map")
+	preparePlanRetrievalTestSlab(t, dealID, manifestRoot, "plan.txt", 1024)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/13" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"id":           "13",
+				"owner":        owner,
+				"cid":          manifestRoot.Canonical,
+				"service_hint": "",
+				"providers":    []string{"nil1providerforstatus"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	tests := []struct {
+		name       string
+		resolver   func(context.Context, uint64, stripeParams, uint64) (retrievalProviderResolution, error)
+		wantStatus int
+	}{
+		{
+			name: "slot out of range maps to 400",
+			resolver: func(context.Context, uint64, stripeParams, uint64) (retrievalProviderResolution, error) {
+				return retrievalProviderResolution{}, fmt.Errorf("%w: test", ErrProviderResolutionSlotOutOfRange)
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "metadata unavailable maps to 502",
+			resolver: func(context.Context, uint64, stripeParams, uint64) (retrievalProviderResolution, error) {
+				return retrievalProviderResolution{}, fmt.Errorf("%w: test", ErrProviderResolutionMetadataUnavailable)
+			},
+			wantStatus: http.StatusBadGateway,
+		},
+		{
+			name: "metadata invalid maps to 409",
+			resolver: func(context.Context, uint64, stripeParams, uint64) (retrievalProviderResolution, error) {
+				return retrievalProviderResolution{}, fmt.Errorf("%w: test", ErrProviderResolutionMetadataInvalid)
+			},
+			wantStatus: http.StatusConflict,
+		},
+	}
+
+	r := testRouter()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setPlanResolverForTest(t, tc.resolver)
+
+			q := url.Values{}
+			q.Set("deal_id", "13")
+			q.Set("owner", owner)
+			q.Set("file_path", "plan.txt")
+
+			req := httptest.NewRequest(http.MethodGet, "/gateway/plan-retrieval-session/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("expected status %d, got %d: %s", tc.wantStatus, w.Code, w.Body.String())
+			}
+
+			var payload jsonErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("expected json error response: %v", err)
+			}
+			if payload.Error != "failed to resolve provider for retrieval session" {
+				t.Fatalf("unexpected error message: %q", payload.Error)
+			}
+			if payload.Hint == "" {
+				t.Fatalf("expected non-empty hint")
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -211,5 +212,138 @@ func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 	}
 	if base != "http://127.0.0.1:8092" {
 		t.Fatalf("expected host override base url, got %q", base)
+	}
+}
+
+func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localprovider")
+
+	const dealID uint64 = 55
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/55" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"deal": {
+				"providers": ["providerA"],
+				"mode2_slots": [
+					{"slot": 0, "provider": "providerA", "status": "SLOT_STATUS_REPAIRING", "pending_provider": "providerPending"}
+				]
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+	dealMode2SlotsCache.Delete(dealID)
+	dealProviderCache.Delete(dealID)
+
+	res, err := resolveProviderForRetrievalPlan(context.Background(), dealID, stripeParams{mode: 2}, 0)
+	if err != nil {
+		t.Fatalf("resolveProviderForRetrievalPlan returned error: %v", err)
+	}
+	if res.Provider != "providerPending" {
+		t.Fatalf("expected pending provider, got %q", res.Provider)
+	}
+	if res.UsedLocalFallback {
+		t.Fatalf("expected metadata mode2 slot selection, got local fallback")
+	}
+	if res.Source != "mode2_slot_pending_provider" {
+		t.Fatalf("unexpected source: %q", res.Source)
+	}
+}
+
+func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localfallback")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+
+	res, err := resolveProviderForRetrievalPlan(context.Background(), 9999, stripeParams{mode: 1}, 0)
+	if err != nil {
+		t.Fatalf("resolveProviderForRetrievalPlan returned error: %v", err)
+	}
+	if res.Provider != "nil1localfallback" {
+		t.Fatalf("expected local fallback provider, got %q", res.Provider)
+	}
+	if !res.UsedLocalFallback {
+		t.Fatalf("expected local fallback to be marked")
+	}
+	if res.Source != "local_cached_provider_fallback" {
+		t.Fatalf("unexpected source: %q", res.Source)
+	}
+}
+
+func TestResolveProviderForRetrievalPlan_Mode2SlotOutOfRange(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+
+	const dealID uint64 = 56
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/56" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"deal": {
+				"providers": ["providerA"],
+				"mode2_slots": [
+					{"slot": 0, "provider": "providerA", "status": "SLOT_STATUS_ACTIVE"}
+				]
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+	dealMode2SlotsCache.Delete(dealID)
+
+	_, err := resolveProviderForRetrievalPlan(context.Background(), dealID, stripeParams{mode: 2}, 1)
+	if err == nil {
+		t.Fatalf("expected slot out-of-range error")
+	}
+	if !errors.Is(err, ErrProviderResolutionSlotOutOfRange) {
+		t.Fatalf("expected ErrProviderResolutionSlotOutOfRange, got: %v", err)
+	}
+}
+
+func TestResolveProviderForRetrievalPlan_Mode2MetadataInvalidEmptyProvider(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+
+	const dealID uint64 = 57
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nilchain/nilchain/v1/deals/57" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"deal": {
+				"providers": ["providerA"],
+				"mode2_slots": [
+					{"slot": 0, "provider": "", "status": "SLOT_STATUS_ACTIVE"}
+				]
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+	dealMode2SlotsCache.Delete(dealID)
+
+	_, err := resolveProviderForRetrievalPlan(context.Background(), dealID, stripeParams{mode: 2}, 0)
+	if err == nil {
+		t.Fatalf("expected metadata invalid error")
+	}
+	if !errors.Is(err, ErrProviderResolutionMetadataInvalid) {
+		t.Fatalf("expected ErrProviderResolutionMetadataInvalid, got: %v", err)
 	}
 }
