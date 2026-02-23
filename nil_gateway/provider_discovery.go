@@ -69,6 +69,11 @@ var (
 	ErrProviderResolutionSlotOutOfRange      = errors.New("provider slot out of range")
 )
 
+func allowPlanProviderFallback() bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK")))
+	return raw == "1" || raw == "true" || raw == "yes" || raw == "on"
+}
+
 type retrievalProviderResolution struct {
 	Provider          string
 	Source            string
@@ -250,6 +255,20 @@ func parseMode2SlotStatus(raw json.RawMessage) int {
 
 func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe stripeParams, mode2Slot uint64) (retrievalProviderResolution, error) {
 	fallbackToLocal := func(metadataErr error) (retrievalProviderResolution, error) {
+		if !allowPlanProviderFallback() {
+			if metadataErr != nil {
+				return retrievalProviderResolution{}, fmt.Errorf(
+					"%w: metadata lookup failed: %v; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+					ErrProviderResolutionMetadataUnavailable,
+					metadataErr,
+				)
+			}
+			return retrievalProviderResolution{}, fmt.Errorf(
+				"%w: local provider fallback disabled; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+				ErrProviderResolutionMetadataUnavailable,
+			)
+		}
+
 		localProvider := strings.TrimSpace(cachedProviderAddress(ctx))
 		if localProvider == "" {
 			if metadataErr != nil {

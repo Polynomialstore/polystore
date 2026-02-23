@@ -259,6 +259,7 @@ func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) 
 func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable(t *testing.T) {
 	origLCD := lcdBase
 	t.Cleanup(func() { lcdBase = origLCD })
+	t.Setenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK", "1")
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localfallback")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +280,27 @@ func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable
 	}
 	if res.Source != "local_cached_provider_fallback" {
 		t.Fatalf("unexpected source: %q", res.Source)
+	}
+}
+
+func TestResolveProviderForRetrievalPlan_FailsWithoutFallbackWhenMetadataUnavailable(t *testing.T) {
+	origLCD := lcdBase
+	t.Cleanup(func() { lcdBase = origLCD })
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localfallback")
+	t.Setenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK", "")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	lcdBase = srv.URL
+
+	_, err := resolveProviderForRetrievalPlan(context.Background(), 8888, stripeParams{mode: 1}, 0)
+	if err == nil {
+		t.Fatalf("expected metadata lookup failure")
+	}
+	if !errors.Is(err, ErrProviderResolutionMetadataUnavailable) {
+		t.Fatalf("expected ErrProviderResolutionMetadataUnavailable, got: %v", err)
 	}
 }
 
