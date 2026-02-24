@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import logoDark from "./assets/nilstore-dark.png";
+import { DealSlabPanel } from "./components/DealSlabPanel";
 import { SpLaunchpad } from "./components/SpLaunchpad";
 import {
   fetchFile,
@@ -41,6 +42,7 @@ const RECOVERY_COOLDOWN_MS = 20_000;
 const RECENT_DEAL_LIMIT = 6;
 const RECENT_FILE_LIMIT = 8;
 const RECENT_ACTIVITY_LIMIT = 5;
+const TECHNOLOGY_MDU_PRIMER_URL = "https://nil.store/#/technology?section=mdu-primer";
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -1085,6 +1087,25 @@ export default function App() {
                 )}
               </div>
 
+              <DealSlabPanel
+                gatewayOnline={phase === "online"}
+                listBusy={listBusy}
+                listError={listError}
+                downloadBusyPath={downloadBusy}
+                downloadError={downloadError}
+                dealId={listDealId}
+                owner={listOwner}
+                manifestRoot={listManifestRoot}
+                files={files}
+                uploadResponse={uploadResponse}
+                onChangeDealId={setListDealId}
+                onChangeOwner={setListOwner}
+                onChangeManifestRoot={setListManifestRoot}
+                onLoadFiles={() => void handleListFiles()}
+                onDownload={(entry) => void handleDownload(entry)}
+                onLearnMdus={() => void openUrl(TECHNOLOGY_MDU_PRIMER_URL)}
+              />
+
               <details className="metric-card bg-slate-50/70 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-slate-700">
                   Connection controls
@@ -1471,78 +1492,12 @@ export default function App() {
                       ) : null}
                     </div>
 
-                    <div className="border-t subtle-divider pt-5">
-                      <p className="text-xs font-semibold text-slate-500">
-                        List and download (`/gateway/list-files` + `/gateway/fetch`)
-                      </p>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                        <label className="text-sm text-slate-600">
-                          Manifest root
-                          <input
-                            className={formFieldClass}
-                            value={listManifestRoot}
-                            onChange={(event) => setListManifestRoot(event.target.value)}
-                          />
-                        </label>
-                        <label className="text-sm text-slate-600">
-                          Deal ID
-                          <input
-                            className={formFieldClass}
-                            value={listDealId}
-                            onChange={(event) => setListDealId(event.target.value)}
-                          />
-                        </label>
-                        <label className="text-sm text-slate-600">
-                          Owner
-                          <input
-                            className={formFieldClass}
-                            value={listOwner}
-                            onChange={(event) => setListOwner(event.target.value)}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          className="control-btn control-btn-inline"
-                          onClick={handleListFiles}
-                          disabled={listBusy || phase !== "online"}
-                        >
-                          {listBusy ? "Listing..." : "List files"}
-                        </button>
-                        {listError ? <span className="text-xs text-rose-600">{listError}</span> : null}
-                        {downloadError ? <span className="text-xs text-rose-600">{downloadError}</span> : null}
-                      </div>
-
-                      <div className="metric-card mt-3">
-                        <div className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-500">
-                          <span>Path</span>
-                          <span>Bytes</span>
-                          <span>Action</span>
-                        </div>
-                        {files.length === 0 ? (
-                          <div className="px-3 py-4 text-sm text-slate-500">No files listed yet.</div>
-                        ) : (
-                          files.map((entry) => (
-                            <div
-                              key={entry.path}
-                              className="grid grid-cols-[1.5fr_0.6fr_0.4fr] gap-3 border-b border-slate-100 px-3 py-2 text-sm text-slate-700 last:border-b-0"
-                            >
-                              <span className="truncate">{entry.path}</span>
-                              <span>{entry.size_bytes}</span>
-                              <button
-                                type="button"
-                                className="control-btn control-btn-inline px-2 py-1"
-                                onClick={() => void handleDownload(entry)}
-                                disabled={downloadBusy === entry.path}
-                              >
-                                {downloadBusy === entry.path ? "Saving..." : "Download"}
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                    <div className="border-t subtle-divider pt-5 text-xs text-slate-600">
+                      List/download and slab ranges are now first-class on the Overview panel:{" "}
+                      <span className="font-semibold text-slate-800">
+                        Deal storage layout (Slab / MDUs)
+                      </span>
+                      .
                     </div>
 
                     {gateway ? (

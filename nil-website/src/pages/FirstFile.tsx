@@ -622,6 +622,11 @@ export function FirstFile() {
               File size: <span className="font-mono text-foreground">{uploadResult.fileSizeBytes}</span> bytes · total_mdus:{' '}
               <span className="font-mono text-foreground">{uploadResult.totalMdus ?? '—'}</span> · witness_mdus:{' '}
               <span className="font-mono text-foreground">{uploadResult.witnessMdus ?? '—'}</span>
+              <span className="ml-2">
+                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                  Learn MDUs
+                </Link>
+              </span>
             </div>
           </div>
         )}

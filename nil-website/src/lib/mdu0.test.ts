@@ -2,24 +2,45 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-
-import init, { WasmMdu0Builder } from '../../public/wasm/nil_core.js';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { sanitizeNilfsRecordPath } from './nilfsPath'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-test('Mdu0Builder WASM', async () => {
-    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm');
-    const wasmBuffer = await fs.readFile(wasmPath);
-    
-    // Initialize WASM with the buffer
-    await init({ module_or_path: wasmBuffer });
+type WasmMdu0BuilderLike = {
+    append_file: (path: string, sizeBytes: bigint, startOffset: bigint) => void
+    bytes: () => Uint8Array
+}
+
+async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
+    const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
+    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
+    try {
+        await fs.access(jsPath)
+        await fs.access(wasmPath)
+    } catch {
+        return null
+    }
+
+    const mod = (await import(pathToFileURL(jsPath).href)) as {
+        default: (args: unknown) => Promise<unknown>
+        WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike
+    }
+    return { init: mod.default, WasmMdu0Builder: mod.WasmMdu0Builder, wasmPath }
+}
+
+test('Mdu0Builder WASM', async (t) => {
+    const wasm = await loadNilCoreWasm()
+    if (!wasm) {
+        t.skip('WASM artifacts not present (nil-website/public/wasm).')
+        return
+    }
+    const wasmBuffer = await fs.readFile(wasm.wasmPath);
+    await wasm.init({ module_or_path: wasmBuffer });
 
     const maxUserMdus = 100n;
-    const mdu = new WasmMdu0Builder(maxUserMdus);
+    const mdu = new wasm.WasmMdu0Builder(maxUserMdus);
 
     // Test append
     const fileName = "test.txt";
@@ -59,24 +80,32 @@ test('Mdu0Builder WASM', async () => {
     assert.strictEqual(readPath, fileName, "Path mismatch");
 });
 
-test('Mdu0Builder WASM rejects paths > 40 bytes (NilFS V1)', async () => {
-    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm');
-    const wasmBuffer = await fs.readFile(wasmPath);
-    await init({ module_or_path: wasmBuffer });
+test('Mdu0Builder WASM rejects paths > 40 bytes (NilFS V1)', async (t) => {
+    const wasm = await loadNilCoreWasm()
+    if (!wasm) {
+        t.skip('WASM artifacts not present (nil-website/public/wasm).')
+        return
+    }
+    const wasmBuffer = await fs.readFile(wasm.wasmPath);
+    await wasm.init({ module_or_path: wasmBuffer });
 
-    const mdu = new WasmMdu0Builder(10n);
+    const mdu = new wasm.WasmMdu0Builder(10n);
     const longName = 'x'.repeat(41);
     assert.throws(() => {
         mdu.append_file(longName, 1n, 0n);
     }, /path too long/i);
 });
 
-test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async () => {
-    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm');
-    const wasmBuffer = await fs.readFile(wasmPath);
-    await init({ module_or_path: wasmBuffer });
+test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
+    const wasm = await loadNilCoreWasm()
+    if (!wasm) {
+        t.skip('WASM artifacts not present (nil-website/public/wasm).')
+        return
+    }
+    const wasmBuffer = await fs.readFile(wasm.wasmPath);
+    await wasm.init({ module_or_path: wasmBuffer });
 
-    const mdu = new WasmMdu0Builder(10n);
+    const mdu = new wasm.WasmMdu0Builder(10n);
     const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(200) + '.txt');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);

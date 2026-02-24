@@ -4,12 +4,14 @@ import { appConfig } from '../config'
 import { useAccount, useChainId } from 'wagmi'
 import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
+import { useLocalGateway } from '../hooks/useLocalGateway'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
-import { CheckCircle2, Copy, RefreshCw } from 'lucide-react'
+import { CheckCircle2, Copy, Download, ExternalLink, RefreshCw } from 'lucide-react'
 
 const STATUS_POLL_MS = 60_000
 const STATUS_HIDDEN_POLL_MS = 300_000
 const OPTIONAL_HEALTH_PROBE_EVERY_TICKS = 20
+const GATEWAY_DESKTOP_RELEASE_URL = 'https://github.com/Nil-Store/nil-store/releases/latest'
 
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -59,6 +61,7 @@ export function StatusBar() {
   const { accountPermissionMismatch } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
   const isLocked = isConnected && unlockState === 'locked'
   const { preference, setPreference, lastTrace } = useTransportContext()
+  const localGateway = useLocalGateway(60_000)
   const [height, setHeight] = useState<number | undefined>(undefined)
   const [chainName, setChainName] = useState<string | undefined>(undefined)
   const [summary, setSummary] = useState({
@@ -238,6 +241,22 @@ export function StatusBar() {
         Route: {lastRoute}{lastReason}
         {routeDegraded ? ' (local gateway available)' : ''}
       </span>
+      {!appConfig.gatewayDisabled && (
+        <span className="opacity-75 flex items-center gap-2">
+          Local gateway: {localGateway.status === 'connected' ? 'connected' : 'not detected'}
+          <a
+            href={GATEWAY_DESKTOP_RELEASE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded border border-border bg-background/60 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+            title="Download the desktop gateway app"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Get App
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </span>
+      )}
       <label className="flex items-center gap-2">
         <span className="opacity-75">Preference</span>
         <select

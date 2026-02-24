@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink, Copy } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, ExternalLink, Copy } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -21,11 +21,10 @@ import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
 import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
-import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
-import { useLocalGateway } from '../hooks/useLocalGateway'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 import { Link } from 'react-router-dom'
 
@@ -140,11 +139,9 @@ export function Dashboard() {
     address,
     chainId: appConfig.chainId,
   })
-  const localGateway = useLocalGateway(60_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
-  const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   const activeChainId = walletChainId ?? chainId
   const isWrongNetwork = isConnected && walletIsWrongNetwork
   const walletReady = Boolean(isConnected && address && !accountPermissionMismatch && !isWrongNetwork)
@@ -259,9 +256,6 @@ export function Dashboard() {
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
-  const [contentFiles, setContentFiles] = useState<NilfsFileEntry[] | null>(null)
-  const [contentFilesLoading, setContentFilesLoading] = useState(false)
-  const [contentFilesError, setContentFilesError] = useState<string | null>(null)
   const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
   const [, setContentSlabLoading] = useState(false)
   const [, setContentSlabError] = useState<string | null>(null)
@@ -282,12 +276,14 @@ export function Dashboard() {
   const optimisticCidTtlMs = 2 * 60_000
   const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
+  const [dealDetailRequestedTab, setDealDetailRequestedTab] = useState<'files' | 'info' | 'manifest' | 'heat' | null>(null)
+  const [dealDetailRequestedTabNonce, setDealDetailRequestedTabNonce] = useState(0)
   const { proofs, loading: proofsLoading } = useProofs({
     enabled: Boolean(nilAddress),
     pollMs: PROOFS_POLL_MS,
     hiddenPollMs: PROOFS_HIDDEN_POLL_MS,
   })
-  const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
+  const { fetchFile, loading: downloading } = useFetch()
   const { listFiles, slab } = useTransportRouter()
 
   const handleWalletError = useCallback((error: unknown, fallback: string) => {
@@ -641,9 +637,6 @@ export function Dashboard() {
 
   useEffect(() => {
     setStagedUpload(null)
-    setContentFiles(null)
-    setContentFilesError(null)
-    setContentFilesLoading(false)
     setContentSlab(null)
     setContentSlabError(null)
     setContentSlabLoading(false)
@@ -653,9 +646,6 @@ export function Dashboard() {
     const manifestRoot = targetDeal?.cid
     const owner = nilAddress || targetDeal?.owner || ''
     if (!manifestRoot || !targetDealId || !owner) {
-      setContentFiles(null)
-      setContentFilesError(null)
-      setContentFilesLoading(false)
       setContentSlab(null)
       setContentSlabError(null)
       setContentSlabLoading(false)
@@ -665,56 +655,30 @@ export function Dashboard() {
     let cancelled = false
 
     const load = async () => {
-      setContentFilesLoading(true)
-      setContentFilesError(null)
       setContentSlabLoading(true)
       setContentSlabError(null)
       try {
         const directBase = resolveProviderBase(targetDeal)
         const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(targetDeal) : undefined
-        const [filesResult, slabResult] = await Promise.allSettled([
-          listFiles({
-            manifestRoot,
-            dealId: targetDealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-          slab({
-            manifestRoot,
-            dealId: targetDealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-        ])
+        const slabResult = await slab({
+          manifestRoot,
+          dealId: targetDealId,
+          owner,
+          directBase,
+          p2pTarget,
+        })
 
         if (cancelled) return
 
-        if (filesResult.status === 'fulfilled') {
-          setContentFiles(filesResult.value.data)
-        } else {
-          setContentFiles([])
-          setContentFilesError(filesResult.reason instanceof Error ? filesResult.reason.message : 'Failed to load NilFS file table')
-        }
-
-        if (slabResult.status === 'fulfilled') {
-          setContentSlab(slabResult.value.data)
-        } else {
-          setContentSlab(null)
-          setContentSlabError(slabResult.reason instanceof Error ? slabResult.reason.message : 'Failed to load slab layout')
-        }
+        setContentSlab(slabResult.data)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load deal content observables'
         if (!cancelled) {
-          setContentFiles([])
           setContentSlab(null)
-          setContentFilesError(msg)
           setContentSlabError(msg)
         }
       } finally {
         if (!cancelled) {
-          setContentFilesLoading(false)
           setContentSlabLoading(false)
         }
       }
@@ -724,7 +688,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
+  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, slab])
 
   useEffect(() => {
     if (address) {
@@ -1538,49 +1502,7 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
-  const handleContentDownload = useCallback(
-    async (file: NilfsFileEntry) => {
-      if (!targetDealId) return
-      const dealId = String(targetDealId)
-      const manifestHex = toHexFromBase64OrHex(contentManifestRoot) || contentManifestRoot
-      const id = `${dealId}:${file.path}`
-      updateRecentFile(id, { status: 'pending', lastAction: 'download', error: undefined })
-      upsertRecentFile({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes || 0,
-        manifestRoot: manifestHex,
-        lastAction: 'download',
-        status: 'pending',
-      })
-      try {
-        const result = await fetchFile({
-          dealId,
-          manifestRoot: manifestHex,
-          owner: nilAddress,
-          filePath: file.path,
-          rangeStart: 0,
-          rangeLen: file.size_bytes,
-          fileStartOffset: file.start_offset,
-          fileSizeBytes: file.size_bytes,
-          mduSizeBytes: contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-          blobSizeBytes: contentSlab?.blob_size_bytes ?? 128 * 1024,
-        })
-        if (!result?.url) throw new Error('Download failed')
-        const anchor = document.createElement('a')
-        anchor.href = result.url
-        anchor.download = file.path.split('/').pop() || 'download'
-        anchor.click()
-        setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
-        updateRecentFile(id, { status: 'success', lastAction: 'download', error: undefined })
-        showDownloadToast(file.path)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
-      }
-    },
-    [contentManifestRoot, contentSlab, fetchFile, nilAddress, showDownloadToast, targetDealId, upsertRecentFile, updateRecentFile],
-  )
+  // Content downloads are tracked via Recent Files and Deal Explorer download actions.
 
   useEffect(() => {
     if (!appConfig.faucetEnabled) return
@@ -1626,6 +1548,75 @@ export function Dashboard() {
             <Database className="h-3.5 w-3.5 text-muted-foreground" />
             {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
           </button>
+        </div>
+      ) : null}
+
+      {targetDealId ? (
+        <div className="rounded-xl border border-border bg-background/60 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Storage layout (MDUs)
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Education lives on{" "}
+                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                  Technology
+                </Link>
+                .
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDealDetailRequestedTab('manifest')
+                  setDealDetailRequestedTabNonce((n) => n + 1)
+                  setPendingScrollTarget('deal')
+                }}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/60"
+                title="Jump to Deal Explorer → Manifest & MDUs"
+              >
+                Inspect MDUs
+                <ArrowDownRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3 text-xs">
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Manifest root</div>
+              <div className="mt-1 font-mono text-[11px] text-foreground truncate" title={contentManifestRoot || undefined}>
+                {contentManifestRoot ? `${contentManifestRoot.slice(0, 18)}…` : 'Empty container'}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Slab MDUs</div>
+              <div className="mt-1 font-mono text-[11px] text-foreground">
+                {contentSlab ? contentSlab.total_mdus : '—'}
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {contentSlab ? `1 meta • ${contentSlab.witness_mdus} witness • ${contentSlab.user_mdus} user` : 'Fetch in Deal Explorer to derive.'}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</div>
+              <div className="mt-1 text-[11px] text-foreground font-semibold">
+                {isTargetDealMode2
+                  ? `Mode 2 RS(${targetDealService.rsK ?? appConfig.defaultRsK},${targetDealService.rsM ?? appConfig.defaultRsM})`
+                  : showAdvanced ? 'Mode 1 (gateway)' : 'Mode 2 (auto)'}
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {(() => {
+                  const k = targetDealService.rsK ?? appConfig.defaultRsK
+                  const mdu = contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024
+                  return isTargetDealMode2 && k ? `per-slot shard: ${formatBytes(Math.floor(mdu / k))}` : '—'
+                })()}
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -1718,60 +1709,6 @@ export function Dashboard() {
                           {stagedUpload.contentEncoding}
                         </span>
                       ) : null}
-                    </div>
-                  )}
-                </div>
-              )}
-              {targetDealId && contentManifestRoot && (
-                <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
-                  <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Files In Slab</div>
-                  {receiptStatus !== 'idle' && (
-                    <div className="text-[11px]">
-                      {receiptStatus === 'submitted' ? (
-                        <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
-                      ) : (
-                        <span className="text-red-500 dark:text-red-400">
-                          Receipt failed{receiptError ? `: ${receiptError}` : ''}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {contentFilesLoading ? (
-                    <div className="text-xs text-muted-foreground">Loading file table…</div>
-                  ) : contentFiles && contentFiles.length > 0 ? (
-                    <div className="space-y-2">
-                      {contentFiles.map((f) => {
-                        return (
-                          <div
-                            key={`${f.path}:${f.start_offset}`}
-                            className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
-                                {f.path}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">{f.size_bytes} bytes</div>
-                            </div>
-                            <button
-                              onClick={() => handleContentDownload(f)}
-                              disabled={downloading}
-                              data-testid="content-download"
-                              data-file-path={f.path}
-                              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
-                            >
-                              <ArrowDownRight className="w-4 h-4" />
-                              {downloading ? 'Downloading...' : 'Download'}
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground italic">No files yet for this manifest.</div>
-                  )}
-                  {contentFilesError && (
-                    <div className="text-xs text-destructive truncate" title={contentFilesError}>
-                      {contentFilesError}
                     </div>
                   )}
                 </div>
@@ -1909,7 +1846,7 @@ export function Dashboard() {
       )}
 
       <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
-        <div className="grid gap-3 p-4 lg:grid-cols-3">
+	        <div className="grid gap-3 p-4 lg:grid-cols-2">
           <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Testnet Funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
@@ -1980,30 +1917,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Local Gateway</div>
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-foreground">
-                  {localGateway.status === 'connected' ? 'Local gateway connected' : 'Local gateway not detected'}
-                </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  Run the local Gateway app for localhost-only gateway routing.
-                </div>
-              </div>
-              <a
-                href={gatewayDesktopReleaseUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Get App
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-        </div>
+	        </div>
         {faucetTx ? (
           <div className="border-t border-border/80 px-4 py-2 text-[11px] text-muted-foreground">
             Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
@@ -2015,409 +1929,7 @@ export function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
-        {/*
-        <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-          <div className="px-5 py-2 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="truncate text-lg font-semibold text-foreground" data-testid="workspace-deal-title">
-                  {targetDealId ? `Deal #${targetDealId}` : 'Deal workspace'}
-                </h3>
-              {hasSelectedDeal ? (
-                <>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                      hasCommittedContent
-                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                        : 'border-border bg-secondary/60 text-muted-foreground'
-                    }`}
-                  >
-                    {activeDealStatus}
-                  </span>
-                  <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {activeDealModeLabel}
-                  </span>
-                </>
-                ) : null}
-              </div>
-              {!targetDealId ? (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Select a deal on the left to upload, list, and download files.
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                data-testid="workspace-advanced-toggle"
-                className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  showAdvanced
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
-                }`}
-              >
-                Advanced
-              </button>
-            </div>
-          </div>
-
-          <div className="px-5 py-2 border-b border-border bg-muted/20 space-y-2">
-          {wizardNext ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Getting started
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{wizardNext.label}</span>
-                  <span className="text-border">|</span>
-                  <span>
-                    {wizardDoneCount}/{wizardSteps.length}
-                  </span>
-                </div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">{wizardNext.hint}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleWizardAction(wizardNext.id)}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
-              >
-                {wizardNext.actionLabel}
-                <ArrowDownRight className="h-3 w-3" />
-              </button>
-            </div>
-          ) : null}
-
-          {showAdvanced && (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
-                data-testid="tab-content"
-                className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  activeTab === 'content'
-                    ? 'border-primary/40 bg-primary/10 text-foreground'
-                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/40'
-                }`}
-              >
-                <Database className={`h-3.5 w-3.5 ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground'}`} />
-                {activeTab === 'content' ? 'Back to Upload' : 'Legacy (Mode 1)'}
-              </button>
-            </div>
-          ) : null}
-
-        </div>
-
-        <div className="p-6 flex-1">
-            {activeTab === 'content' ? (
-                    !showAdvanced ? (
-                      <div ref={contentRef} className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div>
-                          <div className="font-semibold text-foreground">Advanced tools are hidden</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Enable Advanced to access gateway sharding (Mode 1).
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowAdvanced(true)}
-                          className="inline-flex items-center justify-center rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
-                        >
-                          Enable Advanced
-                        </button>
-                      </div>
-                    ) : (
-                      <div ref={contentRef} className="space-y-4">
-                            <p className="text-xs text-muted-foreground">
-                              Legacy gateway sharding (Mode 1). For Mode 2, use the Mode 2 upload card.
-                            </p>
-                          <div className="grid grid-cols-1 gap-3 text-sm">
-                            <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-                              Target deal:{' '}
-                              <span className="font-mono text-foreground">
-                                {targetDealId ? `#${targetDealId}` : '—'}
-                              </span>
-                              {!targetDealId ? (
-                                <span className="ml-2">Select a deal above to continue.</span>
-                              ) : null}
-                            </div>
-                            {targetDealId && (
-                              <div className="text-xs text-muted-foreground">
-                                On-chain:{" "}
-                                {targetDeal?.cid ? (
-                                <span className="font-mono text-primary">{`${targetDeal.cid.slice(0, 18)}...`}</span>
-                              ) : (
-                                <span className="italic">Empty container</span>
-                              )}{" "}
-                              • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
-                            </div>
-                          )}
-                              {isTargetDealMode2 && (
-                              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                                This is a Mode 2 deal. Use the Mode 2 card — it will use the local gateway when available, otherwise fall back to in-browser WASM sharding + direct stripe uploads.
-                              </div>
-                            )}
-                          <label className="space-y-1">
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                                  <Upload className="w-3 h-3 text-primary" />
-                                    Upload & Shard (gateway, Mode 1)
-                                </span>
-                              <input
-                                  type="file"
-                                  onChange={handleFileChange}
-                                  disabled={uploadLoading || !targetDealId || isTargetDealMode2}
-                                  data-testid="content-file-input"
-                                  className="w-full text-xs text-muted-foreground file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
-                              />
-                          </label>
-                          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={compressUploads}
-                              onChange={(e) => setCompressUploads(e.target.checked)}
-                              className="h-3 w-3 rounded border-border text-primary focus:ring-primary/40"
-                            />
-                            Compress before upload (NilCE, recommended)
-                          </label>
-                          <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Manifest Root</span>
-                                  <div
-                                    className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center"
-                                    data-testid="staged-manifest-root"
-                                  >
-                                    {stagedUpload?.cid ? stagedUpload.cid : <span className="text-muted-foreground">Upload a file to populate</span>}
-                                  </div>
-                              </div>
-                              <div className="space-y-1">
-                                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Staged Total Size (bytes)</span>
-                                  <div
-                                    className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground text-sm font-mono text-xs min-h-[40px] flex items-center"
-                                    data-testid="staged-total-size"
-                                  >
-                                    {stagedUpload?.sizeBytes ? String(stagedUpload.sizeBytes) : <span className="text-muted-foreground">Upload a file</span>}
-                                  </div>
-                              </div>
-                          </div>
-                          {stagedUpload && (
-                            <div className="text-xs text-muted-foreground">
-                              Last upload: <span className="font-semibold text-foreground">{stagedUpload.filename}</span> • File size:{' '}
-                              <span className="font-mono text-foreground">{stagedUpload.fileSizeBytes}</span>
-                              {stagedUpload.logicalSizeBytes && stagedUpload.logicalSizeBytes !== stagedUpload.sizeBytes ? (
-                                <>
-                                  {' '}
-                                  • Logical size: <span className="font-mono text-foreground">{stagedUpload.logicalSizeBytes}</span>
-                                </>
-                              ) : null}
-                              {stagedUpload.contentEncoding ? (
-                                <>
-                                  {' '}
-                                  • Encoding: <span className="font-mono text-foreground">{stagedUpload.contentEncoding}</span>
-                                </>
-                              ) : null}
-                              {stagedUpload.allocatedLength !== undefined && (
-                                <>
-                                  {' '}
-                                  • Allocated MDUs: <span className="font-mono text-foreground">{stagedUpload.allocatedLength}</span>
-                                </>
-                              )}
-                            </div>
-                          )}
-
-                          {targetDealId && contentManifestRoot && (
-                            <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
-                              <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                Slab Layout
-                              </div>
-                              {contentSlabLoading ? (
-                                <div className="text-xs text-muted-foreground">Loading slab layout…</div>
-                              ) : contentSlab ? (
-                                <>
-                                  <div className="grid grid-cols-2 gap-3 text-xs">
-                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
-                                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total MDUs</div>
-                                      <div className="font-mono text-foreground">{contentSlab.total_mdus}</div>
-                                      <div className="text-[10px] text-muted-foreground mt-1">
-                                        MDU #0 + {contentSlab.witness_mdus} witness + {contentSlab.user_mdus} user
-                                      </div>
-                                    </div>
-                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
-                                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Files</div>
-                                      <div className="font-mono text-foreground">{contentSlab.file_count}</div>
-                                      <div className="text-[10px] text-muted-foreground mt-1">
-                                        {contentSlab.total_size_bytes} bytes total
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {Array.isArray(contentSlab.segments) && contentSlab.segments.length > 0 && (
-                                    <div className="bg-background/60 border border-border rounded px-3 py-2">
-                                      <div className="flex items-center justify-between">
-                                        <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                          MDU Segments
-                                        </div>
-                                        <div className="text-[10px] text-muted-foreground">
-                                          {(() => {
-                                            const mduSize = Number(contentSlab.mdu_size_bytes)
-                                            if (!Number.isFinite(mduSize) || mduSize <= 0) return '—'
-                                            return `${Math.round(mduSize / (1024 * 1024))} MiB / MDU`
-                                          })()}
-                                        </div>
-                                      </div>
-                                      <div className="mt-2 flex h-2 w-full overflow-hidden rounded bg-muted">
-                                        {contentSlab.segments.map((seg) => {
-                                          const segCount = Number(seg.count)
-                                          const safeCount = Number.isFinite(segCount) && segCount > 0 ? segCount : 1
-                                          return (
-                                            <div
-                                              key={`${seg.kind}:${seg.start_index}`}
-                                              style={{ flexGrow: Math.max(1, safeCount) }}
-                                              className={
-                                                seg.kind === 'mdu0'
-                                                  ? 'bg-blue-500/60'
-                                                  : seg.kind === 'witness'
-                                                    ? 'bg-purple-500/60'
-                                                    : 'bg-emerald-500/60'
-                                              }
-                                              title={`${seg.kind} • start=${seg.start_index} • count=${seg.count}`}
-                                            />
-                                          )
-                                        })}
-                                      </div>
-                                      <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
-                                        <div>
-                                          <span className="text-blue-500 font-semibold">MDU #0</span>: Super-Manifest
-                                        </div>
-                                        <div>
-                                          <span className="text-purple-500 font-semibold">Witness</span>:{' '}
-                                          {contentSlab.witness_mdus > 0 ? `MDU #1..#${contentSlab.witness_mdus}` : 'none'}
-                                        </div>
-                                        <div>
-                                          <span className="text-emerald-500 font-semibold">User</span>:{' '}
-                                          {contentSlab.user_mdus > 0
-                                            ? `MDU #${1 + contentSlab.witness_mdus}..#${contentSlab.total_mdus - 1}`
-                                            : 'none'}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="text-xs text-muted-foreground italic">
-                                  No slab layout found for this manifest.
-                                </div>
-                              )}
-                              {contentSlabError && (
-                                <div className="text-xs text-destructive truncate" title={contentSlabError}>
-                                  {contentSlabError}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {targetDealId && contentManifestRoot && (
-                            <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
-                              <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                Files In Slab
-                              </div>
-                              {receiptStatus !== 'idle' && (
-                                <div className="text-[11px]">
-                                  {receiptStatus === 'submitted' ? (
-                                    <span className="text-green-500 dark:text-green-400">Receipt submitted on-chain</span>
-                                  ) : (
-                                    <span className="text-red-500 dark:text-red-400">
-                                      Receipt failed{receiptError ? `: ${receiptError}` : ''}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {contentFilesLoading ? (
-                                <div className="text-xs text-muted-foreground">Loading file table…</div>
-                              ) : contentFiles && contentFiles.length > 0 ? (
-                                <div className="space-y-2">
-                                  {contentFiles.map((f) => {
-                                    return (
-                                      <div
-                                        key={`${f.path}:${f.start_offset}`}
-                                        className="flex items-center justify-between gap-3 bg-background/60 border border-border rounded px-3 py-2"
-                                      >
-                                        <div className="min-w-0">
-                                          <div className="font-mono text-[11px] text-foreground truncate" title={f.path}>
-                                            {f.path}
-                                          </div>
-                                          <div className="text-[10px] text-muted-foreground">
-                                            {f.size_bytes} bytes
-                                          </div>
-                                        </div>
-                                        <button
-                                          onClick={() => handleContentDownload(f)}
-                                          disabled={downloading}
-                                          data-testid="content-download"
-                                          data-file-path={f.path}
-                                          className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50"
-                                        >
-                                          <ArrowDownRight className="w-4 h-4" />
-                                          {downloading ? 'Downloading...' : 'Download'}
-                                        </button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-muted-foreground italic">
-                                  No files yet for this manifest.
-                                </div>
-                              )}
-                              {contentFilesError && (
-                                <div className="text-xs text-destructive truncate" title={contentFilesError}>
-                                  {contentFilesError}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                      </div>
-                      <div className="flex items-center justify-between pt-2">
-                          <div className="text-xs text-muted-foreground">
-                              {updateTx && <div className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0,10)}...</div>}
-                          </div>
-                          <button
-                              onClick={() =>
-                                stagedUpload &&
-                                void handleUpdateContent(
-                                  stagedUpload.cid,
-                                  stagedUpload.sizeBytes,
-                                  stagedUpload.totalMdus,
-                                  stagedUpload.witnessMdus,
-                                )
-                              }
-                              disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2}
-                              data-testid="content-commit"
-                              className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
-                          >
-                              {updateLoading ? 'Committing...' : 'Commit uploaded content'}
-                            </button>
-                        </div>
-                    </div>
-                    )
-                ) : (
-                <div ref={mduRef} className="space-y-4">
-                  {targetDealId ? (
-                    <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
-                      <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Choose a deal from the left to upload, list, and download files.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        */}
+        {/* Workspace panel intentionally removed (Deal Explorer + FileSharder cover this). */}
 
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
@@ -2436,6 +1948,8 @@ export function Dashboard() {
                 nilAddress={nilAddress}
                 onFileActivity={recordRecentActivity}
                 topPanel={dealExplorerTopPanel}
+                requestedTab={dealDetailRequestedTab ?? undefined}
+                requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
               <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
@@ -3028,101 +2542,145 @@ export function Dashboard() {
             </table>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Retrieval Fees (Gamma-4)
-            </div>
-            <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
-                <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+          {!showAdvanced ? (
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Retrieval economics (Advanced)
               </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
-                <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+              <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
+                  <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
+                  <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+                </div>
+                <div className="flex items-end gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(true)}
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/60"
+                  >
+                    Show Advanced
+                    <ArrowDownRight className="h-4 w-4" />
+                  </button>
+                  <Link
+                    to="/proofs"
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-foreground hover:bg-background/80"
+                    title="View receipts, proofs, and sessions"
+                  >
+                    Proofs
+                    <ArrowDownRight className="h-4 w-4" />
+                  </Link>
+                </div>
               </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
-                <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
+              <div className="px-6 pb-4 text-xs text-muted-foreground">
+                Fees and on-chain retrieval sessions are developer-focused. Use Advanced mode for full tables.
+                {retrievalParamsError ? (
+                  <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+                ) : null}
               </div>
             </div>
-            <div className="px-6 pb-4 text-xs text-muted-foreground">
-              {retrievalFeeNote}
-              {retrievalParamsError ? (
-                <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
-              ) : null}
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Retrieval Fees (Gamma-4)
+                </div>
+                <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
+                    <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
+                    <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
+                    <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
+                  </div>
+                </div>
+                <div className="px-6 pb-4 text-xs text-muted-foreground">
+                  {retrievalFeeNote}
+                  {retrievalParamsError ? (
+                    <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+                  ) : null}
+                </div>
+              </div>
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              My Retrieval Sessions
-            </div>
-            <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
-              <thead className="bg-muted/30">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {!nilAddress ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                      Connect a wallet to view retrieval sessions.
-                    </td>
-                  </tr>
-                ) : retrievalSessionsLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                      Loading sessions…
-                    </td>
-                  </tr>
-                ) : retrievalSessions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                      No retrieval sessions found.
-                      {retrievalSessionsError ? (
-                        <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
-                      ) : null}
-                    </td>
-                  </tr>
-                ) : (
-                  retrievalSessions.map((raw) => {
-                    const s = raw as Record<string, unknown>
-                    const dealId = String(s['deal_id'] ?? '')
-                    const provider = String(s['provider'] ?? '')
-                    const status = formatSessionStatus(s['status'])
-                    const updatedHeight = String(s['updated_height'] ?? '')
-                    const totalBytes = formatBytesU64(s['total_bytes'])
-                    const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
-                    const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
-                    return (
-                      <tr
-                        key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
-                        className="hover:bg-muted/50 transition-colors"
-                      >
-                        <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
-                          {shortSession}
+              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  My Retrieval Sessions
+                </div>
+                <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
+                  <thead className="bg-muted/30">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {!nilAddress ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                          Connect a wallet to view retrieval sessions.
                         </td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
-                          {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">{status}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
                       </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : retrievalSessionsLoading ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                          Loading sessions…
+                        </td>
+                      </tr>
+                    ) : retrievalSessions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                          No retrieval sessions found.
+                          {retrievalSessionsError ? (
+                            <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ) : (
+                      retrievalSessions.map((raw) => {
+                        const s = raw as Record<string, unknown>
+                        const dealId = String(s['deal_id'] ?? '')
+                        const provider = String(s['provider'] ?? '')
+                        const status = formatSessionStatus(s['status'])
+                        const updatedHeight = String(s['updated_height'] ?? '')
+                        const totalBytes = formatBytesU64(s['total_bytes'])
+                        const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
+                        const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
+                        return (
+                          <tr
+                            key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
+                            className="hover:bg-muted/50 transition-colors"
+                          >
+                            <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
+                              {shortSession}
+                            </td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
+                            <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
+                              {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
+                            </td>
+                            <td className="px-4 py-2 text-muted-foreground">{status}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
           </div>
         </div>
       ) : null}

@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { FileJson, Cpu, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
@@ -2868,13 +2869,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
-              <FileJson className="w-5 h-5 text-primary" />
-              Manifest Visualization
-            </h3>
-              <div className="text-sm text-muted-foreground font-mono">
-                {shards.filter(s => s.status === 'expanded').length} / {shards.length} MDUs Expanded
+            <div className="flex justify-between items-center mb-6 gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
+                  <FileJson className="w-5 h-5 text-primary" />
+                  Manifest Visualization
+                </h3>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  MDUs are 8&nbsp;MiB slabs (64 × 128&nbsp;KiB blobs).{" "}
+                  <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                    Learn MDUs
+                  </Link>
+                </div>
+              </div>
+              <div className="shrink-0 text-sm text-muted-foreground font-mono">
+                {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
               </div>
             </div>
 

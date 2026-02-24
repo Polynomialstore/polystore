@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Terminal, Globe, Database } from "lucide-react";
 
 export const S3AdapterDocs = () => {
@@ -30,6 +31,10 @@ export const S3AdapterDocs = () => {
               <h3 className="font-bold text-lg text-foreground">2. Sharding & Binding</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 The file is split into <strong>8 MiB Mega-Data Units (MDUs)</strong>. The adapter generates a <strong>Manifest</strong> containing KZG commitments for each MDU, producing a single 48-byte Root Hash.
+                {" "}
+                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                  Learn MDUs
+                </Link>
               </p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">

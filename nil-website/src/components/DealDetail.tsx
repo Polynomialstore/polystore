@@ -45,6 +45,20 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   return out
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes)) return '—'
+  const abs = Math.abs(bytes)
+  if (abs < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (Math.abs(kb) < 1024) return `${kb.toFixed(1)} KiB`
+  const mb = kb / 1024
+  if (Math.abs(mb) < 1024) return `${mb.toFixed(1)} MiB`
+  const gb = mb / 1024
+  if (Math.abs(gb) < 1024) return `${gb.toFixed(2)} GiB`
+  const tb = gb / 1024
+  return `${tb.toFixed(2)} TiB`
+}
+
 function decodeGatewayHttpError(status: number, bodyText: string): string {
   const trimmed = String(bodyText ?? '').trim()
   if (!trimmed) return `Gateway download failed (${status})`
@@ -126,6 +140,8 @@ interface DealDetailProps {
   nilAddress: string
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
+  requestedTab?: 'files' | 'info' | 'manifest' | 'heat'
+  requestedTabNonce?: number
 }
 
 interface HeatState {
@@ -161,7 +177,7 @@ interface LocalCacheFreshnessResult {
 
 type GatewayRuntimeMode = 'unknown' | 'standalone' | 'proxy'
 
-export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealDetailProps) {
+export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, requestedTab, requestedTabNonce }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(String(deal.cid || '').trim())
@@ -281,7 +297,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'heat'>('files')
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan } = useFetch()
   const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
@@ -291,6 +307,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     lastTrace,
     preference: transportPreference,
   } = useTransportRouter()
+
+  useEffect(() => {
+    if (!requestedTabNonce) return
+    if (!requestedTab) return
+    setActiveTab(requestedTab)
+  }, [requestedTab, requestedTabNonce])
 
   useEffect(() => {
     let cancelled = false
@@ -1146,6 +1168,34 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
     return `${hex.slice(0, 2 + head)}…${hex.slice(-tail)}`
   }
 
+  function shortAddr(addr: string, head = 10, tail = 6) {
+    const a = String(addr || '').trim()
+    if (!a) return '—'
+    if (a.length <= head + tail + 3) return a
+    return `${a.slice(0, head)}…${a.slice(-tail)}`
+  }
+
+  function computeFileSlabMduRange(file: NilfsFileEntry): { start: number; end: number } | null {
+    if (!slab) return null
+    const mduSize = Number(slab.mdu_size_bytes || 0)
+    if (!Number.isFinite(mduSize) || mduSize <= 0) return null
+    const metaMdus = 1 + Number(slab.witness_mdus || 0)
+    const startOffset = Math.max(0, Number(file.start_offset || 0) || 0)
+    const sizeBytes = Math.max(0, Number(file.size_bytes || 0) || 0)
+    if (sizeBytes === 0) return { start: metaMdus, end: metaMdus }
+    const startOrdinal = Math.floor(startOffset / mduSize)
+    const endOrdinal = Math.floor((startOffset + sizeBytes - 1) / mduSize)
+    return { start: metaMdus + startOrdinal, end: metaMdus + endOrdinal }
+  }
+
+  function formatBigint(v: bigint): string {
+    try {
+      return v.toString()
+    } catch {
+      return '—'
+    }
+  }
+
   const fetchHeat = useCallback(async (dealId: string) => {
       try {
           const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${dealId}/heat`)
@@ -1371,6 +1421,59 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                               </span>
                             )}
                           </div>
+                        )}
+
+                        {lastPlan && String(lastPlan.dealId) === String(deal.id) && (
+                          <details className="rounded-xl border border-border bg-background/40 p-3 text-[11px]">
+                            <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                              Last retrieval plan
+                            </summary>
+                            <div className="mt-3 space-y-2 text-[11px] text-muted-foreground">
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Global blobs</div>
+                                  <div className="font-mono text-foreground">
+                                    {formatBigint(lastPlan.globalStart)}..{formatBigint(lastPlan.globalEnd)}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    leaf_count={formatBigint(lastPlan.leafCount)} (blobs per MDU)
+                                  </div>
+                                </div>
+                                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">MDU window</div>
+                                  <div className="font-mono text-foreground">
+                                    MDU #{formatBigint(lastPlan.globalStart / lastPlan.leafCount)}..#
+                                    {formatBigint(lastPlan.globalEnd / lastPlan.leafCount)}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    blob_size={formatBytes(lastPlan.blobSizeBytes)} • mdu_size={formatBytes(lastPlan.mduSizeBytes)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                                <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+                                  Provider groups
+                                </div>
+                                <div className="mt-2 space-y-1">
+                                  {lastPlan.providers.map((p) => (
+                                    <div key={`${p.provider}:${String(p.startMduIndex)}:${p.startBlobIndex}`} className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="font-mono text-[11px] text-foreground">
+                                        {shortAddr(p.provider)}
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        {p.backend}
+                                        {p.endpoint ? ` • ${p.endpoint}` : ''}
+                                      </div>
+                                      <div className="font-mono text-[10px] text-muted-foreground">
+                                        start=({formatBigint(p.startMduIndex)},{p.startBlobIndex}) • blobs={formatBigint(p.blobCount)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </details>
                         )}
 
                         <details className="rounded-xl border border-border bg-secondary/40 p-3 text-[11px]">
@@ -1604,16 +1707,17 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                           {files.map((f) => {
                             const browserCached = !!browserCachedByPath[f.path]
                             const gatewayCached = f.cache_present === true
-                            const gatewayCacheLabel =
-                              gatewayRuntimeMode === 'proxy'
-                                ? gatewayCached
-                                  ? 'provider-backed (proxy mode; legacy "router" alias)'
-                                  : 'not reported (proxy mode; legacy "router" alias)'
-                                : gatewayCached
-                                  ? 'yes'
-                                  : 'no'
-                            const isBusy = busyFilePath === f.path
-                            return (
+	                            const gatewayCacheLabel =
+	                              gatewayRuntimeMode === 'proxy'
+	                                ? gatewayCached
+	                                  ? 'provider-backed (proxy mode; legacy "router" alias)'
+	                                  : 'not reported (proxy mode; legacy "router" alias)'
+	                                : gatewayCached
+	                                  ? 'yes'
+	                                  : 'no'
+	                            const isBusy = busyFilePath === f.path
+	                            const mduRange = computeFileSlabMduRange(f)
+	                            return (
                               <div
                                 key={`${f.path}:${f.start_offset}`}
                                 data-testid="deal-detail-file-row"
@@ -1627,15 +1731,34 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                     <div className="truncate text-sm font-semibold text-foreground" title={f.path}>
                                       {f.path}
                                     </div>
-                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                                      <span className="font-mono">{f.size_bytes} bytes</span>
-                                      <span className="text-border">|</span>
-                                      <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
-                                      <span className="text-border">|</span>
-                                      <span>Gateway cache: {gatewayCacheLabel}</span>
-                                    </div>
-                                  </div>
-                                </div>
+	                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+	                                      <span className="font-mono">{f.size_bytes} bytes</span>
+	                                      <span className="text-border">|</span>
+	                                      <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
+	                                      <span className="text-border">|</span>
+	                                      <span>Gateway cache: {gatewayCacheLabel}</span>
+	                                      {mduRange ? (
+	                                        <>
+	                                          <span className="text-border">|</span>
+	                                          <span className="font-mono">
+	                                            MDUs: #{mduRange.start}..#{mduRange.end}
+	                                          </span>
+	                                          <button
+	                                            type="button"
+	                                            onClick={() => {
+	                                              setSelectedMdu(mduRange.start)
+	                                              setActiveTab('manifest')
+	                                            }}
+	                                            className="text-primary hover:underline"
+	                                            title="Jump to Manifest & MDUs and preselect the first MDU for this file"
+	                                          >
+	                                            Inspect
+	                                          </button>
+	                                        </>
+	                                      ) : null}
+	                                    </div>
+	                                  </div>
+	                                </div>
 
                                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                   <div className="contents">

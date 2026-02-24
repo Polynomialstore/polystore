@@ -2,13 +2,32 @@ import { test } from 'node:test'
 import assert from 'node:assert'
 import fs from 'fs/promises'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { createHash } from 'crypto'
-
-import init, { NilWasm } from '../../public/wasm/nil_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+type NilWasmLike = {
+  expand_mdu_rs: (encodedUserMdu: Uint8Array, k: number, m: number) => unknown
+  compute_mdu_root: (witnessFlat: Uint8Array) => unknown
+}
+
+async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike; wasmPath: string }> {
+  const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
+  const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
+  try {
+    await fs.access(jsPath)
+    await fs.access(wasmPath)
+  } catch {
+    return null
+  }
+  const mod = (await import(pathToFileURL(jsPath).href)) as {
+    default: (args: unknown) => Promise<unknown>
+    NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike
+  }
+  return { init: mod.default, NilWasm: mod.NilWasm, wasmPath }
+}
 
 function sha256Hex0x(bytes: Uint8Array): string {
   const h = createHash('sha256')
@@ -46,7 +65,12 @@ function encodePayloadToMdu(rawData: Uint8Array): Uint8Array {
   return mdu
 }
 
-test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async () => {
+test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
+  const wasm = await loadNilCoreWasm()
+  if (!wasm) {
+    t.skip('WASM artifacts not present (nil-website/public/wasm).')
+    return
+  }
   const repoRoot = path.resolve(__dirname, '../../..')
   const fixturePath = path.join(repoRoot, 'testdata/mode2-artifacts-v1/fixture_k8m4_single.json')
   const fixtureRaw = await fs.readFile(fixturePath, 'utf8')
@@ -69,13 +93,12 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async () => {
   assert.strictEqual(fx.leaf_count, 96)
   assert.strictEqual(fx.witness_count, 1)
 
-  const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
-  const wasmBuffer = await fs.readFile(wasmPath)
-  await init({ module_or_path: wasmBuffer })
+  const wasmBuffer = await fs.readFile(wasm.wasmPath)
+  await wasm.init({ module_or_path: wasmBuffer })
 
   const trustedSetupPath = path.resolve(__dirname, '../../public/trusted_setup.txt')
   const trustedSetupBytes = new Uint8Array(await fs.readFile(trustedSetupPath))
-  const nilWasm = new NilWasm(trustedSetupBytes)
+  const nilWasm = new wasm.NilWasm(trustedSetupBytes)
 
   const payload = hexToBytes(fx.payload_hex)
   assert.strictEqual(sha256Hex0x(payload), fx.payload_sha256)

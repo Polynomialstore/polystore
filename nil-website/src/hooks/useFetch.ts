@@ -83,6 +83,27 @@ export interface FetchResult {
   blob: Blob
 }
 
+export interface RetrievalPlanSummary {
+  capturedAtMs: number
+  dealId: string
+  manifestRoot: string
+  filePath: string
+  routePreference?: RoutePreference
+  mduSizeBytes: number
+  blobSizeBytes: number
+  leafCount: bigint
+  globalStart: bigint
+  globalEnd: bigint
+  providers: Array<{
+    provider: string
+    backend: string
+    endpoint?: string
+    startMduIndex: bigint
+    startBlobIndex: number
+    blobCount: bigint
+  }>
+}
+
 export interface VoucherAuthInput {
   provider?: string
   expiresAt?: number
@@ -156,6 +177,7 @@ export function useFetch() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
   const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [lastPlan, setLastPlan] = useState<RetrievalPlanSummary | null>(null)
   const [progress, setProgress] = useState<FetchProgress>({
     phase: 'idle',
     filePath: '',
@@ -410,6 +432,33 @@ export function useFetch() {
         (max, group) => (group.globalEnd > max ? group.globalEnd : max),
         groups[0].globalEnd,
       )
+
+      setLastPlan({
+        capturedAtMs: Date.now(),
+        dealId,
+        manifestRoot,
+        filePath,
+        routePreference: preferenceOverride,
+        mduSizeBytes,
+        blobSizeBytes,
+        leafCount,
+        globalStart: globalRangeStart,
+        globalEnd: globalRangeEnd,
+        providers: groups.map((group) => {
+          const groupStartMdu = group.globalStart / leafCount
+          const groupStartBlob = Number(group.globalStart % leafCount)
+          const groupBlobCount = group.globalEnd - group.globalStart + 1n
+          const exampleChunk = group.chunks[0]
+          return {
+            provider: group.provider,
+            backend: exampleChunk?.planBackend || 'unknown',
+            endpoint: exampleChunk?.planEndpoint,
+            startMduIndex: groupStartMdu,
+            startBlobIndex: groupStartBlob,
+            blobCount: groupBlobCount,
+          }
+        }),
+      })
 
       const openBaseNonce = BigInt(Date.now())
       let openNonceOffset = BigInt(groups.length)
@@ -899,5 +948,5 @@ export function useFetch() {
     }
   }
 
-  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress }
+  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan }
 }

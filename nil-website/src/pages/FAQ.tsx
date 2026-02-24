@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink, ShieldCheck, Coins, Network, Scale } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const faqs = [
   {
@@ -93,7 +94,12 @@ const faqs = [
       },
       {
         q: "Why 8 MiB Data Units?",
-        a: "We use 8 MiB Mega-Data Units (MDUs) to optimize throughput. Each MDU is 64 × 128 KiB blobs, which aligns with KZG verification while keeping on-chain updates compact."
+        a: <>
+          We use 8 MiB Mega-Data Units (MDUs) to optimize throughput. Each MDU is 64 × 128 KiB blobs, which aligns with KZG verification while keeping on-chain updates compact.{" "}
+          <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+            Learn MDUs
+          </Link>
+        </>
       },
       {
         q: "Can I delete my data?",
