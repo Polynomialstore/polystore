@@ -20,6 +20,7 @@ export const Layout = () => {
       type: "dropdown", 
       name: "Explore", 
       items: [
+        { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
         { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
         { name: "Performance", path: "/performance", description: "Latency racing benchmarks.", icon: <Zap className="w-5 h-5" /> },
