@@ -1707,17 +1707,17 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           {files.map((f) => {
                             const browserCached = !!browserCachedByPath[f.path]
                             const gatewayCached = f.cache_present === true
-	                            const gatewayCacheLabel =
-	                              gatewayRuntimeMode === 'proxy'
-	                                ? gatewayCached
-	                                  ? 'provider-backed (proxy mode; legacy "router" alias)'
-	                                  : 'not reported (proxy mode; legacy "router" alias)'
-	                                : gatewayCached
-	                                  ? 'yes'
-	                                  : 'no'
-	                            const isBusy = busyFilePath === f.path
-	                            const mduRange = computeFileSlabMduRange(f)
-	                            return (
+                              const gatewayCacheLabel =
+                                gatewayRuntimeMode === 'proxy'
+                                  ? gatewayCached
+                                    ? 'provider-backed (proxy mode; legacy "router" alias)'
+                                    : 'not reported (proxy mode; legacy "router" alias)'
+                                  : gatewayCached
+                                    ? 'yes'
+                                    : 'no'
+                              const isBusy = busyFilePath === f.path
+                              const mduRange = computeFileSlabMduRange(f)
+                              return (
                               <div
                                 key={`${f.path}:${f.start_offset}`}
                                 data-testid="deal-detail-file-row"
@@ -1731,34 +1731,34 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     <div className="truncate text-sm font-semibold text-foreground" title={f.path}>
                                       {f.path}
                                     </div>
-	                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-	                                      <span className="font-mono">{f.size_bytes} bytes</span>
-	                                      <span className="text-border">|</span>
-	                                      <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
-	                                      <span className="text-border">|</span>
-	                                      <span>Gateway cache: {gatewayCacheLabel}</span>
-	                                      {mduRange ? (
-	                                        <>
-	                                          <span className="text-border">|</span>
-	                                          <span className="font-mono">
-	                                            MDUs: #{mduRange.start}..#{mduRange.end}
-	                                          </span>
-	                                          <button
-	                                            type="button"
-	                                            onClick={() => {
-	                                              setSelectedMdu(mduRange.start)
-	                                              setActiveTab('manifest')
-	                                            }}
-	                                            className="text-primary hover:underline"
-	                                            title="Jump to Manifest & MDUs and preselect the first MDU for this file"
-	                                          >
-	                                            Inspect
-	                                          </button>
-	                                        </>
-	                                      ) : null}
-	                                    </div>
-	                                  </div>
-	                                </div>
+                                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                                        <span className="font-mono">{f.size_bytes} bytes</span>
+                                        <span className="text-border">|</span>
+                                        <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
+                                        <span className="text-border">|</span>
+                                        <span>Gateway cache: {gatewayCacheLabel}</span>
+                                        {mduRange ? (
+                                          <>
+                                            <span className="text-border">|</span>
+                                            <span className="font-mono">
+                                              MDUs: #{mduRange.start}..#{mduRange.end}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedMdu(mduRange.start)
+                                                setActiveTab('manifest')
+                                              }}
+                                              className="text-primary hover:underline"
+                                              title="Jump to Manifest & MDUs and preselect the first MDU for this file"
+                                            >
+                                              Inspect
+                                            </button>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
 
                                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                   <div className="contents">

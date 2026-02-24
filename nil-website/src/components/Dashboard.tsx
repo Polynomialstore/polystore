@@ -1846,7 +1846,7 @@ export function Dashboard() {
       )}
 
       <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
-	        <div className="grid gap-3 p-4 lg:grid-cols-2">
+          <div className="grid gap-3 p-4 lg:grid-cols-2">
           <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Testnet Funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
@@ -1917,7 +1917,7 @@ export function Dashboard() {
             </div>
           </div>
 
-	        </div>
+          </div>
         {faucetTx ? (
           <div className="border-t border-border/80 px-4 py-2 text-[11px] text-muted-foreground">
             Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
