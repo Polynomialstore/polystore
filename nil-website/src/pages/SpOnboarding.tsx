@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
 
-type OnboardingTrack = "desktop_local" | "remote_headless";
+type OnboardingTrack = "local_demo" | "desktop_local" | "remote_headless";
 
 type Step = {
   id: string;
@@ -11,11 +12,38 @@ type Step = {
   successSignal: string;
 };
 
-const gatewayDesktopReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
 const repoRootUrl = "https://github.com/Nil-Store/nil-store";
+const gatewayDesktopReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
 const devnetPlaybookUrl = "https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md";
 
-const localTrackSteps: Step[] = [
+const localDemoSteps: Step[] = [
+  {
+    id: "demo-stack",
+    title: "Start the local demo stack",
+    detail: "Start chain + faucet + demo providers + trusted user-gateway + web UI on one machine (no systemd).",
+    successSignal: "Terminal prints “=== Stack ready ===” and the dashboard loads at http://localhost:5173/#/dashboard.",
+  },
+  {
+    id: "demo-providers",
+    title: "Confirm providers are available",
+    detail: "Mode 2 deals require K+M providers. The dashboard must see providers before it can create a deal.",
+    successSignal: "Status bar shows Providers: OK and the deal form does not warn about missing providers.",
+  },
+  {
+    id: "demo-upload",
+    title: "Create a deal + upload",
+    detail: "Create a deal in the dashboard, then upload a file through the local user-gateway.",
+    successSignal: "Upload completes and the file appears in the deal file table.",
+  },
+  {
+    id: "demo-retrieve",
+    title: "Retrieve via gateway (default)",
+    detail: "Download using Auto source. When the local user-gateway is healthy, downloads should route through it by default.",
+    successSignal: "Download succeeds with gateway routing and no provider/session errors.",
+  },
+];
+
+const desktopLocalSteps: Step[] = [
   {
     id: "local-download",
     title: "Install Gateway Desktop",
@@ -75,6 +103,16 @@ const remoteTrackSteps: Step[] = [
   },
 ];
 
+const localDemoScript = `# Local demo SP onboarding (single machine; no systemd)
+# From repo root:
+./scripts/ensure_stack_local.sh
+
+# Stop everything started by the stack script:
+./scripts/run_local_stack.sh stop
+
+# Optional: force 3 demo providers (default is 3)
+NIL_LOCAL_PROVIDER_COUNT=3 ./scripts/ensure_stack_local.sh`;
+
 const localBootstrapScript = `# 1) Launch Desktop Gateway GUI
 cd nil_gateway_gui
 npm ci
@@ -110,15 +148,48 @@ nilchaind query nilchain list-providers --home _artifacts/nilchain_data_devnet_a
 # Dashboard -> Deal -> Download via gateway
 # Expect gateway path + successful receipt pipeline`;
 
+function CopyButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
+    >
+      <span className="inline-flex items-center gap-2">
+        <Copy className="h-3.5 w-3.5" /> Copy
+      </span>
+    </button>
+  );
+}
+
+function PrimaryLinkButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+    >
+      {children}
+      <ExternalLink className="h-3.5 w-3.5" />
+    </a>
+  );
+}
+
 export function SpOnboarding() {
-  const [track, setTrack] = useState<OnboardingTrack>("desktop_local");
+  const [track, setTrack] = useState<OnboardingTrack>("local_demo");
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
-  const activeSteps = track === "desktop_local" ? localTrackSteps : remoteTrackSteps;
+  const activeSteps =
+    track === "local_demo"
+      ? localDemoSteps
+      : track === "desktop_local"
+        ? desktopLocalSteps
+        : remoteTrackSteps;
   const checkedCount = useMemo(() => activeSteps.filter((step) => checkedSteps[step.id]).length, [activeSteps, checkedSteps]);
   const completionPercent = activeSteps.length === 0 ? 0 : Math.round((checkedCount / activeSteps.length) * 100);
-  const activeScript = track === "desktop_local" ? localBootstrapScript : remoteBootstrapScript;
+  const activeScript = track === "local_demo" ? localDemoScript : track === "desktop_local" ? localBootstrapScript : remoteBootstrapScript;
 
   const toggleStep = (id: string) => {
     setCheckedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -150,19 +221,13 @@ export function SpOnboarding() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">SP Onboarding Companion</h1>
           <p className="max-w-3xl text-muted-foreground">
-            This is the finalized web companion for provider onboarding. Use it alongside the desktop SP Launchpad to install, register, health-check, and verify download behavior end-to-end.
+            Local demo onboarding: bring up a full single-machine stack (chain + faucet + demo providers + trusted user-gateway + web UI) and validate end-to-end store + retrieve before moving to real SP ops.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
-            <a
-              href={gatewayDesktopReleaseUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
-            >
-              <Download className="h-4 w-4" />
-              Download Gateway Desktop
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+            <PrimaryLinkButton href={repoRootUrl}>
+              <Terminal className="h-4 w-4" />
+              Open Repo
+            </PrimaryLinkButton>
             <Link
               to="/dashboard"
               className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
@@ -194,12 +259,21 @@ export function SpOnboarding() {
           <div className="mt-4 flex rounded-lg border border-border bg-secondary/20 p-1">
             <button
               type="button"
+              onClick={() => setTrack("local_demo")}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Local demo (single machine)
+            </button>
+            <button
+              type="button"
               onClick={() => setTrack("desktop_local")}
               className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
                 track === "desktop_local" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Desktop + Local
+              Desktop (managed gateway)
             </button>
             <button
               type="button"
@@ -208,8 +282,14 @@ export function SpOnboarding() {
                 track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Remote + Headless
+              Remote (deferred)
             </button>
+          </div>
+          <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+            <div className="font-semibold text-foreground">Scope</div>
+            <div className="mt-1">
+              This page targets <span className="font-mono text-foreground">local demo</span> onboarding (no systemd). Remote/headless SP onboarding is deferred.
+            </div>
           </div>
 
           <div className="mt-5 space-y-3">
@@ -293,7 +373,7 @@ export function SpOnboarding() {
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
-                Keep local loopback access enabled (`localhost` + `127.0.0.1`) in your browser when testing dashboard-to-gateway flows.
+                Keep local loopback access enabled (<span className="font-mono">localhost</span> + <span className="font-mono">127.0.0.1</span>) in your browser when testing dashboard-to-gateway flows.
               </div>
             </div>
           </div>
@@ -304,13 +384,7 @@ export function SpOnboarding() {
         <div className="rounded-xl border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Bootstrap commands</h2>
-            <button
-              type="button"
-              onClick={() => void copyText("Bootstrap script", activeScript)}
-              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
-            >
-              Copy
-            </button>
+            <CopyButton onClick={() => void copyText("Bootstrap script", activeScript)} />
           </div>
           <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
             {activeScript}
@@ -320,13 +394,7 @@ export function SpOnboarding() {
         <div className="rounded-xl border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Health + download verification</h2>
-            <button
-              type="button"
-              onClick={() => void copyText("Health script", healthCheckScript)}
-              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
-            >
-              Copy
-            </button>
+            <CopyButton onClick={() => void copyText("Health script", healthCheckScript)} />
           </div>
           <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
             {healthCheckScript}
@@ -374,4 +442,3 @@ export function SpOnboarding() {
     </div>
   );
 }
-

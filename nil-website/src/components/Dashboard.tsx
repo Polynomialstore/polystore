@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink, Copy } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -27,6 +27,7 @@ import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useLocalGateway } from '../hooks/useLocalGateway'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
+import { Link } from 'react-router-dom'
 
 interface Provider {
   address: string
@@ -72,6 +73,28 @@ const PROOFS_POLL_MS = 120_000
 const PROOFS_HIDDEN_POLL_MS = 600_000
 const RPC_HEALTH_POLL_MS = 60_000
 const RPC_HEALTH_HIDDEN_POLL_MS = 300_000
+const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
+
+async function copyText(text: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  if (typeof document === 'undefined') {
+    throw new Error('clipboard unavailable')
+  }
+  const el = document.createElement('textarea')
+  el.value = text
+  el.setAttribute('readonly', 'true')
+  el.style.position = 'fixed'
+  el.style.top = '0'
+  el.style.left = '0'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  document.execCommand('copy')
+  document.body.removeChild(el)
+}
 
 const DURATION_PRESETS = [
   { value: '1d', label: '1 day', seconds: 24 * 60 * 60 },
@@ -2628,6 +2651,29 @@ export function Dashboard() {
                     {autoMode2ProviderError && (
                       <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
                     )}
+                    {autoMode2ProviderError && (
+                      <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
+                            start chain + faucet + demo providers.
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
+                              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                            >
+                              <Copy className="h-3 w-3" /> Copy
+                            </button>
+                            <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
+                              SP onboarding <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </div>
+                        <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -2683,6 +2729,29 @@ export function Dashboard() {
                       {mode2Config.error && (
                         <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
                       )}
+                      {mode2Config.error && (
+                        <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
+                              start chain + faucet + demo providers.
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
+                                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                              >
+                                <Copy className="h-3 w-3" /> Copy
+                              </button>
+                              <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
+                                SP onboarding <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            </div>
+                          </div>
+                          <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {placementProfile === 'auto' && (
@@ -2693,6 +2762,29 @@ export function Dashboard() {
                       <span className="font-mono text-foreground">{providerCount || '—'}</span>
                       {autoMode2ProviderError && (
                         <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
+                      )}
+                      {autoMode2ProviderError && (
+                        <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
+                              start chain + faucet + demo providers.
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
+                                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                              >
+                                <Copy className="h-3 w-3" /> Copy
+                              </button>
+                              <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
+                                SP onboarding <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            </div>
+                          </div>
+                          <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                        </div>
                       )}
                     </div>
                   )}
