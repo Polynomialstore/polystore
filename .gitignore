@@ -30,6 +30,7 @@ nil_bridge/cache/solidity-files-cache.json
 nil_bridge/cache/test-failures
 nil_bridge/cache/
 nil_bridge/broadcast/
+nil_bridge/out/
 
 # Local tooling cache (e.g. e2e scripts)
 .cache/
