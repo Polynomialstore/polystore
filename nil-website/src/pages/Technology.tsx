@@ -167,6 +167,82 @@ export const Technology = () => {
         </p>
       </header>
 
+      <section className="rounded-2xl border border-border bg-gradient-to-br from-background via-background to-primary/5 shadow-sm">
+        <div className="p-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">At a glance</div>
+            <h2 className="text-2xl font-bold text-foreground">The 4-hop chain that makes bytes verifiable</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              If you only read one thing on this page, make it this: NilStore binds bytes to a deal through a clean,
+              auditable chain of commitments.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              {[
+                { label: "Deal", detail: "manifest_root" },
+                { label: "MDU", detail: "mdu_index" },
+                { label: "Blob", detail: "blob_index" },
+                { label: "Bytes", detail: "range" },
+              ].map((node, idx) => (
+                <div key={node.label} className="rounded-xl border border-border bg-background/70 p-3 text-center">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{node.label}</div>
+                  <div className="mt-1 font-mono text-[12px] text-foreground">{node.detail}</div>
+                  {idx < 3 ? <ArrowRight className="mx-auto mt-2 h-4 w-4 text-muted-foreground" /> : null}
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { label: "MDU", value: formatBytes(MDU_SIZE_BYTES) },
+                { label: "Blob", value: formatBytes(BLOB_SIZE_BYTES) },
+                { label: "KZG", value: `${KZG_COMMITMENT_BYTES} B` },
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-lg border border-border bg-background/60 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{stat.label}</div>
+                  <div className="mt-1 font-mono text-lg text-foreground">{stat.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-background/80 p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Quick path</div>
+              <ol className="mt-2 space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+                <li>
+                  Start with{" "}
+                  <Link className="text-primary hover:underline" to="/technology?section=mdu-primer">
+                    MDU Primer
+                  </Link>{" "}
+                  (units + slab order).
+                </li>
+                <li>
+                  Jump to{" "}
+                  <Link className="text-primary hover:underline" to="/technology?section=nilfs-primer">
+                    NilFS
+                  </Link>{" "}
+                  (path → offset → MDU → blob).
+                </li>
+                <li>
+                  Finish at{" "}
+                  <Link className="text-primary hover:underline" to="/technology?section=nilfs-proof-path">
+                    Proof Path
+                  </Link>{" "}
+                  (why the bytes are verifiable).
+                </li>
+              </ol>
+            </div>
+
+            <div className="rounded-xl border border-border bg-secondary/20 p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Curious developers</div>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                This page is designed for skimming first and deep dives second. Every section includes formulas,
+                concrete sizes, and a worked example so you can compute indices by hand if you want to.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section
         id="mdu-primer"
         className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden"
