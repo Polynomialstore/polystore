@@ -1,6 +1,6 @@
 # AGENTS TODO — Project Review → Spec/Doc Sync → Trusted Devnet Soft Launch (Feb 2026)
 
-Last updated: 2026-02-05
+Last updated: 2026-02-24
 
 This file is a **repo-tracked, PR-by-PR TODO list** for getting NilStore to a
 **trusted-collaborator devnet soft launch** (hub VPS + remote SPs).
@@ -613,3 +613,19 @@ Checklist:
 - [x] Add a Cloudflare Tunnel profile to `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` for hub endpoints (`rpc/lcd/evm/gateway/faucet/web`) when inbound `80/443` is unavailable.
 - [x] Update provider onboarding docs (`docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`, `docs/REMOTE_SP_JOIN_QUICKSTART.md`) with direct vs tunnel endpoint examples.
 - [x] Improve docs discoverability (`README.md`, `DOCS.md`) by linking `docs/networking/PROVIDER_ENDPOINTS.md`.
+
+---
+
+### PR40 — UX: MDU visibility + user education (PENDING)
+
+- Branch: `codex/mdu-ux-education`
+- Goal: Make MDUs (MDU #0 / Witness / User) a first-class UX object for debugging + marketing.
+- Spec/audit doc: `docs/ui/MDU_UX_AUDIT.md`
+- Test gate (if code changes):
+  - `npm -C nil-website run test:unit`
+
+Checklist:
+- [ ] Standardize copy on “MDU” (alias “DU” only as legacy).
+- [ ] Improve FileSharder MDU labeling (meta/witness/user) + add an “MDU primer”.
+- [ ] Add retrieval trace details (blob/MDU ranges, receipt counts) after downloads.
+- [ ] Add basic slab/MDU visibility to `nil_gateway_gui`.
