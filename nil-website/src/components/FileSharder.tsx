@@ -2560,7 +2560,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         gatewayReachable ? (
                           <span className="text-accent font-bold">[GW_LOCAL_OPTIMIZED] HYBRID_INGEST_READY</span>
                         ) : (
-                          <span className="text-yellow-500 font-bold">[BROWSER_FALLBACK] WASM_KZG_SHARDING_READY</span>
+                          <span className="text-primary font-bold">[BROWSER_FALLBACK] WASM_KZG_SHARDING_READY</span>
                         )
                       ) : wasmStatus === 'initializing' ? (
                         <span className="animate-pulse">BOOTING_WASM_KZG_CONTEXT...</span>
@@ -2610,14 +2610,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       {showStatusPanel && (
         <div
-          className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm"
+          className="relative overflow-hidden glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm"
           data-testid="mdu-status-panel"
           data-upload-phase={uploadPhase}
         >
-          <p className="font-bold text-foreground mb-2">Current Activity:</p>
-          <div className="space-y-2">
+          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+          {processing ? (
+            <div className="absolute inset-0 pointer-events-none animate-scan opacity-25" />
+          ) : null}
+
+          <p className="relative text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground mb-2">
+            /proc/sharder
+          </p>
+          <div className="relative space-y-2">
             {hasError ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+              <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
                 {commitError ? `Commit failed: ${commitError.message}` : null}
                 {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
@@ -2629,20 +2636,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               <div className="space-y-2" data-testid="wasm-sharding-progress">
                 <div className="flex items-start justify-between gap-3">
                   <p className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4 animate-spin text-blue-500" />
-                    <span className="font-semibold">
+                    <Cpu className="w-4 h-4 animate-spin text-primary" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
                       {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
                         ? 'Gateway ingest'
                         : 'WASM Sharding'}
                     </span>
-                    <span className="text-muted-foreground">•</span>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">•</span>
+                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
                       {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
                         ? shardProgress.label
                         : shardingUi.phaseDetails || 'Working...'}
                     </span>
                   </p>
-                  <div className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                  <div className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
                     {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2') ? (
                       shardProgress.phase === 'gateway_receiving' && shardProgress.workTotal > 0 ? (
                         `${formatBytes(shardProgress.workDone)} / ${formatBytes(shardProgress.workTotal)}`
@@ -2657,31 +2664,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   </div>
                 </div>
 
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/70 border border-border">
+                <div className="h-2 w-full overflow-hidden border border-border/60 bg-background/40">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-purple-500 to-fuchsia-500 transition-[width] duration-300 ease-out"
+                    className="h-full bg-primary transition-[width] duration-300 ease-out dark:shadow-[0_0_18px_hsl(var(--primary)_/_0.25)]"
                     style={{ width: `${(shardingUi.overallPct * 100).toFixed(1)}%` }}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-muted-foreground">
-                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Elapsed</div>
-                    <div className="text-foreground">{formatDuration(shardingUi.elapsedMs)}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
+                  <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
+                    <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
                   </div>
-                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">ETA</div>
-                    <div className="text-foreground">
+                  <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
+                    <div className="mt-1 text-foreground font-mono-data">
                       {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
                     </div>
                   </div>
-                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Speed (recent)</div>
-                    <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
+                  <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
+                    <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
                   </div>
-                  <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Op Time</div>
-                    <div className="text-foreground">
+                  <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
+                    <div className="mt-1 text-foreground font-mono-data">
                       {shardProgress.currentOpStartedAtMs
                         ? formatDuration(shardingUi.currentOpMs)
                         : shardProgress.lastOpMs != null
@@ -2692,33 +2699,33 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </div>
 
                 <details className="text-[11px] text-muted-foreground">
-                  <summary className="cursor-pointer select-none hover:text-foreground">
+                  <summary className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold">
                     Under the hood
                   </summary>
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono">
-                    <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                      <div className="opacity-70">File</div>
-                      <div className="text-foreground">{formatBytes(shardProgress.fileBytesTotal)}</div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="glass-panel industrial-border px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
+                      <div className="mt-1 text-foreground font-mono-data">{formatBytes(shardProgress.fileBytesTotal)}</div>
                     </div>
-                    <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                      <div className="opacity-70">MDUs</div>
-                      <div className="text-foreground">
+                    <div className="glass-panel industrial-border px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
+                      <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
                       </div>
                     </div>
-                    <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                      <div className="opacity-70">Blobs</div>
-                      <div className="text-foreground">
+                    <div className="glass-panel industrial-border px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
+                      <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.blobsDone}/{shardProgress.blobsTotal}
                       </div>
                     </div>
-                    <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                      <div className="opacity-70">Phase</div>
-                      <div className="text-foreground">{shardProgress.phase}</div>
+                    <div className="glass-panel industrial-border px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
+                      <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
                     </div>
-                    <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                      <div className="opacity-70">Current</div>
-                      <div className="text-foreground">
+                    <div className="glass-panel industrial-border px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
+                      <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.currentMduKind
                           ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
                           : '—'}
@@ -2730,27 +2737,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {activeUploading && (
-              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-green-500" />
+              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                <FileJson className="w-4 h-4 animate-pulse text-primary" />
                 {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
               </p>
             )}
 
             {readyToUpload && !processing && !activeUploading ? (
-              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
                 Expansion complete. Ready to upload to Storage Providers.
               </div>
             ) : null}
 
             {readyToCommit && !processing && !activeUploading ? (
-              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
                 Upload complete. Commit the manifest root to update your deal on-chain and make the file visible in the Deal Explorer.
               </div>
             ) : null}
 
             {(isCommitPending || isCommitConfirming) && (
-              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-purple-500" /> Committing manifest root to chain...
+              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                <FileJson className="w-4 h-4 animate-pulse text-primary" /> Committing manifest root to chain...
               </p>
             )}
 
@@ -2782,7 +2789,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   }}
                   disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
                   data-testid="mdu-commit"
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
+                  className="inline-flex items-center justify-center bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
                 >
                   {isCommitPending
                     ? 'Check Wallet...'
@@ -2794,7 +2801,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </button>
 
                 {commitHash && (
-                  <div className="text-xs text-muted-foreground truncate">
+                  <div className="text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
                     Tx: {commitHash}
                   </div>
                 )}
@@ -2802,8 +2809,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ) : null}
 
             {logs.length > 0 ? (
-              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
-                <p className="mb-2 text-primary font-bold">System Activity:</p>
+              <div className="mt-2 p-3 glass-panel industrial-border text-[10px] font-mono-data text-muted-foreground">
+                <p className="mb-2 text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
                 <div ref={logContainerRef} className="space-y-1 max-h-32 overflow-y-auto">
                   {logs.map((log, i) => (
                     <p key={i}>{log}</p>
@@ -2826,7 +2833,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               }}
               disabled={activeUploading || processing || isUploadComplete}
               data-testid="mdu-upload"
-              className={`mt-4 inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 ${isUploadComplete ? 'bg-green-600/50 text-white cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-primary-foreground'}`}
+              className={`mt-4 inline-flex items-center justify-center px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all disabled:opacity-50 ${isUploadComplete ? 'bg-accent/20 text-accent cursor-not-allowed ring-1 ring-accent/30' : 'bg-primary hover:bg-primary/90 text-primary-foreground'}`}
             >
               {activeUploading
                 ? 'Uploading...'
@@ -2838,13 +2845,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </button>
 
             {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
-              <div className="mt-2 p-3 bg-secondary/50 rounded border border-border text-xs font-mono text-muted-foreground">
-                <p className="mb-1 text-primary font-bold">Upload Progress:</p>
+              <div className="mt-2 p-3 glass-panel industrial-border text-[10px] font-mono-data text-muted-foreground">
+                <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
                   <div className="space-y-1 max-h-24 overflow-y-auto">
                     {uploadProgress.map((p, i) => (
                       <div key={i} className="flex justify-between items-center">
                       <span>{p.label}:</span>
-                      <span className={`font-bold ${p.status === 'complete' ? 'text-green-500' : p.status === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
+                      <span className={`font-bold ${p.status === 'complete' ? 'text-accent' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
                         {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
                       </span>
                     </div>
@@ -2854,14 +2861,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {isMode2 && mode2UploadError && (
-              <div className="text-[11px] text-red-500">
+              <div className="text-[11px] font-mono-data text-destructive">
                 Mode 2 upload failed: {mode2UploadError}
               </div>
             )}
 
             {mirrorStatus !== 'idle' && (
               <div
-                className={`text-[11px] ${mirrorStatus === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}
+                className={`text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
               >
                 Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
                 {mirrorError ? ` (${mirrorError})` : ''}
@@ -2872,50 +2879,85 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       {/* Visualization Grid */}
       {shards.length > 0 && (
-        <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-6 gap-3">
-              <div className="min-w-0">
-                <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                  <FileJson className="w-5 h-5 text-primary" />
-                  Manifest Visualization
-                </h3>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  MDUs are 8&nbsp;MiB slabs (64 × 128&nbsp;KiB blobs).{" "}
-                  <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
-                    Learn MDUs
-                  </Link>
-                </div>
-              </div>
-              <div className="shrink-0 text-sm text-muted-foreground font-mono">
-                {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
-              </div>
-            </div>
+        <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {shards.map((shard) => (
-              <div 
-                key={shard.id}
-                  className={`
-                    aspect-square rounded-lg p-2 flex flex-col justify-between text-[10px] font-mono transition-all duration-500 border
-                    ${shard.status === 'expanded' 
-                      ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300' 
-                      : shard.status === 'processing'
-                      ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-300 animate-pulse'
-                      : 'bg-secondary border-border text-muted-foreground'
-                    }
-                  `}
-                title={shard.commitments[0] || 'Pending...'}
-              >
-                  <div className="flex justify-between opacity-50">
-                    <span>#{shard.id}</span>
-                    <span>8MiB</span>
+          <div className="relative flex justify-between items-center mb-6 gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                /mnt/slab_map
+              </div>
+              <h3 className="mt-2 text-sm font-semibold flex items-center gap-2 text-foreground">
+                <FileJson className="w-4 h-4 text-primary" />
+                Slab Map
+              </h3>
+              <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
+                8&nbsp;MiB MDU = 64 × 128&nbsp;KiB blobs.{" "}
+                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                  MDU primer
+                </Link>
+              </div>
+            </div>
+            <div className="shrink-0 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+              {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
+            </div>
+          </div>
+
+          <div className="relative grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 max-h-[420px] overflow-y-auto pr-2">
+            {shards.map((shard) => {
+              const state =
+                shard.status === 'expanded' ? 'COMPLETE' : shard.status === 'processing' ? 'PROCESSING' : 'EMPTY'
+              const stateClass =
+                shard.status === 'expanded'
+                  ? 'text-accent'
+                  : shard.status === 'processing'
+                    ? 'text-primary'
+                    : 'text-muted-foreground'
+              const cellClass =
+                shard.status === 'expanded'
+                  ? 'bg-accent'
+                  : shard.status === 'processing'
+                    ? 'bg-primary/20 animate-pulse'
+                    : 'bg-background/50'
+              const ringClass =
+                shard.status === 'expanded'
+                  ? 'ring-1 ring-accent/30'
+                  : shard.status === 'processing'
+                    ? 'ring-1 ring-primary/30'
+                    : 'ring-1 ring-border/30'
+
+              return (
+                <div
+                  key={shard.id}
+                  className={`relative overflow-hidden glass-panel industrial-border aspect-square p-2 ${ringClass}`}
+                  title={shard.commitments[0] || 'Pending...'}
+                >
+                  {shard.status === 'processing' ? (
+                    <div className="absolute inset-0 pointer-events-none animate-scan opacity-20" />
+                  ) : null}
+
+                  <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+                    <span>MDU {shard.id}</span>
+                    <span className={stateClass}>{state}</span>
                   </div>
-                  <div className="truncate text-[8px] opacity-75">
-                    {shard.status === 'expanded' ? shard.commitments[0].slice(0, 8) : shard.status === 'processing' ? 'Expanding...' : 'Pending'}
+
+                  <div className="relative mt-2 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
+                    {Array.from({ length: 64 }).map((_, i) => (
+                      <div key={i} className={`aspect-square ${cellClass}`} />
+                    ))}
+                  </div>
+
+                  <div className="relative mt-2 truncate text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                    {shard.status === 'expanded'
+                      ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
+                      : shard.status === 'processing'
+                        ? 'EXPANDING...'
+                        : 'PENDING'}
                   </div>
                 </div>
-              ))}
-            </div>
+              )
+            })}
+          </div>
         </div>
       )}
       </>
