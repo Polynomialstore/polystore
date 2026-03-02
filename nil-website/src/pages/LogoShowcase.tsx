@@ -1,54 +1,68 @@
 export const LogoShowcase = () => {
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8">
-      <div className="max-w-2xl w-full space-y-12 text-center">
-        
-        {/* SVG Container */}
-        <div className="relative w-96 h-96 mx-auto">
-          <img 
-            src="/logo_vector.svg" 
-            alt="NilStore Vector Logo" 
-            className="w-full h-full object-contain"
-          />
-        </div>
+    <div className="relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-8 overflow-hidden">
+      <div className="absolute inset-0 cyber-grid opacity-35 pointer-events-none" />
 
-        {/* Brand Mark */}
-        <div className="space-y-2">
-          <h1 
-            className="text-6xl font-extrabold tracking-widest uppercase"
-            style={{
-              fontFamily: "'Montserrat', sans-serif",
-              background: "linear-gradient(90deg, #00E5FF 0%, #7B2CBF 50%, #E056FD 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              filter: "drop-shadow(0 0 10px rgba(0, 229, 255, 0.3))"
-            }}
-          >
-            NilStore
-          </h1>
-          <p className="text-slate-500 font-mono tracking-[0.5em] text-sm uppercase">
-            Structured Infinity
-          </p>
-        </div>
+      <div className="relative w-full max-w-3xl glass-panel industrial-border p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]">
+        <div className="absolute inset-0 opacity-10 pointer-events-none animate-scan" />
 
-        <div className="grid grid-cols-2 gap-8 text-left text-slate-400 text-sm border-t border-slate-800 pt-8">
-            <div>
-                <h3 className="text-cyan-400 font-bold mb-2">Color Palette</h3>
-                <div className="flex gap-2 mb-2">
-                    <div className="w-6 h-6 bg-[#00E5FF]" title="#00E5FF"></div>
-                    <div className="w-6 h-6 bg-[#7B2CBF]" title="#7B2CBF"></div>
-                    <div className="w-6 h-6 bg-[#E056FD]" title="#E056FD"></div>
-                </div>
-                <p>Electric Cyan to Neon Violet</p>
+        <div className="text-center space-y-10">
+          <div className="inline-flex items-center border border-border/50 bg-background/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+            /brand/assets
+          </div>
+
+          {/* Logo Preview */}
+          <div className="relative mx-auto h-44 w-44 glass-panel industrial-border p-3 dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)]">
+            <img
+              src="/brand/logo-light-256.png"
+              className="absolute inset-0 h-full w-full object-contain opacity-100 dark:opacity-0 transition-opacity"
+              alt="NilStore Logo (Light)"
+            />
+            <img
+              src="/brand/logo-dark-256.png"
+              className="absolute inset-0 h-full w-full object-contain opacity-0 dark:opacity-100 transition-opacity"
+              alt="NilStore Logo (Dark)"
+            />
+          </div>
+
+          {/* Wordmark */}
+          <div className="space-y-3">
+            <div className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+              <span className="text-foreground">NIL</span>
+              <span className="text-primary">STORE</span>
             </div>
-            <div>
-                <h3 className="text-purple-400 font-bold mb-2">Typography</h3>
-                <p className="font-bold" style={{ fontFamily: "'Montserrat', sans-serif" }}>Montserrat Bold</p>
-                <p>Geometric Sans-Serif</p>
-            </div>
-        </div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.5em] font-mono-data text-muted-foreground">
+              Structured Infinity
+            </p>
+          </div>
 
+          <div className="grid sm:grid-cols-2 gap-8 text-left">
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">
+                Palette
+              </div>
+              <div className="flex gap-3">
+                <div className="h-8 w-8 border border-border bg-background" title="background" />
+                <div className="h-8 w-8 border border-border bg-primary" title="primary" />
+                <div className="h-8 w-8 border border-border bg-accent" title="accent" />
+                <div className="h-8 w-8 border border-border bg-destructive" title="destructive" />
+              </div>
+              <p className="text-[11px] font-mono-data text-muted-foreground">
+                Safety Orange for primary ops, Signal Green for healthy states, Alarm Red for faults.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">
+                Typography
+              </div>
+              <p className="text-[11px] font-mono-data text-muted-foreground">
+                Montserrat 700/800 for headers. <span className="text-foreground">`font-mono-data`</span> for CIDs, addresses, and readouts.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  );
-};
+  )
+}
