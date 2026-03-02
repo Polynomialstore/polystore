@@ -34,22 +34,28 @@ async function copyText(text: string) {
   document.body.removeChild(el)
 }
 
-function Badge({ label, status }: { label: string; status: ServiceStatus }) {
-  const colors =
+function Badge({ label, status, value }: { label: string; status: ServiceStatus; value?: string }) {
+  const resolvedValue = value ?? (status === 'ok' ? 'OK' : status === 'warn' ? 'WARN' : 'ERR')
+  const borderClass =
     status === 'ok'
-      ? 'bg-green-500/10 text-green-600 dark:text-green-300 border-green-500/30'
+      ? 'border-accent/40'
       : status === 'warn'
-      ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-300 border-yellow-500/30'
-      : 'bg-destructive/10 text-destructive border-destructive/30'
-  const text =
+        ? 'border-primary/40'
+        : 'border-destructive/40'
+  const dotClass =
     status === 'ok'
-      ? 'OK'
+      ? 'bg-accent pulse-status dark:shadow-[0_0_16px_hsl(var(--accent)_/_0.25)]'
       : status === 'warn'
-      ? 'WARN'
-      : 'ERROR'
+        ? 'bg-primary dark:shadow-[0_0_16px_hsl(var(--primary)_/_0.2)]'
+        : 'bg-destructive dark:shadow-[0_0_16px_hsl(var(--destructive)_/_0.22)]'
+  const statusTextClass = status === 'ok' ? 'text-accent' : status === 'warn' ? 'text-primary' : 'text-destructive'
   return (
-    <span className={`px-2 py-1 text-xs rounded border ${colors} font-medium`}>
-      {label}: {text}
+    <span
+      className={`inline-flex items-center gap-2 border ${borderClass} bg-transparent px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+      <span className="text-muted-foreground">{label}:</span>
+      <span className={statusTextClass}>{resolvedValue}</span>
     </span>
   )
 }
@@ -149,16 +155,24 @@ export function StatusBar() {
     }
   }, [])
 
-  const walletBadge =
-    accountPermissionMismatch
-      ? <Badge label="Wallet: Access required" status="warn" />
-      : isLocked
-      ? <Badge label="Wallet: Locked" status="warn" />
+  const walletStatus = accountPermissionMismatch
+    ? ('warn' as const)
+    : isLocked
+      ? ('warn' as const)
       : isConnected && chainId
-      ? chainId === appConfig.chainId
-        ? <Badge label="Wallet: Connected (match)" status="ok" />
-        : <Badge label={`Wallet chain ${chainId}`} status="error" />
-      : <Badge label="Wallet: Not connected" status="warn" />
+        ? chainId === appConfig.chainId
+          ? ('ok' as const)
+          : ('error' as const)
+        : ('warn' as const)
+  const walletValue = accountPermissionMismatch
+    ? 'ACCESS'
+    : isLocked
+      ? 'LOCK'
+      : isConnected && chainId
+        ? chainId === appConfig.chainId
+          ? 'OK'
+          : `CHAIN${chainId}`
+        : 'MISS'
 
   const lastRoute = lastTrace?.chosen?.backend ? lastTrace.chosen.backend.replace('_', ' ') : '—'
   const lastFailure = lastTrace?.attempts.find((a) => !a.ok)
@@ -224,89 +238,130 @@ export function StatusBar() {
   }
 
   return (
-    <div className="flex flex-wrap gap-2 items-center bg-muted/50 border border-border rounded-lg px-4 py-2 text-xs text-muted-foreground shadow-sm">
-      <Badge label={`LCD`} status={summary.lcd} />
-      <Badge label={`EVM`} status={summary.evm} />
-      {!appConfig.gatewayDisabled && <Badge label={`Gateway`} status={summary.gateway} />}
-      {appConfig.faucetEnabled && <Badge label={`Faucet`} status={summary.faucet} />}
-      <Badge label={`Providers ${providerCount ?? '—'}`} status={providerStatus} />
-      <Badge label={`Chain ID`} status={summary.chainIdMatch} />
-      {walletBadge}
-      {height && <span className="opacity-75">Height: {height}</span>}
-      {chainName && <span className="opacity-75">LCD Chain: {chainName}</span>}
-      {evmChainId !== undefined && (
-        <span className="opacity-75">EVM Chain: {evmChainId}</span>
-      )}
-      <span className={routeDegraded ? 'text-amber-600 dark:text-amber-300' : 'opacity-75'}>
-        Route: {lastRoute}{lastReason}
-        {routeDegraded ? ' (local gateway available)' : ''}
-      </span>
-      {!appConfig.gatewayDisabled && (
-        <span className="opacity-75 flex items-center gap-2">
-          Local gateway: {localGateway.status === 'connected' ? 'connected' : 'not detected'}
-          <a
-            href={GATEWAY_DESKTOP_RELEASE_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded border border-border bg-background/60 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
-            title="Download the desktop gateway app"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Get App
-            <ExternalLink className="h-3 w-3" />
-          </a>
+    <div className="relative overflow-hidden glass-panel industrial-border px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.06)]">
+      <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-40" />
+
+      <div className="relative flex flex-wrap items-center gap-2 text-[10px] font-mono-data text-muted-foreground">
+        <span className="inline-flex items-center border border-border/50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+          /sys/diag
         </span>
-      )}
-      <label className="flex items-center gap-2">
-        <span className="opacity-75">Preference</span>
-        <select
-          value={preference ?? 'auto'}
-          onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
-          className="bg-background border border-border rounded px-2 py-1 text-xs"
+
+        <Badge label="LCD" status={summary.lcd} />
+        <Badge label="EVM" status={summary.evm} />
+        {!appConfig.gatewayDisabled && <Badge label="GW" status={summary.gateway} />}
+        {appConfig.faucetEnabled && <Badge label="FAC" status={summary.faucet} />}
+        <Badge label="PROV" status={providerStatus} value={String(providerCount ?? '—')} />
+        <Badge label="CHAIN" status={summary.chainIdMatch} />
+        <Badge label="WAL" status={walletStatus} value={walletValue} />
+
+        <span className="mx-1 h-3 w-[1px] bg-border/40" aria-hidden="true" />
+
+        <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+          <span className="text-muted-foreground">H:</span>
+          <span className="text-foreground">{height ?? '—'}</span>
+        </span>
+
+        {evmChainId !== undefined && (
+          <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+            <span className="text-muted-foreground">EVM:</span>
+            <span className="text-foreground">{evmChainId}</span>
+          </span>
+        )}
+
+        <span
+          className={`inline-flex items-center gap-2 border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data ${
+            routeDegraded ? 'border-primary/40' : 'border-border/40'
+          }`}
         >
-          <option value="auto">Auto</option>
-          <option value="prefer_gateway">Prefer local gateway</option>
-          <option value="prefer_direct_sp">Prefer direct SP</option>
-          {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
-        </select>
-      </label>
-      <button
-        type="button"
-        onClick={() => void handleCopyDiagnostics()}
-        className="inline-flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors"
-        title={copyError ? `Copy failed: ${copyError}` : 'Copy diagnostics bundle for the devs'}
-      >
-        {copyState === 'copied' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-        {copyState === 'copied' ? 'Copied' : 'Copy diag'}
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          if (refreshing) return
-          setRefreshing(true)
-          void fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
-            .then((res) => {
-              setSummary({
-                lcd: res.lcd,
-                evm: res.evm,
-                faucet: res.faucet,
-                gateway: res.gateway,
-                chainIdMatch: res.chainIdMatch,
+          <span className="text-muted-foreground">ROUTE:</span>
+          <span className={routeDegraded ? 'text-primary' : 'text-foreground'}>{lastRoute}{lastReason}</span>
+          {routeDegraded ? <span className="text-muted-foreground">(DEGRADED)</span> : null}
+        </span>
+
+        {!appConfig.gatewayDisabled ? (
+          <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+            <span className="text-muted-foreground">LCL_GW:</span>
+            <span className={localGateway.status === 'connected' ? 'text-accent' : 'text-primary'}>
+              {localGateway.status === 'connected' ? 'OK' : 'MISS'}
+            </span>
+            <a
+              href={GATEWAY_DESKTOP_RELEASE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 border border-border/50 bg-background/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-muted/40 transition-colors"
+              title="Download the desktop gateway app"
+            >
+              <Download className="h-3.5 w-3.5" />
+              GET_APP
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </span>
+        ) : null}
+
+        <label className="inline-flex items-center gap-2 border border-border/40 bg-background/30 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+          <span className="text-muted-foreground">PREF</span>
+          <select
+            value={preference ?? 'auto'}
+            onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
+            className="bg-transparent text-foreground outline-none"
+          >
+            <option value="auto">AUTO</option>
+            <option value="prefer_gateway">PREFER_LOCAL_GW</option>
+            <option value="prefer_direct_sp">PREFER_DIRECT_SP</option>
+            {appConfig.p2pEnabled && <option value="prefer_p2p">PREFER_LIBP2P</option>}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          onClick={() => void handleCopyDiagnostics()}
+          className={`inline-flex items-center gap-2 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
+            copyState === 'copied'
+              ? 'border-accent/40 bg-accent/10 text-accent'
+              : copyState === 'error'
+                ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                : 'border-border/50 bg-background/40 text-foreground hover:bg-muted/40'
+          }`}
+          title={copyError ? `Copy failed: ${copyError}` : 'Copy diagnostics bundle for the devs'}
+        >
+          {copyState === 'copied' ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+          {copyState === 'copied' ? 'SYNCED' : 'COPY_DIAG'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (refreshing) return
+            setRefreshing(true)
+            void fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
+              .then((res) => {
+                setSummary({
+                  lcd: res.lcd,
+                  evm: res.evm,
+                  faucet: res.faucet,
+                  gateway: res.gateway,
+                  chainIdMatch: res.chainIdMatch,
+                })
+                setHeight(res.height)
+                setChainName(res.networkName)
+                setEvmChainId(res.evmChainId)
+                setProviderCount(res.providerCount)
               })
-              setHeight(res.height)
-              setChainName(res.networkName)
-              setEvmChainId(res.evmChainId)
-              setProviderCount(res.providerCount)
-            })
-            .finally(() => setRefreshing(false))
-        }}
-        disabled={refreshing}
-        className="inline-flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors disabled:opacity-60"
-        title="Refresh status"
-      >
-        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-        Refresh
-      </button>
+              .finally(() => setRefreshing(false))
+          }}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 border border-border/50 bg-background/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/40 transition-colors disabled:opacity-60"
+          title="Refresh status"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          RESCAN
+        </button>
+      </div>
     </div>
   )
 }
