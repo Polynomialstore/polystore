@@ -53,13 +53,13 @@ export const Leaderboard = () => {
               <div key={node.address} className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-shadow relative overflow-hidden group">
                 {/* Rank Badge */}
                 <div className="absolute top-4 right-4">
-                   {index === 0 && <Trophy className="w-6 h-6 text-yellow-400" />}
-                   {index === 1 && <Medal className="w-6 h-6 text-gray-400" />}
-                   {index === 2 && <Award className="w-6 h-6 text-amber-600" />}
+                   {index === 0 && <Trophy className="w-6 h-6 text-primary" />}
+                   {index === 1 && <Medal className="w-6 h-6 text-muted-foreground" />}
+                   {index === 2 && <Award className="w-6 h-6 text-primary" />}
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className={`p-3 rounded-lg ${node.status === 'Active' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                  <div className={`p-3 rounded-lg ${node.status === 'Active' ? 'bg-accent/10 text-accent' : 'bg-destructive/10 text-destructive'}`}>
                     <Server className="w-6 h-6" />
                   </div>
                   <div>
@@ -90,13 +90,13 @@ export const Leaderboard = () => {
                       <Activity className="w-4 h-4" />
                       Status
                     </div>
-                    <div className={`font-medium text-sm ${node.status === 'Active' ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`font-medium text-sm ${node.status === 'Active' ? 'text-accent' : 'text-destructive'}`}>
                       {node.status}
                     </div>
                   </div>
                   
                   <div className="pt-2">
-                     <div className="text-xs text-center px-2 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary font-medium">
+                     <div className="text-xs text-center px-2 py-1 border border-primary/20 bg-primary/5 text-primary font-medium">
                         {node.capabilities}
                      </div>
                   </div>

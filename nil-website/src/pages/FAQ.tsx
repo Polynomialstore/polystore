@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 const faqs = [
   {
     category: "General",
-    icon: <Network className="w-5 h-5 text-blue-500" />,
+    icon: <Network className="w-5 h-5 text-primary" />,
     questions: [
       {
         q: "What is NilStore?",
@@ -44,7 +44,7 @@ const faqs = [
   },
   {
     category: "Comparison",
-    icon: <Scale className="w-5 h-5 text-purple-500" />,
+    icon: <Scale className="w-5 h-5 text-primary" />,
     questions: [
       {
         q: "How does NilStore compare to Filecoin?",
@@ -78,7 +78,7 @@ const faqs = [
   },
   {
     category: "Technology",
-    icon: <ShieldCheck className="w-5 h-5 text-green-500" />,
+    icon: <ShieldCheck className="w-5 h-5 text-accent" />,
     questions: [
       {
         q: "What are KZG Commitments?",
@@ -134,7 +134,7 @@ const faqs = [
   },
   {
     category: "Economics",
-    icon: <Coins className="w-5 h-5 text-yellow-500" />,
+    icon: <Coins className="w-5 h-5 text-primary" />,
     questions: [
       {
         q: "How do I earn rewards?",

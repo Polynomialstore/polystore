@@ -16,30 +16,30 @@ export const GovernanceDocs = () => {
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wide mb-4">Network Security Status</h2>
             <div className="grid md:grid-cols-3 gap-6">
                 <div className="flex items-center gap-3">
-                    <div className="bg-green-500/10 p-2 rounded-full">
-                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <div className="bg-accent/10 p-2">
+                        <CheckCircle2 className="w-5 h-5 text-accent" />
                     </div>
                     <div>
                         <div className="text-sm font-semibold text-foreground">L2 Bridge</div>
-                        <div className="text-xs text-green-500 font-mono">OPERATIONAL</div>
+                        <div className="text-xs text-accent font-mono-data uppercase tracking-[0.2em] font-bold">OPERATIONAL</div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="bg-green-500/10 p-2 rounded-full">
-                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <div className="bg-accent/10 p-2">
+                        <CheckCircle2 className="w-5 h-5 text-accent" />
                     </div>
                     <div>
                         <div className="text-sm font-semibold text-foreground">Council Key</div>
-                        <div className="text-xs text-green-500 font-mono">ACTIVE (5/9)</div>
+                        <div className="text-xs text-accent font-mono-data uppercase tracking-[0.2em] font-bold">ACTIVE (5/9)</div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="bg-blue-500/10 p-2 rounded-full">
-                        <Shield className="w-5 h-5 text-blue-500" />
+                    <div className="bg-primary/10 p-2">
+                        <Shield className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <div className="text-sm font-semibold text-foreground">Next Upgrade</div>
-                        <div className="text-xs text-blue-400 font-mono">NONE SCHEDULED</div>
+                        <div className="text-xs text-primary font-mono-data uppercase tracking-[0.2em] font-bold">NONE SCHEDULED</div>
                     </div>
                 </div>
             </div>
@@ -52,7 +52,7 @@ export const GovernanceDocs = () => {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-card p-6 rounded-xl border border-border">
               <div className="flex items-center gap-3 mb-4">
-                <Users className="w-6 h-6 text-blue-400" />
+                <Users className="w-6 h-6 text-primary" />
                 <h3 className="font-bold text-lg text-foreground">Token Holders</h3>
               </div>
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
@@ -65,7 +65,7 @@ export const GovernanceDocs = () => {
 
             <div className="bg-card p-6 rounded-xl border border-border">
               <div className="flex items-center gap-3 mb-4">
-                <Shield className="w-6 h-6 text-red-400" />
+                <Shield className="w-6 h-6 text-destructive" />
                 <h3 className="font-bold text-lg text-foreground">Emergency Council</h3>
               </div>
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
@@ -83,23 +83,23 @@ export const GovernanceDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Proposal Lifecycle</h2>
           <div className="relative border-l-2 border-border ml-4 space-y-8 py-4">
                           <div className="ml-6 relative">
-                            <span className="absolute -left-[33px] top-0 w-4 h-4 bg-blue-500 rounded-full border-4 border-background"></span>
+                            <span className="absolute -left-[33px] top-0 w-4 h-4 bg-primary border-4 border-background"></span>
                             <h4 className="font-bold text-foreground">1. Submission</h4>
                             <p className="text-sm text-muted-foreground">Any user with &gt;10,000 NIL stake can submit a proposal.</p>
                           </div>
             
             <div className="ml-6 relative">
-              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-blue-500 rounded-full border-4 border-background"></span>
+              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-primary border-4 border-background"></span>
               <h4 className="font-bold text-foreground">2. Deposit Period</h4>
               <p className="text-sm text-muted-foreground">The proposal enters a deposit period. It needs 10M NIL total deposit to go to a vote.</p>
             </div>
             <div className="ml-6 relative">
-              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-purple-500 rounded-full border-4 border-background"></span>
+              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-primary border-4 border-background"></span>
               <h4 className="font-bold text-foreground">3. Voting Period</h4>
               <p className="text-sm text-muted-foreground">Validators and delegators vote (Yes, No, Veto, Abstain) for 2 days.</p>
             </div>
             <div className="ml-6 relative">
-              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-green-500 rounded-full border-4 border-background"></span>
+              <span className="absolute -left-[33px] top-0 w-4 h-4 bg-accent border-4 border-background"></span>
               <h4 className="font-bold text-foreground">4. Execution / Timelock</h4>
               <p className="text-sm text-muted-foreground">If passed, the change is queued. Code upgrades execute automatically after the timelock.</p>
             </div>
@@ -112,7 +112,7 @@ export const GovernanceDocs = () => {
           <p className="text-sm text-muted-foreground">
             You can verify the current parameters and council members directly from the chain CLI.
           </p>
-          <div className="bg-card p-6 rounded-xl font-mono text-sm text-muted-foreground border border-border">
+          <div className="bg-card p-6 rounded-xl font-mono-data text-sm text-muted-foreground border border-border">
             <p className="text-muted-foreground"># View Emergency Council Members</p>
             <p>$ nilchaind q group groups-by-admin [alice_addr]</p>
             <br/>

@@ -18,8 +18,8 @@ export const EconomyDashboard = () => {
           transition={{ duration: 0.5 }}
         >
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="p-3 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
-                        <Activity className="w-8 h-8 text-yellow-500" />
+                      <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                        <Activity className="w-8 h-8 text-primary" />
                       </div>
                       <h1 className="text-4xl font-bold text-foreground">Network Economy Simulation</h1>
                     </div>
@@ -35,7 +35,7 @@ export const EconomyDashboard = () => {
           
                     <div className="bg-card border border-border p-6 rounded-xl text-sm space-y-4">
                       <h3 className="font-bold text-card-foreground flex items-center gap-2">
-                        <Info className="w-4 h-4 text-blue-400"/> How this Simulation Works
+                        <Info className="w-4 h-4 text-primary"/> How this Simulation Works
                       </h3>
                       <ul className="space-y-2 text-muted-foreground list-disc list-inside">
                         <li><strong>Storage Growth:</strong> Agents (simulated users) upload files based on an adoption curve.</li>
@@ -53,7 +53,7 @@ export const EconomyDashboard = () => {
                               title="Total Storage" 
                               value={`${data[data.length-1].storage_gb.toFixed(2)} GB`} 
                               sub="Accumulated Data (GB)"
-                              icon={<HardDrive className="text-blue-500 dark:text-blue-400"/>} 
+                              icon={<HardDrive className="text-primary" />} 
                               delay={0.1}
                           />
                   
@@ -61,21 +61,21 @@ export const EconomyDashboard = () => {
                       title="Circulating Supply" 
                       value={`${(data[data.length-1].supply / 1000000).toFixed(2)}M NIL (sim)`} 
                       sub="Simulated reward mint"
-                      icon={<Coins className="text-yellow-600 dark:text-yellow-400"/>} 
+                      icon={<Coins className="text-primary" />} 
                       delay={0.2}
                   />
                   <MetricCard 
                       title="Total Burned" 
                       value={`${data[data.length-1].slashed.toLocaleString()} NIL`} 
                       sub="Slashing + retrieval burn"
-                      icon={<AlertTriangle className="text-red-500 dark:text-red-400"/>} 
+                      icon={<AlertTriangle className="text-destructive" />} 
                       delay={0.3}
                   />
                   <MetricCard 
                       title="Growth Rate" 
                       value="+12.5%" 
                       sub="MoM Capacity"
-                      icon={<TrendingUp className="text-green-600 dark:text-green-400"/>} 
+                      icon={<TrendingUp className="text-accent" />} 
                       delay={0.4}
                   />
                 </div>
@@ -105,11 +105,11 @@ export const EconomyDashboard = () => {
                             viewport={{ once: true }}
                             transition={{ duration: 0.8, delay: i * 0.01 }}
                           >
-                            <div className="w-full h-full bg-gradient-to-t from-yellow-500 to-yellow-300 opacity-80 hover:opacity-100 rounded-t-sm cursor-pointer"></div>
+                            <div className="w-full h-full bg-gradient-to-t from-primary/80 to-primary/20 opacity-80 hover:opacity-100 rounded-t-sm cursor-pointer"></div>
                             
                             {/* Tooltip */}
                             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded border border-border shadow-lg z-20 pointer-events-none whitespace-nowrap">
-                              <div className="font-bold text-yellow-500">Epoch {d.epoch}</div>
+                              <div className="font-bold text-primary">Epoch {d.epoch}</div>
                               <div>{d.supply.toLocaleString()} NIL</div>
                             </div>
                           </motion.div>
@@ -144,8 +144,8 @@ export const EconomyDashboard = () => {
                             <div 
                               className={`w-full h-full rounded-t-sm cursor-pointer ${
                                   isSlash 
-                                  ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] animate-pulse' 
-                                  : 'bg-blue-500/80 hover:bg-blue-400'
+                                  ? 'bg-destructive shadow-[0_0_10px_hsl(var(--destructive)_/_0.35)] animate-pulse' 
+                                  : 'bg-primary/80 hover:bg-primary/90'
                               }`}
                             ></div>
           
@@ -153,7 +153,7 @@ export const EconomyDashboard = () => {
                              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded border border-border shadow-lg z-20 pointer-events-none min-w-[120px]">
                               <div className="font-bold text-foreground">Epoch {d.epoch}</div>
                               <div>{d.storage_gb.toFixed(2)} GB</div>
-                              {isSlash && <div className="text-red-500 font-bold mt-1">-{d.slashed_epoch} NIL Burned</div>}
+                              {isSlash && <div className="text-destructive font-bold mt-1">-{d.slashed_epoch} NIL Burned</div>}
                             </div>
                           </motion.div>
                         );
@@ -194,14 +194,14 @@ export const EconomyDashboard = () => {
                         </thead>
                         <tbody className="divide-y divide-border">
                           {data.map((row) => (
-                            <tr key={row.epoch} className={`hover:bg-muted/50 transition-colors ${row.slashed_epoch > 10 ? 'bg-red-500/10 dark:bg-red-900/20' : ''}`}>
+                            <tr key={row.epoch} className={`hover:bg-muted/50 transition-colors ${row.slashed_epoch > 10 ? 'bg-destructive/10' : ''}`}>
                               <td className="px-6 py-4 font-medium text-foreground">#{row.epoch}</td>
                               <td className="px-6 py-4">{row.storage_gb.toFixed(3)}</td>
-                              <td className="px-6 py-4 font-mono text-yellow-600 dark:text-yellow-500">{row.supply.toLocaleString()}</td>
-                              <td className="px-6 py-4 text-green-600 dark:text-green-400">+{row.rewards_epoch.toFixed(1)}</td>
+                              <td className="px-6 py-4 font-mono-data text-primary">{row.supply.toLocaleString()}</td>
+                              <td className="px-6 py-4 text-accent">+{row.rewards_epoch.toFixed(1)}</td>
                               <td className="px-6 py-4 font-bold">
                                   {row.slashed_epoch > 0 
-                                      ? <span className="text-red-500 dark:text-red-400">-{row.slashed_epoch.toFixed(1)}</span> 
+                                      ? <span className="text-destructive">-{row.slashed_epoch.toFixed(1)}</span> 
                                       : <span className="opacity-20">-</span>
                                   }
                               </td>

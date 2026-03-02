@@ -19,8 +19,8 @@ export const BenchmarkSection = () => {
                 value="< 1 ms"
                 subtitle="Per Proof (Blob)"
                 description="Verifying a KZG/Merkle proof is computationally trivial, allowing low-power devices to participate in consensus."
-                icon={<ZapIcon className="w-6 h-6 text-yellow-500" />}
-                barColor="bg-green-500"
+                icon={<ZapIcon className="w-6 h-6 text-primary" />}
+                barColor="bg-accent"
                 percentage={5} // Visual representation
               />
               <BenchmarkCard
@@ -28,8 +28,8 @@ export const BenchmarkSection = () => {
                 value="0s"
                 subtitle="(No Sealing)"
                 description="Providers don't precompute. They store bytes and compete to serve them quickly; slower adapters earn less in the Performance Market."
-                icon={<Clock className="w-6 h-6 text-blue-500" />}
-                barColor="bg-blue-600"
+                icon={<Clock className="w-6 h-6 text-primary" />}
+                barColor="bg-primary"
                 percentage={0}
               />
             </div>
@@ -78,7 +78,7 @@ const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, pe
       </div>
       <div className="p-2 bg-secondary rounded-lg">{icon}</div>
     </div>
-    <div className="w-full bg-secondary h-2 rounded-full mb-4 overflow-hidden">
+    <div className="w-full bg-secondary h-2 mb-4 overflow-hidden border border-border/40">
       <motion.div 
         initial={{ width: 0 }}
         whileInView={{ width: `${percentage}%` }}
@@ -95,7 +95,7 @@ const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, pe
 const MetricRow = ({ label, value }: { label: string, value: string }) => (
   <div className="flex justify-between items-center py-3 border-b last:border-0">
     <span className="text-muted-foreground">{label}</span>
-    <span className="font-mono font-medium">{value}</span>
+    <span className="font-mono-data font-medium">{value}</span>
   </div>
 );
 

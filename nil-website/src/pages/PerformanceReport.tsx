@@ -24,7 +24,7 @@ export const PerformanceReport = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-none bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-primary/20 mb-6">
             <Activity className="w-3 h-3" /> Live Benchmark Results
           </div>
           <h1 className="text-5xl font-bold mb-6 text-foreground">Network Performance Report</h1>
@@ -42,25 +42,25 @@ export const PerformanceReport = () => {
         <StatCard
           label="Avg Block Time"
           value={avgBlockTime > 0 ? `${avgBlockTime.toFixed(3)}s` : '—'}
-          icon={<Zap className="w-5 h-5 text-yellow-500" />}
+          icon={<Zap className="w-5 h-5 text-primary" />}
           delay={0.1}
         />
         <StatCard
           label="Peak TPS (Sim)"
           value={peakTps > 0 ? `~${peakTps.toFixed(1)}` : '—'}
-          icon={<Activity className="w-5 h-5 text-green-500" />}
+          icon={<Activity className="w-5 h-5 text-accent" />}
           delay={0.2}
         />
         <StatCard
           label="Total Tx Processed"
           value={totalTxs > 0 ? totalTxs.toLocaleString() : '—'}
-          icon={<Database className="w-5 h-5 text-blue-500" />}
+          icon={<Database className="w-5 h-5 text-primary" />}
           delay={0.3}
         />
         <StatCard
           label="Success Rate"
           value="100%"
-          icon={<CheckCircle2 className="w-5 h-5 text-purple-500" />}
+          icon={<CheckCircle2 className="w-5 h-5 text-primary" />}
           delay={0.4}
         />
       </div>
@@ -100,7 +100,7 @@ export const PerformanceReport = () => {
                     {run.results.avg_block_time_sec.toFixed(3)}s
                   </span>
                 </div>
-                <div className="w-full bg-secondary h-2 rounded-full mt-3 overflow-hidden">
+                <div className="w-full bg-secondary h-2 mt-3 overflow-hidden border border-border/40">
                   <div className="h-full bg-primary w-[95%]" /> {/* Visual representation of consistency */}
                 </div>
                 <p className="text-[10px] text-right mt-1 text-muted-foreground">Devnet target: ~1s cadence</p>
@@ -117,8 +117,8 @@ export const PerformanceReport = () => {
         className="bg-gradient-to-br from-secondary/50 to-background border border-border rounded-2xl p-8 md:p-12 mb-16"
       >
         <div className="flex items-start gap-6">
-          <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20 hidden md:block">
-            <Server className="w-8 h-8 text-blue-500" />
+          <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 hidden md:block">
+            <Server className="w-8 h-8 text-primary" />
           </div>
           <div>
             <h3 className="text-2xl font-bold text-foreground mb-4">Engineering Analysis</h3>
@@ -127,10 +127,10 @@ export const PerformanceReport = () => {
             </p>
             <div className="mt-6 flex gap-4">
               <div className="px-4 py-2 bg-background rounded-lg border border-border text-sm font-mono text-muted-foreground">
-                Scaling Factor: <span className="text-green-500">Linear (O(1))</span>
+                Scaling Factor: <span className="text-accent">Linear (O(1))</span>
               </div>
               <div className="px-4 py-2 bg-background rounded-lg border border-border text-sm font-mono text-muted-foreground">
-                Overhead: <span className="text-green-500">Minimal</span>
+                Overhead: <span className="text-accent">Minimal</span>
               </div>
             </div>
           </div>
@@ -147,19 +147,19 @@ export const PerformanceReport = () => {
                 </p>
                 <ul className="space-y-4">
                     <li className="flex gap-3">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</div>
+                        <div className="w-6 h-6 bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">1</div>
                         <div>
                             <strong className="text-foreground">Small Scale (Baseline):</strong> Functional verification with 10 providers and 10 deals to establish baseline latency.
                         </div>
                     </li>
                     <li className="flex gap-3">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</div>
+                        <div className="w-6 h-6 bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">2</div>
                         <div>
                             <strong className="text-foreground">Medium Scale (Throughput):</strong> 50 providers and 100 deals. Concurrent proof submission (50+ txs in mempool) to measure average TPS and Block Time under moderate congestion.
                         </div>
                     </li>
                     <li className="flex gap-3">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</div>
+                        <div className="w-6 h-6 bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">3</div>
                         <div>
                             <strong className="text-foreground">Large Scale (Stress):</strong> 200 providers and 500+ deals. Rapid-fire creation and proving to identify CPU/IO bottlenecks.
                         </div>
@@ -194,7 +194,7 @@ const StatCard = ({ label, value, icon, delay }: { label: string, value: string 
     transition={{ delay, duration: 0.4 }}
     className="bg-card p-6 rounded-xl border border-border flex flex-col items-center text-center hover:shadow-md transition-all"
   >
-    <div className="mb-3 p-3 bg-secondary/50 rounded-full">
+    <div className="mb-3 p-3 bg-secondary/50">
       {icon}
     </div>
     <div className="text-2xl font-bold text-foreground mb-1">{value}</div>

@@ -211,11 +211,12 @@ export function SpOnboarding() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-cyan-500/10 via-background to-blue-500/10 p-8">
-        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
+      <section className="relative overflow-hidden glass-panel industrial-border p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+        <div className="absolute inset-0 cyber-grid opacity-25 pointer-events-none" />
+          <div className="absolute -top-24 -right-24 h-72 w-72 bg-primary/20 blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 h-72 w-72 bg-accent/20 blur-3xl" />
         <div className="relative space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-cyan-600 dark:text-cyan-300">
+          <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
             <Server className="h-4 w-4" />
             Storage Provider Companion
           </div>
@@ -299,25 +300,25 @@ export function SpOnboarding() {
                 <div
                   key={step.id}
                   className={`rounded-lg border p-4 transition-colors ${
-                    checked ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-background/70"
+                    checked ? "border-accent/40 bg-accent/5" : "border-border bg-background/70"
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     <button
                       type="button"
                       onClick={() => toggleStep(step.id)}
-                      className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border ${
-                        checked
-                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-500"
-                          : "border-border bg-background text-muted-foreground"
-                      }`}
+                        className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center border ${
+                          checked
+                            ? "border-accent/50 bg-accent/20 text-accent"
+                            : "border-border bg-background text-muted-foreground"
+                        }`}
                     >
                       {checked ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-xs font-bold">{index + 1}</span>}
                     </button>
                     <div className="min-w-0">
                       <h3 className="font-semibold text-foreground">{step.title}</h3>
                       <p className="mt-1 text-sm text-muted-foreground">{step.detail}</p>
-                      <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-300">
+                      <p className="mt-2 text-xs font-medium text-accent">
                         Success: {step.successSignal}
                       </p>
                     </div>
@@ -369,7 +370,7 @@ export function SpOnboarding() {
             </a>
           </div>
 
-          <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
+          <div className="mt-6 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
@@ -420,22 +421,22 @@ export function SpOnboarding() {
         <h2 className="text-xl font-semibold text-foreground">Operational UX model</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div className="rounded-lg border border-border bg-background/70 p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><Shield className="h-4 w-4 text-emerald-500" /> Healthy</div>
+            <div className="flex items-center gap-2 font-semibold text-foreground"><Shield className="h-4 w-4 text-accent" /> Healthy</div>
             <p className="mt-2 text-sm text-muted-foreground">All critical checks pass: chain connectivity, service availability, endpoint reachability, auth compatibility.</p>
           </div>
           <div className="rounded-lg border border-border bg-background/70 p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><Server className="h-4 w-4 text-amber-500" /> Degraded</div>
+            <div className="flex items-center gap-2 font-semibold text-foreground"><Server className="h-4 w-4 text-primary" /> Degraded</div>
             <p className="mt-2 text-sm text-muted-foreground">Provider is reachable but drift or partial check failures exist. Review remediation actions before serving production traffic.</p>
           </div>
           <div className="rounded-lg border border-border bg-background/70 p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><HardDrive className="h-4 w-4 text-red-500" /> Critical</div>
+            <div className="flex items-center gap-2 font-semibold text-foreground"><HardDrive className="h-4 w-4 text-destructive" /> Critical</div>
             <p className="mt-2 text-sm text-muted-foreground">Service down, chain mismatch, auth mismatch, or endpoint failure. Upload/download reliability is blocked until fixed.</p>
           </div>
         </div>
       </section>
 
       {copyStatus ? (
-        <div className="mt-5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <div className="mt-5 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm text-accent">
           {copyStatus}
         </div>
       ) : null}

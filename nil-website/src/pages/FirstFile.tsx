@@ -371,7 +371,7 @@ export function FirstFile() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-3">
-            <Rocket className="w-8 h-8 text-cyan-500" />
+            <Rocket className="w-8 h-8 text-primary" />
             First File Wizard
           </h1>
           <p className="mt-3 text-muted-foreground">
@@ -400,7 +400,7 @@ export function FirstFile() {
       )}
 
       {notice && (
-        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-200 flex items-start gap-3">
+        <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm text-primary flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5" />
           <div className="min-w-0">
             <div className="font-semibold">Note</div>
@@ -420,7 +420,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Chain ID {appConfig.chainId}</div>
             </div>
           </div>
-          {isConnected && !isWrongNetwork && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {isConnected && !isWrongNetwork && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <ConnectWallet />
@@ -428,7 +428,7 @@ export function FirstFile() {
             <button
               type="button"
               onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
-              className="inline-flex items-center justify-center rounded-lg bg-yellow-600 hover:bg-yellow-500 px-4 py-2 text-sm font-bold text-white transition-colors"
+              className="inline-flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
             >
               {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
             </button>
@@ -450,7 +450,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Gas is required for on-chain transactions.</div>
             </div>
           </div>
-          {hasBalance && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {hasBalance && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
         {!appConfig.faucetEnabled ? (
           <div className="text-sm text-muted-foreground">
@@ -463,7 +463,7 @@ export function FirstFile() {
                 type="button"
                 onClick={() => void handleRequestFunds()}
                 disabled={!isConnected || faucetLoading}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-700 dark:text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-60"
               >
                 <Coins className="w-4 h-4" />
                 {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
@@ -492,7 +492,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Creates a thin-provisioned container on-chain.</div>
             </div>
           </div>
-          {dealId && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {dealId && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
 
         <div className="grid md:grid-cols-3 gap-3 text-sm">
@@ -577,7 +577,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Shards locally and uploads via your selected route.</div>
             </div>
           </div>
-          {uploadResult && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {uploadResult && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -607,7 +607,7 @@ export function FirstFile() {
           type="button"
           onClick={() => void handleUpload()}
           disabled={!selectedFile || !dealId || uploadLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-sm font-bold text-white transition-colors disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
         >
           <Upload className="w-4 h-4" />
           {uploadLoading ? 'Uploading…' : 'Upload'}
@@ -643,7 +643,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Updates the deal to the new manifest root.</div>
             </div>
           </div>
-          {commitOk && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {commitOk && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
 
         <button
@@ -673,7 +673,7 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Downloads the file (or first 128&nbsp;KiB) and submits receipts.</div>
             </div>
           </div>
-          {downloadOk && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          {downloadOk && <CheckCircle2 className="w-5 h-5 text-accent" />}
           {downloadOk === false && <AlertCircle className="w-5 h-5 text-destructive" />}
         </div>
 
@@ -681,7 +681,7 @@ export function FirstFile() {
           type="button"
           onClick={() => void handleRetrieve()}
           disabled={!commitOk || fetchLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-bold text-white transition-colors disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent/90 px-4 py-2 text-sm font-bold text-accent-foreground transition-colors disabled:opacity-60"
         >
           <Download className="w-4 h-4" />
           {fetchLoading ? 'Fetching…' : 'Fetch now'}

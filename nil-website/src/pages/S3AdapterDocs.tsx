@@ -20,14 +20,14 @@ export const S3AdapterDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">How it Works</h2>
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-card p-6 rounded-xl border border-border">
-              <Globe className="w-8 h-8 text-blue-400 mb-4" />
+              <Globe className="w-8 h-8 text-primary mb-4" />
               <h3 className="font-bold text-lg text-foreground">1. S3 Ingestion</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 The adapter listens for standard HTTP/S3 requests. When a file is uploaded via `PUT`, it is temporarily buffered.
               </p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">
-              <Database className="w-8 h-8 text-green-400 mb-4" />
+              <Database className="w-8 h-8 text-accent mb-4" />
               <h3 className="font-bold text-lg text-foreground">2. Sharding & Binding</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 The file is split into <strong>8 MiB Mega-Data Units (MDUs)</strong>. The adapter generates a <strong>Manifest</strong> containing KZG commitments for each MDU, producing a single 48-byte Root Hash.
@@ -38,7 +38,7 @@ export const S3AdapterDocs = () => {
               </p>
             </div>
             <div className="bg-card p-6 rounded-xl border border-border">
-              <Terminal className="w-8 h-8 text-purple-400 mb-4" />
+              <Terminal className="w-8 h-8 text-primary mb-4" />
               <h3 className="font-bold text-lg text-foreground">3. Content Commitment</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 The Root Hash is returned to the user or automatically committed to an active Storage Deal via `MsgUpdateDealContent`, binding the data to the network's capacity.
@@ -77,7 +77,7 @@ export const S3AdapterDocs = () => {
 
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-mono">PUT</span>
+                <span className="bg-primary/10 text-primary px-2 py-1 rounded-none text-xs font-mono-data uppercase tracking-[0.2em] font-bold border border-primary/20">PUT</span>
                 /api/v1/object/{'{key}'}
               </h3>
               <p className="text-sm text-muted-foreground mb-2">Uploads and shards a file.</p>
@@ -88,7 +88,7 @@ export const S3AdapterDocs = () => {
 
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                <span className="bg-accent/10 text-accent px-2 py-1 rounded-none text-xs font-mono-data uppercase tracking-[0.2em] font-bold border border-accent/20">GET</span>
                 /api/v1/object/{'{key}'}
               </h3>
               <p className="text-sm text-muted-foreground mb-2">Retrieves a file (reassembling shards).</p>

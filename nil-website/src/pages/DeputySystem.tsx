@@ -10,8 +10,8 @@ export const DeputySystem = () => {
         className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20 shrink-0">
-            <Gavel className="w-8 h-8 text-red-500" />
+          <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 shrink-0">
+            <Gavel className="w-8 h-8 text-destructive" />
           </div>
           <h2 className="text-3xl font-bold text-foreground">Dispute Resolution: The Deputy System</h2>
         </div>
@@ -23,7 +23,7 @@ export const DeputySystem = () => {
         {/* Section 1: The Problem */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Scale className="w-5 h-5 text-red-500" /> The "Ghosting" Problem
+            <Scale className="w-5 h-5 text-destructive" /> The "Ghosting" Problem
           </h3>
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div className="bg-card p-6 rounded-xl border border-border">
@@ -40,7 +40,7 @@ export const DeputySystem = () => {
         {/* Section 2: The Solution */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Search className="w-5 h-5 text-purple-500" /> Solution: The "Mystery Shopper"
+            <Search className="w-5 h-5 text-primary" /> Solution: The "Mystery Shopper"
           </h3>
           <p className="text-muted-foreground mb-6">
             Instead of a judge, the user summons a <strong>Deputy</strong> (a random third-party node) to fetch the file for them.
@@ -52,7 +52,7 @@ export const DeputySystem = () => {
                 
                 {/* Step 1 */}
                 <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center font-bold shrink-0">1</div>
+                    <div className="w-8 h-8 bg-destructive text-destructive-foreground flex items-center justify-center font-bold shrink-0">1</div>
                     <div className="bg-background/80 p-4 rounded-lg border border-border flex-1">
                         <strong>Escalation:</strong> User fails to connect. User broadcasts a bounty: "Pay 5 tokens (example) to fetch Chunk X from Provider Y."
                     </div>
@@ -60,7 +60,7 @@ export const DeputySystem = () => {
 
                 {/* Step 2 */}
                 <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold shrink-0">2</div>
+                    <div className="w-8 h-8 bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">2</div>
                     <div className="bg-background/80 p-4 rounded-lg border border-border flex-1">
                         <strong>The Trap:</strong> A Deputy accepts. They generate a <strong>Fresh Ephemeral Identity</strong> (New Key/IP). They look like a brand new customer.
                     </div>
@@ -68,7 +68,7 @@ export const DeputySystem = () => {
 
                 {/* Step 3 */}
                 <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold shrink-0">3</div>
+                    <div className="w-8 h-8 bg-accent text-accent-foreground flex items-center justify-center font-bold shrink-0">3</div>
                     <div className="bg-background/80 p-4 rounded-lg border border-border flex-1">
                         <strong>The Dilemma:</strong> The Provider receives the request.
                         <ul className="list-disc list-inside text-sm text-muted-foreground mt-2">
@@ -85,7 +85,7 @@ export const DeputySystem = () => {
         {/* Section 3: Audit Debt */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <ShieldCheck className="w-5 h-5 text-blue-500" /> Audit Debt: Forced Participation
+            <ShieldCheck className="w-5 h-5 text-primary" /> Audit Debt: Forced Participation
           </h3>
           <p className="text-muted-foreground mb-6">
             Where do Deputies come from? We <strong>conscript</strong> them. In the proposed model, every Storage Provider must perform a fixed number of audits (act as a Deputy) per epoch to stay eligible for rewards.

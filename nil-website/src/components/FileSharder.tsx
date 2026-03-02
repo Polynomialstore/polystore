@@ -2513,9 +2513,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           onClick={() => openConnectModal?.()}
           className="w-full rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
         >
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary/60">
-            <Wallet className="h-6 w-6 text-foreground" />
-          </div>
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-border/60 bg-secondary/60">
+              <Wallet className="h-6 w-6 text-foreground" />
+            </div>
           <div className="text-sm font-semibold text-foreground">Connect wallet to upload</div>
           <div className="mt-1 text-xs text-muted-foreground">Deals and files are owned by your Nil address.</div>
         </button>

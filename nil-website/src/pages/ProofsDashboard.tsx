@@ -287,8 +287,8 @@ export const ProofsDashboard = () => {
       <div className="mb-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="max-w-2xl">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10">
-              <Activity className="w-6 h-6 text-indigo-400" />
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/10">
+              <Activity className="w-6 h-6 text-primary" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-foreground">Retrieval Observatory</h1>
           </div>
@@ -306,25 +306,25 @@ export const ProofsDashboard = () => {
       {/* Summary metrics */}
       <div className="grid md:grid-cols-4 gap-4 mb-10">
         <SummaryCard
-          icon={<BarChart2 className="w-5 h-5 text-cyan-400" />}
+          icon={<BarChart2 className="w-5 h-5 text-primary" />}
           title="Retrieval Sessions"
           value={totalSessions}
           sub="On-chain session objects"
         />
         <SummaryCard
-          icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+          icon={<CheckCircle2 className="w-5 h-5 text-accent" />}
           title="Completed"
           value={statusCounts.COMPLETED}
           sub="Fully confirmed sessions"
         />
         <SummaryCard
-          icon={<XCircle className="w-5 h-5 text-red-400" />}
+          icon={<XCircle className="w-5 h-5 text-destructive" />}
           title="Canceled / Expired"
           value={statusCounts.CANCELED + statusCounts.EXPIRED}
           sub="Did not complete"
         />
         <SummaryCard
-          icon={<HardDrive className="w-5 h-5 text-yellow-400" />}
+          icon={<HardDrive className="w-5 h-5 text-primary" />}
           title="Deals & Providers"
           value={`${activeDeals}/${totalDeals} deals · ${activeProviders || totalProviders} SPs`}
           sub="Active/total on-chain"
@@ -332,7 +332,7 @@ export const ProofsDashboard = () => {
       </div>
 
       {error ? (
-        <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
@@ -354,12 +354,12 @@ export const ProofsDashboard = () => {
           </div>
           <div className="space-y-3 mt-2">
             {[
-              { label: 'Completed', value: statusCounts.COMPLETED, color: 'bg-emerald-500' },
-              { label: 'Open', value: statusCounts.OPEN, color: 'bg-cyan-500' },
-              { label: 'Proof submitted', value: statusCounts.PROOF_SUBMITTED, color: 'bg-indigo-500' },
-              { label: 'User confirmed', value: statusCounts.USER_CONFIRMED, color: 'bg-blue-500' },
-              { label: 'Canceled', value: statusCounts.CANCELED, color: 'bg-slate-500' },
-              { label: 'Expired', value: statusCounts.EXPIRED, color: 'bg-red-500' },
+              { label: 'Completed', value: statusCounts.COMPLETED, color: 'bg-accent' },
+              { label: 'Open', value: statusCounts.OPEN, color: 'bg-primary/60' },
+              { label: 'Proof submitted', value: statusCounts.PROOF_SUBMITTED, color: 'bg-primary' },
+              { label: 'User confirmed', value: statusCounts.USER_CONFIRMED, color: 'bg-accent/60' },
+              { label: 'Canceled', value: statusCounts.CANCELED, color: 'bg-muted-foreground/50' },
+              { label: 'Expired', value: statusCounts.EXPIRED, color: 'bg-destructive' },
             ].map((row) => {
               const pct = (row.value / totalForStatusChart) * 100
               return (
@@ -370,7 +370,7 @@ export const ProofsDashboard = () => {
                       {row.value} session{row.value === 1 ? '' : 's'} ({pct.toFixed(1)}%)
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-2 rounded-none bg-muted overflow-hidden">
                     <div className={`h-full ${row.color}`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -394,8 +394,8 @@ export const ProofsDashboard = () => {
         <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <HardDrive className="w-4 h-4 text-blue-400" />
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <HardDrive className="w-4 h-4 text-primary" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-card-foreground">Top Deals & Providers</h3>
@@ -443,7 +443,7 @@ export const ProofsDashboard = () => {
                       className="flex items-center justify-between bg-muted/40 rounded-lg px-2 py-1.5 border border-border/50"
                     >
                       <div>
-                        <div className="font-mono text-[10px] text-indigo-300">
+                        <div className="font-mono-data text-[10px] text-foreground">
                           {p.provider.slice(0, 10)}...{p.provider.slice(-4)}
                         </div>
                         <div className="text-[10px] text-muted-foreground">{p.count} sessions</div>
@@ -466,8 +466,8 @@ export const ProofsDashboard = () => {
       <section className="bg-card rounded-xl border border-border p-5 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-emerald-400" />
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-accent" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-card-foreground">Recent Retrieval Sessions</h3>
@@ -509,15 +509,15 @@ export const ProofsDashboard = () => {
                       key={`${s.dealId}-${s.provider}-${s.updatedHeight ?? ''}-${shortSession}`}
                       className="hover:bg-muted/50 transition-colors"
                     >
-                      <td className="px-3 py-2 font-mono text-[10px] text-primary" title={sessionHex || undefined}>
+                      <td className="px-3 py-2 font-mono-data text-[10px] text-primary" title={sessionHex || undefined}>
                         {shortSession}
                       </td>
                       <td className="px-3 py-2 text-foreground">{s.dealId ? `#${s.dealId}` : '—'}</td>
-                      <td className="px-3 py-2 font-mono text-[10px] text-indigo-300" title={s.provider || undefined}>
+                      <td className="px-3 py-2 font-mono-data text-[10px] text-foreground" title={s.provider || undefined}>
                         {s.provider ? `${s.provider.slice(0, 10)}...${s.provider.slice(-4)}` : '—'}
                       </td>
                       <td className="px-3 py-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] text-muted-foreground">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-none border border-border/50 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
                           {s.statusLabel}
                         </span>
                       </td>

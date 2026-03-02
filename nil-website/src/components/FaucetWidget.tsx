@@ -49,7 +49,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
         <button
             onClick={() => (isLocked ? handleUnlock() : openConnectModal?.())}
             disabled={unlocking}
-            className={`flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors shadow-lg shadow-indigo-900/20 ${className}`}
+            className={`inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-60 ${className}`}
         >
             {unlocking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
             {isLocked ? 'Unlock to Request Funds' : 'Connect to Request Funds'}
@@ -62,12 +62,12 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
         <button 
             onClick={handleRequest}
             disabled={loading || status === 'success'}
-            className={`flex items-center gap-2 px-4 py-2 font-medium rounded-md transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed ${
+            className={`inline-flex items-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-70 disabled:cursor-not-allowed border ${
                 status === 'success' 
-                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                ? 'bg-accent/10 text-accent border-accent/40 dark:shadow-[0_0_24px_hsl(var(--accent)_/_0.18)]' 
                 : status === 'error'
-                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                : 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/20'
+                ? 'bg-destructive/10 text-destructive border-destructive/40 dark:shadow-[0_0_24px_hsl(var(--destructive)_/_0.16)]'
+                : 'bg-primary/10 text-primary hover:bg-primary/20 border-primary/30 dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)]'
             } ${className}`}
         >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 

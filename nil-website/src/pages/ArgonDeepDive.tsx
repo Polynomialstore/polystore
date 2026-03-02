@@ -22,8 +22,8 @@ export const ArgonDeepDive = () => {
         className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20 shrink-0">
-            <HeartCrack className="w-8 h-8 text-red-500" />
+          <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 shrink-0">
+            <HeartCrack className="w-8 h-8 text-destructive" />
           </div>
           <h2 className="text-3xl font-bold text-foreground">Archived: Proof-of-Delayed-Encode (PoDE)</h2>
         </div>
@@ -35,7 +35,7 @@ export const ArgonDeepDive = () => {
         {/* Section 1: The Concept & Mechanism */}
         <section>
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Cpu className="w-5 h-5 text-red-500" /> Memory-Hard Computation
+            <Cpu className="w-5 h-5 text-destructive" /> Memory-Hard Computation
           </h3>
           <p className="text-muted-foreground mb-6">
             In the PoDE model, when challenged, SPs perform a memory-hard computation (<strong>Argon2id</strong>) on a chunk of data. The work was tuned (example) to take about {podeWorkMs/1000} second on a reference CPU.
@@ -54,7 +54,7 @@ export const ArgonDeepDive = () => {
                     delay: i * 0.03,
                     repeatDelay: 1
                   }}
-                  className="bg-red-500 rounded-sm w-full h-full"
+                  className="bg-primary/70 rounded-sm w-full h-full"
                 />
               ))}
             </div>
@@ -65,7 +65,7 @@ export const ArgonDeepDive = () => {
         {/* Section 2: The Security Guarantee (Timing Gap) */}
         <section className="mt-16">
           <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-foreground">
-            <Clock className="w-5 h-5 text-blue-500" /> The Timing Defense
+            <Clock className="w-5 h-5 text-accent" /> The Timing Defense
           </h3>
           <p className="text-muted-foreground mb-6">
             PoDE relied on a strict submission deadline: if a node tried to fetch missing data from a remote source on demand, it would miss the deadline and be penalized. In practice, strict deadlines can be brittle, which is why NilStore now uses the Performance Market instead.
@@ -78,14 +78,14 @@ export const ArgonDeepDive = () => {
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm text-foreground">
                             <span>Local Compute (Argon2id)</span>
-                            <span className="font-bold text-blue-500">{honestSeconds.toFixed(2)}s</span>
+                            <span className="font-bold text-accent">{honestSeconds.toFixed(2)}s</span>
                         </div>
-                        <div className="w-full bg-secondary h-4 rounded-full overflow-hidden">
+                        <div className="w-full bg-secondary h-4 overflow-hidden border border-border/40">
                             <motion.div 
                             initial={{ width: 0 }}
                             animate={{ width: "100%" }}
                             transition={{ duration: 1 }}
-                            className="h-full bg-blue-500"
+                            className="h-full bg-accent"
                             />
                         </div>
                     </div>
@@ -96,23 +96,23 @@ export const ArgonDeepDive = () => {
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm text-foreground">
                             <span>Network Fetch + Compute</span>
-                            <span className="font-bold text-red-500">{attackerSeconds.toFixed(2)}s</span>
+                            <span className="font-bold text-destructive">{attackerSeconds.toFixed(2)}s</span>
                         </div>
-                        <div className="w-full bg-secondary h-4 rounded-full overflow-hidden">
+                        <div className="w-full bg-secondary h-4 overflow-hidden border border-border/40">
                             <motion.div 
                             initial={{ width: 0 }}
                             animate={{ width: "100%" }}
                             transition={{ duration: 1 }}
-                            className="h-full bg-red-500"
+                            className="h-full bg-destructive"
                             />
                         </div>
                     </div>
                 </div>
             </div>
             
-            <div className="mt-8 p-4 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-800 flex gap-3 items-start">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="text-red-300">
+            <div className="mt-8 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex gap-3 items-start">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-destructive" />
+              <p className="text-destructive">
                 <strong>PoDE Intuition (Archived):</strong> Under these example parameters, remote fetch + compute exceeds a strict deadline of <strong>{deadlineMs}ms</strong>. 
                 <br/>
                 This is the core intuition PoDE attempted to encode; the current protocol achieves similar goals via incentives rather than a hard cutoff.

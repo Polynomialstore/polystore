@@ -77,7 +77,7 @@ export function Devnet() {
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl">
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-foreground flex items-center gap-3">
-          <Globe className="w-8 h-8 text-cyan-500" />
+          <Globe className="w-8 h-8 text-primary" />
           Devnet (Multi-Provider)
         </h1>
         <p className="mt-3 text-muted-foreground">
@@ -89,7 +89,7 @@ export function Devnet() {
       <div className="grid gap-6">
         <section className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 text-foreground font-semibold">
-            <LinkIcon className="w-5 h-5 text-indigo-500" />
+            <LinkIcon className="w-5 h-5 text-primary" />
             Hub Endpoints
           </div>
           <div className="mt-4 grid md:grid-cols-2 gap-4 text-sm">
@@ -116,7 +116,7 @@ export function Devnet() {
 
         <section className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 text-foreground font-semibold">
-            <Terminal className="w-5 h-5 text-purple-500" />
+            <Terminal className="w-5 h-5 text-primary" />
             Join As A Provider
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -134,12 +134,12 @@ export function Devnet() {
         <section className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-foreground">
-              <Server className="w-5 h-5 text-emerald-500" />
+              <Server className="w-5 h-5 text-accent" />
               Providers
             </div>
             <div className="text-xs text-muted-foreground">{loading ? 'Refreshing…' : `${providers.length} registered`}</div>
           </div>
-          {err && <div className="px-6 py-4 text-sm text-red-600 dark:text-red-400">Failed to load providers: {err}</div>}
+          {err && <div className="px-6 py-4 text-sm text-destructive">Failed to load providers: {err}</div>}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border text-xs">
               <thead className="bg-muted/20">

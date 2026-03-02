@@ -61,10 +61,10 @@ const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
   if (loading) {
     return renderBody(
       <div className="space-y-4">
-        <div className="h-6 w-32 rounded-full bg-muted animate-pulse" />
-        <div className="h-4 w-3/4 rounded-full bg-muted animate-pulse" />
-        <div className="h-4 w-5/6 rounded-full bg-muted animate-pulse" />
-        <div className="h-4 w-2/3 rounded-full bg-muted animate-pulse" />
+        <div className="h-6 w-32 bg-muted animate-pulse" />
+        <div className="h-4 w-3/4 bg-muted animate-pulse" />
+        <div className="h-4 w-5/6 bg-muted animate-pulse" />
+        <div className="h-4 w-2/3 bg-muted animate-pulse" />
       </div>
     );
   }

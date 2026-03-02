@@ -224,13 +224,13 @@ export const Technology = () => {
               <div className="mt-2 text-sm text-muted-foreground">
                 Slab MDUs are ordered as:
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
-                  <span className="rounded-full border border-border bg-background px-3 py-1 font-mono text-foreground">MDU #0</span>
+                  <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">MDU #0</span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <span className="rounded-full border border-border bg-background px-3 py-1 font-mono text-foreground">
+                  <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">
                     witness MDUs (#1..#{nilfsWitnessMdus})
                   </span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <span className="rounded-full border border-border bg-background px-3 py-1 font-mono text-foreground">
+                  <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">
                     user data MDUs (start at #{nilfsMetaMdus})
                   </span>
                 </div>
@@ -331,7 +331,7 @@ export const Technology = () => {
                   >
                     {copiedKey === "nilfs_meta_mdus" ? (
                       <>
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        <Check className="h-3.5 w-3.5 text-accent" />
                         Copied meta_mdus
                       </>
                     ) : (
@@ -633,7 +633,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                   className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
                   title="Copy blob size bytes"
                 >
-                  {copiedKey === "blob_size" ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "blob_size" ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
                   {BLOB_SIZE_BYTES}
                 </button>
               </div>
@@ -654,7 +654,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                   className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
                   title="Copy MDU size bytes"
                 >
-                  {copiedKey === "mdu_size" ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "mdu_size" ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
                   {MDU_SIZE_BYTES}
                 </button>
               </div>
@@ -665,7 +665,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             <div className="rounded-xl border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Manifest Root</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                <Hash className="h-4 w-4 text-emerald-500" />
+                <Hash className="h-4 w-4 text-accent" />
                 <span className="font-semibold">48-byte KZG commitment</span>
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground">
@@ -676,7 +676,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             <div className="rounded-xl border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">MDU Root</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                <Spline className="h-4 w-4 text-indigo-500" />
+                <Spline className="h-4 w-4 text-primary" />
                 <span className="font-semibold">Merkle root</span>
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground">
@@ -687,7 +687,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             <div className="rounded-xl border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Blob Commitment</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                <Shield className="h-4 w-4 text-purple-500" />
+                <Shield className="h-4 w-4 text-primary" />
                 <span className="font-semibold">48-byte KZG commitment</span>
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground">
@@ -820,9 +820,9 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
         <div className="space-y-20">
           <div className="flex gap-6 group">
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-500 font-bold shrink-0">
-                1
-              </div>
+                <div className="w-12 h-12 bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-bold shrink-0">
+                  1
+                </div>
               <div className="w-0.5 flex-grow bg-border my-2"></div>
             </div>
             <div className="w-full pb-6">
@@ -832,9 +832,9 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
 
           <div className="flex gap-6 group">
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-500 font-bold shrink-0">
-                2
-              </div>
+                <div className="w-12 h-12 bg-accent/10 border border-accent/30 flex items-center justify-center text-accent font-bold shrink-0">
+                  2
+                </div>
               <div className="w-0.5 flex-grow bg-border my-2"></div>
             </div>
             <div className="w-full pb-6">
@@ -844,9 +844,9 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
 
           <div className="flex gap-6 group">
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 font-bold shrink-0">
-                3
-              </div>
+                <div className="w-12 h-12 bg-destructive/10 border border-destructive/30 flex items-center justify-center text-destructive font-bold shrink-0">
+                  3
+                </div>
               <div className="w-0.5 flex-grow bg-border my-2"></div>
             </div>
             <div className="w-full pb-6">
@@ -856,9 +856,9 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
 
           <div className="flex gap-6 group">
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-500 font-bold shrink-0">
-                4
-              </div>
+                <div className="w-12 h-12 bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-bold shrink-0">
+                  4
+                </div>
             </div>
             <div className="w-full pb-6">
               <DeputySystem />
