@@ -189,11 +189,11 @@ export function DealSlabPanel(props: {
   }, [inferred.blobsPerMdu, mduInspectorIndex]);
 
   return (
-    <div className="metric-card">
+    <div className="metric-card industrial-border">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b subtle-divider px-3 py-2">
         <div>
           <p className="soft-label">Deal storage layout (Slab / MDUs)</p>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-400">
             MDU education lives on the Technology page. This panel focuses on
             visibility and developer-grade ranges.
           </p>
@@ -220,26 +220,26 @@ export function DealSlabPanel(props: {
 
       <div className="px-3 py-3 space-y-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
-          <label className="text-xs font-semibold text-slate-500">
+          <label className="text-xs font-semibold text-slate-400">
             Manifest root
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
               value={manifestRoot}
               onChange={(event) => onChangeManifestRoot(event.target.value)}
               placeholder="0x…"
             />
           </label>
-          <label className="text-xs font-semibold text-slate-500">
+          <label className="text-xs font-semibold text-slate-400">
             Deal ID / Owner
             <div className="mt-1 grid gap-2 sm:grid-cols-2">
               <input
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
                 value={dealId}
                 onChange={(event) => onChangeDealId(event.target.value)}
                 placeholder="123"
               />
               <input
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
                 value={owner}
                 onChange={(event) => onChangeOwner(event.target.value)}
                 placeholder="nil1…"
@@ -260,48 +260,48 @@ export function DealSlabPanel(props: {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+          <div className="glass-panel industrial-border px-3 py-2">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
               Constants
             </p>
-            <p className="mt-1 text-xs text-slate-700">
+            <p className="mt-1 text-xs text-slate-200 font-mono-data">
               mdu_size={inferred.mduSizeBytes.toLocaleString()} · blob_size=
               {inferred.blobSizeBytes.toLocaleString()} · blobs_per_mdu=
               {inferred.blobsPerMdu}
             </p>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-slate-400">
               Retrieval sessions and receipts often reference global blob indices.
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <div className="glass-panel industrial-border px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                 Slab breakdown
               </p>
               {!inferred.uploadMatches ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                <span className="font-mono-data border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-bold text-slate-300 tracking-[0.18em]">
                   best-effort
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-xs text-slate-700">
+            <p className="mt-1 text-xs text-slate-200 font-mono-data">
               meta=1 · witness=
               {inferred.witnessMdus !== null ? inferred.witnessMdus : "?"} ·
               user=
               {inferred.userMdus !== null ? inferred.userMdus : "?"} · total=
               {inferred.totalMdus !== null ? inferred.totalMdus : "?"}
             </p>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-slate-400">
               Override witness MDUs if you loaded a manifest without an upload
               response.
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+          <div className="glass-panel industrial-border px-3 py-2">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
               Witness override (optional)
             </p>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
               value={witnessOverride}
               onChange={(event) =>
                 setWitnessOverride(event.target.value.replace(/[^\d]/g, ""))
@@ -312,13 +312,13 @@ export function DealSlabPanel(props: {
         </div>
 
         {listError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <div className="border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 font-mono-data">
             {listError}
           </div>
         ) : null}
 
         {downloadError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <div className="border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 font-mono-data">
             {downloadError}
           </div>
         ) : null}
@@ -329,10 +329,10 @@ export function DealSlabPanel(props: {
               key={tab}
               type="button"
               className={[
-                "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                "font-mono-data border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] transition-colors",
                 tab === activeTab
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  ? "border-orange-500/50 bg-orange-500/10 text-orange-200"
+                  : "border-white/10 bg-black/20 text-slate-200 hover:bg-orange-500/10 hover:border-orange-500/40 hover:text-orange-200",
               ].join(" ")}
               onClick={() => setActiveTab(tab)}
             >
@@ -347,11 +347,11 @@ export function DealSlabPanel(props: {
 
         {activeTab === "overview" ? (
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="glass-panel industrial-border px-3 py-2">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                 Artifact map
               </p>
-              <ul className="mt-1 space-y-1 text-xs text-slate-700">
+              <ul className="mt-1 space-y-1 text-xs text-slate-200">
                 <li>
                   <span className="font-semibold">MDU #0</span>: NilFS metadata
                   (file table + root table)
@@ -366,16 +366,16 @@ export function DealSlabPanel(props: {
                 </li>
               </ul>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="glass-panel industrial-border px-3 py-2">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                 Used range (from list-files)
               </p>
-              <p className="mt-1 text-xs text-slate-700">
+              <p className="mt-1 text-xs text-slate-200 font-mono-data">
                 {inferred.usedMduMin !== null && inferred.usedMduMax !== null
                   ? formatIntRange(inferred.usedMduMin, inferred.usedMduMax)
                   : "Load files to derive the used MDU range."}
               </p>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-slate-400">
                 Meta MDUs assumed as {inferred.metaMdus} (1 + witness).
               </p>
             </div>
@@ -383,8 +383,8 @@ export function DealSlabPanel(props: {
         ) : null}
 
         {activeTab === "files" ? (
-          <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-500">
+          <div className="glass-panel industrial-border">
+            <div className="font-mono-data grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
               <span>Path</span>
               <span className="text-right">Bytes</span>
               <span className="text-right">Start offset</span>
@@ -392,7 +392,7 @@ export function DealSlabPanel(props: {
               <span className="text-right">Actions</span>
             </div>
             {inferred.fileRows.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-slate-500">
+              <div className="px-3 py-3 text-xs text-slate-400 font-mono-data">
                 No file rows yet. Load files from the gateway to derive MDU
                 ranges.
               </div>
@@ -400,18 +400,18 @@ export function DealSlabPanel(props: {
               inferred.fileRows.map((row) => (
                 <div
                   key={row.path}
-                  className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-700 last:border-b-0"
+                  className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b border-white/5 px-3 py-2 text-xs text-slate-200 last:border-b-0"
                 >
-                  <span className="truncate font-medium text-slate-900">
+                  <span className="truncate font-mono-data font-medium text-slate-100">
                     {row.path}
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="text-right tabular-nums font-mono-data">
                     {row.sizeBytes.toLocaleString()}
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="text-right tabular-nums font-mono-data">
                     {row.startOffset.toLocaleString()}
                   </span>
-                  <span className="text-right font-mono text-[11px]">
+                  <span className="text-right font-mono-data text-[11px]">
                     {formatIntRange(row.startMduIndex, row.endMduIndex)}
                   </span>
                   <div className="flex justify-end gap-1">
@@ -445,76 +445,155 @@ export function DealSlabPanel(props: {
 
         {activeTab === "mdus" ? (
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                Ranges
+            <div className="glass-panel industrial-border px-3 py-2">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                Slab map (MDU #0..#63)
               </p>
-              <div className="mt-1 space-y-1 text-xs text-slate-700">
-                <p>
-                  meta: <span className="font-mono">#0</span>
-                </p>
-                <p>
-                  witness:{" "}
-                  <span className="font-mono">
-                    {inferred.witnessMdus !== null
-                      ? inferred.witnessMdus === 0
-                        ? "—"
-                        : `#1..#${inferred.witnessMdus}`
-                      : "?"}
-                  </span>
-                </p>
-                <p>
-                  user:{" "}
-                  <span className="font-mono">
-                    {inferred.userMdus !== null
-                      ? inferred.userMdus === 0
-                        ? "—"
-                        : `#${inferred.metaMdus}..#${inferred.metaMdus + inferred.userMdus - 1}`
-                      : "?"}
-                  </span>
-                </p>
+
+              <div className="mt-2 grid grid-cols-8 gap-1">
+                {Array.from({ length: 64 }, (_, idx) => {
+                  const allocated = inferred.totalMdus === null ? true : idx < inferred.totalMdus;
+                  const isMeta = idx === 0;
+                  const isWitness =
+                    inferred.witnessMdus !== null && idx > 0 && idx < inferred.metaMdus;
+                  const isUser =
+                    inferred.userMdus !== null &&
+                    idx >= inferred.metaMdus &&
+                    idx < inferred.metaMdus + inferred.userMdus;
+
+                  const inUsedRange =
+                    inferred.usedMduMin !== null &&
+                    inferred.usedMduMax !== null &&
+                    idx >= inferred.usedMduMin &&
+                    idx <= inferred.usedMduMax;
+
+                  const role = !allocated
+                    ? "unallocated"
+                    : isMeta
+                      ? "meta"
+                      : isWitness
+                        ? "witness"
+                        : isUser
+                          ? "user"
+                          : "unknown";
+
+                  const cellClass = !allocated
+                    ? "border-white/5 bg-black/10 opacity-40"
+                    : isMeta
+                      ? "border-orange-400/60 bg-orange-500/30"
+                      : isWitness
+                        ? "border-violet-400/50 bg-violet-500/20"
+                        : isUser
+                          ? "border-emerald-400/50 bg-emerald-500/25"
+                          : "border-white/10 bg-black/20";
+
+                  return (
+                    <div
+                      key={`mdu-cell-${idx}`}
+                      className={[
+                        "h-6 w-6 border",
+                        cellClass,
+                        inUsedRange ? "shadow-[0_0_0_1px_rgba(226,232,240,0.18)]" : "",
+                      ].join(" ")}
+                      title={`MDU #${idx} · ${role}`}
+                    />
+                  );
+                })}
               </div>
-              <p className="mt-2 text-[11px] text-slate-500">
-                If totals are unknown, use list-files derived ranges instead.
+
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono-data font-bold uppercase tracking-[0.18em] text-slate-400">
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 border border-orange-400/60 bg-orange-500/30" /> MDU0
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 border border-violet-400/50 bg-violet-500/20" /> Witness
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 border border-emerald-400/50 bg-emerald-500/25" /> User
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 border border-white/10 bg-black/20" /> ?
+                </span>
+              </div>
+
+              <p className="mt-2 text-[11px] text-slate-400">
+                Totals inferred from the most recent upload response (when available). Used range
+                comes from list-files.
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                MDU inspector
-              </p>
-              <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                <input
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                  value={mduInspectorIndex}
-                  onChange={(event) =>
-                    setMduInspectorIndex(event.target.value.replace(/[^\d]/g, ""))
-                  }
-                  placeholder="MDU index (e.g. 12)"
-                />
-                <button
-                  type="button"
-                  className="control-btn control-btn-inline"
-                  onClick={() => {
-                    if (!inspector) return;
-                    copyToClipboard(
-                      `mdu=${inspector.idx} blobs=${formatBigintRange(inspector.startBlob, inspector.endBlob)}`,
-                    );
-                  }}
-                  disabled={!inspector}
-                  title="Copy global blob range for this MDU"
-                >
-                  Copy
-                </button>
+            <div className="grid gap-3">
+              <div className="glass-panel industrial-border px-3 py-2">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                  Ranges
+                </p>
+                <div className="mt-1 space-y-1 text-xs text-slate-200 font-mono-data">
+                  <p>
+                    meta: <span>#0</span>
+                  </p>
+                  <p>
+                    witness:{" "}
+                    <span>
+                      {inferred.witnessMdus !== null
+                        ? inferred.witnessMdus === 0
+                          ? "—"
+                          : `#1..#${inferred.witnessMdus}`
+                        : "?"}
+                    </span>
+                  </p>
+                  <p>
+                    user:{" "}
+                    <span>
+                      {inferred.userMdus !== null
+                        ? inferred.userMdus === 0
+                          ? "—"
+                          : `#${inferred.metaMdus}..#${inferred.metaMdus + inferred.userMdus - 1}`
+                        : "?"}
+                    </span>
+                  </p>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  If totals are unknown, use list-files derived ranges instead.
+                </p>
               </div>
-              <p className="mt-2 text-xs text-slate-700">
-                {inspector
-                  ? `global_blobs: ${formatBigintRange(inspector.startBlob, inspector.endBlob)}`
-                  : "Enter an MDU index to compute its global blob range."}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                global_blob = mdu_index * {inferred.blobsPerMdu} + blob_index
-              </p>
+
+              <div className="glass-panel industrial-border px-3 py-2">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                  MDU inspector
+                </p>
+                <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                  <input
+                    className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                    value={mduInspectorIndex}
+                    onChange={(event) =>
+                      setMduInspectorIndex(event.target.value.replace(/[^\d]/g, ""))
+                    }
+                    placeholder="MDU index (e.g. 12)"
+                  />
+                  <button
+                    type="button"
+                    className="control-btn control-btn-inline"
+                    onClick={() => {
+                      if (!inspector) return;
+                      copyToClipboard(
+                        `mdu=${inspector.idx} blobs=${formatBigintRange(inspector.startBlob, inspector.endBlob)}`,
+                      );
+                    }}
+                    disabled={!inspector}
+                    title="Copy global blob range for this MDU"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-200 font-mono-data break-all">
+                  {inspector
+                    ? `global_blobs: ${formatBigintRange(inspector.startBlob, inspector.endBlob)}`
+                    : "Enter an MDU index to compute its global blob range."}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400 font-mono-data">
+                  global_blob = mdu_index * {inferred.blobsPerMdu} + blob_index
+                </p>
+              </div>
             </div>
           </div>
         ) : null}
