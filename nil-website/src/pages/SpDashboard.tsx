@@ -108,13 +108,11 @@ export function SpDashboard() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-emerald-500/10 via-background to-cyan-500/10 p-8">
-        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
+      <section className="relative overflow-hidden glass-panel industrial-border cyber-grid p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.10)]">
         <div className="relative space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-            <Server className="h-4 w-4" />
-            Provider Console
+          <div className="inline-flex items-center gap-2 border border-border bg-background/40 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
+            <Server className="h-4 w-4 text-primary" />
+            <span className="font-mono-data text-foreground/80">/sp/console</span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Storage Provider Dashboard</h1>
           <p className="max-w-3xl text-muted-foreground">
@@ -123,14 +121,14 @@ export function SpDashboard() {
           <div className="flex flex-wrap gap-3 pt-2">
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
             >
               <ExternalLink className="h-4 w-4" />
               Open Client Dashboard
             </Link>
             <Link
               to="/sp-onboarding"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <ExternalLink className="h-4 w-4" />
               Open SP Onboarding
@@ -144,21 +142,21 @@ export function SpDashboard() {
       </div>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="glass-panel industrial-border cyber-grid p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Local demo stack</h2>
             <button
               type="button"
               onClick={() => void handleCopy('Start command', LOCAL_DEMO_STACK_CMD)}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
             >
               <Copy className="h-3.5 w-3.5" /> Copy start
             </button>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Single-machine local dev: chain + faucet + demo providers + trusted <span className="font-mono">user-gateway</span> + web UI.
+            Single-machine local dev: chain + faucet + demo providers + trusted <span className="font-mono-data">user-gateway</span> + web UI.
           </p>
-          <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
+          <pre className="mt-4 overflow-x-auto border border-border bg-background/40 p-4 text-xs text-muted-foreground font-mono-data">
             {LOCAL_DEMO_STACK_CMD}
             {'\n'}
             {LOCAL_DEMO_STOP_CMD}
@@ -167,30 +165,30 @@ export function SpDashboard() {
             <button
               type="button"
               onClick={() => void handleCopy('Stop command', LOCAL_DEMO_STOP_CMD)}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Terminal className="h-4 w-4" /> Copy stop
             </button>
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh providers
             </button>
           </div>
           {copyStatus ? (
-            <div className="mt-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+            <div className="mt-3 border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent">
               {copyStatus}
             </div>
           ) : null}
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="glass-panel industrial-border cyber-grid p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]">
           <h2 className="text-xl font-semibold text-foreground">Provider registry (on-chain)</h2>
           <div className="mt-2 text-sm text-muted-foreground">
-            Total providers: <span className="font-mono text-foreground">{providers.length}</span> • Local endpoints:{' '}
-            <span className="font-mono text-foreground">{localCount}</span>
+            Total providers: <span className="font-mono-data text-foreground">{providers.length}</span> • Local endpoints:{' '}
+            <span className="font-mono-data text-foreground">{localCount}</span>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -205,18 +203,18 @@ export function SpDashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value ?? '')}
               placeholder="Filter by provider address…"
-              className="flex-1 min-w-[220px] bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+              className="flex-1 min-w-[220px] bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
             />
           </div>
           {error ? (
-            <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="mt-4 border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </div>
           ) : null}
-          <div className="mt-4 rounded-lg border border-border overflow-hidden">
+          <div className="mt-4 border border-border overflow-hidden">
             <div className="max-h-[360px] overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-secondary/40 text-xs text-muted-foreground">
+              <table className="w-full text-sm divide-y divide-border/40">
+                <thead className="sticky top-0 bg-background/40 backdrop-blur-md text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
                   <tr>
                     <th className="text-left px-3 py-2">Provider</th>
                     <th className="text-left px-3 py-2">Endpoints</th>
@@ -230,16 +228,16 @@ export function SpDashboard() {
                     const local = primary ? isLikelyLocalHttpBase(primary) : false
                     const activeProbe = probe.status !== 'idle' && probe.base === primary
                     return (
-                      <tr key={p.address} className="border-t border-border">
+                      <tr key={p.address} className="border-t border-border/40">
                         <td className="px-3 py-2 align-top">
-                          <div className="font-mono text-xs text-foreground break-all">{p.address}</div>
+                          <div className="font-mono-data text-xs text-foreground break-all">{p.address}</div>
                           <div className="mt-1 text-xs text-muted-foreground">
                             {local ? (
-                              <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
+                              <span className="border border-accent/40 bg-accent/10 px-2 py-0.5 text-accent">
                                 local
                               </span>
                             ) : (
-                              <span className="rounded border border-border bg-background px-2 py-0.5">remote</span>
+                              <span className="border border-border bg-background/60 px-2 py-0.5">remote</span>
                             )}
                           </div>
                         </td>
@@ -247,7 +245,7 @@ export function SpDashboard() {
                           {bases.length > 0 ? (
                             <div className="space-y-1">
                               {bases.slice(0, 3).map((b) => (
-                                <div key={b} className="font-mono text-xs text-foreground break-all">
+                                <div key={b} className="font-mono-data text-xs text-foreground break-all">
                                   {b}
                                 </div>
                               ))}
@@ -265,13 +263,13 @@ export function SpDashboard() {
                               <button
                                 type="button"
                                 onClick={() => void probeHealth(primary)}
-                                className="inline-flex items-center gap-2 rounded border border-border bg-background px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary/40"
+                                className="inline-flex items-center gap-2 border border-border bg-background/60 px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary/40"
                               >
                                 <RefreshCw className={`h-3.5 w-3.5 ${activeProbe && probe.status === 'loading' ? 'animate-spin' : ''}`} />
                                 Probe /health
                               </button>
                               {activeProbe && probe.status === 'ok' ? (
-                                <div className="text-xs text-emerald-700 dark:text-emerald-300">
+                                <div className="text-xs text-accent font-mono-data">
                                   OK ({probe.ms}ms)
                                 </div>
                               ) : null}
@@ -300,7 +298,7 @@ export function SpDashboard() {
             </div>
           </div>
           <div className="mt-3 text-xs text-muted-foreground">
-            Note: health probes require provider endpoints to allow CORS from <span className="font-mono">http://localhost:5173</span>.
+            Note: health probes require provider endpoints to allow CORS from <span className="font-mono-data">http://localhost:5173</span>.
           </div>
         </div>
       </section>

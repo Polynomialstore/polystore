@@ -12,7 +12,10 @@ interface GatewayStatusWidgetProps {
 export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollInterval, className }) => {
   const { status, url, error, details } = useLocalGateway(pollInterval);
 
-  let icon, colorClass, text, tooltip;
+  let icon: React.ReactNode = <AlertCircle className="w-4 h-4" />;
+  let colorClass = 'text-muted-foreground';
+  let text = 'Unknown';
+  let tooltip = `Unknown gateway status: ${status}`;
   const caps =
     details?.capabilities
       ? Object.entries(details.capabilities)
@@ -36,7 +39,7 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
   } else switch (status) {
     case 'connected':
       icon = <Wifi className="w-4 h-4" />;
-      colorClass = 'text-green-500';
+      colorClass = 'text-accent';
       text = 'Connected';
       tooltip = `Local Gateway connected at ${url}${
         details?.mode ? ` (mode=${details.mode})` : ''
@@ -44,34 +47,29 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
       break;
     case 'connecting':
       icon = <Loader2 className="w-4 h-4 animate-spin" />;
-      colorClass = 'text-yellow-500';
+      colorClass = 'text-primary';
       text = 'Connecting...';
       tooltip = `Attempting to connect to local gateway at ${url}`;
       break;
     case 'disconnected':
       icon = <WifiOff className="w-4 h-4" />;
-      colorClass = 'text-red-500';
+      colorClass = 'text-destructive';
       text = 'Disconnected';
       tooltip = `Local Gateway disconnected. ${error || 'Service unreachable.'}`;
       break;
     case 'error':
       icon = <AlertCircle className="w-4 h-4" />;
-      colorClass = 'text-red-500';
+      colorClass = 'text-destructive';
       text = 'Error';
       tooltip = `Error connecting to local gateway: ${error}`;
       break;
-    default:
-      icon = <AlertCircle className="w-4 h-4" />;
-      colorClass = 'text-gray-500';
-      text = 'Unknown';
-      tooltip = `Unknown gateway status: ${status}`;
   }
 
   return (
     <div 
       data-testid="gateway-status-widget"
       data-status={status}
-      className={`flex items-center gap-1 text-sm ${colorClass} ${className}`}
+      className={`flex items-center gap-1 text-sm ${colorClass} ${className ?? ''}`}
       title={tooltip}
     >
       {icon}
