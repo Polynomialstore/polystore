@@ -29,10 +29,10 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       onMouseLeave={() => setIsOpen(false)}
     >
       <button 
-        className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 flex items-center gap-1 group ${
+        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-transparent transition-colors flex items-center gap-2 group ${
           isActive || isOpen
-            ? "text-foreground bg-secondary/80" 
-            : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+            ? "text-foreground bg-muted/40 border-border/60" 
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/30 hover:border-border/60"
         }`}
       >
         {label}
@@ -53,10 +53,11 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="w-[600px] bg-background border-b-2 border-x-2 border-t-0 border-border rounded-none shadow-2xl p-4 overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
+            <div className="relative w-[640px] glass-panel industrial-border shadow-[8px_8px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.10)] p-4 overflow-hidden">
+              <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
               
               {/* Grid Layout - 2 Columns */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="relative grid grid-cols-2 gap-2">
                 {items.map((item) => {
                   const active = location.pathname === item.path;
                   
@@ -71,15 +72,13 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   return (
                     <Wrapper
                         key={item.path}
-                        className={`group flex items-start gap-3 p-3 rounded-xl transition-all duration-200 ${
-                            active 
-                            ? "bg-secondary" 
-                            : "hover:bg-secondary/50"
+                        className={`group flex items-start gap-3 p-3 border border-border/50 transition-colors ${
+                            active ? "bg-muted/40 border-primary/40" : "hover:bg-muted/30 hover:border-border/70"
                         }`}
                     >
                         {/* Icon Box */}
-                        <div className={`mt-0.5 p-2 rounded-lg shrink-0 transition-colors ${
-                            active ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground group-hover:text-primary group-hover:bg-primary/10"
+                        <div className={`mt-0.5 p-2 border border-border/50 bg-background/50 shrink-0 transition-colors ${
+                            active ? "border-primary/40 text-primary" : "text-muted-foreground group-hover:text-primary"
                         }`}>
                             {item.icon}
                         </div>
@@ -87,12 +86,12 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                                <span className={`text-sm font-bold truncate ${active ? "text-primary" : "text-foreground"}`}>
+                                <span className={`text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data truncate ${active ? "text-primary" : "text-foreground"}`}>
                                     {item.name}
                                 </span>
                                 {item.external && <ArrowUpRight className="w-3 h-3 text-muted-foreground" />}
                             </div>
-                            <p className="text-xs text-muted-foreground leading-tight mt-0.5 line-clamp-2">
+                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2">
                                 {item.description}
                             </p>
                         </div>
