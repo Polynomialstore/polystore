@@ -66,7 +66,7 @@ export const Layout = () => {
         <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between relative z-10">
+        <div className="container mx-auto px-4 h-16 flex items-center gap-4 relative z-10">
           
           {/* 1. LEFT: Logo */}
           <div className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
@@ -103,10 +103,12 @@ export const Layout = () => {
           </div>
 
           {/* 2. CENTER: Desktop Navigation */}
-          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 px-2 py-1 glass-panel industrial-border">
-            {navStructure.map((item) => (
-                <NavDropdown key={item.name} label={item.name} items={item.items!} />
-            ))}
+          <div className="flex-1 flex justify-center">
+            <div className="hidden lg:flex items-center gap-1 px-2 py-1 glass-panel industrial-border">
+              {navStructure.map((item) => (
+                  <NavDropdown key={item.name} label={item.name} items={item.items!} />
+              ))}
+            </div>
           </div>
 
           {/* 3. RIGHT: Actions (Console CTA) */}
