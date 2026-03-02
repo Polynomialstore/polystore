@@ -104,22 +104,18 @@
 
   .industrial-border::before {
     content: "";
-    position: absolute;
-    inset: -1px;
+    @apply absolute -top-px -left-px w-2 h-2;
     pointer-events: none;
-    background:
-      linear-gradient(hsl(var(--primary)) 0 0) top left / 4px 4px no-repeat,
-      linear-gradient(hsl(var(--primary)) 0 0) top right / 4px 4px no-repeat;
+    border-top: 1px solid hsl(var(--primary) / 0.6);
+    border-left: 1px solid hsl(var(--primary) / 0.6);
   }
 
   .industrial-border::after {
     content: "";
-    position: absolute;
-    inset: -1px;
+    @apply absolute -bottom-px -right-px w-2 h-2;
     pointer-events: none;
-    background:
-      linear-gradient(hsl(var(--primary)) 0 0) bottom left / 4px 4px no-repeat,
-      linear-gradient(hsl(var(--primary)) 0 0) bottom right / 4px 4px no-repeat;
+    border-bottom: 1px solid hsl(var(--primary) / 0.6);
+    border-right: 1px solid hsl(var(--primary) / 0.6);
   }
 
   .pulse-status {
