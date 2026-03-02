@@ -697,15 +697,15 @@
   .industrial-border::before {
     top: -1px;
     left: -1px;
-    border-top: 1px solid rgba(249, 115, 22, 0.6);
-    border-left: 1px solid rgba(249, 115, 22, 0.6);
+    border-top: 1.5px solid rgba(249, 115, 22, 0.6);
+    border-left: 1.5px solid rgba(249, 115, 22, 0.6);
   }
 
   .industrial-border::after {
     bottom: -1px;
     right: -1px;
-    border-bottom: 1px solid rgba(249, 115, 22, 0.6);
-    border-right: 1px solid rgba(249, 115, 22, 0.6);
+    border-bottom: 1.5px solid rgba(249, 115, 22, 0.6);
+    border-right: 1.5px solid rgba(249, 115, 22, 0.6);
   }
 
   @keyframes ng-scan {
