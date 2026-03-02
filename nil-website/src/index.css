@@ -4,25 +4,29 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 20.5 90.2% 48.2%; /* Safety Orange */
+    /* --- Light Mode: Technical Blueprint --- */
+    --background: 210 20% 98%; /* Off-white "Paper" */
+    --foreground: 222 47% 11%; /* Deep Navy Ink */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 20.5 90% 45%; /* Deeper Safety Orange */
     --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 142.1 70.6% 45.3%; /* Success Green */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 142 70% 35%; /* Signal Green */
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 20.5 90.2% 48.2%;
+    --border: 214 32% 85%; /* Sharp Technical Lines */
+    --input: 214 32% 85%;
+    --ring: 20.5 90% 45%;
+    --glass-opacity: 0.7;
+    --grid-color: rgba(0, 0, 0, 0.05);
+    --scan-opacity: 0.05;
     --radius: 0rem;
 
     --cyan-400: 180 100% 50%; /* #00E5FF */
@@ -34,11 +38,12 @@
   }
  
   .dark {
+    /* --- Dark Mode: Control Room --- */
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 3.9%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 240 10% 3.9%; 
     --popover-foreground: 0 0% 98%;
     --primary: 20.5 90.2% 48.2%; /* Safety Orange */
     --primary-foreground: 60 9.1% 97.8%;
@@ -53,6 +58,9 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 20.5 90.2% 48.2%;
+    --glass-opacity: 0.6;
+    --grid-color: rgba(255, 255, 255, 0.02);
+    --scan-opacity: 0.12;
   }
 }
  
@@ -65,8 +73,8 @@
     font-family: "Montserrat", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
       "Segoe UI Emoji";
     background-image: 
-      linear-gradient(to right, hsl(var(--primary) / 0.035) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.035) 1px, transparent 1px);
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
     background-size: 40px 40px;
   }
   
@@ -79,17 +87,19 @@
 @layer utilities {
   .cyber-grid {
     background-image: 
-      linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
   .glass-panel {
-    @apply bg-background/60 backdrop-blur-md;
+    @apply backdrop-blur-md;
+    background-color: hsl(var(--card) / var(--glass-opacity));
+    border: 1px solid hsl(var(--border) / 0.55);
   }
 
   .industrial-border {
-    @apply border border-border/40 relative;
+    @apply relative;
   }
 
   .industrial-border::before {
@@ -130,7 +140,7 @@
     background: linear-gradient(
       to bottom,
       transparent,
-      hsl(var(--primary) / 0.1),
+      hsl(var(--primary) / var(--scan-opacity)),
       transparent
     );
     animation: scan 3s linear infinite;
