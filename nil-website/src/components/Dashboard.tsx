@@ -1574,7 +1574,7 @@ export function Dashboard() {
                   setDealDetailRequestedTabNonce((n) => n + 1)
                   setPendingScrollTarget('deal')
                 }}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/60"
+                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                 title="Jump to Deal Explorer → Manifest & MDUs"
               >
                 Inspect MDUs
@@ -1584,31 +1584,31 @@ export function Dashboard() {
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-3 text-xs">
-            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Manifest root</div>
-              <div className="mt-1 font-mono text-[11px] text-foreground truncate" title={contentManifestRoot || undefined}>
+            <div className="glass-panel industrial-border px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Manifest root</div>
+              <div className="mt-1 font-mono-data text-[11px] text-foreground truncate" title={contentManifestRoot || undefined}>
                 {contentManifestRoot ? `${contentManifestRoot.slice(0, 18)}…` : 'Empty container'}
               </div>
             </div>
 
-            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Slab MDUs</div>
-              <div className="mt-1 font-mono text-[11px] text-foreground">
+            <div className="glass-panel industrial-border px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Slab MDUs</div>
+              <div className="mt-1 font-mono-data text-[11px] text-foreground">
                 {contentSlab ? contentSlab.total_mdus : '—'}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground">
+              <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
                 {contentSlab ? `1 meta • ${contentSlab.witness_mdus} witness • ${contentSlab.user_mdus} user` : 'Fetch in Deal Explorer to derive.'}
               </div>
             </div>
 
-            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mode</div>
-              <div className="mt-1 text-[11px] text-foreground font-semibold">
+            <div className="glass-panel industrial-border px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Mode</div>
+              <div className="mt-1 text-[11px] text-foreground font-semibold font-mono-data">
                 {isTargetDealMode2
                   ? `Mode 2 RS(${targetDealService.rsK ?? appConfig.defaultRsK},${targetDealService.rsM ?? appConfig.defaultRsM})`
                   : showAdvanced ? 'Mode 1 (gateway)' : 'Mode 2 (auto)'}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground">
+              <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
                 {(() => {
                   const k = targetDealService.rsK ?? appConfig.defaultRsK
                   const mdu = contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024
@@ -1624,44 +1624,45 @@ export function Dashboard() {
         !showAdvanced ? (
           <div
             ref={contentRef}
-            className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            className="glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
           >
             <div>
-              <div className="font-semibold text-foreground">Advanced tools are hidden</div>
-              <div className="text-xs text-muted-foreground mt-1">Enable Advanced to access gateway sharding (Mode 1).</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/gateway/tools</div>
+              <div className="mt-1 font-semibold text-foreground">Advanced tools are hidden</div>
+              <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Enable Advanced to access gateway sharding (Mode 1).</div>
             </div>
             <button
               type="button"
               onClick={() => setShowAdvanced(true)}
-              className="inline-flex items-center justify-center rounded-md border border-primary/30 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+              className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary hover:bg-primary/15"
             >
               Enable Advanced
             </button>
           </div>
         ) : (
           <div ref={contentRef} className="space-y-4">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] font-mono-data text-muted-foreground">
               Legacy gateway sharding (Mode 1). For Mode 2, use the Upload tab.
             </p>
             <div className="grid grid-cols-1 gap-3 text-sm">
-              <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground">
                 Target deal:{' '}
-                <span className="font-mono text-foreground">{targetDealId ? `#${targetDealId}` : '—'}</span>
+                <span className="font-mono-data text-foreground">{targetDealId ? `#${targetDealId}` : '—'}</span>
                 {!targetDealId ? <span className="ml-2">Select a deal above to continue.</span> : null}
               </div>
               {targetDealId && (
-                <div className="text-xs text-muted-foreground">
+                <div className="text-[11px] font-mono-data text-muted-foreground">
                   On-chain:{' '}
                   {onChainCid ? (
-                    <span className="font-mono text-primary">{`${onChainCid.slice(0, 18)}...`}</span>
+                    <span className="font-mono-data text-primary">{`${onChainCid.slice(0, 18)}...`}</span>
                   ) : (
                     <span className="italic">Empty container</span>
                   )}{' '}
-                  • Size: <span className="font-mono text-foreground">{targetDeal?.size ?? '0'}</span>
+                  • Size: <span className="font-mono-data text-foreground">{targetDeal?.size ?? '0'}</span>
                 </div>
               )}
               {isTargetDealMode2 && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-primary ring-1 ring-primary/25">
                   This is a Mode 2 deal. Use the Upload tab (Mode 2).
                 </div>
               )}
@@ -1671,13 +1672,13 @@ export function Dashboard() {
                 </div>
               )}
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Select file</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Select file</span>
                 <input
                   type="file"
                   onChange={handleFileChange}
                   disabled={!targetDealId || uploadLoading || isTargetDealMode2 || targetDealExpired}
                   data-testid="content-file-input"
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
                 />
               </label>
               <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -1690,20 +1691,20 @@ export function Dashboard() {
                 Compress before upload (NilCE, recommended)
               </label>
               {stagedUpload && (
-                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                <div className="glass-panel industrial-border px-3 py-2 text-[11px] text-muted-foreground space-y-1 font-mono-data">
                   <div>
-                    Staged: <span className="font-mono text-foreground">{stagedUpload.filename}</span>
+                    Staged: <span className="text-foreground">{stagedUpload.filename}</span>
                   </div>
                   <div>
                     Manifest root:{' '}
-                    <span className="font-mono text-primary select-all" data-testid="staged-manifest-root">
+                    <span className="text-primary select-all" data-testid="staged-manifest-root">
                       {stagedUpload.cid}
                     </span>
                   </div>
                   {stagedUpload.logicalSizeBytes && stagedUpload.logicalSizeBytes !== stagedUpload.sizeBytes && (
                     <div>
                       Logical size:{' '}
-                      <span className="font-mono text-foreground">{stagedUpload.logicalSizeBytes}</span>
+                      <span className="text-foreground">{stagedUpload.logicalSizeBytes}</span>
                       {stagedUpload.contentEncoding ? (
                         <span className="ml-2 text-[10px] uppercase text-muted-foreground">
                           {stagedUpload.contentEncoding}
@@ -1717,7 +1718,7 @@ export function Dashboard() {
             <div className="flex items-center justify-between pt-2">
               <div className="text-xs text-muted-foreground">
                 {updateTx && (
-                  <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <div className="text-accent flex items-center gap-2 font-mono-data text-[10px] uppercase tracking-[0.2em]">
                     <CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0, 10)}...
                   </div>
                 )}
@@ -1734,7 +1735,7 @@ export function Dashboard() {
                 }}
                 disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2 || targetDealExpired}
                 data-testid="content-commit"
-                className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] disabled:opacity-50 transition-all"
               >
                 {updateLoading ? 'Committing...' : 'Commit uploaded content'}
               </button>
@@ -1768,14 +1769,18 @@ export function Dashboard() {
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       {rpcMismatch && (
-        <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">
+        <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-destructive/40">
+          <div className="absolute inset-0 pointer-events-none animate-scan opacity-30" />
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-destructive/20 rounded-full">
+            <div className="p-2 bg-destructive/10 border border-destructive/30">
               <RefreshCw className="w-5 h-5 text-destructive" />
             </div>
             <div>
-              <h3 className="font-bold text-destructive-foreground">Critical Node Mismatch</h3>
-              <p className="text-sm text-destructive-foreground/80">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-destructive">
+                rpc_mismatch
+              </div>
+              <h3 className="mt-1 text-sm font-bold text-foreground">Critical Node Mismatch</h3>
+              <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                 Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
                 <br/>Please restart your local stack or check your <code>run_local_stack.sh</code> configuration.
               </p>
@@ -1785,14 +1790,18 @@ export function Dashboard() {
       )}
 
       {isWrongNetwork && (
-        <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-center justify-between">
+        <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-primary/30">
+          <div className="absolute inset-0 pointer-events-none animate-scan opacity-20" />
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-yellow-500/20 rounded-full">
-              <RefreshCw className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            <div className="p-2 bg-primary/10 border border-primary/30">
+              <RefreshCw className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-bold text-yellow-700 dark:text-yellow-200">Wrong Network</h3>
-              <p className="text-sm text-yellow-600 dark:text-yellow-300">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">
+                wallet_network
+              </div>
+              <h3 className="mt-1 text-sm font-bold text-foreground">Wrong Network</h3>
+              <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                 {genesisMismatch ? (
                   <>
                     Connected to Chain ID <strong>{activeChainId}</strong>, but this is a different network than the NilStore RPC.
@@ -1808,7 +1817,7 @@ export function Dashboard() {
           </div>
           <button
             onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             {genesisMismatch ? 'Repair MetaMask Network' : 'Switch Network'}
           </button>
@@ -1816,50 +1825,56 @@ export function Dashboard() {
       )}
 
       {statusMsg && (
-        <div className={`rounded-lg border px-4 py-3 text-sm ${
+        <div className={`relative overflow-hidden glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data ${
           statusTone === 'error'
-            ? 'border-destructive/50 bg-destructive/10 text-destructive'
+            ? 'text-destructive ring-1 ring-destructive/40'
             : statusTone === 'success'
-            ? 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400'
-            : 'border-border bg-secondary/50 text-muted-foreground'
+            ? 'text-accent ring-1 ring-accent/40'
+            : 'text-muted-foreground ring-1 ring-border/40'
         }`}>
+          <div className="absolute inset-0 pointer-events-none animate-scan opacity-15" />
           {statusMsg}
         </div>
       )}
 
       {walletReconnectHint && (
-        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="glass-panel industrial-border px-4 py-3 ring-1 ring-primary/25 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="font-semibold">Wallet access needs refresh</div>
-            <div className="text-xs text-yellow-700/90 dark:text-yellow-200/90">
+            <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">wallet_access</div>
+            <div className="mt-1 font-semibold text-foreground">Wallet access needs refresh</div>
+            <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">
               If you switched accounts in MetaMask, reconnect and approve access for the active account.
             </div>
           </div>
           <button
             type="button"
             onClick={() => void requestWalletReconnect()}
-            className="inline-flex items-center justify-center rounded-md border border-yellow-600/40 bg-yellow-500/15 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/25 dark:text-yellow-200"
+            className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
           >
             Reconnect Wallet
           </button>
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
-          <div className="grid gap-3 p-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Testnet Funds</div>
+      <div className="relative overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]" data-testid="dashboard-utility-bar">
+          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+          <div className="relative grid gap-3 p-4 lg:grid-cols-2">
+          <div className="glass-panel industrial-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/wallet/testnet_funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div
-                  className="truncate font-mono text-[11px] text-muted-foreground"
+                  className="truncate font-mono-data text-[11px] text-muted-foreground"
                   data-testid="cosmos-identity"
                   title={nilAddress || undefined}
                 >
                   {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  Stake: <span className="font-mono text-foreground" data-testid="cosmos-stake-balance">{bankBalances.stake || '—'}</span>
+                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
+                  Stake:{' '}
+                  <span className="text-foreground" data-testid="cosmos-stake-balance">
+                    {bankBalances.stake || '—'}
+                  </span>
                 </div>
               </div>
               {appConfig.faucetEnabled ? (
@@ -1867,7 +1882,7 @@ export function Dashboard() {
                   data-testid="faucet-request"
                   onClick={handleRequestFunds}
                   disabled={!address || faucetBusy}
-                  className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+                  className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Coins className="h-3.5 w-3.5" />
                   {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
@@ -1878,14 +1893,14 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Account</div>
+          <div className="glass-panel industrial-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/wallet/account</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate font-mono text-[11px] text-foreground" title={address || undefined}>
+                <div className="truncate font-mono-data text-[11px] text-foreground" title={address || undefined}>
                   {walletAddressShort}
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
+                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
                   {accountPermissionMismatch
                     ? 'Wallet access required'
                     : isWrongNetwork
@@ -1897,7 +1912,7 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={() => void requestWalletReconnect()}
-                  className="inline-flex items-center gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-200"
+                  className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
                 >
                   <Wallet className="h-3.5 w-3.5" />
                   Reconnect
@@ -1906,13 +1921,16 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-                  className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/40"
+                  className="inline-flex items-center gap-2 border border-border bg-background/80 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-muted/30"
                 >
                   <Wallet className="h-3.5 w-3.5" />
                   Switch
                 </button>
               ) : (
-                <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">Ready</span>
+                <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent">
+                  <span className="h-2 w-2 rounded-full bg-accent pulse-status" />
+                  Ready
+                </span>
               )}
             </div>
           </div>
@@ -1920,7 +1938,7 @@ export function Dashboard() {
           </div>
         {faucetTx ? (
           <div className="border-t border-border/80 px-4 py-2 text-[11px] text-muted-foreground">
-            Faucet tx: <span className="font-mono text-foreground">{faucetTx.slice(0, 10)}…</span>
+            Faucet tx: <span className="font-mono-data text-foreground">{faucetTx.slice(0, 10)}…</span>
           </div>
         ) : null}
       </div>
@@ -1933,13 +1951,14 @@ export function Dashboard() {
 
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]" data-testid="deal-detail">
                 <div className="p-8 text-center">
-                  <div className="w-14 h-14 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-14 h-14 glass-panel industrial-border flex items-center justify-center mx-auto mb-4">
                     <HardDrive className="w-7 h-7 text-muted-foreground" />
                   </div>
-                  <div className="text-sm font-semibold text-foreground">No deals yet</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Create a deal to start uploading files.</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">/mnt/storage_deals</div>
+                  <div className="mt-2 text-sm font-semibold text-foreground">No deals yet</div>
+                  <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Create a deal to start uploading files.</div>
                 </div>
               </div>
             ) : targetDeal ? (
@@ -1952,25 +1971,25 @@ export function Dashboard() {
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
-              <div className="rounded-xl border border-border bg-card p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
-                <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]" data-testid="deal-detail">
+                <div className="flex items-center justify-between p-5 border-b border-border/60 bg-background/40">
                   <div className="flex items-center gap-3">
-                    <div className="bg-primary/10 p-2 rounded-lg">
+                    <div className="glass-panel industrial-border p-2">
                       <HardDrive className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Deal Explorer</div>
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">/mnt/deal_explorer</div>
                       <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
                         {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
                       </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
+                      <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                         Upload, list, and download files inside a deal.
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="border-b border-border">{dealExplorerTopPanel}</div>
-                <div className="p-5 text-sm text-muted-foreground">
+                <div className="p-5 text-[11px] font-mono-data text-muted-foreground">
                   {targetDealId ? 'Loading deal details…' : 'Select a deal from the left to view files.'}
                 </div>
               </div>
@@ -1980,16 +1999,16 @@ export function Dashboard() {
 
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
           {appConfig.faucetEnabled && !hasBuildFaucetAuthToken() ? (
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm p-4">
+            <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] p-4">
               <FaucetAuthTokenInput />
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="px-6 py-3 border-b border-border bg-muted/50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+          <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deals</div>
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">/registry/deals</div>
+              <p className="text-[11px] font-mono-data text-muted-foreground mt-1">
                 Select a deal to manage files (upload, list, download).
               </p>
             </div>
@@ -1998,10 +2017,10 @@ export function Dashboard() {
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
                 data-testid="workspace-advanced-toggle"
-                className={`inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
+                className={`inline-flex items-center justify-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
                   showAdvanced
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary/50'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-muted/30'
                 }`}
               >
                 Advanced
@@ -2010,7 +2029,7 @@ export function Dashboard() {
                 type="button"
                 onClick={() => void handleRefreshSummary()}
                 title="Refresh deals"
-                className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary/50"
+                className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-muted/30"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
@@ -2047,39 +2066,39 @@ export function Dashboard() {
                           }
                           setPendingScrollTarget('workspace')
                         }}
-                        className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                        className={`w-full border px-3 py-3 text-left transition-colors ${
                           isSelected
-                            ? 'border-primary/40 bg-primary/10'
-                            : 'border-border bg-background/60 hover:bg-secondary/40'
+                            ? 'border-primary/40 bg-primary/10 ring-1 ring-primary/20'
+                            : 'border-border/60 bg-background/60 hover:bg-muted/30'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-foreground">Deal #{deal.id}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
                                 {deal.cid ? 'Active' : 'Empty'}
                               </span>
-                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
                                 {hint.mode === 'mode2' ? 'Mode 2' : 'Mode 1'}
                               </span>
-                              <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5">
+                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
                                 {sizeLabel}
                               </span>
                               {dealExpired && (
-                                <span className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
+                                <span className="border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
                                   Expired
                                 </span>
                               )}
                             </div>
                           </div>
-                          <div className="shrink-0 text-[11px] text-muted-foreground">
-                            <span className="font-mono text-foreground">{retrievalCount}</span>
+                          <div className="shrink-0 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                            <span className="text-foreground">{retrievalCount}</span>
                             <span className="ml-1 hidden sm:inline">retrievals</span>
                           </div>
                         </div>
                         <div
-                          className="mt-2 truncate font-mono text-[10px] text-muted-foreground"
+                          className="mt-2 truncate font-mono-data text-[10px] text-muted-foreground"
                           title={deal.cid || ''}
                           data-testid={`deal-manifest-${deal.id}`}
                         >
@@ -2092,26 +2111,26 @@ export function Dashboard() {
               </div>
             )}
 
-          <div ref={allocRef} className="border-t border-border bg-muted/20 px-6 py-4">
+          <div ref={allocRef} className="border-t border-border/60 bg-background/30 px-6 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Create deal</div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">/alloc/create_deal</div>
+                <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                   Allocate a new deal on NilChain. Deals act like buckets for files.
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 space-y-3 text-sm">
+            <div className="mt-4 space-y-3 text-[11px]">
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Duration</span>
                 <select
                   value={durationPreset}
                   onChange={(e) => {
                     setDurationFromPreset(e.target.value)
                   }}
                   data-testid="alloc-duration"
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   {DURATION_PRESETS.map((preset) => (
                     <option key={preset.value} value={preset.value}>
@@ -2121,36 +2140,36 @@ export function Dashboard() {
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Duration (seconds)</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Duration (seconds)</span>
                 <input
                   value={duration ?? ''}
                   onChange={(e) => setDuration(e.target.value ?? '')}
                   readOnly={durationPreset !== 'custom'}
                   data-testid="alloc-duration-seconds"
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Initial escrow</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Initial escrow</span>
                 <input
                   defaultValue={initialEscrow ?? ''}
                   onChange={(e) => setInitialEscrow(e.target.value ?? '')}
                   data-testid="alloc-initial-escrow"
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Max monthly spend</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Max monthly spend</span>
                 <input
                   defaultValue={maxMonthlySpend ?? ''}
                   onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
                   data-testid="alloc-max-monthly-spend"
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
 
               {!showAdvanced ? (
-                <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                <div className="glass-panel industrial-border px-3 py-2 text-[11px] text-muted-foreground space-y-1">
                   <div>
                     <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (default RS {defaultRsLabel}, recommended)
                     <span className="ml-2 text-[11px] text-muted-foreground">
@@ -2159,14 +2178,14 @@ export function Dashboard() {
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     Slots required:{' '}
-                    <span className="font-mono text-foreground">{defaultMode2Slots}</span>
+                    <span className="font-mono-data text-foreground">{defaultMode2Slots}</span>
                     {' '}• Providers available:{' '}
-                    <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                    <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
                     {autoMode2ProviderError && (
-                      <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
+                      <div className="mt-1 text-[11px] font-mono-data text-destructive">{autoMode2ProviderError}</div>
                     )}
                     {autoMode2ProviderError && (
-                      <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                      <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
@@ -2176,7 +2195,7 @@ export function Dashboard() {
                             <button
                               type="button"
                               onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                              className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                             >
                               <Copy className="h-3 w-3" /> Copy
                             </button>
@@ -2185,7 +2204,7 @@ export function Dashboard() {
                             </Link>
                           </div>
                         </div>
-                        <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                        <div className="mt-2 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
                       </div>
                     )}
                   </div>
@@ -2208,7 +2227,7 @@ export function Dashboard() {
                   {placementProfile === 'custom' && (
                     <div className="grid grid-cols-2 gap-3">
                       <label className="space-y-1">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS K (Data)</span>
+                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">RS K (Data)</span>
                         <input
                           type="number"
                           min={1}
@@ -2216,11 +2235,11 @@ export function Dashboard() {
                           defaultValue={rsK ?? ''}
                           onChange={(e) => setRsK(e.target.value ?? '')}
                           data-testid="alloc-rs-k"
-                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                          className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                         />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">RS M (Parity)</span>
+                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">RS M (Parity)</span>
                         <input
                           type="number"
                           min={1}
@@ -2228,7 +2247,7 @@ export function Dashboard() {
                           defaultValue={rsM ?? ''}
                           onChange={(e) => setRsM(e.target.value ?? '')}
                           data-testid="alloc-rs-m"
-                          className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                          className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                         />
                       </label>
                     </div>
@@ -2237,14 +2256,14 @@ export function Dashboard() {
                   {placementProfile === 'custom' && (
                     <div className="text-[11px] text-muted-foreground">
                       Slots required:{' '}
-                      <span className="font-mono text-foreground">{mode2Config.slots ?? '—'}</span>
+                      <span className="font-mono-data text-foreground">{mode2Config.slots ?? '—'}</span>
                       {' '}• Providers available:{' '}
-                      <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                      <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
                       {mode2Config.error && (
-                        <div className="mt-1 text-[11px] text-red-500">{mode2Config.error}</div>
+                        <div className="mt-1 text-[11px] font-mono-data text-destructive">{mode2Config.error}</div>
                       )}
                       {mode2Config.error && (
-                        <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                        <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
@@ -2254,7 +2273,7 @@ export function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                               >
                                 <Copy className="h-3 w-3" /> Copy
                               </button>
@@ -2263,7 +2282,7 @@ export function Dashboard() {
                               </Link>
                             </div>
                           </div>
-                          <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                          <div className="mt-1 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
                         </div>
                       )}
                     </div>
@@ -2271,14 +2290,14 @@ export function Dashboard() {
                   {placementProfile === 'auto' && (
                     <div className="text-[11px] text-muted-foreground">
                       Slots required:{' '}
-                      <span className="font-mono text-foreground">{defaultMode2Slots}</span>
+                      <span className="font-mono-data text-foreground">{defaultMode2Slots}</span>
                       {' '}• Providers available:{' '}
-                      <span className="font-mono text-foreground">{providerCount || '—'}</span>
+                      <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
                       {autoMode2ProviderError && (
-                        <div className="mt-1 text-[11px] text-red-500">{autoMode2ProviderError}</div>
+                        <div className="mt-1 text-[11px] font-mono-data text-destructive">{autoMode2ProviderError}</div>
                       )}
                       {autoMode2ProviderError && (
-                        <div className="mt-2 rounded-md border border-border bg-background/60 p-2 text-[11px] text-muted-foreground">
+                        <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
@@ -2288,7 +2307,7 @@ export function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/40"
+                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                               >
                                 <Copy className="h-3 w-3" /> Copy
                               </button>
@@ -2297,7 +2316,7 @@ export function Dashboard() {
                               </Link>
                             </div>
                           </div>
-                          <div className="mt-1 font-mono text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
+                          <div className="mt-2 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
                         </div>
                       )}
                     </div>
@@ -2308,7 +2327,7 @@ export function Dashboard() {
               <div className="flex items-start justify-between gap-3 pt-1">
                 <div className="text-xs text-muted-foreground">
                   {createTx && (
-                    <div className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <div className="text-accent flex items-center gap-2 font-mono-data text-[10px] uppercase tracking-[0.2em]">
                       <CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0, 10)}...
                     </div>
                   )}
@@ -2324,7 +2343,7 @@ export function Dashboard() {
                     }
                     disabled={dealLoading || Boolean(createDealProviderError)}
                     data-testid="alloc-submit"
-                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                    className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] disabled:opacity-50 transition-all"
                   >
                     {dealLoading
                       ? 'Creating...'
@@ -2338,7 +2357,7 @@ export function Dashboard() {
                   </button>
                   <div
                     data-testid="alloc-provider-guard"
-                    className={createDealProviderError ? 'text-[11px] text-red-500 text-right' : 'text-[11px] text-muted-foreground text-right'}
+                    className={createDealProviderError ? 'text-[11px] font-mono-data text-destructive text-right' : 'text-[11px] font-mono-data text-muted-foreground text-right'}
                   >
                     Need {createDealRequiredSlots ?? '—'} providers • Found {providerCount || 0}
                     {createDealProviderError ? ` • ${createDealProviderError}` : ''}
@@ -2369,13 +2388,13 @@ export function Dashboard() {
                       ? 'Retry'
                       : 'Download'
                 return (
-                  <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-3">
+                  <div key={entry.id} className="glass-panel industrial-border p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-xs font-semibold text-foreground truncate" title={entry.filePath}>
+                        <div className="text-[11px] font-semibold text-foreground truncate font-mono-data" title={entry.filePath}>
                           {entry.filePath}
                         </div>
-                        <div className="text-[10px] text-muted-foreground">
+                        <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
                           Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
                         </div>
                       </div>
@@ -2383,28 +2402,28 @@ export function Dashboard() {
                         type="button"
                         onClick={() => handleRecentDownload(entry)}
                         disabled={isBusy}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary hover:bg-primary/15 disabled:opacity-50"
                       >
                         <ArrowDownRight className="w-3 h-3" />
                         {actionLabel}
                       </button>
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span className="rounded-full border border-border px-2 py-0.5">
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                      <span className="border border-border/60 bg-background/60 px-2 py-0.5">
                         Last: {entry.lastAction}
                       </span>
-                      <span className={`rounded-full border px-2 py-0.5 ${
+                      <span className={`border px-2 py-0.5 ${
                         entry.status === 'failed'
-                          ? 'border-red-500/40 text-red-500'
+                          ? 'border-destructive/40 text-destructive'
                           : entry.status === 'pending'
-                            ? 'border-yellow-500/40 text-yellow-600 dark:text-yellow-400'
-                            : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                            ? 'border-primary/40 text-primary'
+                            : 'border-accent/40 text-accent'
                       }`}>
                         {entry.status}
                       </span>
                     </div>
                     {entry.error && (
-                      <div className="mt-2 text-[10px] text-red-500 truncate" title={entry.error}>
+                      <div className="mt-2 text-[10px] text-destructive font-mono-data truncate" title={entry.error}>
                         {entry.error}
                       </div>
                     )}
@@ -2418,47 +2437,47 @@ export function Dashboard() {
       </div>
 
       {showAdvanced ? (
-        <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="px-6 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Network &amp; routing (advanced)
+        <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+            /net/routing --advanced
           </div>
           <div className="p-6 space-y-6">
           {proofs.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                <span>Liveness &amp; Performance</span>
-                {proofsLoading && <span className="text-[10px] text-muted-foreground">Syncing proofs…</span>}
+            <div className="overflow-hidden glass-panel industrial-border">
+              <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex items-center justify-between">
+                <span className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">/obs/liveness</span>
+                {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Syncing proofs…</span>}
               </div>
-              <table className="min-w-full divide-y divide-border text-xs">
-                <thead className="bg-muted/30">
+              <table className="min-w-full divide-y divide-border/40 text-xs">
+                <thead className="bg-background/40">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Block</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Valid</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Provider</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Block</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Valid</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border/40">
                   {(() => {
                     const myDealIds = new Set(deals.map((d) => d.id))
                     const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
                     return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-4 py-2 text-foreground">
+                      <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-2 text-foreground font-mono-data">
                           {p.dealId ? `#${p.dealId}` : '—'}
                         </td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-primary">
+                        <td className="px-4 py-2 font-mono-data text-[10px] text-primary">
                           {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground">
+                        <td className="px-4 py-2 text-muted-foreground font-mono-data">
                           {p.blockHeight || 0}
                         </td>
                         <td className="px-4 py-2">
                           <span
-                            className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                            className={`px-2 py-0.5 border text-[10px] font-bold font-mono-data uppercase tracking-[0.2em] ${
                               p.valid
-                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+                                ? 'border-accent/40 bg-accent/10 text-accent'
+                                : 'border-destructive/40 bg-destructive/10 text-destructive'
                             }`}
                           >
                             {p.valid ? 'OK' : 'FAIL'}
@@ -2472,25 +2491,25 @@ export function Dashboard() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Providers (Deals &amp; Retrievals)
+          <div className="overflow-hidden glass-panel industrial-border">
+            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+              /registry/providers
             </div>
-            <table className="min-w-full divide-y divide-border text-xs" data-testid="providers-table">
-              <thead className="bg-muted/30">
+            <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="providers-table">
+              <thead className="bg-background/40">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Address</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Capabilities</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Endpoints</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deals</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Active</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Retrievals</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Bytes Served</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Storage</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Address</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Capabilities</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Status</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Endpoints</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deals</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Active</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Retrievals</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Bytes Served</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Total Storage</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-border/40">
                 {providers.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-6 py-6 text-sm text-muted-foreground">
@@ -2506,28 +2525,28 @@ export function Dashboard() {
                       bytesServed: 0,
                     }
                     return (
-                      <tr key={p.address} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-4 py-2 font-mono text-[11px] text-primary" title={p.address}>
+                      <tr key={p.address} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={p.address}>
                           {p.address.slice(0, 12)}...{p.address.slice(-6)}
                         </td>
                         <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
                         <td className="px-4 py-2">
-                          <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <span className="px-2 py-0.5 border border-accent/40 bg-accent/10 text-accent text-[10px] font-bold font-mono-data uppercase tracking-[0.2em]">
                             {p.status}
                           </span>
                         </td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
+                        <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground">
                           {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
                             <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
                           ) : (
                             <span className="italic">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.assignedDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.activeDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{stats.retrievals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">{formatBytes(stats.bytesServed)}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground">
+                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.assignedDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.activeDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.retrievals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{formatBytes(stats.bytesServed)}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">
                           {(() => {
                             const totalStorage = Number(p.total_storage)
                             if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
@@ -2543,31 +2562,31 @@ export function Dashboard() {
           </div>
 
           {!showAdvanced ? (
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Retrieval economics (Advanced)
+            <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+              <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                /retrieval/economics --advanced
               </div>
-              <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+              <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
                 <div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
-                  <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Base Fee</div>
+                  <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
-                  <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Per-Blob Fee</div>
+                  <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
                 </div>
                 <div className="flex items-end gap-2 sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(true)}
-                    className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/60"
+                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                   >
                     Show Advanced
                     <ArrowDownRight className="h-4 w-4" />
                   </button>
                   <Link
                     to="/proofs"
-                    className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-foreground hover:bg-background/80"
+                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
                     title="View receipts, proofs, and sessions"
                   >
                     Proofs
@@ -2575,57 +2594,57 @@ export function Dashboard() {
                   </Link>
                 </div>
               </div>
-              <div className="px-6 pb-4 text-xs text-muted-foreground">
+              <div className="px-6 pb-4 text-[11px] font-mono-data text-muted-foreground">
                 Fees and on-chain retrieval sessions are developer-focused. Use Advanced mode for full tables.
                 {retrievalParamsError ? (
-                  <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+                  <span className="block mt-1 text-[11px] text-destructive">{retrievalParamsError}</span>
                 ) : null}
               </div>
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Retrieval Fees (Gamma-4)
+              <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                  /retrieval/fees gamma-4
                 </div>
-                <div className="px-6 py-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+                <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
                   <div>
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Base Fee</div>
-                    <div className="text-sm text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Base Fee</div>
+                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Per-Blob Fee</div>
-                    <div className="text-sm text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Per-Blob Fee</div>
+                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Burn Cut</div>
-                    <div className="text-sm text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Burn Cut</div>
+                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
                   </div>
                 </div>
-                <div className="px-6 pb-4 text-xs text-muted-foreground">
+                <div className="px-6 pb-4 text-[11px] font-mono-data text-muted-foreground">
                   {retrievalFeeNote}
                   {retrievalParamsError ? (
-                    <span className="block mt-1 text-[11px] text-red-500/80">{retrievalParamsError}</span>
+                    <span className="block mt-1 text-[11px] text-destructive">{retrievalParamsError}</span>
                   ) : null}
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                <div className="px-6 py-3 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  My Retrieval Sessions
+              <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                  /retrieval/sessions
                 </div>
-                <table className="min-w-full divide-y divide-border text-xs" data-testid="retrieval-sessions-table">
-                  <thead className="bg-muted/30">
+                <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="retrieval-sessions-table">
+                  <thead className="bg-background/40">
                     <tr>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Session</th>
-                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Deal</th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Provider</th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Total Bytes</th>
-                      <th className="px-4 py-2 text-right font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Session</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Provider</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Status</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Total Bytes</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Updated</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border/40">
                     {!nilAddress ? (
                       <tr>
                         <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
@@ -2643,7 +2662,7 @@ export function Dashboard() {
                         <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
                           No retrieval sessions found.
                           {retrievalSessionsError ? (
-                            <span className="block mt-1 text-[11px] text-red-500/80">{retrievalSessionsError}</span>
+                            <span className="block mt-1 text-[11px] font-mono-data text-destructive">{retrievalSessionsError}</span>
                           ) : null}
                         </td>
                       </tr>
@@ -2660,18 +2679,18 @@ export function Dashboard() {
                         return (
                           <tr
                             key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
-                            className="hover:bg-muted/50 transition-colors"
+                            className="hover:bg-muted/30 transition-colors"
                           >
-                            <td className="px-4 py-2 font-mono text-[11px] text-primary" title={sessionHex || undefined}>
+                            <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={sessionHex || undefined}>
                               {shortSession}
                             </td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{dealId || '—'}</td>
-                            <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground" title={provider || undefined}>
+                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{dealId || '—'}</td>
+                            <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground" title={provider || undefined}>
                               {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
                             </td>
-                            <td className="px-4 py-2 text-muted-foreground">{status}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{totalBytes}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{updatedHeight || '—'}</td>
+                            <td className="px-4 py-2 text-muted-foreground font-mono-data">{status}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{totalBytes}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{updatedHeight || '—'}</td>
                           </tr>
                         )
                       })
@@ -2687,7 +2706,7 @@ export function Dashboard() {
 
       {downloadToast && (
         <div className="fixed bottom-6 right-6 z-50">
-          <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-700 shadow-lg dark:text-emerald-300">
+          <div className="flex items-center gap-2 glass-panel industrial-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent ring-1 ring-accent/30 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--accent)_/_0.16)]">
             <CheckCircle2 className="h-4 w-4" />
             {downloadToast}
           </div>
