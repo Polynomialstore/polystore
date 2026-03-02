@@ -190,7 +190,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
-  const [wasmError, setWasmError] = useState<string | null>(null);
 
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<{ index: number; data: Uint8Array }[]>([]);
@@ -1009,7 +1008,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     const promise = (async () => {
       setWasmStatus('initializing')
-      setWasmError(null)
       try {
         const response = await fetch('/trusted_setup.txt')
         if (!response.ok) {
@@ -1023,7 +1021,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         addLog('WASM and KZG context initialized in worker.')
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e)
-        setWasmError(message)
         setWasmStatus('error')
         addLog(`Error initializing WASM in worker: ${message}`)
         console.error('WASM Worker Init Error:', e)
@@ -2540,66 +2537,73 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               className={`
-                border-2 border-dashed rounded-xl p-6 transition-all duration-200
+                border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group industrial-border
                 ${isDragging
-                  ? 'border-primary bg-primary/10 scale-[1.01]'
-                  : 'border-border hover:border-primary/50 bg-card'
+                  ? 'border-primary bg-primary/10 scale-[1.005]'
+                  : 'border-border/60 hover:border-primary/40 bg-card/40'
                 }
               `}
             >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-                    <Cpu className="h-5 w-5 text-foreground" />
+               {/* Background scanning effect */}
+               <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
+               <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none animate-scan" />
+
+              <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="shrink-0 flex h-12 w-12 items-center justify-center rounded-none bg-primary/10 border border-primary/40">
+                    <Cpu className="h-6 w-6 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Upload a file</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="text-[11px] font-bold text-foreground uppercase tracking-[0.2em]">/dev/shm_sharder_v1</div>
+                    <div className="mt-1 text-[10px] text-muted-foreground font-mono-data">
                       {isMode2 && gatewayMode2Enabled ? (
                         gatewayReachable ? (
-                          'Local gateway connected (fast path).'
+                          <span className="text-accent font-bold">[GW_LOCAL_OPTIMIZED] HYBRID_INGEST_READY</span>
                         ) : (
-                          'No local Gateway detected (in-browser sharding fallback).'
+                          <span className="text-yellow-500 font-bold">[BROWSER_FALLBACK] WASM_KZG_SHARDING_READY</span>
                         )
                       ) : wasmStatus === 'initializing' ? (
-                        'Preparing in-browser sharding…'
+                        <span className="animate-pulse">BOOTING_WASM_KZG_CONTEXT...</span>
                       ) : wasmStatus === 'error' ? (
-                        `In-browser sharding unavailable: ${wasmError || 'init failed'}`
+                        <span className="text-destructive font-bold">ERROR: WASM_INIT_FAILED</span>
                       ) : (
-                        'In-browser sharding.'
+                        <span>WASM_READY :: MODE1_BROWSER_SHARDING</span>
                       )}
                     </div>
                   </div>
                 </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto">
-                  Choose file
+                <label className="inline-flex w-full cursor-pointer items-center justify-center bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:w-auto">
+                  LOAD_OBJECT
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <label className="flex items-center gap-2">
+              <div className="relative z-10 mt-6 flex flex-wrap items-center gap-4 text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest">
+                <label className="flex items-center gap-2 cursor-pointer group/chk">
+                  <div className={`w-4 h-4 border flex items-center justify-center transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
+                    {compressUploads && <div className="w-1.5 h-1.5 bg-primary-foreground" />}
+                  </div>
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-primary"
+                    className="hidden"
                     checked={compressUploads}
                     disabled={processing || activeUploading}
                     onChange={(e) => setCompressUploads(e.target.checked)}
                   />
-                  <span>Compress locally (NilCE zstd) before sharding</span>
+                  <span>NilCE_ZSTD_COMPRESSION</span>
                 </label>
-                {gatewayMode2Enabled && gatewayReachable ? (
-                  <span>Gateway Mode 2 handles compression independently.</span>
-                ) : null}
+                <div className="h-3 w-[1px] bg-border/40" />
                 {!appConfig.gatewayDisabled && !gatewayReachable ? (
                   <a
                     href={gatewayGuiReleaseUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center rounded-md border border-border bg-background/70 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary/50"
+                    className="text-primary hover:underline"
                   >
-                    Install local Gateway app
+                    GET_DESKTOP_GATEWAY
                   </a>
-                ) : null}
+                ) : (
+                  <span className="opacity-40">SYSTEM_READY</span>
+                )}
               </div>
             </div>
           )}
