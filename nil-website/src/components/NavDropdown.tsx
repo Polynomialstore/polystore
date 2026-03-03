@@ -31,8 +31,8 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       <button 
         className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-transparent transition-colors flex items-center gap-2 group ${
           isActive || isOpen
-            ? "text-foreground bg-muted/40 border-border/60" 
-            : "text-muted-foreground hover:text-foreground hover:bg-muted/30 hover:border-border/60"
+            ? "text-foreground bg-secondary border-border/60" 
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary hover:border-border/60"
         }`}
       >
         {label}
@@ -53,7 +53,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="relative w-[640px] glass-panel industrial-border [--glass-opacity:0.95] dark:[--glass-bg:hsl(var(--background)_/_0.98)] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.10)] p-4 overflow-hidden">
+            <div className="relative w-[640px] glass-panel industrial-border [--glass-opacity:0.95] dark:[--glass-bg:hsl(var(--card)_/_0.98)] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.10)] p-4 overflow-hidden">
               <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none" />
               
               {/* Grid Layout - 2 Columns */}
@@ -73,11 +73,11 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                     <Wrapper
                         key={item.path}
                         className={`group flex items-start gap-3 p-3 border border-border/50 transition-colors ${
-                            active ? "bg-muted/40 border-primary/40" : "hover:bg-muted/30 hover:border-border/70"
+                            active ? "bg-secondary border-primary/40" : "hover:bg-secondary hover:border-border/70"
                         }`}
                     >
                         {/* Icon Box */}
-                        <div className={`mt-0.5 p-2 border border-border/50 bg-background/50 shrink-0 transition-colors ${
+                        <div className={`mt-0.5 p-2 border border-border/50 bg-background/50 dark:bg-black/30 shrink-0 transition-colors ${
                             active ? "border-primary/40 text-primary" : "text-muted-foreground group-hover:text-primary"
                         }`}>
                             {item.icon}

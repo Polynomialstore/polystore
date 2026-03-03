@@ -1539,20 +1539,20 @@ export function Dashboard() {
     <div className="p-5 space-y-4 bg-muted/10">
       {showAdvanced ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          <button
-            type="button"
-            onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
-            data-testid="tab-content"
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
-          >
-            <Database className="h-3.5 w-3.5 text-muted-foreground" />
-            {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
+              data-testid="tab-content"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Database className="h-3.5 w-3.5 text-muted-foreground" />
+              {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
+            </button>
         </div>
       ) : null}
 
       {targetDealId ? (
-        <div className="rounded-xl border border-border bg-background/60 p-4">
+        <div className="glass-panel industrial-border p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
@@ -1574,7 +1574,7 @@ export function Dashboard() {
                   setDealDetailRequestedTabNonce((n) => n + 1)
                   setPendingScrollTarget('deal')
                 }}
-                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                 title="Jump to Deal Explorer → Manifest & MDUs"
               >
                 Inspect MDUs
@@ -1627,7 +1627,7 @@ export function Dashboard() {
             className="glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
           >
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/gateway/tools</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/gateway/tools</div>
               <div className="mt-1 font-semibold text-foreground">Advanced tools are hidden</div>
               <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Enable Advanced to access gateway sharding (Mode 1).</div>
             </div>
@@ -1678,7 +1678,7 @@ export function Dashboard() {
                   onChange={handleFileChange}
                   disabled={!targetDealId || uploadLoading || isTargetDealMode2 || targetDealExpired}
                   data-testid="content-file-input"
-                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
+                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
                 />
               </label>
               <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -1860,11 +1860,11 @@ export function Dashboard() {
           <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           <div className="relative grid gap-3 p-4 lg:grid-cols-2">
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/wallet/testnet_funds</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div
-                  className="truncate font-mono-data text-[11px] text-muted-foreground"
+                  className="truncate font-mono-data text-[11px] text-foreground"
                   data-testid="cosmos-identity"
                   title={nilAddress || undefined}
                 >
@@ -1894,7 +1894,7 @@ export function Dashboard() {
           </div>
 
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">/wallet/account</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/account</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-mono-data text-[11px] text-foreground" title={address || undefined}>
@@ -1921,7 +1921,7 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-                  className="inline-flex items-center gap-2 border border-border bg-background/80 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-muted/30"
+                  className="inline-flex items-center gap-2 border border-border bg-background/80 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-secondary"
                 >
                   <Wallet className="h-3.5 w-3.5" />
                   Switch
@@ -1956,7 +1956,7 @@ export function Dashboard() {
                   <div className="w-14 h-14 glass-panel industrial-border flex items-center justify-center mx-auto mb-4">
                     <HardDrive className="w-7 h-7 text-muted-foreground" />
                   </div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">/mnt/storage_deals</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/storage_deals</div>
                   <div className="mt-2 text-sm font-semibold text-foreground">No deals yet</div>
                   <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Create a deal to start uploading files.</div>
                 </div>
@@ -1978,7 +1978,7 @@ export function Dashboard() {
                       <HardDrive className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">/mnt/deal_explorer</div>
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/deal_explorer</div>
                       <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
                         {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
                       </div>
@@ -2007,7 +2007,7 @@ export function Dashboard() {
           <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
           <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">/registry/deals</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/registry/deals</div>
               <p className="text-[11px] font-mono-data text-muted-foreground mt-1">
                 Select a deal to manage files (upload, list, download).
               </p>
@@ -2020,7 +2020,7 @@ export function Dashboard() {
                 className={`inline-flex items-center justify-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
                   showAdvanced
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-background/60 text-muted-foreground hover:bg-muted/30'
+                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary'
                 }`}
               >
                 Advanced
@@ -2029,7 +2029,7 @@ export function Dashboard() {
                 type="button"
                 onClick={() => void handleRefreshSummary()}
                 title="Refresh deals"
-                className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-muted/30"
+                className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
@@ -2069,7 +2069,7 @@ export function Dashboard() {
                         className={`w-full border px-3 py-3 text-left transition-colors ${
                           isSelected
                             ? 'border-primary/40 bg-primary/10 ring-1 ring-primary/20'
-                            : 'border-border/60 bg-background/60 hover:bg-muted/30'
+                            : 'border-border/60 bg-background/60 hover:bg-secondary'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -2098,7 +2098,7 @@ export function Dashboard() {
                           </div>
                         </div>
                         <div
-                          className="mt-2 truncate font-mono-data text-[10px] text-muted-foreground"
+                          className="mt-2 truncate font-mono-data text-[10px] text-muted-foreground dark:text-foreground"
                           title={deal.cid || ''}
                           data-testid={`deal-manifest-${deal.id}`}
                         >
@@ -2114,7 +2114,7 @@ export function Dashboard() {
           <div ref={allocRef} className="border-t border-border/60 bg-background/30 px-6 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">/alloc/create_deal</div>
+                <div className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/alloc/create_deal</div>
                 <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                   Allocate a new deal on NilChain. Deals act like buckets for files.
                 </p>
@@ -2130,7 +2130,7 @@ export function Dashboard() {
                     setDurationFromPreset(e.target.value)
                   }}
                   data-testid="alloc-duration"
-                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   {DURATION_PRESETS.map((preset) => (
                     <option key={preset.value} value={preset.value}>
@@ -2146,7 +2146,7 @@ export function Dashboard() {
                   onChange={(e) => setDuration(e.target.value ?? '')}
                   readOnly={durationPreset !== 'custom'}
                   data-testid="alloc-duration-seconds"
-                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
               <label className="space-y-1">
@@ -2155,7 +2155,7 @@ export function Dashboard() {
                   defaultValue={initialEscrow ?? ''}
                   onChange={(e) => setInitialEscrow(e.target.value ?? '')}
                   data-testid="alloc-initial-escrow"
-                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
               <label className="space-y-1">
@@ -2164,7 +2164,7 @@ export function Dashboard() {
                   defaultValue={maxMonthlySpend ?? ''}
                   onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
                   data-testid="alloc-max-monthly-spend"
-                  className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </label>
 
@@ -2195,7 +2195,7 @@ export function Dashboard() {
                             <button
                               type="button"
                               onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                              className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                              className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                             >
                               <Copy className="h-3 w-3" /> Copy
                             </button>
@@ -2217,7 +2217,7 @@ export function Dashboard() {
                       value={placementProfile}
                       onChange={(e) => setPlacementProfile((e.target.value as 'auto' | 'custom') || 'auto')}
                       data-testid="alloc-placement-profile"
-                      className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                      className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                     >
                       <option value="auto">Mode 2 (Default {defaultRsLabel}, recommended)</option>
                       <option value="custom">Mode 2 (Custom RS)</option>
@@ -2235,7 +2235,7 @@ export function Dashboard() {
                           defaultValue={rsK ?? ''}
                           onChange={(e) => setRsK(e.target.value ?? '')}
                           data-testid="alloc-rs-k"
-                          className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                          className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                         />
                       </label>
                       <label className="space-y-1">
@@ -2247,7 +2247,7 @@ export function Dashboard() {
                           defaultValue={rsM ?? ''}
                           onChange={(e) => setRsM(e.target.value ?? '')}
                           data-testid="alloc-rs-m"
-                          className="w-full bg-background/60 border border-border/70 px-3 py-2 text-foreground font-mono-data text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
+                          className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
                         />
                       </label>
                     </div>
@@ -2273,7 +2273,7 @@ export function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                               >
                                 <Copy className="h-3 w-3" /> Copy
                               </button>
@@ -2307,7 +2307,7 @@ export function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                               >
                                 <Copy className="h-3 w-3" /> Copy
                               </button>
@@ -2438,15 +2438,15 @@ export function Dashboard() {
 
       {showAdvanced ? (
         <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
             /net/routing --advanced
           </div>
           <div className="p-6 space-y-6">
           {proofs.length > 0 && (
             <div className="overflow-hidden glass-panel industrial-border">
               <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex items-center justify-between">
-                <span className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">/obs/liveness</span>
-                {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Syncing proofs…</span>}
+                <span className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/obs/liveness</span>
+                {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">Syncing proofs…</span>}
               </div>
               <table className="min-w-full divide-y divide-border/40 text-xs">
                 <thead className="bg-background/40">
@@ -2462,14 +2462,14 @@ export function Dashboard() {
                     const myDealIds = new Set(deals.map((d) => d.id))
                     const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
                     return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={p.id} className="hover:bg-secondary transition-colors">
                         <td className="px-4 py-2 text-foreground font-mono-data">
                           {p.dealId ? `#${p.dealId}` : '—'}
                         </td>
                         <td className="px-4 py-2 font-mono-data text-[10px] text-primary">
                           {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground font-mono-data">
+                        <td className="px-4 py-2 text-muted-foreground dark:text-foreground font-mono-data">
                           {p.blockHeight || 0}
                         </td>
                         <td className="px-4 py-2">
@@ -2492,7 +2492,7 @@ export function Dashboard() {
           )}
 
           <div className="overflow-hidden glass-panel industrial-border">
-            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
               /registry/providers
             </div>
             <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="providers-table">
@@ -2525,7 +2525,7 @@ export function Dashboard() {
                       bytesServed: 0,
                     }
                     return (
-                      <tr key={p.address} className="hover:bg-muted/30 transition-colors">
+                      <tr key={p.address} className="hover:bg-secondary transition-colors">
                         <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={p.address}>
                           {p.address.slice(0, 12)}...{p.address.slice(-6)}
                         </td>
@@ -2535,18 +2535,18 @@ export function Dashboard() {
                             {p.status}
                           </span>
                         </td>
-                        <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground">
+                        <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground dark:text-foreground">
                           {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
                             <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
                           ) : (
                             <span className="italic">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.assignedDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.activeDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{stats.retrievals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{formatBytes(stats.bytesServed)}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">
+                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.assignedDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.activeDeals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.retrievals}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{formatBytes(stats.bytesServed)}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">
                           {(() => {
                             const totalStorage = Number(p.total_storage)
                             if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
@@ -2579,14 +2579,14 @@ export function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(true)}
-                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                   >
                     Show Advanced
                     <ArrowDownRight className="h-4 w-4" />
                   </button>
                   <Link
                     to="/proofs"
-                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/30"
+                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
                     title="View receipts, proofs, and sessions"
                   >
                     Proofs
@@ -2630,7 +2630,7 @@ export function Dashboard() {
               </div>
 
               <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
                   /retrieval/sessions
                 </div>
                 <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="retrieval-sessions-table">
@@ -2679,18 +2679,18 @@ export function Dashboard() {
                         return (
                           <tr
                             key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
-                            className="hover:bg-muted/30 transition-colors"
+                            className="hover:bg-secondary transition-colors"
                           >
                             <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={sessionHex || undefined}>
                               {shortSession}
                             </td>
-                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{dealId || '—'}</td>
-                            <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground" title={provider || undefined}>
+                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{dealId || '—'}</td>
+                            <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground dark:text-foreground" title={provider || undefined}>
                               {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
                             </td>
-                            <td className="px-4 py-2 text-muted-foreground font-mono-data">{status}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{totalBytes}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground font-mono-data">{updatedHeight || '—'}</td>
+                            <td className="px-4 py-2 text-muted-foreground dark:text-foreground font-mono-data">{status}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{totalBytes}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{updatedHeight || '—'}</td>
                           </tr>
                         )
                       })

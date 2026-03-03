@@ -1260,7 +1260,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                 <FileJson className="w-5 h-5 text-primary" />
             </div>
             <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">/deal/explorer</div>
+                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
                 <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   <span
@@ -1288,28 +1288,28 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         <button
           onClick={() => setActiveTab('files')}
           data-testid="deal-detail-tab-files"
-          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'files' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'files' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
           Files
         </button>
         <button
           onClick={() => setActiveTab('info')}
           data-testid="deal-detail-tab-info"
-          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
           Deal info
         </button>
         <button
           onClick={() => setActiveTab('manifest')}
           data-testid="deal-detail-tab-manifest"
-          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'manifest' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'manifest' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
           Manifest &amp; MDUs
         </button>
         <button
           onClick={() => setActiveTab('heat')}
           data-testid="deal-detail-tab-heat"
-          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
           Heat &amp; Liveness
         </button>
@@ -1369,7 +1369,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     )}
                                   </div>
                                   {providersByAddr[p]?.endpoints && providersByAddr[p].endpoints!.length > 0 && (
-                                    <div className="font-mono-data text-[10px] text-muted-foreground break-all">
+                                    <div className="font-mono-data text-[10px] text-foreground break-all">
                                       {providersByAddr[p].endpoints![0]}
                                     </div>
                                   )}
@@ -1468,7 +1468,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         {p.backend}
                                         {p.endpoint ? ` • ${p.endpoint}` : ''}
                                       </div>
-                                        <div className="font-mono-data text-[10px] text-muted-foreground">
+                                        <div className="font-mono-data text-[10px] text-foreground">
                                           start=({formatBigint(p.startMduIndex)},{p.startBlobIndex}) • blobs={formatBigint(p.blobCount)}
                                         </div>
                                     </div>
@@ -1526,7 +1526,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     onChange={(e) =>
                                       setDownloadRangeStart(Math.max(0, Number(e.target.value || 0) || 0))
                                     }
-                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                    className="recessed-input px-2 py-1 text-[11px]"
                                     />
                                 </label>
                                 <label className="flex flex-col gap-1">
@@ -1536,7 +1536,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     min={0}
                                     value={downloadRangeLen}
                                     onChange={(e) => setDownloadRangeLen(Math.max(0, Number(e.target.value || 0) || 0))}
-                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                    className="recessed-input px-2 py-1 text-[11px]"
                                     />
                                 </label>
                               </div>
@@ -1569,12 +1569,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 {(deal.retrieval_policy?.mode ?? 1) === 5 && 'Public'}
                                 </div>
                                 {deal.retrieval_policy?.allowlist_root ? (
-                                  <div className="text-[10px] text-muted-foreground font-mono-data break-all">
+                                  <div className="text-[10px] text-foreground font-mono-data break-all">
                                     allowlist_root: {deal.retrieval_policy.allowlist_root}
                                   </div>
                                 ) : null}
                                 {deal.retrieval_policy?.voucher_signer ? (
-                                  <div className="text-[10px] text-muted-foreground font-mono-data break-all">
+                                  <div className="text-[10px] text-foreground font-mono-data break-all">
                                     voucher_signer: {deal.retrieval_policy.voucher_signer}
                                   </div>
                                 ) : null}
@@ -1591,7 +1591,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     <select
                                       value={policyMode}
                                       onChange={(e) => setPolicyMode(Number(e.target.value) as RetrievalPolicyMode)}
-                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px]"
+                                      className="px-2 py-1 rounded border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
                                     >
                                       <option value={1}>Owner only</option>
                                       <option value={2}>Allowlist</option>
@@ -1607,7 +1607,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         value={policyAllowlistRoot}
                                         onChange={(e) => setPolicyAllowlistRoot(e.target.value)}
                                         placeholder="0x... (32 bytes)"
-                                          className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                        className="recessed-input px-2 py-1 text-[11px]"
                                         />
                                     </label>
                                   )}
@@ -1618,7 +1618,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         value={policyVoucherSigner}
                                         onChange={(e) => setPolicyVoucherSigner(e.target.value)}
                                         placeholder="0x... (EVM address)"
-                                          className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                        className="recessed-input px-2 py-1 text-[11px]"
                                         />
                                     </label>
                                   )}
@@ -1630,7 +1630,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     <div className="text-[10px] text-accent">{policyStatus}</div>
                                   ) : null}
                                   {policyTx ? (
-                                    <div className="text-[10px] text-muted-foreground font-mono-data break-all">
+                                    <div className="text-[10px] text-foreground font-mono-data break-all">
                                       tx: {policyTx}
                                     </div>
                                   ) : null}
@@ -1653,7 +1653,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 <select
                                   value={authType}
                                   onChange={(e) => setAuthType(e.target.value as 'none' | 'allowlist' | 'voucher')}
-                                  className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px]"
+                                  className="px-2 py-1 rounded border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
                                 >
                                   <option value="none">None (public)</option>
                                   <option value="allowlist">Allowlist proof</option>
@@ -1668,7 +1668,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     onChange={(e) => setAllowlistProofInput(e.target.value)}
                                     placeholder='{"leafIndex":0,"merklePath":["0x...","0x..."]}'
                                     rows={4}
-                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                    className="recessed-input px-2 py-1 text-[11px]"
                                     />
                                 </label>
                               )}
@@ -1680,7 +1680,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     onChange={(e) => setVoucherInput(e.target.value)}
                                     placeholder='{"nonce":1,"expiresAt":12345,"signature":"0x...","provider":"","redeemer":""}'
                                     rows={4}
-                                      className="px-2 py-1 rounded border border-border bg-background text-foreground text-[11px] font-mono-data"
+                                    className="recessed-input px-2 py-1 text-[11px]"
                                     />
                                 </label>
                                 )}
