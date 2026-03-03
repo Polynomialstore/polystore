@@ -2540,12 +2540,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group industrial-border
                 ${isDragging
                   ? 'border-primary bg-primary/10 scale-[1.005]'
-                  : 'border-border/60 hover:border-primary/40 bg-card/40'
+                  : 'border-border/60 hover:border-primary/40 bg-card'
                 }
               `}
             >
-               {/* Background scanning effect */}
-               <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
+               {/* Keep hover scan only; avoid persistent grid bleed inside the slab. */}
                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none animate-scan" />
 
               <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -2614,7 +2613,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           data-testid="mdu-status-panel"
           data-upload-phase={uploadPhase}
         >
-          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           {processing ? (
             <div className="absolute inset-0 pointer-events-none animate-scan opacity-25" />
           ) : null}

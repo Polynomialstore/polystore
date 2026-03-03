@@ -1536,7 +1536,7 @@ export function Dashboard() {
   const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
 
   const dealExplorerTopPanel = (
-    <div className="p-5 space-y-4 bg-muted/10">
+    <div className="p-5 space-y-4 bg-card">
       {showAdvanced ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <button
