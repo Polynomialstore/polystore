@@ -2878,6 +2878,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+          <div className="absolute inset-0 cyber-grid opacity-30 dark:opacity-0 pointer-events-none" />
           <div className="relative flex justify-between items-center mb-6 gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">

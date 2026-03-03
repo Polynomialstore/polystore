@@ -239,6 +239,7 @@ export function StatusBar() {
 
   return (
     <div className="relative overflow-hidden glass-panel industrial-border px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.06)]">
+      <div className="absolute inset-0 cyber-grid opacity-30 dark:opacity-0 pointer-events-none" />
       <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-40" />
 
       <div className="relative flex flex-wrap items-center gap-2 text-[10px] font-mono-data text-muted-foreground">

@@ -1857,6 +1857,7 @@ export function Dashboard() {
       )}
 
       <div className="relative overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]" data-testid="dashboard-utility-bar">
+          <div className="absolute inset-0 cyber-grid opacity-30 dark:opacity-0 pointer-events-none" />
           <div className="relative grid gap-3 p-4 lg:grid-cols-2">
           <div className="glass-panel industrial-border px-4 py-3">
             <div className="text-[10px] font-bold hud-path">/wallet/testnet_funds</div>

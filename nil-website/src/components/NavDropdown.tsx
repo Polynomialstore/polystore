@@ -54,6 +54,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
           >
             {/* The Mega Menu Card */}
             <div className="relative w-[640px] industrial-border border border-border/70 bg-background backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] dark:shadow-[0_0_50px_rgba(0,0,0,1)] p-4 overflow-hidden">
+              <div className="absolute inset-0 cyber-grid opacity-15 dark:opacity-0 pointer-events-none" />
               {/* Grid Layout - 2 Columns */}
               <div className="relative grid grid-cols-2 gap-2">
                 {items.map((item) => {
