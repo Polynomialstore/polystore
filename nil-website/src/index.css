@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    /* --- Light Mode: Tactical Blueprint --- */
+    /* --- Light Mode: Ultra-Clean Tactical Blueprint --- */
     --background: 210 20% 96%; /* Technical Gray Floor */
     --foreground: 222 47% 11%; 
-    --card: 0 0% 100%; /* Pure White Clinical Slabs */
+    --card: 0 0% 100%; /* Pure White Slabs */
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
@@ -21,10 +21,10 @@
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 88%; /* Sharp Technical Borders */
+    --border: 214 32% 88%; /* Frame borders only */
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
-    --grid-color: hsl(var(--foreground) / 0.08); /* Slightly Darker Drafting Grid */
+    --grid-color: hsl(var(--foreground) / 0.08); 
     --scan-color: hsl(var(--primary) / 0.06); 
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
@@ -62,7 +62,6 @@
   body {
     @apply bg-background text-foreground;
     font-family: "Montserrat", sans-serif;
-    /* GLOBAL MICRO GRID RESTORED */
     background-image: 
       linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
@@ -86,30 +85,28 @@
 @keyframes scan { 0% { top: -50%; } 100% { top: 100%; } }
 
 @layer utilities {
-  /* THE SLAB PRINCIPLE: Gray Modules occluding the White Grid */
+  /* THE SLAB PRINCIPLE: Defined by Shadow and Brackets, NOT Borders */
   .glass-panel, .solid-panel {
-    @apply border relative;
+    @apply relative;
     background-color: hsl(var(--card) / 1); 
-    border-color: hsl(var(--border));
-    box-shadow: 0 0 60px rgba(0, 0, 0, 0.05);
+    box-shadow: none;
     background-image: none;
   }
 
   .solid-slab {
-    @apply border relative;
+    @apply relative;
     background-color: hsl(var(--card) / 1);
-    border-color: hsl(var(--border));
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
   }
 
   .dark .glass-panel, .dark .solid-panel, .dark .solid-slab {
+    @apply border;
     background-color: hsl(var(--card) / 1);
     border-color: hsl(var(--border));
     border-top-color: hsl(var(--primary) / 0.2);
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
   }
 
-  /* FLOATING BRACKETS: Increasing negative offset to not exactly line up */
   .industrial-border { @apply relative; }
   .industrial-border::before, .industrial-border::after {
     content: "";

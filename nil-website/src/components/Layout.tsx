@@ -62,8 +62,7 @@ export const Layout = () => {
       <nav className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300">
         
         {/* Control Surface */}
-        <div className="absolute inset-0 bg-background border-b border-border" />
-        <div className="absolute inset-0 cyber-grid pointer-events-none" />
+        <div className="absolute inset-0 bg-card border-b border-border" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
         <div className="container mx-auto px-4 h-16 flex items-center gap-4 relative z-10">
@@ -228,8 +227,7 @@ export const Layout = () => {
         <Outlet />
       </main>
 
-      <footer className="py-12 border-t border-border/60 bg-background/60 backdrop-blur-md mt-24 relative overflow-hidden">
-        <div className="absolute inset-0 cyber-grid pointer-events-none" />
+      <footer className="py-12 border-t border-border bg-card mt-24 relative overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm relative z-10">

@@ -31,7 +31,7 @@ export const Home = () => {
             />
           </div>
 
-          <div className="relative mx-auto inline-flex items-center border border-border/80 bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
+          <div className="relative mx-auto inline-flex items-center border border-border bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
             /nilstore/overview
           </div>
 
