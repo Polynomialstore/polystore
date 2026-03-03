@@ -1322,7 +1322,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     <div className="space-y-1">
                         <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
                         <div
-                          className="font-mono-data break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
+                          className="font-mono-data break-all bg-secondary/50 border border-border rounded-none px-3 py-2 text-primary select-all"
                           data-testid="deal-detail-cid"
                         >
                           {deal.cid || 'Empty Container'}
@@ -1332,7 +1332,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     {activeTab === 'info' && (
                       <div className="space-y-1">
                         <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Owner</div>
-                        <div className="font-mono-data text-[11px] bg-secondary/50 border border-border rounded px-3 py-2 text-foreground select-all">
+                        <div className="font-mono-data text-[11px] bg-secondary/50 border border-border rounded-none px-3 py-2 text-foreground select-all">
                           {deal.owner}
                         </div>
                       </div>
@@ -1341,11 +1341,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     <div className="space-y-1">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
+                        <div className="bg-secondary/50 px-2 py-1 rounded-none border border-border">
                           <span className="text-muted-foreground block text-[10px]">Escrow Remaining</span>
                           <span className="text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</span>
                         </div>
-                        <div className="bg-secondary/50 px-2 py-1 rounded border border-border">
+                        <div className="bg-secondary/50 px-2 py-1 rounded-none border border-border">
                           <span className="text-muted-foreground block text-[10px]">Max Spend</span>
                           <span className="text-foreground">{deal.max_monthly_spend ? `${deal.max_monthly_spend} stake` : '—'}</span>
                         </div>
@@ -1355,7 +1355,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   {activeTab === 'info' && (
                     <div className="space-y-1 sm:col-span-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Providers</div>
-                      <div className="bg-secondary/50 border border-border rounded p-2">
+                      <div className="bg-secondary/50 border border-border rounded-none p-2">
                           {deal.providers && deal.providers.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               {deal.providers.map((p: string, idx: number) => (
@@ -1427,13 +1427,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           )}
 
                         {lastPlan && String(lastPlan.dealId) === String(deal.id) && (
-                          <details className="rounded-xl border border-border bg-background/40 p-3 text-[11px]">
+                          <details className="rounded-none border border-border bg-background/40 p-3 text-[11px]">
                             <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                               Last retrieval plan
                             </summary>
                             <div className="mt-3 space-y-2 text-[11px] text-muted-foreground">
                               <div className="grid sm:grid-cols-2 gap-2">
-                                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                                <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Global blobs</div>
                                     <div className="font-mono-data text-foreground">
                                       {formatBigint(lastPlan.globalStart)}..{formatBigint(lastPlan.globalEnd)}
@@ -1442,7 +1442,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     leaf_count={formatBigint(lastPlan.leafCount)} (blobs per MDU)
                                   </div>
                                 </div>
-                                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                                <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">MDU window</div>
                                     <div className="font-mono-data text-foreground">
                                       MDU #{formatBigint(lastPlan.globalStart / lastPlan.leafCount)}..#
@@ -1454,7 +1454,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 </div>
                               </div>
 
-                              <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                              <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                                 <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                                   Provider groups
                                 </div>
@@ -1479,29 +1479,29 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           </details>
                         )}
 
-                        <details className="rounded-xl border border-border bg-secondary/40 p-3 text-[11px]">
+                        <details className="rounded-none border border-border bg-secondary/40 p-3 text-[11px]">
                           <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                             Advanced
                           </summary>
                           <div className="mt-3 space-y-3">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-                                <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
                                   <div className="text-[10px] text-muted-foreground uppercase">Bytes Served</div>
                                   <div className="font-mono-data text-foreground">
                                     {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
                                   </div>
                                 </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
                                   <div className="text-[10px] text-muted-foreground uppercase">Escrow Remaining</div>
                                   <div className="font-mono-data text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</div>
                                 </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
                                   <div className="text-[10px] text-muted-foreground uppercase">Chunks</div>
                                   <div className="font-mono-data text-foreground">
                                     {progress.phase === 'idle' ? '—' : `${progress.chunksFetched}/${progress.chunkCount || 0}`}
                                   </div>
                                 </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded border border-border">
+                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
                                   <div className="text-[10px] text-muted-foreground uppercase">Receipt</div>
                                   <div className="font-mono-data text-foreground">
                                     {progress.phase === 'idle'
@@ -1511,7 +1511,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-2">
+                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-2">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="text-[10px] text-muted-foreground uppercase font-semibold">Download Range</div>
                                 <div className="text-[10px] text-muted-foreground">Len=0 downloads to EOF</div>
@@ -1554,12 +1554,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           </div>
                         </details>
 
-                        <details className="rounded-xl border border-border bg-secondary/40 p-3 text-[11px]">
+                        <details className="rounded-none border border-border bg-secondary/40 p-3 text-[11px]">
                           <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
                             Retrieval Access
                           </summary>
                           <div className="mt-3 space-y-3">
-                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-2">
+                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-2">
                               <div className="text-[10px] text-muted-foreground uppercase font-semibold">Current Policy</div>
                               <div className="text-[11px] text-foreground">
                                 {(deal.retrieval_policy?.mode ?? 1) === 1 && 'Owner only'}
@@ -1581,7 +1581,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                             </div>
 
                             {isDealOwner && (
-                              <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                              <div className="rounded-none border border-border bg-background/40 p-3 space-y-3">
                                 <div className="text-[10px] text-muted-foreground uppercase font-semibold">
                                   Update Policy (owner)
                                 </div>
@@ -1591,7 +1591,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     <select
                                       value={policyMode}
                                       onChange={(e) => setPolicyMode(Number(e.target.value) as RetrievalPolicyMode)}
-                                      className="px-2 py-1 rounded border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
+                                      className="px-2 py-1 rounded-none border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
                                     >
                                       <option value={1}>Owner only</option>
                                       <option value={2}>Allowlist</option>
@@ -1637,14 +1637,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 <button
                                   onClick={handlePolicyUpdate}
                                   disabled={policyUpdating}
-                                  className="inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
+                                  className="inline-flex items-center justify-center rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
                                 >
                                   {policyUpdating ? 'Updating…' : 'Update policy'}
                                 </button>
                               </div>
                             )}
 
-                            <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-3">
                               <div className="text-[10px] text-muted-foreground uppercase font-semibold">
                                 Sponsored Auth (non-owner)
                               </div>
@@ -1653,7 +1653,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 <select
                                   value={authType}
                                   onChange={(e) => setAuthType(e.target.value as 'none' | 'allowlist' | 'voucher')}
-                                  className="px-2 py-1 rounded border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
+                                  className="px-2 py-1 rounded-none border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
                                 >
                                   <option value="none">None (public)</option>
                                   <option value="allowlist">Allowlist proof</option>
@@ -1695,7 +1695,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               </div>
                               <button
                                 onClick={applySponsoredAuth}
-                                className="inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
+                                className="inline-flex items-center justify-center rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
                               >
                                 Save sponsored auth
                               </button>
@@ -1727,7 +1727,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 data-file-path={f.path}
                                 data-cache-browser={browserCached ? 'yes' : 'no'}
                                 data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-                                className="rounded-lg border border-border bg-background/60 px-3 py-2 space-y-2"
+                                className="rounded-none border border-border bg-background/60 px-3 py-2 space-y-2"
                               >
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <div className="min-w-0">
@@ -1793,7 +1793,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={isBusy || !browserCached}
                                         data-testid="deal-detail-download-browser-cache"
                                         data-file-path={f.path}
-                                        className="order-6 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-6 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
                                         title="Download file bytes cached in this browser (no network)."
                                       >
                                         Download from Browser cache
@@ -1831,7 +1831,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={isBusy}
                                         data-testid="deal-detail-download-browser-slab"
                                         data-file-path={f.path}
-                                        className="order-3 inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-3 inline-flex items-center gap-2 rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
                                         title="Rebuild file from browser OPFS MDU cache, then download."
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
@@ -1852,7 +1852,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={downloading || isBusy || !browserCached}
                                         data-testid="deal-detail-clear-browser-cache"
                                         data-file-path={f.path}
-                                        className="order-5 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-5 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
                                         title="Remove cached file bytes from this browser."
                                       >
                                         Clear Browser cache
@@ -1982,7 +1982,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download"
                                         data-file-path={f.path}
-                                        className="order-1 inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-1 inline-flex items-center justify-center rounded-none bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
                                         title="Download using best available path (gateway cache first, then provider path, then browser cache)."
                                       >
                                         Download (auto source)
@@ -2056,7 +2056,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={downloading || isBusy || gatewaySlabStatus !== 'present'}
                                         data-testid="deal-detail-download-gateway"
                                         data-file-path={f.path}
-                                        className="order-4 inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-4 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
                                         title="Request file through local Gateway endpoint."
                                       >
                                         Download via Gateway
@@ -2134,7 +2134,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         disabled={downloading || isBusy || !deal.cid}
                                         data-testid="deal-detail-download-sp"
                                         data-file-path={f.path}
-                                        className="order-2 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
+                                        className="order-2 inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
                                         title="Force fresh network retrieval and submit on-chain receipt."
                                       >
                                         <ArrowDownRight className="w-4 h-4" />
@@ -2154,7 +2154,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   )}
 
                   {activeTab === 'files' && !deal.cid && (
-                    <div className="sm:col-span-2 rounded-xl border border-border bg-background/60 p-8 text-center">
+                    <div className="sm:col-span-2 rounded-none border border-border bg-background/60 p-8 text-center">
                       <div className="text-sm font-semibold text-foreground">No files yet</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         Upload a file inside this deal to store and retrieve.
@@ -2171,7 +2171,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                 ) : slab ? (
                     <>
                         <div className="grid grid-cols-2 gap-4 text-xs">
-                              <div className="bg-secondary/50 p-3 rounded border border-border">
+                              <div className="bg-secondary/50 p-3 rounded-none border border-border">
                                   <div className="text-muted-foreground uppercase text-[10px]">Slab MDUs</div>
                                   <div className="text-lg font-mono-data text-foreground">{slab.total_mdus}</div>
                                 <div className="text-[10px] text-muted-foreground mt-1">
@@ -2181,7 +2181,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     Source: {slabSource === 'gateway' ? 'gateway' : slabSource === 'opfs' ? 'browser (OPFS)' : '—'}
                                 </div>
                             </div>
-                              <div className="bg-secondary/50 p-3 rounded border border-border">
+                              <div className="bg-secondary/50 p-3 rounded-none border border-border">
                                   <div className="text-muted-foreground uppercase text-[10px]">Manifest Root</div>
                                   <div className="font-mono-data text-primary text-[10px] truncate" title={slab.manifest_root}>
                                       {slab.manifest_root.slice(0, 16)}...
@@ -2189,7 +2189,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               </div>
                         </div>
 
-                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                        <div className="bg-secondary/50 border border-border rounded-none p-3 text-xs space-y-2">
                             <div className="flex items-center justify-between">
                                 <div className="text-xs text-muted-foreground uppercase font-semibold">Layout</div>
                                 <div className="text-[10px] text-muted-foreground">
@@ -2227,7 +2227,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               </div>
                         </div>
 
-                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs">
+                        <div className="bg-secondary/50 border border-border rounded-none p-3 text-xs">
                             <div className="text-muted-foreground uppercase text-[10px]">NilFS</div>
                             <div className="mt-1 text-[11px] text-foreground">
                                 {slab.file_count} files • {slab.total_size_bytes} bytes
@@ -2237,7 +2237,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                             </div>
                         </div>
 
-                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-3">
+                        <div className="bg-secondary/50 border border-border rounded-none p-3 text-xs space-y-3">
                             <div className="flex items-center justify-between">
                                 <div className="text-xs text-muted-foreground uppercase font-semibold">Manifest Commitment</div>
                                 <div className="text-[10px] text-muted-foreground">KZG commitment over MDU roots</div>
@@ -2248,11 +2248,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                             ) : manifestInfo ? (
                               <>
                                 <div className="grid grid-cols-2 gap-2">
-                                  <div className="bg-background/50 border border-border rounded p-2">
+                                  <div className="bg-background/50 border border-border rounded-none p-2">
                                     <div className="text-[10px] text-muted-foreground uppercase">Manifest Root</div>
                                       <div className="font-mono-data text-[10px] text-foreground break-all">{manifestInfo.manifest_root}</div>
                                   </div>
-                                  <div className="bg-background/50 border border-border rounded p-2">
+                                  <div className="bg-background/50 border border-border rounded-none p-2">
                                     <div className="text-[10px] text-muted-foreground uppercase">Manifest Blob</div>
                                       <div className="font-mono-data text-[10px] text-foreground break-all" title={manifestInfo.manifest_blob_hex}>
                                         {shortHex(manifestInfo.manifest_blob_hex, 24, 12)}
@@ -2263,7 +2263,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                   </div>
                                 </div>
 
-                                <div className="bg-background/50 border border-border rounded p-2">
+                                <div className="bg-background/50 border border-border rounded-none p-2">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="text-[10px] text-muted-foreground uppercase">Ordered MDU Roots</div>
                                     <button
@@ -2277,7 +2277,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                           setMerkleError(err instanceof Error ? err.message : 'Failed to build Merkle tree')
                                         }
                                       }}
-                                      className="text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                      className="text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
                                     >
                                       Build Merkle Tree (Debug)
                                     </button>
@@ -2298,7 +2298,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                             setSelectedMdu(r.mdu_index)
                                             fetchMduKzg(manifestInfo.manifest_root, r.mdu_index, deal.id, nilAddress)
                                           }}
-                                          className="shrink-0 text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                          className="shrink-0 text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
                                         >
                                           Inspect
                                         </button>
@@ -2315,7 +2315,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                       </div>
                                       <div className="space-y-2 max-h-64 overflow-auto pr-1">
                                         {mduRootMerkle.map((layer, idx) => (
-                                          <div key={idx} className="bg-background/50 border border-border rounded p-2">
+                                          <div key={idx} className="bg-background/50 border border-border rounded-none p-2">
                                             <div className="text-[10px] text-muted-foreground uppercase">
                                               Level {idx} • {layer.length} nodes
                                             </div>
@@ -2345,7 +2345,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                         </div>
 
                         {manifestInfo?.roots?.length ? (
-                          <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                          <div className="bg-secondary/50 border border-border rounded-none p-3 text-xs space-y-2">
                             <div className="flex items-center justify-between">
                               <div className="text-xs text-muted-foreground uppercase font-semibold">Root Table (MDU #0)</div>
                               <div className="text-[10px] text-muted-foreground">
@@ -2370,7 +2370,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                         setSelectedMdu(r.mdu_index)
                                         fetchMduKzg(manifestInfo.manifest_root, r.mdu_index, deal.id, nilAddress)
                                       }}
-                                      className="shrink-0 text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                      className="shrink-0 text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
                                     >
                                       Inspect
                                     </button>
@@ -2380,7 +2380,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           </div>
                         ) : null}
 
-                        <div className="bg-secondary/50 border border-border rounded p-3 text-xs space-y-2">
+                        <div className="bg-secondary/50 border border-border rounded-none p-3 text-xs space-y-2">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                             <div>
                               <div className="text-xs text-muted-foreground uppercase font-semibold">MDU Inspector</div>
@@ -2397,7 +2397,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                   setMduKzg(null)
                                   setMduKzgError(null)
                                 }}
-                                className="text-[10px] bg-background border border-border rounded px-2 py-1 text-foreground"
+                                className="text-[10px] bg-background border border-border rounded-none px-2 py-1 text-foreground"
                               >
                                 {Array.from({ length: slab.total_mdus }).map((_, idx) => {
                                   const kind =
@@ -2411,7 +2411,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               </select>
                               <button
                                 onClick={() => fetchMduKzg(slab.manifest_root, selectedMdu, deal.id, nilAddress)}
-                                className="text-[10px] px-2 py-1 rounded border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
+                                className="text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"
                               >
                                 {loadingMduKzg ? 'Loading…' : 'Load Commitments'}
                               </button>
@@ -2423,7 +2423,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           {mduKzg && mduKzg.mdu_index === selectedMdu ? (
                             <div className="space-y-2">
                               <div className="grid grid-cols-2 gap-2">
-                                <div className="bg-background/50 border border-border rounded p-2">
+                                <div className="bg-background/50 border border-border rounded-none p-2">
                                   <div className="text-[10px] text-muted-foreground uppercase">MDU Root</div>
                                     <div className="font-mono-data text-[10px] text-foreground break-all">
                                       {shortHex(mduKzg.root_hex, 24, 12)}
@@ -2432,7 +2432,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     Blake2s Merkle root over 64 blob commitments
                                   </div>
                                 </div>
-                                <div className="bg-background/50 border border-border rounded p-2">
+                                <div className="bg-background/50 border border-border rounded-none p-2">
                                   <div className="text-[10px] text-muted-foreground uppercase">Blob Commitments</div>
                                     <div className="text-[11px] text-foreground font-mono-data">{mduKzg.blobs.length}</div>
                                   <div className="text-[10px] text-muted-foreground mt-1">
@@ -2441,7 +2441,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                 </div>
                               </div>
 
-                              <div className="bg-background/50 border border-border rounded p-2">
+                              <div className="bg-background/50 border border-border rounded-none p-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="text-[10px] text-muted-foreground uppercase">Stripe Layout</div>
                                   <div className="text-[10px] text-muted-foreground">
@@ -2474,7 +2474,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                           key={`stripe-${row}-${col}`}
                                           title={title}
                                           className={[
-                                            'flex items-center justify-center rounded-sm border border-border/40 text-[9px] font-mono-data',
+                                            'flex items-center justify-center rounded-none border border-border/40 text-[9px] font-mono-data',
                                             hasBlob
                                               ? 'bg-primary/25 text-foreground'
                                               : isDataSlot
@@ -2489,11 +2489,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
                                     <div className="inline-flex items-center gap-1">
-                                      <span className="h-2 w-2 rounded-sm bg-primary/70" />
+                                      <span className="h-2 w-2 rounded-none bg-primary/70" />
                                       Data blob
                                     </div>
                                     <div className="inline-flex items-center gap-1">
-                                      <span className="h-2 w-2 rounded-sm bg-accent/60" />
+                                      <span className="h-2 w-2 rounded-none bg-accent/60" />
                                       {stripeLayout.isMode2 ? 'Parity shard' : 'Replica slot'}
                                     </div>
                                   </div>
@@ -2516,7 +2516,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
         {activeTab === 'heat' && (
             <div className="space-y-4">
-                  <div className="bg-secondary/50 border border-border rounded p-4 text-center">
+                  <div className="bg-secondary/50 border border-border rounded-none p-4 text-center">
                       <Activity className="w-8 h-8 text-primary mx-auto mb-2" />
                       <h4 className="text-sm font-medium text-foreground">Traffic Analysis</h4>
                       <p className="text-xs text-muted-foreground mt-1">Real-time stats from chain state</p>
@@ -2524,25 +2524,25 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   
                   {heat ? (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                          <div className="bg-secondary/50 p-3 rounded border border-border">
+                          <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Traffic</div>
                               <div className="text-lg font-mono-data text-foreground">
                                   {(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB
                               </div>
                           </div>
-                          <div className="bg-secondary/50 p-3 rounded border border-border">
+                          <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Retrievals</div>
                               <div className="text-lg font-mono-data text-accent">
                                   {heat.successful_retrievals_total || '0'}
                               </div>
                           </div>
-                          <div className="bg-secondary/50 p-3 rounded border border-border">
+                          <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Failed Proofs</div>
                               <div className="text-lg font-mono-data text-destructive">
                                   {heat.failed_challenges_total}
                               </div>
                           </div>
-                          <div className="bg-secondary/50 p-3 rounded border border-border">
+                          <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Last Activity</div>
                               <div className="text-lg font-mono-data text-foreground">
                                   Block {heat.last_update_height}

@@ -10,7 +10,7 @@ export const KZGDeepDive = () => {
         className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-accent/10 rounded-xl border border-accent/20 shrink-0">
+          <div className="p-3 bg-accent/10 rounded-none border border-accent/20 shrink-0">
             <Hash className="w-8 h-8 text-accent" />
           </div>
           <h2 className="text-3xl font-bold text-foreground">Cryptographic Binding: Proof-of-Useful-Data (PoUD)</h2>
@@ -28,11 +28,11 @@ export const KZGDeepDive = () => {
           <p className="text-muted-foreground mb-4">
             KZG requires a "Structured Reference String" (SRS). This is a public parameter generated once from a secret $\tau$. Our SRS is compatible with Ethereum's EIP-4844 blobs.
           </p>
-          <div className="bg-secondary/30 p-6 rounded-xl border border-border mb-6">
+          <div className="bg-secondary/30 p-6 rounded-none border border-border mb-6">
             <p className="text-sm text-muted-foreground mb-4">
               The SRS comprises a sequence of elliptic curve points derived from powers of $\tau$:
             </p>
-            <div className="font-mono-data bg-background/50 text-foreground p-4 rounded-lg text-sm overflow-x-auto text-center border border-border shadow-inner">
+            <div className="font-mono-data bg-background/50 text-foreground p-4 rounded-none text-sm overflow-x-auto text-center border border-border shadow-inner">
               SRS = [ g, g^tau, g^(tau^2), ... , g^(tau^n) ]
             </div>
           </div>
@@ -51,7 +51,7 @@ export const KZGDeepDive = () => {
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <motion.div 
               whileHover={{ scale: 1.02 }}
-              className="bg-primary/5 p-6 rounded-2xl text-center border border-primary/20"
+              className="bg-primary/5 p-6 rounded-none text-center border border-primary/20"
             >
               <h4 className="font-bold text-lg text-primary mb-2">Atomic Blob</h4>
               <div className="text-4xl font-bold my-4 text-foreground">128 KiB</div>
@@ -59,7 +59,7 @@ export const KZGDeepDive = () => {
             </motion.div>
             <motion.div 
               whileHover={{ scale: 1.02 }}
-              className="bg-accent/5 p-6 rounded-2xl text-center border border-accent/20"
+              className="bg-accent/5 p-6 rounded-none text-center border border-accent/20"
             >
               <h4 className="font-bold text-lg text-accent mb-2">Commitment</h4>
               <div className="text-4xl font-bold my-4 text-foreground">48 Bytes</div>
@@ -76,7 +76,7 @@ export const KZGDeepDive = () => {
           <p className="text-muted-foreground mb-6">
             How do you verify a 1 Petabyte dataset with a single hash? NilStore uses a <strong>3-Hop Verification Chain</strong> to bind every byte to the Deal Root.
           </p>
-          <div className="bg-card p-6 rounded-xl border border-border mb-6 space-y-4">
+          <div className="bg-card p-6 rounded-none border border-border mb-6 space-y-4">
             <div className="flex items-center gap-4">
                 <div className="w-8 h-8 bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold">1</div>
                 <div>
@@ -101,7 +101,7 @@ export const KZGDeepDive = () => {
                 </div>
             </div>
           </div>
-          <div className="bg-secondary/30 p-8 rounded-2xl border border-border overflow-hidden relative">
+          <div className="bg-secondary/30 p-8 rounded-none border border-border overflow-hidden relative">
             
             {/* Animated Protocol Visualization */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10 h-64">
@@ -146,7 +146,7 @@ export const KZGDeepDive = () => {
             </div>
 
             <div className="mt-4 text-center">
-              <div className="inline-block bg-background/50 text-foreground font-mono-data p-3 rounded-lg border border-border shadow-lg">
+              <div className="inline-block bg-background/50 text-foreground font-mono-data p-3 rounded-none border border-border shadow-lg">
                 Chain Check: Valid(Root, $\pi$) == TRUE
               </div>
             </div>

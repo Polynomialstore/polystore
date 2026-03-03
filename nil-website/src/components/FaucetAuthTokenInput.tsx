@@ -33,7 +33,7 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
   }
 
   return (
-    <div className={`rounded-xl border border-border bg-secondary/10 p-4 ${className}`}>
+    <div className={`rounded-none border border-border bg-secondary/10 p-4 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Faucet access token</div>
@@ -62,14 +62,14 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
               handleSave()
             }
           }}
-          className="w-full rounded-md border border-border bg-background/70 px-3 py-2 text-sm font-mono"
+          className="w-full rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-mono"
         />
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleSave}
             disabled={!token.trim()}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+            className="inline-flex items-center justify-center rounded-none bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
           >
             Save
           </button>
@@ -77,7 +77,7 @@ export function FaucetAuthTokenInput({ className = '' }: { className?: string })
             type="button"
             onClick={handleClear}
             disabled={!hasSavedToken}
-            className="inline-flex items-center justify-center rounded-md border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/50 disabled:opacity-50 disabled:pointer-events-none"
+            className="inline-flex items-center justify-center rounded-none border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/50 disabled:opacity-50 disabled:pointer-events-none"
           >
             Clear
           </button>

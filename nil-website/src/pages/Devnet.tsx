@@ -87,25 +87,25 @@ export function Devnet() {
       </div>
 
       <div className="grid gap-6">
-        <section className="bg-card rounded-xl border border-border p-6">
+        <section className="bg-card rounded-none border border-border p-6">
           <div className="flex items-center gap-2 text-foreground font-semibold">
             <LinkIcon className="w-5 h-5 text-primary" />
             Hub Endpoints
           </div>
           <div className="mt-4 grid md:grid-cols-2 gap-4 text-sm">
-            <div className="bg-secondary/20 border border-border rounded-lg p-4">
+            <div className="bg-secondary/20 border border-border rounded-none p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Gateway Router (Optional)</div>
               <div className="font-mono text-foreground">{appConfig.gatewayBase}</div>
             </div>
-            <div className="bg-secondary/20 border border-border rounded-lg p-4">
+            <div className="bg-secondary/20 border border-border rounded-none p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">LCD</div>
               <div className="font-mono text-foreground">{appConfig.lcdBase}</div>
             </div>
-            <div className="bg-secondary/20 border border-border rounded-lg p-4">
+            <div className="bg-secondary/20 border border-border rounded-none p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">EVM RPC</div>
               <div className="font-mono text-foreground">{appConfig.evmRpc}</div>
             </div>
-            <div className="bg-secondary/20 border border-border rounded-lg p-4">
+            <div className="bg-secondary/20 border border-border rounded-none p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Chain IDs</div>
               <div className="font-mono text-foreground">
                 EVM {appConfig.chainId} · Cosmos {appConfig.cosmosChainId}
@@ -114,7 +114,7 @@ export function Devnet() {
           </div>
         </section>
 
-        <section className="bg-card rounded-xl border border-border p-6">
+        <section className="bg-card rounded-none border border-border p-6">
           <div className="flex items-center gap-2 text-foreground font-semibold">
             <Terminal className="w-5 h-5 text-primary" />
             Join As A Provider
@@ -123,7 +123,7 @@ export function Devnet() {
             Providers must register reachable HTTP endpoints (Multiaddr) and run the provider gateway. The hub operator must
             share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
           </p>
-          <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-lg p-4 overflow-x-auto text-muted-foreground">
+          <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-none p-4 overflow-x-auto text-muted-foreground">
             {joinSnippet}
           </pre>
           <p className="mt-3 text-xs text-muted-foreground">
@@ -131,7 +131,7 @@ export function Devnet() {
           </p>
         </section>
 
-        <section className="bg-card rounded-xl border border-border overflow-hidden">
+        <section className="bg-card rounded-none border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-foreground">
               <Server className="w-5 h-5 text-accent" />

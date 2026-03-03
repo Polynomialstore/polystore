@@ -1686,7 +1686,7 @@ export function Dashboard() {
                   type="checkbox"
                   checked={compressUploads}
                   onChange={(e) => setCompressUploads(e.target.checked)}
-                  className="h-3 w-3 rounded border-border text-primary focus:ring-primary/40"
+                  className="h-3 w-3 rounded-none border-border text-primary focus:ring-primary/40"
                 />
                 Compress before upload (NilCE, recommended)
               </label>
@@ -1856,8 +1856,8 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="relative overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="dashboard-utility-bar">
-          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+      <div className="relative overflow-hidden glass-panel industrial-border" data-testid="dashboard-utility-bar">
+          <div className="scan-overlay" />
           <div className="relative grid gap-3 p-4 lg:grid-cols-2">
           <div className="glass-panel industrial-border px-4 py-3">
             <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
@@ -2368,7 +2368,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-none border border-border bg-card shadow-sm">
+        <div className="rounded-none border border-border bg-card shadow-sm">
           <div className="px-4 py-3 border-b border-border bg-card flex items-center justify-between">
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
             <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
@@ -2437,13 +2437,13 @@ export function Dashboard() {
       </div>
 
       {showAdvanced ? (
-        <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+        <div className="mt-6 glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
           <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
             /net/routing --advanced
           </div>
           <div className="p-6 space-y-6">
           {proofs.length > 0 && (
-            <div className="overflow-hidden glass-panel industrial-border">
+            <div className="glass-panel industrial-border">
                 <div className="px-6 py-3 border-b border-border/60 bg-card flex items-center justify-between">
                 <span className="text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">/obs/liveness</span>
                 {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">Syncing proofs…</span>}

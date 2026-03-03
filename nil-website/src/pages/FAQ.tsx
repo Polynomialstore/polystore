@@ -167,7 +167,7 @@ export const FAQ = () => {
 
       <div className="space-y-12">
         {faqs.map((section, idx) => (
-          <div key={idx} className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+          <div key={idx} className="bg-card border border-border rounded-none p-6 shadow-sm">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-foreground border-b border-border pb-4">
               {section.icon}
               {section.category}
@@ -188,7 +188,7 @@ const AccordionItem = ({ question, answer }: { question: string, answer: React.R
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="border border-border rounded-xl bg-background/50 overflow-hidden">
+    <div className="border border-border rounded-none bg-background/50 overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/50 transition-colors"

@@ -34,7 +34,7 @@ export const BenchmarkSection = () => {
               />
             </div>
 
-          <div className="bg-card p-8 rounded-3xl border shadow-lg">
+          <div className="bg-card p-8 rounded-none border shadow-lg">
             <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
               <Activity className="w-5 h-5 text-primary" /> Live Metrics (Simulated)
             </h3>
@@ -66,7 +66,7 @@ const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, pe
     initial={{ opacity: 0, x: -20 }}
     whileInView={{ opacity: 1, x: 0 }}
     viewport={{ once: true }}
-    className="bg-background p-6 rounded-2xl border"
+    className="bg-background p-6 rounded-none border"
   >
     <div className="flex justify-between items-start mb-4">
       <div>
@@ -76,7 +76,7 @@ const BenchmarkCard = ({ title, value, subtitle, description, icon, barColor, pe
           <span className="text-sm text-muted-foreground">{subtitle}</span>
         </div>
       </div>
-      <div className="p-2 bg-secondary rounded-lg">{icon}</div>
+      <div className="p-2 bg-secondary rounded-none">{icon}</div>
     </div>
     <div className="w-full bg-secondary h-2 mb-4 overflow-hidden border border-border/40">
       <motion.div 

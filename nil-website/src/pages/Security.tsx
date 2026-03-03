@@ -7,7 +7,7 @@ export const Security = () => {
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl">
       <div className="mb-12">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-3 rounded-xl border border-accent/30 bg-accent/10">
+          <div className="p-3 rounded-none border border-accent/30 bg-accent/10">
             <Shield className="w-7 h-7 text-accent" />
           </div>
           <h1 className="text-4xl font-bold text-foreground">Security & Threat Model</h1>
@@ -19,7 +19,7 @@ export const Security = () => {
         </p>
       </div>
 
-      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+      <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-4">Threat Model (Assumptions)</h2>
         <div className="grid md:grid-cols-2 gap-4 text-sm text-muted-foreground">
           <div className="flex items-start gap-3">
@@ -78,7 +78,7 @@ export const Security = () => {
         />
       </div>
 
-      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+      <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-6">Default Verification: Triple Proof</h2>
         <div className="grid md:grid-cols-3 gap-6 text-sm text-muted-foreground">
           <div className="space-y-2">
@@ -105,7 +105,7 @@ export const Security = () => {
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+      <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-6">NilFS: Filesystem on Slab</h2>
         <div className="grid md:grid-cols-2 gap-6 text-sm text-muted-foreground">
           <div className="space-y-2">
@@ -125,7 +125,7 @@ export const Security = () => {
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+      <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-6">Threats & Mitigations</h2>
         <div className="grid md:grid-cols-2 gap-6">
           <ThreatCard
@@ -161,7 +161,7 @@ export const Security = () => {
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-12">
+      <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
         <h2 className="text-2xl font-bold text-foreground mb-4">Retrieval Security Pipeline</h2>
         <div className="grid md:grid-cols-2 gap-6 text-sm text-muted-foreground">
           <div className="space-y-3">
@@ -199,7 +199,7 @@ export const Security = () => {
         initial={{ opacity: 0, y: 12 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="bg-secondary/20 border border-border rounded-2xl p-6"
+        className="bg-secondary/20 border border-border rounded-none p-6"
       >
         <div className="flex items-center gap-2 mb-3">
           <Gavel className="w-5 h-5 text-muted-foreground" />
@@ -223,7 +223,7 @@ const PillarCard = ({
   title: string;
   body: string;
 }) => (
-  <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+  <div className="bg-card border border-border rounded-none p-5 shadow-sm">
     <div className="flex items-center gap-2 mb-3">
       {icon}
       <h3 className="font-semibold text-foreground">{title}</h3>
@@ -241,7 +241,7 @@ const ThreatCard = ({
   title: string;
   body: string;
 }) => (
-  <div className="bg-background/60 border border-border rounded-xl p-5">
+  <div className="bg-background/60 border border-border rounded-none p-5">
     <div className="flex items-center gap-2 mb-2">
       {icon}
       <h3 className="font-semibold text-foreground">{title}</h3>

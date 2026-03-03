@@ -22,7 +22,7 @@ const steps = [
             viewport={{ once: true }}
             transition={{ delay: i * 0.05 }}
             key={i}
-            className="w-12 h-12 bg-primary/10 border border-primary/30 rounded flex items-center justify-center text-[10px] font-mono-data text-primary uppercase tracking-[0.2em] font-bold"
+            className="w-12 h-12 bg-primary/10 border border-primary/30 rounded-none flex items-center justify-center text-[10px] font-mono-data text-primary uppercase tracking-[0.2em] font-bold"
           >
             128KiB
           </motion.div>
@@ -52,7 +52,7 @@ const steps = [
     DeepDiveComponent: PerformanceDeepDive,
     visual: (
       <div className="flex gap-4 items-center">
-        <div className="w-24 h-24 bg-primary/10 border border-primary/30 rounded-lg flex items-center justify-center text-primary font-bold font-mono-data uppercase tracking-[0.2em] text-[10px]">
+        <div className="w-24 h-24 bg-primary/10 border border-primary/30 rounded-none flex items-center justify-center text-primary font-bold font-mono-data uppercase tracking-[0.2em] text-[10px]">
           Data
         </div>
         <motion.div 
@@ -60,7 +60,7 @@ const steps = [
           transition={{ repeat: Infinity, duration: 1.5 }}
           className="text-2xl text-muted-foreground"
         >→</motion.div>
-        <div className="w-24 h-24 bg-accent/10 border border-accent/30 rounded-lg flex items-center justify-center text-accent font-bold font-mono-data uppercase tracking-[0.2em] text-[10px] shadow-[0_0_18px_hsl(var(--accent)_/_0.12)] dark:shadow-[0_0_26px_hsl(var(--accent)_/_0.18)]">
+        <div className="w-24 h-24 bg-accent/10 border border-accent/30 rounded-none flex items-center justify-center text-accent font-bold font-mono-data uppercase tracking-[0.2em] text-[10px] shadow-[0_0_18px_hsl(var(--accent)_/_0.12)] dark:shadow-[0_0_26px_hsl(var(--accent)_/_0.18)]">
           Served
         </div>
       </div>
@@ -74,7 +74,7 @@ const steps = [
     visual: (
       <div className="flex flex-col gap-4 items-center">
         <div className="text-accent text-6xl">✓</div>
-        <div className="glass-panel industrial-border font-mono-data p-4 rounded-lg text-[11px] text-accent">
+        <div className="glass-panel industrial-border font-mono-data p-4 rounded-none text-[11px] text-accent">
           {`verify(C, z, y, proof) == true`}
           <br/>
           <span className="text-muted-foreground">Time: 0.94ms</span>
@@ -111,14 +111,14 @@ export const AlgorithmWalkthrough = () => {
               <div className="absolute left-8 top-8 w-3 h-3 bg-primary -translate-x-1.5 hidden lg:block ring-4 ring-background" />
 
               <div className={cn(
-                "bg-card rounded-3xl border shadow-sm overflow-hidden transition-all duration-500",
+                "bg-card rounded-none border shadow-sm overflow-hidden transition-all duration-500",
                 expandedStep === step.id ? "ring-2 ring-primary/20 border-primary/50 shadow-md" : "hover:border-primary/30"
               )}>
                 {/* Header / Summary Section */}
                 <div className="p-8 flex flex-col lg:flex-row gap-8 items-center cursor-pointer" onClick={() => step.DeepDiveComponent && toggleStep(step.id)}>
                   <div className="flex-1">
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="p-3 bg-secondary rounded-2xl text-foreground">
+                      <div className="p-3 bg-secondary rounded-none text-foreground">
                         {step.icon}
                       </div>
                       <h3 className="text-2xl font-bold">{step.title}</h3>

@@ -53,7 +53,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="relative w-[640px] bg-background border border-border rounded-none glass-panel industrial-border shadow-[0_0_60px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] p-4 overflow-hidden">
+            <div className="relative w-[640px] bg-card border border-border rounded-none solid-slab industrial-border p-4 overflow-hidden">
               
               {/* Grid Layout - 2 Columns */}
               <div className="relative grid grid-cols-2 gap-2">

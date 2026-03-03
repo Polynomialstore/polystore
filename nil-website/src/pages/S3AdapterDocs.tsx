@@ -19,14 +19,14 @@ export const S3AdapterDocs = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">How it Works</h2>
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-card p-6 rounded-xl border border-border">
+            <div className="bg-card p-6 rounded-none border border-border">
               <Globe className="w-8 h-8 text-primary mb-4" />
               <h3 className="font-bold text-lg text-foreground">1. S3 Ingestion</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 The adapter listens for standard HTTP/S3 requests. When a file is uploaded via `PUT`, it is temporarily buffered.
               </p>
             </div>
-            <div className="bg-card p-6 rounded-xl border border-border">
+            <div className="bg-card p-6 rounded-none border border-border">
               <Database className="w-8 h-8 text-accent mb-4" />
               <h3 className="font-bold text-lg text-foreground">2. Sharding & Binding</h3>
               <p className="text-sm text-muted-foreground mt-2">
@@ -37,7 +37,7 @@ export const S3AdapterDocs = () => {
                 </Link>
               </p>
             </div>
-            <div className="bg-card p-6 rounded-xl border border-border">
+            <div className="bg-card p-6 rounded-none border border-border">
               <Terminal className="w-8 h-8 text-primary mb-4" />
               <h3 className="font-bold text-lg text-foreground">3. Content Commitment</h3>
               <p className="text-sm text-muted-foreground mt-2">
@@ -58,7 +58,7 @@ export const S3AdapterDocs = () => {
                 For standard tools, NilGateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
                 <span className="font-mono"> deal-{'{id}'}</span>.
               </p>
-              <div className="bg-background/50 p-4 rounded-lg font-mono text-sm text-foreground overflow-x-auto border border-border space-y-2">
+              <div className="bg-background/50 p-4 rounded-none font-mono text-sm text-foreground overflow-x-auto border border-border space-y-2">
                 <div># List deals as buckets</div>
                 <div>aws --endpoint-url http://localhost:8080 s3 ls</div>
                 <div className="pt-2"># Upload into a deal</div>
@@ -81,7 +81,7 @@ export const S3AdapterDocs = () => {
                 /api/v1/object/{'{key}'}
               </h3>
               <p className="text-sm text-muted-foreground mb-2">Uploads and shards a file.</p>
-              <div className="bg-background/50 p-4 rounded-lg font-mono text-sm text-foreground overflow-x-auto border border-border">
+              <div className="bg-background/50 p-4 rounded-none font-mono text-sm text-foreground overflow-x-auto border border-border">
                 curl -X PUT --data-binary @my_photo.jpg http://localhost:8080/api/v1/object/my_photo.jpg
               </div>
             </div>
@@ -92,7 +92,7 @@ export const S3AdapterDocs = () => {
                 /api/v1/object/{'{key}'}
               </h3>
               <p className="text-sm text-muted-foreground mb-2">Retrieves a file (reassembling shards).</p>
-              <div className="bg-background/50 p-4 rounded-lg font-mono text-sm text-foreground overflow-x-auto border border-border">
+              <div className="bg-background/50 p-4 rounded-none font-mono text-sm text-foreground overflow-x-auto border border-border">
                 curl -O http://localhost:8080/api/v1/object/my_photo.jpg
               </div>
             </div>
@@ -102,7 +102,7 @@ export const S3AdapterDocs = () => {
         {/* Setup */}
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Running the Adapter</h2>
-          <div className="bg-card p-6 rounded-xl font-mono text-sm text-muted-foreground border border-border">
+          <div className="bg-card p-6 rounded-none font-mono text-sm text-muted-foreground border border-border">
             <p className="text-muted-foreground"># 1. Build the S3 Service</p>
             <p>$ cd nil_gateway</p>
             <p>$ go build</p>

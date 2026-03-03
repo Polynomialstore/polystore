@@ -287,7 +287,7 @@ export const ProofsDashboard = () => {
       <div className="mb-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="max-w-2xl">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-3 rounded-xl border border-primary/30 bg-primary/10">
+            <div className="p-3 rounded-none border border-primary/30 bg-primary/10">
               <Activity className="w-6 h-6 text-primary" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-foreground">Retrieval Observatory</h1>
@@ -332,7 +332,7 @@ export const ProofsDashboard = () => {
       </div>
 
       {error ? (
-        <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="mb-6 rounded-none border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
@@ -340,10 +340,10 @@ export const ProofsDashboard = () => {
       {/* Status distribution + Top tables */}
       <div className="grid lg:grid-cols-2 gap-6 mb-10">
         {/* Status distribution bar chart */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-none border border-border p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-none bg-primary/10 flex items-center justify-center">
                 <BarChart2 className="w-4 h-4 text-primary" />
               </div>
               <div>
@@ -377,7 +377,7 @@ export const ProofsDashboard = () => {
               )
             })}
           </div>
-          <div className="mt-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <div className="mt-4 rounded-none border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             {totalSessions === 0 ? (
               <span>
                 No sessions yet. Open a retrieval session from the dashboard to see activity here.
@@ -391,10 +391,10 @@ export const ProofsDashboard = () => {
         </div>
 
         {/* Top deals & providers */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-none border border-border p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-none bg-primary/10 flex items-center justify-center">
                 <HardDrive className="w-4 h-4 text-primary" />
               </div>
               <div>
@@ -416,7 +416,7 @@ export const ProofsDashboard = () => {
                   topDealsBySessions.map((d) => (
                     <div
                       key={d.dealId}
-                      className="flex items-center justify-between bg-muted/40 rounded-lg px-2 py-1.5 border border-border/50"
+                      className="flex items-center justify-between bg-muted/40 rounded-none px-2 py-1.5 border border-border/50"
                     >
                       <div>
                         <div className="text-foreground font-medium">Deal #{d.dealId}</div>
@@ -440,7 +440,7 @@ export const ProofsDashboard = () => {
                   topProvidersBySessions.map((p) => (
                     <div
                       key={p.provider}
-                      className="flex items-center justify-between bg-muted/40 rounded-lg px-2 py-1.5 border border-border/50"
+                      className="flex items-center justify-between bg-muted/40 rounded-none px-2 py-1.5 border border-border/50"
                     >
                       <div>
                         <div className="font-mono-data text-[10px] text-foreground">
@@ -463,10 +463,10 @@ export const ProofsDashboard = () => {
       </div>
 
       {/* Recent sessions table */}
-      <section className="bg-card rounded-xl border border-border p-5 shadow-sm">
+      <section className="bg-card rounded-none border border-border p-5 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-none bg-accent/10 flex items-center justify-center">
               <Activity className="w-4 h-4 text-accent" />
             </div>
             <div>
@@ -543,12 +543,12 @@ interface SummaryCardProps {
 }
 
 const SummaryCard = ({ title, value, sub, icon }: SummaryCardProps) => (
-  <div className="bg-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
+  <div className="bg-card rounded-none border border-border p-4 flex items-center justify-between shadow-sm">
     <div>
       <div className="text-xs font-medium text-muted-foreground mb-1">{title}</div>
       <div className="text-xl font-bold text-card-foreground">{value}</div>
       <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>
     </div>
-    <div className="p-2 rounded-lg bg-secondary/40 flex items-center justify-center">{icon}</div>
+    <div className="p-2 rounded-none bg-secondary/40 flex items-center justify-center">{icon}</div>
   </div>
 )

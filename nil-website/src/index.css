@@ -4,286 +4,127 @@
 
 @layer base {
   :root {
-    /* --- Light Mode: Technical Blueprint --- */
-    --background: 210 20% 98%; /* Off-white "Paper" */
-    --foreground: 222 47% 11%; /* Deep Navy Ink */
-    --card: 0 0% 100%;
+    /* --- Light Mode: Tactical Blueprint --- */
+    --background: 210 20% 96%; /* Technical Gray Floor */
+    --foreground: 222 47% 11%; 
+    --card: 0 0% 100%; /* Pure White Clinical Slabs */
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 20.5 90% 45%; /* Deeper Safety Orange */
+    --primary: 20.5 90% 45%; 
     --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 210 40% 96%;
+    --secondary: 210 40% 94%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
+    --muted: 210 40% 94%;
     --muted-foreground: 215 16% 47%;
-    --accent: 142 70% 35%; /* Signal Green */
+    --accent: 142 70% 35%; 
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 80%; /* Sharper Technical Lines */
+    --border: 214 32% 88%; /* Sharp Technical Borders */
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
-    --glass-opacity: 0.7;
-    --grid-color: hsl(var(--foreground) / 0.1);
-    --scan-opacity: 0.05;
-    --industrial-bracket-opacity: 0.6;
+    --grid-color: hsl(var(--foreground) / 0.08); /* Slightly Darker Drafting Grid */
+    --scan-color: hsl(var(--primary) / 0.06); 
+    --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
-
-    --cyan-400: 180 100% 50%; /* #00E5FF */
-    --cyan-400-rgb: 0, 229, 255;
-    --purple-500: 291 98% 66%; /* #E056FD */
-    --purple-500-rgb: 224, 86, 253;
-    --violet-600: 255 49% 49%; /* #7B2CBF */
-    --violet-600-rgb: 123, 44, 191;
   }
  
   .dark {
-    /* --- Dark Mode: Control Room --- */
-    --background: 240 10% 2%; /* Level 0 (Floor) */
+    /* --- Dark Mode: Tactical Console --- */
+    --background: 240 10% 2%; 
     --foreground: 0 0% 98%;
-    --card: 240 10% 6%; /* Level 1 (Panels) */
+    --card: 240 10% 6%; 
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 6%;
     --popover-foreground: 0 0% 98%;
-    --primary: 20.5 90.2% 48.2%; /* Safety Orange */
+    --primary: 20.5 90.2% 48.2%; 
     --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 240 10% 10%; /* Level 2 (Active/Hover) */
+    --secondary: 240 10% 10%; 
     --secondary-foreground: 0 0% 98%;
     --muted: 240 10% 10%;
     --muted-foreground: 240 5% 74%;
-    --accent: 142.1 70.6% 45.3%; /* Success Green */
+    --accent: 142.1 70.6% 45.3%; 
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 18%;
+    --border: 240 6% 22%;
     --input: 240 6% 18%;
     --ring: 20.5 90.2% 48.2%;
-    --glass-opacity: 0.9;
-    --grid-color: hsl(var(--primary) / 0.04);
-    --scan-opacity: 0.12;
-    --industrial-bracket-opacity: 0.8;
+    --grid-color: hsl(var(--foreground) / 0.03); 
+    --scan-color: hsl(var(--primary) / 0.04);
+    --industrial-bracket-opacity: 0.95;
   }
 }
  
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: "Montserrat", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
-      "Segoe UI Emoji";
-    background-image: 
-      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 40px 40px;
-  }
-  
-  .font-mono-data {
-    font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    letter-spacing: -0.02em;
-  }
-}
-
-@layer utilities {
-  .cyber-grid {
+    font-family: "Montserrat", sans-serif;
+    /* GLOBAL MICRO GRID RESTORED */
     background-image: 
       linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
     background-size: 20px 20px;
+    background-attachment: fixed;
+  }
+  
+  .dark body { background-image: none; }
+  .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
+}
+
+.scan-overlay { @apply absolute inset-0 pointer-events-none overflow-hidden z-[15]; }
+.scan-overlay::after {
+  content: "";
+  position: absolute;
+  top: -50%; left: 0; width: 100%; height: 50%;
+  background: linear-gradient(to bottom, transparent, var(--scan-color), transparent);
+  animation: scan 10s linear infinite;
+}
+
+@keyframes scan { 0% { top: -50%; } 100% { top: 100%; } }
+
+@layer utilities {
+  /* THE SLAB PRINCIPLE: Gray Modules occluding the White Grid */
+  .glass-panel, .solid-panel {
+    @apply border relative;
+    background-color: hsl(var(--card) / 1); 
+    border-color: hsl(var(--border));
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.05);
+    background-image: none;
   }
 
-  .glass-panel {
-    @apply border;
-    background-color: hsl(var(--background) / 1);
-    border-color: hsl(var(--border) / 1);
-    box-shadow:
-      var(--tw-ring-offset-shadow, 0 0 #0000),
-      var(--tw-ring-shadow, 0 0 #0000),
-      0 0 60px rgba(0, 0, 0, 0.06);
+  .solid-slab {
+    @apply border relative;
+    background-color: hsl(var(--card) / 1);
+    border-color: hsl(var(--border));
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.1);
   }
 
-  .dark .glass-panel {
-    background-color: hsl(var(--background) / 1);
-    border-color: hsl(var(--border) / 1);
-    border-top-color: hsl(var(--foreground) / 0.12);
-    box-shadow:
-      var(--tw-ring-offset-shadow, 0 0 #0000),
-      var(--tw-ring-shadow, 0 0 #0000),
-      inset 0 1px 0 hsl(var(--foreground) / 0.06),
-      0 0 60px rgba(0, 0, 0, 0.8),
-      var(--tw-shadow, 0 0 #0000);
-  }
-
-  .solid-panel {
-    @apply border-2 border-border;
-    background-color: hsl(var(--background) / 1);
-  }
-
-  .dark .solid-panel {
-    background-color: hsl(var(--background) / 1);
+  .dark .glass-panel, .dark .solid-panel, .dark .solid-slab {
+    background-color: hsl(var(--card) / 1);
+    border-color: hsl(var(--border));
+    border-top-color: hsl(var(--primary) / 0.2);
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
   }
 
-  .border-primary-frame {
-    @apply border-2 border-border/80;
+  /* FLOATING BRACKETS: Increasing negative offset to not exactly line up */
+  .industrial-border { @apply relative; }
+  .industrial-border::before, .industrial-border::after {
+    content: "";
+    @apply absolute pointer-events-none z-[20] w-4 h-4;
   }
-
-  .recessed-input {
-    @apply rounded-none border border-border/70 bg-background/60 text-foreground font-mono-data;
-  }
-
-  .dark .recessed-input {
-    @apply bg-black/40 border-border/70;
-    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.05);
-  }
-
-  .industrial-border {
-    @apply relative;
-  }
-
   .industrial-border::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: -1px;
-    right: -1px;
-    height: 16px;
-    pointer-events: none;
-    z-index: 10;
-    /* Top HUD corner brackets: 1.5px stroke, 16px legs. */
-    background:
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 16px 1.5px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 1.5px 16px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 16px 1.5px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 1.5px 16px no-repeat;
+    top: -1px; left: -1px;
+    border-top: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-left: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
   }
-
   .industrial-border::after {
-    content: "";
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    left: -1px;
-    height: 16px;
-    pointer-events: none;
-    z-index: 10;
-    /* Bottom HUD corner brackets: 1.5px stroke, 16px legs. */
-    background:
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 16px 1.5px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 1.5px 16px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 16px 1.5px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 1.5px 16px no-repeat;
-  }
-
-  .pulse-status {
-    animation: pulse-status 2.4s ease-in-out infinite;
+    bottom: -1px; right: -1px;
+    border-bottom: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-right: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
   }
   
-  .animate-scan {
-    overflow: hidden;
-  }
-  
-  .animate-scan::after {
-    content: "";
-    position: absolute;
-    top: -100%;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      hsl(var(--primary) / var(--scan-opacity)),
-      transparent
-    );
-    animation: scan 3s linear infinite;
-  }
-
-  @keyframes scan {
-    0% { top: -100%; }
-    100% { top: 100%; }
-  }
-
-  @keyframes pulse-status {
-    0% { opacity: 0.35; }
-    50% { opacity: 1; }
-    100% { opacity: 0.35; }
-  }
-}
-
-@layer components {
-  .markdown-content {
-    @apply space-y-6 text-base md:text-lg leading-relaxed text-muted-foreground;
-  }
-
-  .markdown-content h1 {
-    @apply text-3xl md:text-4xl font-bold text-foreground mt-10 mb-4 leading-tight;
-  }
-
-  .markdown-content h2 {
-    @apply text-2xl md:text-3xl font-semibold text-foreground mt-8 mb-3;
-  }
-
-  .markdown-content h3 {
-    @apply text-xl md:text-2xl font-semibold text-foreground mt-6 mb-2;
-  }
-
-  .markdown-content p {
-    @apply text-muted-foreground;
-  }
-
-  .markdown-content strong {
-    @apply text-foreground font-semibold;
-  }
-
-  .markdown-content a {
-    @apply text-primary font-medium underline-offset-4 hover:underline;
-  }
-
-  .markdown-content ul,
-  .markdown-content ol {
-    @apply pl-6 space-y-2;
-  }
-
-  .markdown-content ul {
-    @apply list-disc;
-  }
-
-  .markdown-content ol {
-    @apply list-decimal;
-  }
-
-  .markdown-content li {
-    @apply text-muted-foreground;
-  }
-
-  .markdown-content blockquote {
-    @apply border-l-4 border-primary/40 pl-4 italic text-foreground/80 bg-primary/5 rounded-none py-2;
-  }
-
-  .markdown-content code {
-    @apply bg-muted text-foreground px-2 py-1 rounded-none font-mono text-sm;
-  }
-
-  .markdown-content pre {
-    @apply bg-muted text-foreground p-4 rounded-none overflow-x-auto text-sm border border-border;
-  }
-
-  .markdown-content hr {
-    @apply border-border my-10;
-  }
-
-  .markdown-content table {
-    @apply w-full border border-border rounded-none overflow-hidden text-sm;
-  }
-
-  .markdown-content th {
-    @apply bg-muted/60 text-foreground font-semibold px-4 py-3 text-left;
-  }
-
-  .markdown-content td {
-    @apply border-t border-border px-4 py-3 align-top text-muted-foreground;
-  }
+  .border-primary-frame { @apply border-2 border-border; }
 }

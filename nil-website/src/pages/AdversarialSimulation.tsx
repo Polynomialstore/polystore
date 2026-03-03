@@ -118,11 +118,11 @@ export const AdversarialSimulation = () => {
             <h3 className="text-xl font-bold text-foreground">Cumulative Profit & Loss (P&L)</h3>
             <div className="flex gap-4 text-[11px] font-mono-data uppercase tracking-[0.2em]">
                 <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-accent rounded-full pulse-status"></span>
+                    <span className="w-2 h-2 bg-accent rounded-none pulse-status"></span>
                     <span className="text-muted-foreground">Honest</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-destructive rounded-full"></span>
+                    <span className="w-2 h-2 bg-destructive rounded-none"></span>
                     <span className="text-muted-foreground">Remote</span>
                 </div>
             </div>

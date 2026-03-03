@@ -18,7 +18,7 @@ export const EconomyDashboard = () => {
           transition={{ duration: 0.5 }}
         >
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                      <div className="p-3 bg-primary/10 rounded-none border border-primary/20">
                         <Activity className="w-8 h-8 text-primary" />
                       </div>
                       <h1 className="text-4xl font-bold text-foreground">Network Economy Simulation</h1>
@@ -33,7 +33,7 @@ export const EconomyDashboard = () => {
                       Figures are illustrative; devnet currently uses <span className="font-mono">stake</span> as the base denom.
                     </p>
           
-                    <div className="bg-card border border-border p-6 rounded-xl text-sm space-y-4">
+                    <div className="bg-card border border-border p-6 rounded-none text-sm space-y-4">
                       <h3 className="font-bold text-card-foreground flex items-center gap-2">
                         <Info className="w-4 h-4 text-primary"/> How this Simulation Works
                       </h3>
@@ -88,7 +88,7 @@ export const EconomyDashboard = () => {
                       initial={{ opacity: 0, x: -20 }}
                       whileInView={{ opacity: 1, x: 0 }}
                       viewport={{ once: true }}
-                      className="bg-card p-8 rounded-2xl border border-border shadow-sm"
+                      className="bg-card p-8 rounded-none border border-border shadow-sm"
                   >
                     <h3 className="text-lg font-bold text-card-foreground mb-2">Token Supply Expansion</h3>
                     <p className="text-xs text-muted-foreground mb-8">Visualizing the inflationary curve vs epoch time.</p>
@@ -105,10 +105,10 @@ export const EconomyDashboard = () => {
                             viewport={{ once: true }}
                             transition={{ duration: 0.8, delay: i * 0.01 }}
                           >
-                            <div className="w-full h-full bg-gradient-to-t from-primary/80 to-primary/20 opacity-80 hover:opacity-100 rounded-t-sm cursor-pointer"></div>
+                            <div className="w-full h-full bg-gradient-to-t from-primary/80 to-primary/20 opacity-80 hover:opacity-100 rounded-none cursor-pointer"></div>
                             
                             {/* Tooltip */}
-                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded border border-border shadow-lg z-20 pointer-events-none whitespace-nowrap">
+                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded-none border border-border shadow-lg z-20 pointer-events-none whitespace-nowrap">
                               <div className="font-bold text-primary">Epoch {d.epoch}</div>
                               <div>{d.supply.toLocaleString()} NIL</div>
                             </div>
@@ -123,7 +123,7 @@ export const EconomyDashboard = () => {
                       initial={{ opacity: 0, x: 20 }}
                       whileInView={{ opacity: 1, x: 0 }}
                       viewport={{ once: true }}
-                      className="bg-card p-8 rounded-2xl border border-border shadow-sm"
+                      className="bg-card p-8 rounded-none border border-border shadow-sm"
                   >
                     <h3 className="text-lg font-bold text-card-foreground mb-2">Storage Capacity vs. Slashing</h3>
                     <p className="text-xs text-muted-foreground mb-8">Blue: Healthy Storage. Red: Slashing Events.</p>
@@ -142,7 +142,7 @@ export const EconomyDashboard = () => {
                             transition={{ duration: 0.8, delay: i * 0.01 }}
                           >
                             <div 
-                              className={`w-full h-full rounded-t-sm cursor-pointer ${
+                              className={`w-full h-full rounded-none cursor-pointer ${
                                   isSlash 
                                   ? 'bg-destructive shadow-[0_0_10px_hsl(var(--destructive)_/_0.35)] animate-pulse' 
                                   : 'bg-primary/80 hover:bg-primary/90'
@@ -150,7 +150,7 @@ export const EconomyDashboard = () => {
                             ></div>
           
                              {/* Tooltip */}
-                             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded border border-border shadow-lg z-20 pointer-events-none min-w-[120px]">
+                             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-popover text-popover-foreground text-xs p-2 rounded-none border border-border shadow-lg z-20 pointer-events-none min-w-[120px]">
                               <div className="font-bold text-foreground">Epoch {d.epoch}</div>
                               <div>{d.storage_gb.toFixed(2)} GB</div>
                               {isSlash && <div className="text-destructive font-bold mt-1">-{d.slashed_epoch} NIL Burned</div>}
@@ -166,7 +166,7 @@ export const EconomyDashboard = () => {
                 <motion.section 
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  className="bg-gradient-to-br from-card to-secondary/50 p-8 rounded-2xl border border-border mb-16 relative overflow-hidden"
+                  className="bg-gradient-to-br from-card to-secondary/50 p-8 rounded-none border border-border mb-16 relative overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                       <Activity className="w-32 h-32" />
@@ -180,7 +180,7 @@ export const EconomyDashboard = () => {
                 {/* Data Table */}
                 <section>
                   <h3 className="text-xl font-bold text-foreground mb-6">Epoch Detail Log</h3>
-                  <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <div className="bg-card rounded-none border border-border overflow-hidden">
                     <div className="overflow-x-auto max-h-96">
                       <table className="w-full text-sm text-left text-muted-foreground">
                         <thead className="text-xs text-foreground uppercase bg-muted/50 sticky top-0 z-10">
@@ -228,14 +228,14 @@ export const EconomyDashboard = () => {
             <motion.div              initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
               transition={{ delay, duration: 0.4 }}
-              className="bg-card p-6 rounded-xl border border-border flex items-center justify-between hover:border-primary/50 transition-colors group shadow-sm"
+              className="bg-card p-6 rounded-none border border-border flex items-center justify-between hover:border-primary/50 transition-colors group shadow-sm"
             >
               <div>
                 <p className="text-sm text-muted-foreground font-medium mb-1">{title}</p>
                 <p className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors">{value}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">{sub}</p>
               </div>
-              <div className="p-3 bg-secondary/50 rounded-lg group-hover:bg-primary/10 transition-colors">
+              <div className="p-3 bg-secondary/50 rounded-none group-hover:bg-primary/10 transition-colors">
                 {icon}
               </div>
             </motion.div>

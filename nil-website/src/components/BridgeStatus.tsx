@@ -77,7 +77,7 @@ export function BridgeStatus() {
       : stateRoot
 
   return (
-    <div className="mt-4 rounded-xl border border-border bg-card p-4 flex items-center justify-between shadow-sm">
+    <div className="mt-4 rounded-none border border-border bg-card p-4 flex items-center justify-between shadow-sm">
       <div className="space-y-1 text-xs">
         <div className="uppercase tracking-wide text-[10px] text-muted-foreground font-semibold">
           EVM Bridge

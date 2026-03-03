@@ -45,12 +45,12 @@ export const Leaderboard = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ranked.length === 0 ? (
-             <div className="col-span-full text-center py-12 bg-card rounded-2xl border border-border text-muted-foreground">
+             <div className="col-span-full text-center py-12 bg-card rounded-none border border-border text-muted-foreground">
                No providers detected. Ensure the devnet hub is running and providers are registered.
              </div>
           ) : (
             ranked.map((node, index) => (
-              <div key={node.address} className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-shadow relative overflow-hidden group">
+              <div key={node.address} className="bg-card border border-border rounded-none p-6 hover:shadow-lg transition-shadow relative overflow-hidden group">
                 {/* Rank Badge */}
                 <div className="absolute top-4 right-4">
                    {index === 0 && <Trophy className="w-6 h-6 text-primary" />}
@@ -59,7 +59,7 @@ export const Leaderboard = () => {
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className={`p-3 rounded-lg ${node.status === 'Active' ? 'bg-accent/10 text-accent' : 'bg-destructive/10 text-destructive'}`}>
+                  <div className={`p-3 rounded-none ${node.status === 'Active' ? 'bg-accent/10 text-accent' : 'bg-destructive/10 text-destructive'}`}>
                     <Server className="w-6 h-6" />
                   </div>
                   <div>
@@ -71,7 +71,7 @@ export const Leaderboard = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-none">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <HardDrive className="w-4 h-4" />
                       Capacity
@@ -85,7 +85,7 @@ export const Leaderboard = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-none">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Activity className="w-4 h-4" />
                       Status

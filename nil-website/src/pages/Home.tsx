@@ -11,9 +11,12 @@ export const Home = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="relative overflow-hidden glass-panel industrial-border border-2 border-border p-10 md:p-14 text-center shadow-[0_0_60px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]"
+          className="relative glass-panel industrial-border border-primary-frame p-10 md:p-14 text-center"
         >
-          <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border border-2 border-border p-3 shadow-[0_0_60px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+          {/* CRT Scan Overlay */}
+          <div className="scan-overlay" />
+
+          <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3">
             <img
               src="/brand/logo-light-256.png"
               srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
@@ -28,7 +31,7 @@ export const Home = () => {
             />
           </div>
 
-          <div className="relative mx-auto inline-flex items-center border border-border/50 bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest font-mono-data text-foreground">
+          <div className="relative mx-auto inline-flex items-center border border-border/80 bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
             /nilstore/overview
           </div>
 
@@ -44,7 +47,7 @@ export const Home = () => {
           <div className="relative mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               to="/testnet"
-              className="inline-flex items-center justify-center gap-3 rounded-none bg-primary text-primary-foreground px-6 py-3 text-[10px] font-mono-data font-bold uppercase tracking-[0.2em] border border-primary shadow-[0_0_60px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
+              className="inline-flex items-center justify-center gap-3 rounded-none bg-primary text-primary-foreground px-6 py-3 text-[10px] font-mono-data font-bold uppercase tracking-[0.2em] border border-primary shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
             >
               Join Store Wars
               <ArrowRight className="w-4 h-4" />
@@ -96,7 +99,7 @@ interface FeatureCardProps {
 const FeatureCard = ({ icon, title, desc }: FeatureCardProps) => (
   <motion.div
     whileHover={{ y: -5 }}
-    className="relative overflow-hidden glass-panel industrial-border border border-border p-8 transition-colors shadow-[0_0_60px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] hover:ring-1 hover:ring-primary/20"
+    className="relative glass-panel industrial-border border border-border p-8 transition-colors hover:ring-1 hover:ring-primary/20"
   >
     <div className="relative mb-4 glass-panel industrial-border w-14 h-14 flex items-center justify-center">
       {icon}

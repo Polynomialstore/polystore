@@ -380,7 +380,7 @@ export function FirstFile() {
         </div>
         <Link
           to="/dashboard"
-          className="hidden sm:inline-flex items-center gap-2 rounded-lg border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40 transition-colors"
+          className="hidden sm:inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40 transition-colors"
         >
           <HardDrive className="w-4 h-4" />
           Open Dashboard
@@ -390,7 +390,7 @@ export function FirstFile() {
       <StatusBar />
 
       {error && (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive flex items-start gap-3">
+        <div className="rounded-none border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5" />
           <div className="min-w-0">
             <div className="font-semibold">Action required</div>
@@ -400,7 +400,7 @@ export function FirstFile() {
       )}
 
       {notice && (
-        <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm text-primary flex items-start gap-3">
+        <div className="rounded-none border border-primary/30 bg-primary/10 p-4 text-sm text-primary flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5" />
           <div className="min-w-0">
             <div className="font-semibold">Note</div>
@@ -409,10 +409,10 @@ export function FirstFile() {
         </div>
       )}
 
-    <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+    <section className="bg-card rounded-none border border-border p-6 space-y-4">
       <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               1
             </div>
             <div>
@@ -428,7 +428,7 @@ export function FirstFile() {
             <button
               type="button"
               onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
-              className="inline-flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
+              className="inline-flex items-center justify-center rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
             >
               {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
             </button>
@@ -439,10 +439,10 @@ export function FirstFile() {
         </div>
       </section>
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-card rounded-none border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               2
             </div>
             <div>
@@ -463,7 +463,7 @@ export function FirstFile() {
                 type="button"
                 onClick={() => void handleRequestFunds()}
                 disabled={!isConnected || faucetLoading}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-none border border-border bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-60"
               >
                 <Coins className="w-4 h-4" />
                 {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
@@ -481,10 +481,10 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-card rounded-none border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               3
             </div>
             <div>
@@ -508,7 +508,7 @@ export function FirstFile() {
                   setDuration(String(presetSeconds))
                 }
               }}
-              className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
             >
               {DURATION_PRESETS.map((preset) => (
                 <option key={preset.value} value={preset.value}>
@@ -523,7 +523,7 @@ export function FirstFile() {
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               readOnly={durationPreset !== 'custom'}
-              className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
             />
           </label>
           <label className="block">
@@ -531,7 +531,7 @@ export function FirstFile() {
             <input
               value={initialEscrow}
               onChange={(e) => setInitialEscrow(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
             />
           </label>
           <label className="block">
@@ -539,7 +539,7 @@ export function FirstFile() {
             <input
               value={maxMonthlySpend}
               onChange={(e) => setMaxMonthlySpend(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
             />
           </label>
         </div>
@@ -549,7 +549,7 @@ export function FirstFile() {
             type="button"
             onClick={() => void handleCreateDeal()}
             disabled={!isConnected || isWrongNetwork || dealLoading}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
           >
             <HardDrive className="w-4 h-4" />
             {dealLoading ? 'Creating…' : 'Create deal'}
@@ -566,10 +566,10 @@ export function FirstFile() {
         </div>
       </section>
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-card rounded-none border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               4
             </div>
             <div>
@@ -589,7 +589,7 @@ export function FirstFile() {
           <button
             type="button"
             onClick={() => void handleUseSampleFile()}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background/60 px-4 py-2 text-sm font-semibold hover:bg-secondary/40 transition-colors"
+            className="inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-4 py-2 text-sm font-semibold hover:bg-secondary/40 transition-colors"
           >
             <Upload className="w-4 h-4" />
             Use sample file
@@ -607,14 +607,14 @@ export function FirstFile() {
           type="button"
           onClick={() => void handleUpload()}
           disabled={!selectedFile || !dealId || uploadLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
         >
           <Upload className="w-4 h-4" />
           {uploadLoading ? 'Uploading…' : 'Upload'}
         </button>
 
         {uploadResult && (
-          <div className="rounded-lg border border-border bg-secondary/20 p-4 text-xs space-y-1">
+          <div className="rounded-none border border-border bg-secondary/20 p-4 text-xs space-y-1">
             <div>
               Manifest root: <span className="font-mono text-foreground">{String(uploadResult.cid).slice(0, 18)}…</span>
             </div>
@@ -632,10 +632,10 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-card rounded-none border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               5
             </div>
             <div>
@@ -650,7 +650,7 @@ export function FirstFile() {
           type="button"
           onClick={() => void handleCommit()}
           disabled={!uploadResult || !dealId || commitLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
         >
           <HardDrive className="w-4 h-4" />
           {commitLoading ? 'Committing…' : 'Commit'}
@@ -662,10 +662,10 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-card rounded-none border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/40 flex items-center justify-center font-bold text-foreground">
+            <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
               6
             </div>
             <div>
@@ -681,7 +681,7 @@ export function FirstFile() {
           type="button"
           onClick={() => void handleRetrieve()}
           disabled={!commitOk || fetchLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent/90 px-4 py-2 text-sm font-bold text-accent-foreground transition-colors disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-none bg-accent hover:bg-accent/90 px-4 py-2 text-sm font-bold text-accent-foreground transition-colors disabled:opacity-60"
         >
           <Download className="w-4 h-4" />
           {fetchLoading ? 'Fetching…' : 'Fetch now'}

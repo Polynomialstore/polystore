@@ -73,14 +73,14 @@ export const PerformanceReport = () => {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: index * 0.2 }}
-            className="bg-card rounded-2xl border border-border p-8 shadow-sm hover:border-primary/30 transition-colors"
+            className="bg-card rounded-none border border-border p-8 shadow-sm hover:border-primary/30 transition-colors"
           >
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="text-xl font-bold text-foreground">{run.name}</h3>
                 <p className="text-sm text-muted-foreground mt-1">Configuration: {run.config.mode} broadcast</p>
               </div>
-              <div className="p-2 bg-secondary rounded-lg">
+              <div className="p-2 bg-secondary rounded-none">
                 <BarChart3 className="w-6 h-6 text-foreground" />
               </div>
             </div>
@@ -93,7 +93,7 @@ export const PerformanceReport = () => {
               <MetricRow label="Block Height" value={run.results.final_height} />
               <MetricRow label="Transaction Count" value={run.results.total_txs} />
               
-              <div className="mt-6 pt-4 bg-secondary/30 rounded-xl p-4">
+              <div className="mt-6 pt-4 bg-secondary/30 rounded-none p-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-muted-foreground">Avg Block Time</span>
                   <span className="text-2xl font-mono font-bold text-primary">
@@ -114,10 +114,10 @@ export const PerformanceReport = () => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-secondary/50 to-background border border-border rounded-2xl p-8 md:p-12 mb-16"
+        className="bg-gradient-to-br from-secondary/50 to-background border border-border rounded-none p-8 md:p-12 mb-16"
       >
         <div className="flex items-start gap-6">
-          <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 hidden md:block">
+          <div className="p-4 bg-primary/10 rounded-none border border-primary/20 hidden md:block">
             <Server className="w-8 h-8 text-primary" />
           </div>
           <div>
@@ -126,10 +126,10 @@ export const PerformanceReport = () => {
               {analysis}
             </p>
             <div className="mt-6 flex gap-4">
-              <div className="px-4 py-2 bg-background rounded-lg border border-border text-sm font-mono text-muted-foreground">
+              <div className="px-4 py-2 bg-background rounded-none border border-border text-sm font-mono text-muted-foreground">
                 Scaling Factor: <span className="text-accent">Linear (O(1))</span>
               </div>
-              <div className="px-4 py-2 bg-background rounded-lg border border-border text-sm font-mono text-muted-foreground">
+              <div className="px-4 py-2 bg-background rounded-none border border-border text-sm font-mono text-muted-foreground">
                 Overhead: <span className="text-accent">Minimal</span>
               </div>
             </div>
@@ -167,7 +167,7 @@ export const PerformanceReport = () => {
                 </ul>
             </div>
         </div>
-        <div className="bg-card p-8 rounded-2xl border border-border">
+        <div className="bg-card p-8 rounded-none border border-border">
             <h3 className="text-xl font-bold text-foreground mb-4">Full Test Plan</h3>
             <p className="text-muted-foreground mb-6">
                 For a deep dive into our testing strategy, including detailed environment setup, specific simulation flows, and success criteria, please refer to the official documentation on GitHub.
@@ -176,7 +176,7 @@ export const PerformanceReport = () => {
                 href="https://github.com/Nil-Store/nil-store/tree/main/performance" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-none font-medium hover:opacity-90 transition-opacity"
             >
                 View Performance Test Plan <Activity className="w-4 h-4" />
             </a>
@@ -192,7 +192,7 @@ const StatCard = ({ label, value, icon, delay }: { label: string, value: string 
     initial={{ opacity: 0, scale: 0.95 }}
     animate={{ opacity: 1, scale: 1 }}
     transition={{ delay, duration: 0.4 }}
-    className="bg-card p-6 rounded-xl border border-border flex flex-col items-center text-center hover:shadow-md transition-all"
+    className="bg-card p-6 rounded-none border border-border flex flex-col items-center text-center hover:shadow-md transition-all"
   >
     <div className="mb-3 p-3 bg-secondary/50">
       {icon}

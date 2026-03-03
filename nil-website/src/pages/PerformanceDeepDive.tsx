@@ -21,7 +21,7 @@ export const PerformanceDeepDive = () => {
         className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 shrink-0">
+          <div className="p-3 bg-primary/10 rounded-none border border-primary/20 shrink-0">
             <Trophy className="w-8 h-8 text-primary" />
           </div>
           <h2 className="text-3xl font-bold text-foreground">The Performance Market</h2>
@@ -32,7 +32,7 @@ export const PerformanceDeepDive = () => {
         </p>
 
         {/* Visualization: The Latency Racer */}
-        <section className="bg-card border border-border p-8 rounded-2xl shadow-sm relative overflow-hidden">
+        <section className="bg-card border border-border p-8 rounded-none shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
              <Zap className="w-64 h-64" />
           </div>
@@ -120,7 +120,7 @@ export const PerformanceDeepDive = () => {
             </div>
           </div>
 
-          <div className="mt-12 p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm text-muted-foreground">
+          <div className="mt-12 p-4 bg-primary/5 border border-primary/20 rounded-none text-sm text-muted-foreground">
             <p>
               <strong>Market Logic:</strong> Slow providers aren't banned; they just earn less. The market rewards low-latency service without brittle slashing rules, and real-time demand naturally pressures providers to keep hot data local.
             </p>
@@ -136,20 +136,20 @@ export const PerformanceDeepDive = () => {
             Speed is worthless if the user refuses to pay. NilStore uses <strong>retrieval sessions</strong>: users open a
             session on-chain, lock a base fee plus a per-blob budget, and only release payment when the session is confirmed.
           </p>
-          <div className="bg-card border border-border p-6 rounded-xl shadow-sm grid md:grid-cols-3 gap-4 text-center">
-            <div className="p-4 bg-secondary/20 rounded-lg">
+          <div className="bg-card border border-border p-6 rounded-none shadow-sm grid md:grid-cols-3 gap-4 text-center">
+            <div className="p-4 bg-secondary/20 rounded-none">
                 <div className="text-lg font-bold text-foreground mb-1">Step 1</div>
                 <div className="text-sm text-muted-foreground">
                   User opens a session and locks the <strong>base fee</strong> + <strong>per-blob budget</strong>.
                 </div>
             </div>
-            <div className="p-4 bg-secondary/20 rounded-lg">
+            <div className="p-4 bg-secondary/20 rounded-none">
                 <div className="text-lg font-bold text-foreground mb-1">Step 2</div>
                 <div className="text-sm text-muted-foreground">
                   Provider serves data with the session ID and proves the blobs served.
                 </div>
             </div>
-            <div className="p-4 bg-secondary/20 rounded-lg">
+            <div className="p-4 bg-secondary/20 rounded-none">
                 <div className="text-lg font-bold text-foreground mb-1">Step 3</div>
                 <div className="text-sm text-muted-foreground">
                   User confirms the session to release payment; unused budget can be refunded on expiry.

@@ -53,7 +53,7 @@ function Badge({ label, status, value }: { label: string; status: ServiceStatus;
     <span
       className={`inline-flex items-center gap-2 border ${borderClass} bg-transparent px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+      <span className={`h-1.5 w-1.5 rounded-none ${dotClass}`} aria-hidden="true" />
       <span className="text-muted-foreground">{label}:</span>
       <span className={statusTextClass}>{resolvedValue}</span>
     </span>

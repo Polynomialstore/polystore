@@ -56,13 +56,14 @@ export const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30">
+    <div className="min-h-screen font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30 relative">
       
       {/* --- NAVBAR --- */}
       <nav className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300">
         
         {/* Control Surface */}
         <div className="absolute inset-0 bg-background border-b border-border" />
+        <div className="absolute inset-0 cyber-grid pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
         <div className="container mx-auto px-4 h-16 flex items-center gap-4 relative z-10">
@@ -128,7 +129,7 @@ export const Layout = () => {
               {/* PRIMARY CTA: Launch Console */}
               <Link 
                 to="/dashboard"
-                className="hidden sm:flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                className="hidden sm:flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
               >
                 <Rocket className="w-4 h-4 fill-current" />
                 Launch Console
@@ -161,7 +162,7 @@ export const Layout = () => {
                 <Link 
                     to="/dashboard" 
                     onClick={() => setIsOpen(false)}
-                    className="block w-full py-4 bg-primary text-primary-foreground font-bold text-center text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] active:translate-x-[2px] active:translate-y-[2px] transition-transform flex items-center justify-center gap-3"
+                    className="block w-full py-4 bg-primary text-primary-foreground font-bold text-center text-[11px] uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] active:translate-x-[2px] active:translate-y-[2px] transition-transform flex items-center justify-center gap-3"
                   >
                     <Rocket className="w-6 h-6 fill-current" />
                     Launch Console
@@ -228,7 +229,7 @@ export const Layout = () => {
       </main>
 
       <footer className="py-12 border-t border-border/60 bg-background/60 backdrop-blur-md mt-24 relative overflow-hidden">
-        <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
+        <div className="absolute inset-0 cyber-grid pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm relative z-10">

@@ -56,9 +56,9 @@ export const TestnetDocs = () => {
           </p>
           
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
+            <div className="bg-card p-6 rounded-none border border-border hover:border-primary/50 transition-all">
               <h3 className="font-bold text-lg text-foreground">1. Build & Run Chain (EVM enabled)</h3>
-              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Clone Repository</p>
                 <p>$ git clone https://github.com/Nil-Store/nil-store.git</p>
                 <p>$ cd nil-store/nilchain</p>
@@ -76,25 +76,25 @@ export const TestnetDocs = () => {
                 <p>$ nilchaind start --minimum-gas-prices 0.001aatom</p>
               </div>
             </div>
-            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all">
+            <div className="bg-card p-6 rounded-none border border-border hover:border-primary/50 transition-all">
               <h3 className="font-bold text-lg text-foreground">2. Run Faucet (Optional)</h3>
               <p className="text-sm text-muted-foreground mb-2">
                 The faucet is a dev-only helper. On trusted-devnet public domains (for example
-                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">*.nilstore.org</code>) the UI enables faucet by default.
+                <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">*.nilstore.org</code>) the UI enables faucet by default.
                 You can always override with
-                <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1|0</code>.
+                <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">VITE_ENABLE_FAUCET=1|0</code>.
               </p>
-              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># In a new terminal window</p>
                 <p>$ ./scripts/run_local_stack.sh start</p>
                 <br/>
                 <p className="text-primary text-xs"># Note: Ensure 'faucet' key exists in keyring (keyring-backend test)</p>
               </div>
             </div>
-            <div className="bg-card p-6 rounded-xl border border-border hover:border-primary/50 transition-all md:col-span-2">
+            <div className="bg-card p-6 rounded-none border border-border hover:border-primary/50 transition-all md:col-span-2">
               <h3 className="font-bold text-lg text-foreground">3. Deploy Contracts (Optional)</h3>
               <p className="text-sm text-muted-foreground mb-2">To enable future bridge features, deploy the smart contracts to the local EVM.</p>
-              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Requires Foundry (forge)</p>
                 <p>$ cd nil-store/nil_bridge</p>
                 <p>$ forge script script/Deploy.s.sol --rpc-url {appConfig.evmRpc} --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
@@ -109,33 +109,33 @@ export const TestnetDocs = () => {
           <p className="text-muted-foreground">
             All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile.
             The faucet is dev-only; the "Get Testnet NIL" button is auto-enabled on trusted-devnet public domains and can be forced with
-            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
+            <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
             or hidden with
-            <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">VITE_ENABLE_FAUCET=0</code>.
+            <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">VITE_ENABLE_FAUCET=0</code>.
           </p>
           <p className="text-sm text-muted-foreground">
             The browser client can shard and commit using WASM + OPFS. The local Gateway runs on localhost (not a shared public service).
             If no local gateway is running, uploads still work via in-browser sharding and direct provider transport.
           </p>
-          <div className="rounded-xl border border-border/60 bg-secondary/10 p-4 text-sm text-muted-foreground">
+          <div className="rounded-none border border-border/60 bg-secondary/10 p-4 text-sm text-muted-foreground">
             <div className="font-semibold text-foreground">Local Gateway (recommended)</div>
             <div className="mt-1">
-              Install <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway_gui</code>, start it, then refresh this page.
+              Install <code className="px-1 py-0.5 rounded-none bg-secondary/60">nil_gateway_gui</code>, start it, then refresh this page.
               The website probes loopback automatically and can use either
-              <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://localhost:8080</code>
+              <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">http://localhost:8080</code>
               or
-              <code className="mx-1 px-1 py-0.5 rounded bg-secondary/60">http://127.0.0.1:8080</code>.
+              <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">http://127.0.0.1:8080</code>.
             </div>
             <a
               href={gatewayGuiReleaseUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex items-center rounded-md border border-border bg-background/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/50"
+              className="mt-3 inline-flex items-center rounded-none border border-border bg-background/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/50"
             >
               Download Nil Gateway GUI
             </a>
           </div>
-          <div className="bg-secondary/10 rounded-xl p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
+          <div className="bg-secondary/10 rounded-none p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
             <p>$ # (optional) in nil_faucet/</p>
             <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
             <p># Open http://localhost:5173/#/dashboard and click "Submit Deal"</p>
@@ -195,7 +195,7 @@ export const TestnetDocs = () => {
                 <p className="text-sm text-muted-foreground">
                     Alternatively, for CLI users:
                 </p>
-                <div className="bg-secondary/20 p-3 rounded font-mono text-xs">
+                <div className="bg-secondary/20 p-3 rounded-none font-mono text-xs">
                     $ ./bin/nilchaind keys add my-wallet
                 </div>
             </div>
@@ -206,7 +206,7 @@ export const TestnetDocs = () => {
                 <p className="text-sm text-muted-foreground">
                     If enabled, the faucet will send testnet tokens to your connected wallet (EVM or Cosmos).
                 </p>
-                <div className="p-4 bg-secondary/10 rounded-xl border border-border/50 flex flex-col items-center justify-center gap-2">
+                <div className="p-4 bg-secondary/10 rounded-none border border-border/50 flex flex-col items-center justify-center gap-2">
                     <FaucetWidget />
                     {appConfig.faucetEnabled ? <FaucetAuthTokenInput className="w-full" /> : null}
                     <p className="text-xs text-muted-foreground mt-2 text-center">
@@ -231,7 +231,7 @@ export const TestnetDocs = () => {
                     <select 
                         value={targetDealId} 
                         onChange={e => setTargetDealId(e.target.value)}
-                        className="w-full bg-background border border-border rounded px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
+                        className="w-full bg-background border border-border rounded-none px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
                     >
                         <option value="">Select a Deal...</option>
                         {deals.map(d => (
@@ -246,7 +246,7 @@ export const TestnetDocs = () => {
             {targetDealId ? (
                 <FileSharder dealId={targetDealId} />
             ) : (
-                <div className="p-8 text-center border border-dashed border-border rounded-xl">
+                <div className="p-8 text-center border border-dashed border-border rounded-none">
                     <p className="text-muted-foreground text-sm">Select a deal to begin client-side sharding.</p>
                 </div>
             )}
@@ -259,28 +259,28 @@ export const TestnetDocs = () => {
             <Terminal className="w-6 h-6 text-primary" /> Run a Provider Node
           </h2>
           <p className="text-muted-foreground">
-            To participate as a Storage Provider (SP), run <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway</code> in provider mode and register at least one public endpoint on-chain.
+            To participate as a Storage Provider (SP), run <code className="px-1 py-0.5 rounded-none bg-secondary/60">nil_gateway</code> in provider mode and register at least one public endpoint on-chain.
           </p>
 
-          <div className="bg-card p-6 rounded-xl border border-border space-y-6 text-sm">
+          <div className="bg-card p-6 rounded-none border border-border space-y-6 text-sm">
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">Endpoint Types</h3>
               <p className="text-muted-foreground">
                 For testnet onboarding, keep it simple:
               </p>
               <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-                <li><strong>direct</strong> (recommended): SP has an open port on a public IP / port-forward; expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> via a reverse proxy.</li>
-                <li><strong>cloudflare-tunnel</strong> (fallback): SP is behind NAT; expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> via Cloudflare Tunnel (no router changes).</li>
+                <li><strong>direct</strong> (recommended): SP has an open port on a public IP / port-forward; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via a reverse proxy.</li>
+                <li><strong>cloudflare-tunnel</strong> (fallback): SP is behind NAT; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via Cloudflare Tunnel (no router changes).</li>
                 <li><strong>webrtc</strong> (future): NAT traversal optimization; not testnet-blocking.</li>
               </ul>
               <p className="text-muted-foreground">
-                The chain stores endpoints as multiaddrs. Use <code className="px-1 py-0.5 rounded bg-secondary/60">nil_gateway --print-endpoints</code> to generate the exact <code className="px-1 py-0.5 rounded bg-secondary/60">--endpoint</code> value to register.
+                The chain stores endpoints as multiaddrs. Use <code className="px-1 py-0.5 rounded-none bg-secondary/60">nil_gateway --print-endpoints</code> to generate the exact <code className="px-1 py-0.5 rounded-none bg-secondary/60">--endpoint</code> value to register.
               </p>
             </div>
 
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">1) Run the SP Gateway</h3>
-              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Run provider-mode gateway on the SP machine</p>
                 <p>$ cd nil_gateway</p>
                 <p>$ NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .</p>
@@ -290,9 +290,9 @@ export const TestnetDocs = () => {
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">2A) direct (reverse proxy on 443)</h3>
               <p className="text-muted-foreground">
-                If the SP has an open inbound port, terminate TLS on 443 and proxy to <code className="px-1 py-0.5 rounded bg-secondary/60">localhost:8082</code>. Example with Caddy:
+                If the SP has an open inbound port, terminate TLS on 443 and proxy to <code className="px-1 py-0.5 rounded-none bg-secondary/60">localhost:8082</code>. Example with Caddy:
               </p>
-              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p>$ caddy reverse-proxy --from sp.example.com --to localhost:8082</p>
                 <p className="text-accent"># Print the multiaddr to register</p>
                 <p>$ NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \\</p>
@@ -303,9 +303,9 @@ export const TestnetDocs = () => {
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">2B) cloudflare-tunnel (no open ports)</h3>
               <p className="text-muted-foreground">
-                If the SP cannot open inbound ports, use Cloudflare Tunnel to expose <code className="px-1 py-0.5 rounded bg-secondary/60">https://sp.example.com</code> (bytes will transit Cloudflare).
+                If the SP cannot open inbound ports, use Cloudflare Tunnel to expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> (bytes will transit Cloudflare).
               </p>
-              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># One-time setup (Cloudflare account + DNS)</p>
                 <p>$ cloudflared tunnel login</p>
                 <p>$ cloudflared tunnel create nilstore-sp</p>
@@ -320,9 +320,9 @@ export const TestnetDocs = () => {
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">3) Register Provider Endpoint On-Chain</h3>
               <p className="text-muted-foreground">
-                Copy the printed <code className="px-1 py-0.5 rounded bg-secondary/60">--endpoint</code> line(s) and register the provider:
+                Copy the printed <code className="px-1 py-0.5 rounded-none bg-secondary/60">--endpoint</code> line(s) and register the provider:
               </p>
-              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded overflow-x-auto">
+              <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p>$ nilchaind tx nilchain register-provider General 1099511627776 \\</p>
                 <p>&nbsp;&nbsp;--from &lt;your-key&gt; --chain-id {appConfig.cosmosChainId} --yes \\</p>
                 <p>&nbsp;&nbsp;--endpoint &quot;/dns4/sp.example.com/tcp/443/https&quot;</p>

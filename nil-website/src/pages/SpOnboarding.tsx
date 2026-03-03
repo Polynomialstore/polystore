@@ -153,7 +153,7 @@ function CopyButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
+      className="rounded-none border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
     >
       <span className="inline-flex items-center gap-2">
         <Copy className="h-3.5 w-3.5" /> Copy
@@ -168,7 +168,7 @@ function PrimaryLinkButton({ href, children }: { href: string; children: ReactNo
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+      className="inline-flex items-center gap-2 rounded-none bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
     >
       {children}
       <ExternalLink className="h-3.5 w-3.5" />
@@ -231,7 +231,7 @@ export function SpOnboarding() {
             </PrimaryLinkButton>
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Rocket className="h-4 w-4" />
               Open Dashboard
@@ -240,7 +240,7 @@ export function SpOnboarding() {
               href={devnetPlaybookUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Globe className="h-4 w-4" />
               Operator Playbook
@@ -251,17 +251,17 @@ export function SpOnboarding() {
       </section>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="rounded-none border border-border bg-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Guided onboarding flow</h2>
             <div className="text-sm font-medium text-muted-foreground">{checkedCount}/{activeSteps.length} complete ({completionPercent}%)</div>
           </div>
 
-          <div className="mt-4 flex rounded-lg border border-border bg-secondary/20 p-1">
+          <div className="mt-4 flex rounded-none border border-border bg-secondary/20 p-1">
             <button
               type="button"
               onClick={() => setTrack("local_demo")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
                 track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -270,7 +270,7 @@ export function SpOnboarding() {
             <button
               type="button"
               onClick={() => setTrack("desktop_local")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
                 track === "desktop_local" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -279,14 +279,14 @@ export function SpOnboarding() {
             <button
               type="button"
               onClick={() => setTrack("remote_headless")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
                 track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Remote (deferred)
             </button>
           </div>
-          <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+          <div className="mt-3 rounded-none border border-border bg-background/60 p-3 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground">Scope</div>
             <div className="mt-1">
               This page targets <span className="font-mono text-foreground">local demo</span> onboarding (no systemd). Remote/headless SP onboarding is deferred.
@@ -299,7 +299,7 @@ export function SpOnboarding() {
               return (
                 <div
                   key={step.id}
-                  className={`rounded-lg border p-4 transition-colors ${
+                  className={`rounded-none border p-4 transition-colors ${
                     checked ? "border-accent/40 bg-accent/5" : "border-border bg-background/70"
                   }`}
                 >
@@ -329,14 +329,14 @@ export function SpOnboarding() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="rounded-none border border-border bg-card p-6">
           <h2 className="text-xl font-semibold text-foreground">Download + assets</h2>
           <div className="mt-4 space-y-3 text-sm">
             <a
               href={gatewayDesktopReleaseUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-lg border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Gateway Desktop GUI</div>
@@ -348,7 +348,7 @@ export function SpOnboarding() {
               href={repoRootUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-lg border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Repo source + scripts</div>
@@ -360,7 +360,7 @@ export function SpOnboarding() {
               href={devnetPlaybookUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-lg border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Devnet multi-provider guide</div>
@@ -370,7 +370,7 @@ export function SpOnboarding() {
             </a>
           </div>
 
-          <div className="mt-6 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
+          <div className="mt-6 rounded-none border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
@@ -382,34 +382,34 @@ export function SpOnboarding() {
       </section>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="rounded-none border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Bootstrap commands</h2>
             <CopyButton onClick={() => void copyText("Bootstrap script", activeScript)} />
           </div>
-          <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
+          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
             {activeScript}
           </pre>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="rounded-none border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Health + download verification</h2>
             <CopyButton onClick={() => void copyText("Health script", healthCheckScript)} />
           </div>
-          <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
+          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
             {healthCheckScript}
           </pre>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Link
               to="/dashboard"
-              className="rounded-lg border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               Open Dashboard
             </Link>
             <Link
               to="/devnet"
-              className="rounded-lg border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               Open Devnet Join
             </Link>
@@ -417,18 +417,18 @@ export function SpOnboarding() {
         </div>
       </section>
 
-      <section className="mt-8 rounded-xl border border-border bg-card p-6">
+      <section className="mt-8 rounded-none border border-border bg-card p-6">
         <h2 className="text-xl font-semibold text-foreground">Operational UX model</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-border bg-background/70 p-4">
+          <div className="rounded-none border border-border bg-background/70 p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><Shield className="h-4 w-4 text-accent" /> Healthy</div>
             <p className="mt-2 text-sm text-muted-foreground">All critical checks pass: chain connectivity, service availability, endpoint reachability, auth compatibility.</p>
           </div>
-          <div className="rounded-lg border border-border bg-background/70 p-4">
+          <div className="rounded-none border border-border bg-background/70 p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><Server className="h-4 w-4 text-primary" /> Degraded</div>
             <p className="mt-2 text-sm text-muted-foreground">Provider is reachable but drift or partial check failures exist. Review remediation actions before serving production traffic.</p>
           </div>
-          <div className="rounded-lg border border-border bg-background/70 p-4">
+          <div className="rounded-none border border-border bg-background/70 p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><HardDrive className="h-4 w-4 text-destructive" /> Critical</div>
             <p className="mt-2 text-sm text-muted-foreground">Service down, chain mismatch, auth mismatch, or endpoint failure. Upload/download reliability is blocked until fixed.</p>
           </div>
@@ -436,7 +436,7 @@ export function SpOnboarding() {
       </section>
 
       {copyStatus ? (
-        <div className="mt-5 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm text-accent">
+        <div className="mt-5 rounded-none border border-accent/40 bg-accent/10 px-4 py-2 text-sm text-accent">
           {copyStatus}
         </div>
       ) : null}

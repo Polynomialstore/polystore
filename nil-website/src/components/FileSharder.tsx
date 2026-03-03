@@ -2511,7 +2511,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       {!isConnected ? (
         <button
           onClick={() => openConnectModal?.()}
-          className="w-full rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
+          className="w-full rounded-none border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
         >
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-border/60 bg-secondary/60">
               <Wallet className="h-6 w-6 text-foreground" />
@@ -2523,8 +2523,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         <>
           {/* Dropzone */}
           {!stripeParamsLoaded ? (
-            <div className="rounded-xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary" />
+            <div className="rounded-none border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-none border-2 border-border border-t-primary" />
               <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 Checking redundancy mode and gateway availability.

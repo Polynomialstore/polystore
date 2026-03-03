@@ -12,7 +12,7 @@ export const GovernanceDocs = () => {
 
       <div className="grid gap-12">
         {/* Live Status Dashboard (Mock) */}
-        <section className="bg-card border border-border rounded-xl p-6 shadow-sm">
+        <section className="bg-card border border-border rounded-none p-6 shadow-sm">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wide mb-4">Network Security Status</h2>
             <div className="grid md:grid-cols-3 gap-6">
                 <div className="flex items-center gap-3">
@@ -50,7 +50,7 @@ export const GovernanceDocs = () => {
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">DAO Structure</h2>
           
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-card p-6 rounded-xl border border-border">
+            <div className="bg-card p-6 rounded-none border border-border">
               <div className="flex items-center gap-3 mb-4">
                 <Users className="w-6 h-6 text-primary" />
                 <h3 className="font-bold text-lg text-foreground">Token Holders</h3>
@@ -63,7 +63,7 @@ export const GovernanceDocs = () => {
               </ul>
             </div>
 
-            <div className="bg-card p-6 rounded-xl border border-border">
+            <div className="bg-card p-6 rounded-none border border-border">
               <div className="flex items-center gap-3 mb-4">
                 <Shield className="w-6 h-6 text-destructive" />
                 <h3 className="font-bold text-lg text-foreground">Emergency Council</h3>
@@ -112,7 +112,7 @@ export const GovernanceDocs = () => {
           <p className="text-sm text-muted-foreground">
             You can verify the current parameters and council members directly from the chain CLI.
           </p>
-          <div className="bg-card p-6 rounded-xl font-mono-data text-sm text-muted-foreground border border-border">
+          <div className="bg-card p-6 rounded-none font-mono-data text-sm text-muted-foreground border border-border">
             <p className="text-muted-foreground"># View Emergency Council Members</p>
             <p>$ nilchaind q group groups-by-admin [alice_addr]</p>
             <br/>

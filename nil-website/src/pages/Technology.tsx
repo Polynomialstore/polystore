@@ -169,12 +169,12 @@ export const Technology = () => {
 
       <section
         id="nilfs-primer"
-        className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden"
+        className="rounded-none border border-border bg-card shadow-sm overflow-hidden"
         data-testid="technology-nilfs-primer"
       >
         <div className="border-b border-border bg-muted/30 px-6 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+            <div className="p-2 rounded-none bg-primary/10 border border-primary/20">
               <HardDrive className="w-5 h-5 text-primary" />
             </div>
             <div>
@@ -200,7 +200,7 @@ export const Technology = () => {
 
         <div className="p-6 space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Mental model</div>
               <div className="mt-2 text-sm text-muted-foreground">
                 A deal’s <span className="font-semibold text-foreground">slab</span> is an ordered list of MDUs. NilFS turns that slab into a
@@ -214,12 +214,12 @@ export const Technology = () => {
                   a <span className="font-semibold text-foreground">root table</span>: slab MDU index → 32-byte root
                 </li>
               </ul>
-              <div className="mt-3 rounded-lg border border-border bg-secondary/20 p-3 text-[12px] text-muted-foreground">
+              <div className="mt-3 rounded-none border border-border bg-secondary/20 p-3 text-[12px] text-muted-foreground">
                 Key mapping: <span className="font-mono text-foreground">path → offset → (mdu, blob)</span>.
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Slab order</div>
               <div className="mt-2 text-sm text-muted-foreground">
                 Slab MDUs are ordered as:
@@ -235,7 +235,7 @@ export const Technology = () => {
                   </span>
                 </div>
               </div>
-              <div className="mt-3 rounded-lg border border-border bg-secondary/20 p-3 text-[12px] text-muted-foreground">
+              <div className="mt-3 rounded-none border border-border bg-secondary/20 p-3 text-[12px] text-muted-foreground">
                 MDU #0 is the <span className="font-semibold text-foreground">Super-Manifest</span>: it stores the file table plus the root table.
               </div>
             </div>
@@ -249,7 +249,7 @@ export const Technology = () => {
               </Link>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Root table</div>
                 <div className="mt-2 text-sm text-muted-foreground">
                   Blob 0..15 store the <span className="font-semibold text-foreground">root table</span>: 32-byte roots for every slab MDU (witness + user data).
@@ -272,7 +272,7 @@ export const Technology = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">File table</div>
                 <div className="mt-2 text-sm text-muted-foreground">
                   Blob 16..63 store the file table header + fixed records. Each record is 64 bytes with packed flags.
@@ -305,7 +305,7 @@ export const Technology = () => {
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Witness MDUs</div>
                 <div className="mt-2 text-sm text-muted-foreground">
                   Each user MDU needs {BLOBS_PER_MDU} KZG blob commitments.
@@ -319,7 +319,7 @@ export const Technology = () => {
                 <div className="mt-2 font-mono text-foreground">W = {nilfsSuggestedWitnessMdus}</div>
               </div>
 
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Live toggle</div>
                 <div className="mt-2 text-sm text-muted-foreground">
                   Adjust witness MDUs to see how slab indexing shifts for the sample files below.
@@ -327,7 +327,7 @@ export const Technology = () => {
                 <div className="mt-4 flex items-center gap-3">
                   <button
                     onClick={() => void handleCopy("nilfs_meta_mdus", String(nilfsMetaMdus))}
-                    className="inline-flex items-center gap-2 rounded-md border border-border bg-background/70 px-3 py-2 text-[12px] font-semibold text-foreground hover:bg-muted/40"
+                    className="inline-flex items-center gap-2 rounded-none border border-border bg-background/70 px-3 py-2 text-[12px] font-semibold text-foreground hover:bg-muted/40"
                   >
                     {copiedKey === "nilfs_meta_mdus" ? (
                       <>
@@ -364,7 +364,7 @@ export const Technology = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border bg-secondary/20 p-4 text-[12px] text-muted-foreground">
+              <div className="rounded-none border border-border bg-secondary/20 p-4 text-[12px] text-muted-foreground">
                 <div className="font-semibold text-foreground">Indexing summary</div>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
                   <li>MDU #0 holds the NilFS super-manifest.</li>
@@ -375,7 +375,7 @@ export const Technology = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="rounded-none border border-border bg-card p-4 space-y-3">
               <div className="text-sm font-semibold text-foreground">Example file table → derived MDU / blob ranges</div>
               <div className="overflow-auto">
                 <table className="min-w-full divide-y divide-border text-sm">
@@ -418,7 +418,7 @@ export const Technology = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-secondary/20 p-4 text-[12px] text-muted-foreground">
+            <div className="rounded-none border border-border bg-secondary/20 p-4 text-[12px] text-muted-foreground">
               <div className="font-semibold text-foreground">Mapping formulas</div>
               <div className="mt-2 font-mono text-[11px] text-foreground whitespace-pre-wrap">
                 {`meta_mdus = 1 + witness_mdus
@@ -439,7 +439,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Step 1: resolve the file</div>
                 <ol className="mt-2 space-y-2 text-[12px] text-muted-foreground list-decimal list-inside">
                   <li>Read NilFS file table in slab MDU #0.</li>
@@ -451,7 +451,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 </ol>
               </div>
 
-              <div className="rounded-xl border border-border bg-background/60 p-4">
+              <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Step 2: verify inclusion</div>
                 <ol className="mt-2 space-y-2 text-[12px] text-muted-foreground list-decimal list-inside">
                   <li>
@@ -467,7 +467,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="rounded-none border border-border bg-card overflow-hidden">
               <div className="border-b border-border bg-muted/30 px-6 py-4">
                 <div className="text-sm font-semibold text-foreground">Chained proof sketch (3 hops)</div>
                 <div className="mt-1 text-[12px] text-muted-foreground">
@@ -491,8 +491,8 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                       detail: "Prove the bytes you fetched are consistent with the blob commitment.",
                     },
                   ].map((row) => (
-                    <div key={row.label} className="flex items-start gap-3 rounded-lg border border-border bg-background/60 p-3">
-                      <div className="rounded-md border border-border bg-secondary/30 px-2 py-1 text-[11px] font-semibold text-foreground">
+                    <div key={row.label} className="flex items-start gap-3 rounded-none border border-border bg-background/60 p-3">
+                      <div className="rounded-none border border-border bg-secondary/30 px-2 py-1 text-[11px] font-semibold text-foreground">
                         {row.label}
                       </div>
                       <div className="text-[12px] text-muted-foreground">{row.detail}</div>
@@ -509,7 +509,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-gradient-to-br from-background via-background to-primary/5 shadow-sm">
+      <section className="rounded-none border border-border bg-gradient-to-br from-background via-background to-primary/5 shadow-sm">
         <div className="p-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
             <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">At a glance</div>
@@ -525,7 +525,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 { label: "Blob", detail: "blob_index" },
                 { label: "Bytes", detail: "range" },
               ].map((node, idx) => (
-                <div key={node.label} className="rounded-xl border border-border bg-background/70 p-3 text-center">
+                <div key={node.label} className="rounded-none border border-border bg-background/70 p-3 text-center">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{node.label}</div>
                   <div className="mt-1 font-mono text-[12px] text-foreground">{node.detail}</div>
                   {idx < 3 ? <ArrowRight className="mx-auto mt-2 h-4 w-4 text-muted-foreground" /> : null}
@@ -538,7 +538,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 { label: "Blob", value: formatBytes(BLOB_SIZE_BYTES) },
                 { label: "KZG", value: `${KZG_COMMITMENT_BYTES} B` },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-lg border border-border bg-background/60 px-3 py-2">
+                <div key={stat.label} className="rounded-none border border-border bg-background/60 px-3 py-2">
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{stat.label}</div>
                   <div className="mt-1 font-mono text-lg text-foreground">{stat.value}</div>
                 </div>
@@ -547,7 +547,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-xl border border-border bg-background/80 p-4">
+            <div className="rounded-none border border-border bg-background/80 p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Quick path</div>
               <ol className="mt-2 space-y-2 text-sm text-muted-foreground list-decimal list-inside">
                 <li>
@@ -574,7 +574,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               </ol>
             </div>
 
-            <div className="rounded-xl border border-border bg-secondary/20 p-4">
+            <div className="rounded-none border border-border bg-secondary/20 p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Curious developers</div>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 This page is designed for skimming first and deep dives second. Every section includes formulas,
@@ -587,12 +587,12 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
 
       <section
         id="mdu-primer"
-        className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden"
+        className="rounded-none border border-border bg-card shadow-sm overflow-hidden"
         data-testid="technology-mdu-primer"
       >
         <div className="border-b border-border bg-muted/30 px-6 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+            <div className="p-2 rounded-none bg-primary/10 border border-primary/20">
               <Layers className="w-5 h-5 text-primary" />
             </div>
             <div>
@@ -618,7 +618,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
 
         <div className="p-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Blob</div>
@@ -630,7 +630,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 <button
                   type="button"
                   onClick={() => void handleCopy("blob_size", String(BLOB_SIZE_BYTES))}
-                  className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
+                  className="inline-flex items-center gap-2 rounded-none border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
                   title="Copy blob size bytes"
                 >
                   {copiedKey === "blob_size" ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
@@ -639,7 +639,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">MDU</div>
@@ -651,7 +651,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 <button
                   type="button"
                   onClick={() => void handleCopy("mdu_size", String(MDU_SIZE_BYTES))}
-                  className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
+                  className="inline-flex items-center gap-2 rounded-none border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary/40"
                   title="Copy MDU size bytes"
                 >
                   {copiedKey === "mdu_size" ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
@@ -662,7 +662,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Manifest Root</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
                 <Hash className="h-4 w-4 text-accent" />
@@ -673,7 +673,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">MDU Root</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
                 <Spline className="h-4 w-4 text-primary" />
@@ -684,7 +684,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-background/60 p-4">
+            <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Blob Commitment</div>
               <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
                 <Shield className="h-4 w-4 text-primary" />
@@ -696,7 +696,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+          <div className="rounded-none border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
             <div className="font-semibold text-foreground">Slab order (what “MDU index” means)</div>
             <div className="mt-1">
               A deal’s slab is ordered as: <span className="font-mono text-foreground">MDU #0</span> (NilFS Super-Manifest)
@@ -714,7 +714,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             Back to MDU Primer
           </Link>
         </div>
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="overflow-hidden rounded-none border border-border bg-card">
           <table className="min-w-full divide-y divide-border text-sm">
             <thead className="bg-muted/30">
               <tr>
@@ -755,7 +755,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
       <section id="worked-example" className="space-y-4">
         <h2 className="text-2xl font-bold text-foreground">Worked Example (MDU/Blob math)</h2>
         <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-4">
-          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <div className="rounded-none border border-border bg-card p-6 space-y-4">
             <div className="text-sm text-muted-foreground">
               MDUs and blobs are the units that show up in upload progress, slab layout, and retrieval session planning.
             </div>
@@ -764,23 +764,23 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               <input
                 value={String(exampleBytes)}
                 onChange={(e) => setExampleBytes(clampInt(Number(e.target.value), 0, 10_000_000_000))}
-                className="mt-1 w-full rounded-md border border-border bg-background/60 px-3 py-2 text-sm font-mono text-foreground"
+                className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm font-mono text-foreground"
               />
             </label>
             <div className="grid sm:grid-cols-3 gap-3">
-              <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">User MDUs</div>
                 <div className="font-mono text-lg text-foreground">{exampleUserMdus}</div>
                 <div className="text-[11px] text-muted-foreground mt-1">{formatBytes(exampleUserMdus * MDU_SIZE_BYTES)}</div>
               </div>
-              <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Blobs</div>
                 <div className="font-mono text-lg text-foreground">{exampleBlobCount}</div>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {exampleUserMdus} × {BLOBS_PER_MDU}
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+              <div className="rounded-none border border-border bg-background/60 px-3 py-2">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Global blob indices</div>
                 <div className="font-mono text-[12px] text-foreground">
                   {exampleUserMdus > 0 ? `${toHexBytes(BigInt(exampleUserMdus) * BigInt(BLOBS_PER_MDU))}…` : "—"}
@@ -792,7 +792,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/20 p-6 space-y-3">
+          <div className="rounded-none border border-border bg-secondary/20 p-6 space-y-3">
             <div className="text-sm font-semibold text-foreground">How this shows up in UX</div>
             <ul className="text-[12px] text-muted-foreground space-y-2 list-disc list-inside">
               <li>

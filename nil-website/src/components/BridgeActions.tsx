@@ -128,7 +128,7 @@ export function BridgeActions() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-4">
+    <div className="rounded-none border border-border bg-card p-4 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <PlugZap className="w-4 h-4 text-primary" />
@@ -147,7 +147,7 @@ export function BridgeActions() {
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Block Height
           <input
-            className="px-3 py-2 rounded-md border border-border bg-background text-foreground text-sm"
+            className="px-3 py-2 rounded-none border border-border bg-background text-foreground text-sm"
             type="number"
             value={nextHeight}
             onChange={(e) => setNextHeight(e.target.value)}
@@ -157,7 +157,7 @@ export function BridgeActions() {
         <label className="flex flex-col gap-1 text-xs text-muted-foreground md:col-span-2">
           State Root (bytes32)
           <input
-            className="px-3 py-2 rounded-md border border-border bg-background text-foreground text-sm font-mono"
+            className="px-3 py-2 rounded-none border border-border bg-background text-foreground text-sm font-mono"
             type="text"
             value={stateRoot}
             onChange={(e) => setStateRoot(e.target.value as `0x${string}`)}
@@ -170,7 +170,7 @@ export function BridgeActions() {
         <button
           onClick={handleSendDemo}
           disabled={txPending || waitingReceipt}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-md hover:bg-primary/90 disabled:opacity-60"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-none hover:bg-primary/90 disabled:opacity-60"
         >
           {txPending || waitingReceipt ? (
             <Loader2 className="w-4 h-4 animate-spin" />

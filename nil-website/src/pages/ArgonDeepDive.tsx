@@ -22,7 +22,7 @@ export const ArgonDeepDive = () => {
         className="space-y-16"
       >
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 shrink-0">
+          <div className="p-3 bg-destructive/10 rounded-none border border-destructive/20 shrink-0">
             <HeartCrack className="w-8 h-8 text-destructive" />
           </div>
           <h2 className="text-3xl font-bold text-foreground">Archived: Proof-of-Delayed-Encode (PoDE)</h2>
@@ -41,8 +41,8 @@ export const ArgonDeepDive = () => {
             In the PoDE model, when challenged, SPs perform a memory-hard computation (<strong>Argon2id</strong>) on a chunk of data. The work was tuned (example) to take about {podeWorkMs/1000} second on a reference CPU.
           </p>
           
-          <div className="bg-card border border-border p-8 rounded-2xl shadow-sm flex flex-col items-center">
-            <div className="grid grid-cols-8 gap-1 w-full max-w-md aspect-video bg-muted/30 p-2 rounded border border-border">
+          <div className="bg-card border border-border p-8 rounded-none shadow-sm flex flex-col items-center">
+            <div className="grid grid-cols-8 gap-1 w-full max-w-md aspect-video bg-muted/30 p-2 rounded-none border border-border">
               {[...Array(64)].map((_, i) => (
                 <motion.div
                   key={i}
@@ -54,7 +54,7 @@ export const ArgonDeepDive = () => {
                     delay: i * 0.03,
                     repeatDelay: 1
                   }}
-                  className="bg-primary/70 rounded-sm w-full h-full"
+                  className="bg-primary/70 rounded-none w-full h-full"
                 />
               ))}
             </div>
@@ -70,7 +70,7 @@ export const ArgonDeepDive = () => {
           <p className="text-muted-foreground mb-6">
             PoDE relied on a strict submission deadline: if a node tried to fetch missing data from a remote source on demand, it would miss the deadline and be penalized. In practice, strict deadlines can be brittle, which is why NilStore now uses the Performance Market instead.
           </p>
-          <div className="bg-card border border-border p-8 rounded-2xl shadow-sm">
+          <div className="bg-card border border-border p-8 rounded-none shadow-sm">
             <div className="grid md:grid-cols-2 gap-8">
                 <div>
                     <h4 className="font-bold text-foreground mb-2">Honest Node (Local Storage)</h4>
@@ -110,7 +110,7 @@ export const ArgonDeepDive = () => {
                 </div>
             </div>
             
-            <div className="mt-8 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex gap-3 items-start">
+            <div className="mt-8 p-4 bg-destructive/10 border border-destructive/20 rounded-none text-sm text-destructive flex gap-3 items-start">
               <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-destructive" />
               <p className="text-destructive">
                 <strong>PoDE Intuition (Archived):</strong> Under these example parameters, remote fetch + compute exceeds a strict deadline of <strong>{deadlineMs}ms</strong>. 
