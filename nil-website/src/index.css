@@ -27,6 +27,7 @@
     --glass-opacity: 0.7;
     --grid-color: rgba(0, 0, 0, 0.05);
     --scan-opacity: 0.05;
+    --industrial-bracket-opacity: 0.6;
     --radius: 0rem;
 
     --cyan-400: 180 100% 50%; /* #00E5FF */
@@ -41,16 +42,16 @@
     /* --- Dark Mode: Control Room --- */
     --background: 240 10% 2%; /* Level 0 (Floor) */
     --foreground: 0 0% 98%;
-    --card: 240 10% 6%; /* Level 1 (Panels) */
+    --card: 240 10% 5%; /* Level 1 (Panels) */
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 6%;
+    --popover: 240 10% 5%;
     --popover-foreground: 0 0% 98%;
     --primary: 20.5 90.2% 48.2%; /* Safety Orange */
     --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 240 10% 10%; /* Level 2 (Active/Hover) */
+    --secondary: 240 10% 8%; /* Level 2 (Active/Hover) */
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 10% 10%;
-    --muted-foreground: 240 5% 70%;
+    --muted: 240 10% 8%;
+    --muted-foreground: 240 5% 74%;
     --accent: 142.1 70.6% 45.3%; /* Success Green */
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
@@ -58,9 +59,10 @@
     --border: 240 6% 18%;
     --input: 240 6% 18%;
     --ring: 20.5 90.2% 48.2%;
-    --glass-opacity: 0.75;
-    --grid-color: rgba(255, 255, 255, 0.025);
+    --glass-opacity: 0.82;
+    --grid-color: hsl(var(--primary) / 0.03);
     --scan-opacity: 0.12;
+    --industrial-bracket-opacity: 0.8;
   }
 }
  
@@ -94,7 +96,7 @@
 
   .glass-panel {
     @apply backdrop-blur-xl;
-    background-color: hsl(var(--card) / var(--glass-opacity));
+    background-color: var(--glass-bg, hsl(var(--card) / var(--glass-opacity)));
     border: 1px solid hsl(var(--border) / 0.65);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
@@ -103,11 +105,14 @@
   }
 
   .dark .glass-panel {
-    border-color: hsl(var(--foreground) / 0.1);
+    border-color: hsl(var(--border) / 0.55);
+    border-top-color: hsl(var(--primary) / 0.22);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
       var(--tw-ring-shadow, 0 0 #0000),
-      0 0 0 1px hsl(var(--primary) / 0.08),
+      inset 0 1px 0 hsl(var(--foreground) / 0.06),
+      0 0 0 1px hsl(var(--primary) / 0.06),
+      0 0 18px hsl(var(--primary) / 0.035),
       var(--tw-shadow, 0 0 #0000);
   }
 
@@ -119,16 +124,16 @@
     content: "";
     @apply absolute -top-px -left-px w-2 h-2;
     pointer-events: none;
-    border-top: 1.5px solid hsl(var(--primary) / 0.6);
-    border-left: 1.5px solid hsl(var(--primary) / 0.6);
+    border-top: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-left: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
   }
 
   .industrial-border::after {
     content: "";
     @apply absolute -bottom-px -right-px w-2 h-2;
     pointer-events: none;
-    border-bottom: 1.5px solid hsl(var(--primary) / 0.6);
-    border-right: 1.5px solid hsl(var(--primary) / 0.6);
+    border-bottom: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-right: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
   }
 
   .pulse-status {
