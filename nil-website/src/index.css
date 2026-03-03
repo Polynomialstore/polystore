@@ -155,7 +155,7 @@
 
   .industrial-border::before {
     content: "";
-    @apply absolute -top-px -left-px w-2 h-2;
+    @apply absolute -top-px -left-px w-3.5 h-3.5;
     pointer-events: none;
     border-top: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-left: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
@@ -163,7 +163,7 @@
 
   .industrial-border::after {
     content: "";
-    @apply absolute -bottom-px -right-px w-2 h-2;
+    @apply absolute -bottom-px -right-px w-3.5 h-3.5;
     pointer-events: none;
     border-bottom: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-right: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
