@@ -25,7 +25,7 @@ export const Hero = () => {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="flex flex-col sm:flex-row justify-center gap-4"
           >
-            <button className="px-8 py-4 bg-primary text-primary-foreground border border-primary/40 font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+            <button className="px-8 py-4 bg-primary text-primary-foreground border border-primary/40 font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)]">
               Read the Whitepaper <ArrowRight className="w-4 h-4" />
             </button>
             <button className="px-8 py-4 bg-background/60 border border-border text-foreground font-medium hover:bg-secondary/40 transition-colors">

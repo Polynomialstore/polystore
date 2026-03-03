@@ -1817,7 +1817,7 @@ export function Dashboard() {
           </div>
           <button
             onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
+            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             {genesisMismatch ? 'Repair MetaMask Network' : 'Switch Network'}
           </button>

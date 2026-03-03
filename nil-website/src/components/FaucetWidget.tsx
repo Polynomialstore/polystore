@@ -49,7 +49,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
         <button
             onClick={() => (isLocked ? handleUnlock() : openConnectModal?.())}
             disabled={unlocking}
-            className={`inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-60 ${className}`}
+            className={`inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-60 ${className}`}
         >
             {unlocking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
             {isLocked ? 'Unlock to Request Funds' : 'Connect to Request Funds'}
