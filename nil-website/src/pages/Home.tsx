@@ -11,12 +11,12 @@ export const Home = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="relative overflow-hidden glass-panel industrial-border p-10 md:p-14 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]"
+          className="relative overflow-hidden glass-panel industrial-border p-10 md:p-14 text-center shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]"
         >
           <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           <div className="absolute inset-0 opacity-10 pointer-events-none animate-scan" />
 
-          <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3 dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)]">
+          <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3 dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
             <img
               src="/brand/logo-light-256.png"
               srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
@@ -31,7 +31,7 @@ export const Home = () => {
             />
           </div>
 
-          <div className="relative mx-auto inline-flex items-center border border-border/50 bg-background/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+          <div className="relative mx-auto inline-flex items-center border border-border/50 bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest font-mono-data text-foreground">
             /nilstore/overview
           </div>
 
@@ -47,20 +47,20 @@ export const Home = () => {
           <div className="relative mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               to="/testnet"
-              className="inline-flex items-center justify-center gap-3 bg-primary text-primary-foreground px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
+              className="inline-flex items-center justify-center gap-3 rounded-none bg-primary text-primary-foreground px-6 py-3 text-[10px] font-mono-data font-bold uppercase tracking-[0.2em] border border-primary/70 shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
             >
               Join Store Wars
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               to="/whitepaper"
-              className="inline-flex items-center justify-center border border-border/60 bg-background/50 px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/40 transition-colors"
+              className="inline-flex items-center justify-center rounded-none border border-border/70 bg-card px-6 py-3 text-[10px] font-mono-data font-bold uppercase tracking-[0.2em] text-foreground hover:bg-secondary transition-colors"
             >
               Read Whitepaper
             </Link>
             <Link
               to="/litepaper"
-              className="inline-flex items-center justify-center border border-border/60 bg-background/50 px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/40 transition-colors"
+              className="inline-flex items-center justify-center rounded-none border border-border/70 bg-card px-6 py-3 text-[10px] font-mono-data font-bold uppercase tracking-[0.2em] text-foreground hover:bg-secondary transition-colors"
             >
               Read Litepaper
             </Link>
@@ -99,10 +99,13 @@ interface FeatureCardProps {
 const FeatureCard = ({ icon, title, desc }: FeatureCardProps) => (
   <motion.div
     whileHover={{ y: -5 }}
-    className="relative overflow-hidden glass-panel industrial-border p-8 transition-colors shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.05)] hover:ring-1 hover:ring-primary/20"
+    className="relative overflow-hidden bg-card shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] hover:ring-1 hover:ring-primary/20"
   >
-    <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none" />
-    <div className="relative mb-4 glass-panel industrial-border w-14 h-14 flex items-center justify-center">
+    <span className="pointer-events-none absolute left-0 top-0 h-4 w-4 border-t border-l border-primary/80" />
+    <span className="pointer-events-none absolute right-0 top-0 h-4 w-4 border-t border-r border-primary/80" />
+    <span className="pointer-events-none absolute left-0 bottom-0 h-4 w-4 border-b border-l border-primary/80" />
+    <span className="pointer-events-none absolute right-0 bottom-0 h-4 w-4 border-b border-r border-primary/80" />
+    <div className="relative mb-4 bg-card industrial-border w-14 h-14 flex items-center justify-center">
       {icon}
     </div>
     <h3 className="relative text-xl font-bold mb-3 text-card-foreground">{title}</h3>

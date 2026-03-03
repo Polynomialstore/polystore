@@ -95,26 +95,39 @@
   }
 
   .glass-panel {
-    @apply backdrop-blur-xl;
-    background-color: var(--glass-bg, hsl(var(--card) / var(--glass-opacity)));
-    border: 1px solid hsl(var(--border) / 0.65);
+    @apply backdrop-blur-none border;
+    background-color: hsl(var(--card) / 1);
+    border-color: hsl(var(--border) / 0.8);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
       var(--tw-ring-shadow, 0 0 #0000),
-      var(--tw-shadow, 0 0 #0000);
+      0 0 50px rgba(0, 0, 0, 0.06);
   }
 
   .dark .glass-panel {
-    border-color: hsl(var(--border) / 0.4);
+    background-color: hsl(var(--card) / 0.98);
+    border-color: hsl(var(--border) / 0.8);
     border-top-color: hsl(var(--primary) / 0.2);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
       var(--tw-ring-shadow, 0 0 #0000),
       inset 0 1px 0 hsl(var(--foreground) / 0.06),
-      0 0 0 1px hsl(var(--primary) / 0.06),
-      0 0 40px hsl(0 0% 0% / 0.7),
-      0 0 18px hsl(var(--primary) / 0.03),
+      0 0 60px rgba(0, 0, 0, 0.8),
       var(--tw-shadow, 0 0 #0000);
+  }
+
+  .solid-panel {
+    @apply border-2 border-border/80;
+    background-color: hsl(var(--card) / 1);
+  }
+
+  .dark .solid-panel {
+    background-color: hsl(var(--card) / 0.98);
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  }
+
+  .border-primary-frame {
+    @apply border-2 border-border/80;
   }
 
   .recessed-input {
@@ -132,18 +145,20 @@
 
   .industrial-border::before {
     content: "";
-    @apply absolute -top-px -left-px w-2 h-2;
+    @apply absolute -top-px -left-px w-4 h-4;
     pointer-events: none;
     border-top: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-left: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-width: 1px;
   }
 
   .industrial-border::after {
     content: "";
-    @apply absolute -bottom-px -right-px w-2 h-2;
+    @apply absolute -bottom-px -right-px w-4 h-4;
     pointer-events: none;
     border-bottom: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-right: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
+    border-width: 1px;
   }
 
   .pulse-status {
@@ -229,15 +244,15 @@
   }
 
   .markdown-content blockquote {
-    @apply border-l-4 border-primary/40 pl-4 italic text-foreground/80 bg-primary/5 rounded-r-xl py-2;
+    @apply border-l-4 border-primary/40 pl-4 italic text-foreground/80 bg-primary/5 rounded-none py-2;
   }
 
   .markdown-content code {
-    @apply bg-muted text-foreground px-2 py-1 rounded-md font-mono text-sm;
+    @apply bg-muted text-foreground px-2 py-1 rounded-none font-mono text-sm;
   }
 
   .markdown-content pre {
-    @apply bg-muted text-foreground p-4 rounded-xl overflow-x-auto text-sm border border-border;
+    @apply bg-muted text-foreground p-4 rounded-none overflow-x-auto text-sm border border-border;
   }
 
   .markdown-content hr {
@@ -245,7 +260,7 @@
   }
 
   .markdown-content table {
-    @apply w-full border border-border rounded-xl overflow-hidden text-sm;
+    @apply w-full border border-border rounded-none overflow-hidden text-sm;
   }
 
   .markdown-content th {

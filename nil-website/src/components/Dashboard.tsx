@@ -1524,7 +1524,7 @@ export function Dashboard() {
           <button
           onClick={() => openConnectModal?.()}
           data-testid="connect-wallet"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md shadow transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-none shadow transition-colors"
         >
           <Wallet className="w-4 h-4" />
           Connect Wallet
@@ -1536,14 +1536,14 @@ export function Dashboard() {
   const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
 
   const dealExplorerTopPanel = (
-    <div className="p-5 space-y-4 bg-muted/10">
+    <div className="p-5 space-y-4 bg-card">
       {showAdvanced ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
               data-testid="tab-content"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Database className="h-3.5 w-3.5 text-muted-foreground" />
               {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
@@ -1627,7 +1627,7 @@ export function Dashboard() {
             className="glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
           >
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/gateway/tools</div>
+              <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/gateway/tools</div>
               <div className="mt-1 font-semibold text-foreground">Advanced tools are hidden</div>
               <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Enable Advanced to access gateway sharding (Mode 1).</div>
             </div>
@@ -1667,7 +1667,7 @@ export function Dashboard() {
                 </div>
               )}
               {targetDealExpired && (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                <div className="rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
                   {targetDealExpiryMsg}
                 </div>
               )}
@@ -1735,7 +1735,7 @@ export function Dashboard() {
                 }}
                 disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2 || targetDealExpired}
                 data-testid="content-commit"
-                className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] disabled:opacity-50 transition-all"
+                className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] disabled:opacity-50 transition-all"
               >
                 {updateLoading ? 'Committing...' : 'Commit uploaded content'}
               </button>
@@ -1745,7 +1745,7 @@ export function Dashboard() {
       ) : (
         <div ref={mduRef} className="space-y-4">
           {targetDealId ? targetDealExpired ? (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5">
+            <div className="rounded-none border border-destructive/40 bg-destructive/10 p-5">
               <div className="text-sm font-semibold text-destructive">Deal expired</div>
               <div className="mt-1 text-xs text-destructive/90">
                 {targetDealExpiryMsg}
@@ -1754,7 +1754,7 @@ export function Dashboard() {
           ) : (
             <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
           ) : (
-            <div className="rounded-xl border border-dashed border-border bg-background/60 p-10 text-center">
+            <div className="rounded-none border border-dashed border-border bg-background/60 p-10 text-center">
               <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 Choose a deal from the left to upload, list, and download files.
@@ -1817,7 +1817,7 @@ export function Dashboard() {
           </div>
           <button
             onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.18)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
+            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             {genesisMismatch ? 'Repair MetaMask Network' : 'Switch Network'}
           </button>
@@ -1856,11 +1856,11 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="relative overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]" data-testid="dashboard-utility-bar">
+      <div className="relative overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="dashboard-utility-bar">
           <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           <div className="relative grid gap-3 p-4 lg:grid-cols-2">
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
+            <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div
@@ -1882,7 +1882,7 @@ export function Dashboard() {
                   data-testid="faucet-request"
                   onClick={handleRequestFunds}
                   disabled={!address || faucetBusy}
-                  className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50 disabled:pointer-events-none"
+                  className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Coins className="h-3.5 w-3.5" />
                   {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
@@ -1894,7 +1894,7 @@ export function Dashboard() {
           </div>
 
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/account</div>
+            <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/account</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-mono-data text-[11px] text-foreground" title={address || undefined}>
@@ -1928,7 +1928,7 @@ export function Dashboard() {
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent">
-                  <span className="h-2 w-2 rounded-full bg-accent pulse-status" />
+                  <span className="h-2 w-2 rounded-none bg-accent pulse-status" />
                   Ready
                 </span>
               )}
@@ -1951,12 +1951,12 @@ export function Dashboard() {
 
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="deal-detail">
                 <div className="p-8 text-center">
                   <div className="w-14 h-14 glass-panel industrial-border flex items-center justify-center mx-auto mb-4">
                     <HardDrive className="w-7 h-7 text-muted-foreground" />
                   </div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/storage_deals</div>
+                  <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/storage_deals</div>
                   <div className="mt-2 text-sm font-semibold text-foreground">No deals yet</div>
                   <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Create a deal to start uploading files.</div>
                 </div>
@@ -1971,14 +1971,14 @@ export function Dashboard() {
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]" data-testid="deal-detail">
-                <div className="flex items-center justify-between p-5 border-b border-border/60 bg-background/40">
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="deal-detail">
+                <div className="flex items-center justify-between p-5 border-b border-border/60 bg-card">
                   <div className="flex items-center gap-3">
                     <div className="glass-panel industrial-border p-2">
                       <HardDrive className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/deal_explorer</div>
+                      <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/deal_explorer</div>
                       <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
                         {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
                       </div>
@@ -1999,15 +1999,15 @@ export function Dashboard() {
 
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
           {appConfig.faucetEnabled && !hasBuildFaucetAuthToken() ? (
-            <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] p-4">
+            <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] p-4">
               <FaucetAuthTokenInput />
             </div>
           ) : null}
 
-          <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="overflow-hidden bg-card glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+          <div className="px-6 py-3 border-b border-border/60 bg-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/registry/deals</div>
+              <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/registry/deals</div>
               <p className="text-[11px] font-mono-data text-muted-foreground mt-1">
                 Select a deal to manage files (upload, list, download).
               </p>
@@ -2038,7 +2038,7 @@ export function Dashboard() {
 
             {loading ? (
               <div className="text-center py-10">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+                <div className="animate-spin rounded-none h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
                 <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
               </div>
             ) : ownedDeals.length === 0 ? null : (
@@ -2111,10 +2111,10 @@ export function Dashboard() {
               </div>
             )}
 
-          <div ref={allocRef} className="border-t border-border/60 bg-background/30 px-6 py-4">
+          <div ref={allocRef} className="border-t border-border/60 bg-card px-6 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/alloc/create_deal</div>
+                <div className="text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">/alloc/create_deal</div>
                 <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                   Allocate a new deal on NilChain. Deals act like buckets for files.
                 </p>
@@ -2343,7 +2343,7 @@ export function Dashboard() {
                     }
                     disabled={dealLoading || Boolean(createDealProviderError)}
                     data-testid="alloc-submit"
-                    className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] disabled:opacity-50 transition-all"
+                    className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] disabled:opacity-50 transition-all"
                   >
                     {dealLoading
                       ? 'Creating...'
@@ -2368,8 +2368,8 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="px-4 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
+        <div className="overflow-hidden rounded-none border border-border bg-card shadow-sm">
+          <div className="px-4 py-3 border-b border-border bg-card flex items-center justify-between">
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
             <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
           </div>
@@ -2437,19 +2437,19 @@ export function Dashboard() {
       </div>
 
       {showAdvanced ? (
-        <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+        <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+          <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
             /net/routing --advanced
           </div>
           <div className="p-6 space-y-6">
           {proofs.length > 0 && (
             <div className="overflow-hidden glass-panel industrial-border">
-              <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex items-center justify-between">
-                <span className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/obs/liveness</span>
+                <div className="px-6 py-3 border-b border-border/60 bg-card flex items-center justify-between">
+                <span className="text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">/obs/liveness</span>
                 {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">Syncing proofs…</span>}
               </div>
               <table className="min-w-full divide-y divide-border/40 text-xs">
-                <thead className="bg-background/40">
+                <thead className="bg-card">
                   <tr>
                     <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
                     <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Provider</th>
@@ -2492,11 +2492,11 @@ export function Dashboard() {
           )}
 
           <div className="overflow-hidden glass-panel industrial-border">
-            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+            <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
               /registry/providers
             </div>
             <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="providers-table">
-              <thead className="bg-background/40">
+              <thead className="bg-card">
                 <tr>
                   <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Address</th>
                   <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Capabilities</th>
@@ -2562,8 +2562,8 @@ export function Dashboard() {
           </div>
 
           {!showAdvanced ? (
-            <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-              <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+            <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+              <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground uppercase tracking-widest">
                 /retrieval/economics --advanced
               </div>
               <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
@@ -2603,8 +2603,8 @@ export function Dashboard() {
             </div>
           ) : (
             <>
-              <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+              <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+                <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground uppercase tracking-widest">
                   /retrieval/fees gamma-4
                 </div>
                 <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
@@ -2629,12 +2629,12 @@ export function Dashboard() {
                 </div>
               </div>
 
-              <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+              <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+                <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
                   /retrieval/sessions
                 </div>
                 <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="retrieval-sessions-table">
-                  <thead className="bg-background/40">
+                  <thead className="bg-card">
                     <tr>
                       <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Session</th>
                       <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
@@ -2706,7 +2706,7 @@ export function Dashboard() {
 
       {downloadToast && (
         <div className="fixed bottom-6 right-6 z-50">
-          <div className="flex items-center gap-2 glass-panel industrial-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent ring-1 ring-accent/30 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--accent)_/_0.16)]">
+          <div className="flex items-center gap-2 glass-panel industrial-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent ring-1 ring-accent/30 shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
             <CheckCircle2 className="h-4 w-4" />
             {downloadToast}
           </div>
