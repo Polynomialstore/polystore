@@ -1251,16 +1251,16 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
   return (
     <div
-      className="solid-panel industrial-border p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]"
+      className="glass-panel industrial-border cyber-grid p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]"
       data-testid="deal-detail"
     >
-      <div className="flex items-center justify-between p-5 border-b border-border/40 bg-card backdrop-blur-md">
+      <div className="flex items-center justify-between p-5 border-b border-border/40 bg-background/40 backdrop-blur-md">
         <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-2 border border-primary/30">
                 <FileJson className="w-5 h-5 text-primary" />
             </div>
             <div>
-                <div className="text-[10px] font-bold hud-path">/deal/explorer</div>
+                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
                 <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   <span
@@ -1284,7 +1284,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
       {topPanel ? <div className="border-b border-border">{topPanel}</div> : null}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-border bg-card">
+      <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-border">
         <button
           onClick={() => setActiveTab('files')}
           data-testid="deal-detail-tab-files"
@@ -1322,7 +1322,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     <div className="space-y-1">
                         <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
                         <div
-                          className="font-mono-data break-all bg-secondary/50 border border-border rounded px-3 py-2 text-foreground select-all"
+                          className="font-mono-data break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
                           data-testid="deal-detail-cid"
                         >
                           {deal.cid || 'Empty Container'}

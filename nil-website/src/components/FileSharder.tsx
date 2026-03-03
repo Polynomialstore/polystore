@@ -2540,11 +2540,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group industrial-border
                 ${isDragging
                   ? 'border-primary bg-primary/10 scale-[1.005]'
-                  : 'border-border/60 hover:border-primary/40 bg-card'
+                  : 'border-border/60 hover:border-primary/40 bg-card/40'
                 }
               `}
             >
-               {/* Keep hover scan only; avoid persistent grid bleed inside the slab. */}
+               {/* Background scanning effect */}
+               <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none animate-scan" />
 
               <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -2553,7 +2554,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     <Cpu className="h-6 w-6 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-bold hud-path">/dev/shm_sharder_v1</div>
+                    <div className="text-[11px] font-bold text-foreground uppercase tracking-[0.2em]">/dev/shm_sharder_v1</div>
                     <div className="mt-1 text-[10px] text-muted-foreground font-mono-data">
                       {isMode2 && gatewayMode2Enabled ? (
                         gatewayReachable ? (
@@ -2571,7 +2572,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     </div>
                   </div>
                 </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] dark:shadow-[0_0_15px_hsl(var(--primary)_/_0.2)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:w-auto">
+                <label className="inline-flex w-full cursor-pointer items-center justify-center bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:w-auto">
                   LOAD_OBJECT
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
@@ -2613,11 +2614,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           data-testid="mdu-status-panel"
           data-upload-phase={uploadPhase}
         >
+          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           {processing ? (
             <div className="absolute inset-0 pointer-events-none animate-scan opacity-25" />
           ) : null}
 
-          <p className="relative text-[10px] font-bold hud-path mb-2">
+          <p className="relative text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground mb-2">
             /proc/sharder
           </p>
           <div className="relative space-y-2">
@@ -2878,7 +2880,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       {/* Visualization Grid */}
       {shards.length > 0 && (
         <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="absolute inset-0 cyber-grid opacity-30 dark:opacity-0 pointer-events-none" />
+          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+
           <div className="relative flex justify-between items-center mb-6 gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
