@@ -62,8 +62,7 @@ export const Layout = () => {
       <nav className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300">
         
         {/* Control Surface */}
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-md border-b border-border/60" />
-        <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
+        <div className="absolute inset-0 bg-background border-b border-border" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
         <div className="container mx-auto px-4 h-16 flex items-center gap-4 relative z-10">
@@ -154,9 +153,8 @@ export const Layout = () => {
               animate={{ opacity: 1, height: "100vh" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background/95 backdrop-blur-3xl border-t border-border/50 pb-24"
+              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background border-t border-border pb-24"
             >
-              <div className="absolute inset-0 cyber-grid opacity-50 pointer-events-none" />
               <div className="flex flex-col p-6 space-y-6">
                 
                 {/* Mobile CTA */}

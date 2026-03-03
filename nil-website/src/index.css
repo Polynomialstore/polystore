@@ -25,7 +25,7 @@
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
     --glass-opacity: 0.7;
-    --grid-color: rgba(0, 0, 0, 0.08);
+    --grid-color: hsl(var(--foreground) / 0.1);
     --scan-opacity: 0.05;
     --industrial-bracket-opacity: 0.6;
     --radius: 0rem;
@@ -95,19 +95,19 @@
   }
 
   .glass-panel {
-    @apply backdrop-blur-none border;
-    background-color: hsl(var(--card) / 1);
-    border-color: hsl(var(--border) / 0.8);
+    @apply border;
+    background-color: hsl(var(--background) / 1);
+    border-color: hsl(var(--border) / 1);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
       var(--tw-ring-shadow, 0 0 #0000),
-      0 0 50px rgba(0, 0, 0, 0.06);
+      0 0 60px rgba(0, 0, 0, 0.06);
   }
 
   .dark .glass-panel {
-    background-color: hsl(var(--card) / 0.98);
-    border-color: hsl(var(--border) / 0.8);
-    border-top-color: hsl(var(--primary) / 0.2);
+    background-color: hsl(var(--background) / 1);
+    border-color: hsl(var(--border) / 1);
+    border-top-color: hsl(var(--foreground) / 0.12);
     box-shadow:
       var(--tw-ring-offset-shadow, 0 0 #0000),
       var(--tw-ring-shadow, 0 0 #0000),
@@ -117,12 +117,12 @@
   }
 
   .solid-panel {
-    @apply border-2 border-border/80;
-    background-color: hsl(var(--card) / 1);
+    @apply border-2 border-border;
+    background-color: hsl(var(--background) / 1);
   }
 
   .dark .solid-panel {
-    background-color: hsl(var(--card) / 0.98);
+    background-color: hsl(var(--background) / 1);
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
   }
 
@@ -147,21 +147,34 @@
     content: "";
     position: absolute;
     top: -1px;
+    left: -1px;
+    right: -1px;
+    height: 16px;
+    pointer-events: none;
+    z-index: 10;
+    /* Top HUD corner brackets: 1.5px stroke, 16px legs. */
+    background:
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 16px 1.5px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 1.5px 16px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 16px 1.5px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 1.5px 16px no-repeat;
+  }
+
+  .industrial-border::after {
+    content: "";
+    position: absolute;
     right: -1px;
     bottom: -1px;
     left: -1px;
+    height: 16px;
     pointer-events: none;
     z-index: 10;
-    /* 4-corner HUD "L" brackets: 1px stroke, 16px legs (Tailwind w-4/h-4). */
+    /* Bottom HUD corner brackets: 1.5px stroke, 16px legs. */
     background:
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 16px 1px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 1px 16px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 16px 1px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 1px 16px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 16px 1px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 1px 16px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 16px 1px no-repeat,
-      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 1px 16px no-repeat;
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 16px 1.5px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 1.5px 16px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 16px 1.5px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 1.5px 16px no-repeat;
   }
 
   .pulse-status {
