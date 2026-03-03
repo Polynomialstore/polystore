@@ -1068,6 +1068,8 @@ start_bridge() {
     fi
   else
     echo "Bridge deploy script failed; see /tmp/bridge_deploy.log. Continuing without bridge."
+    echo "To retry later: ./scripts/deploy_bridge_local.sh"
+    echo "To skip next time: NIL_DEPLOY_BRIDGE=0 ./scripts/ensure_stack_local.sh"
     BRIDGE_STATUS="failed (see /tmp/bridge_deploy.log)"
   fi
 }

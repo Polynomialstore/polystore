@@ -52,6 +52,12 @@ FORGE_EXIT=$?
 set -e
 popd >/dev/null
 
+# Convenience (debug): show which EVM address we're broadcasting from.
+DEPLOYER_ADDR="$(FOUNDRY_DISABLE_NIGHTLY_WARNING=1 cast wallet address --private-key "$PRIVATE_KEY" 2>/dev/null | tail -n 1 || true)"
+if [ -n "$DEPLOYER_ADDR" ]; then
+  echo ">>> Deployer: $DEPLOYER_ADDR"
+fi
+
 # Check if forge failed
 if [ $FORGE_EXIT -ne 0 ]; then
   echo "✖ Forge script failed. Output:" >&2
@@ -67,14 +73,25 @@ if [ $FORGE_EXIT -ne 0 ]; then
   fi
 fi
 
-BRIDGE_ADDR=$(echo "$DEPLOY_LOG" | grep -Eo "0x[a-fA-F0-9]{40}" | tail -n 1)
+BRIDGE_ADDR=$(
+  echo "$DEPLOY_LOG" \
+    | grep -E "NilBridge deployed at:" \
+    | grep -Eo "0x[a-fA-F0-9]{40}" \
+    | tail -n 1
+)
+if [ -z "$BRIDGE_ADDR" ]; then
+  # Fallback for changed forge output formats.
+  BRIDGE_ADDR=$(echo "$DEPLOY_LOG" | grep -Eo "0x[a-fA-F0-9]{40}" | tail -n 1)
+fi
 if [ -z "$BRIDGE_ADDR" ]; then
   echo "✖ Could not parse NilBridge address from deploy output." >&2
+  echo "---- forge output (tail) ----" >&2
+  echo "$DEPLOY_LOG" | tail -n 120 >&2
   exit 1
 fi
 
 echo ">>> Verifying NilBridge code at $BRIDGE_ADDR ..."
-VERIFY_TIMEOUT_SECS="${VERIFY_TIMEOUT_SECS:-60}"
+VERIFY_TIMEOUT_SECS="${VERIFY_TIMEOUT_SECS:-120}"
 VERIFY_DEADLINE=$(( $(date +%s) + VERIFY_TIMEOUT_SECS ))
 while true; do
   CODE=$(cast code --rpc-url "$RPC_URL" "$BRIDGE_ADDR" 2>/dev/null || true)
@@ -83,6 +100,12 @@ while true; do
   fi
   if [ "$(date +%s)" -ge "$VERIFY_DEADLINE" ]; then
     echo "✖ NilBridge not deployed (eth_getCode returned 0x after ${VERIFY_TIMEOUT_SECS}s)." >&2
+    echo "  Parsed address: $BRIDGE_ADDR" >&2
+    if [ -n "$DEPLOYER_ADDR" ]; then
+      echo "  Deployer: $DEPLOYER_ADDR" >&2
+    fi
+    echo "---- forge output (tail) ----" >&2
+    echo "$DEPLOY_LOG" | tail -n 120 >&2
     exit 1
   fi
   sleep 2
