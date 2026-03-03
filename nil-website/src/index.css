@@ -24,7 +24,7 @@
     --border: 214 32% 85%; /* Sharp Technical Lines */
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
-    --glass-opacity: 0.7;
+    --glass-opacity: 0.98;
     --grid-color: rgba(0, 0, 0, 0.05);
     --scan-opacity: 0.05;
     --industrial-bracket-opacity: 0.6;
@@ -59,7 +59,7 @@
     --border: 240 6% 18%;
     --input: 240 6% 18%;
     --ring: 20.5 90.2% 48.2%;
-    --glass-opacity: 0.9;
+    --glass-opacity: 0.98;
     --grid-color: hsl(var(--primary) / 0.04);
     --scan-opacity: 0.12;
     --industrial-bracket-opacity: 0.8;
@@ -104,7 +104,30 @@
       var(--tw-shadow, 0 0 #0000);
   }
 
+  .solid-panel {
+    @apply backdrop-blur-xl;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border) / 0.65);
+    box-shadow:
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      var(--tw-shadow, 0 0 #0000);
+  }
+
   .dark .glass-panel {
+    border-color: hsl(var(--border) / 0.4);
+    border-top-color: hsl(var(--primary) / 0.2);
+    box-shadow:
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      inset 0 1px 0 hsl(var(--foreground) / 0.06),
+      0 0 0 1px hsl(var(--primary) / 0.06),
+      0 0 40px hsl(0 0% 0% / 0.7),
+      0 0 18px hsl(var(--primary) / 0.03),
+      var(--tw-shadow, 0 0 #0000);
+  }
+
+  .dark .solid-panel {
     border-color: hsl(var(--border) / 0.4);
     border-top-color: hsl(var(--primary) / 0.2);
     box-shadow:

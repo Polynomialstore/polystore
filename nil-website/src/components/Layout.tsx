@@ -62,7 +62,7 @@ export const Layout = () => {
       <nav className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300">
         
         {/* Control Surface */}
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-md border-b border-border/60" />
+        <div className="absolute inset-0 bg-background backdrop-blur-md border-b border-border/60" />
         <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
@@ -154,7 +154,7 @@ export const Layout = () => {
               animate={{ opacity: 1, height: "100vh" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background/95 backdrop-blur-3xl border-t border-border/50 pb-24"
+              className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background backdrop-blur-3xl border-t border-border/50 pb-24"
             >
               <div className="absolute inset-0 cyber-grid opacity-50 pointer-events-none" />
               <div className="flex flex-col p-6 space-y-6">
@@ -229,7 +229,7 @@ export const Layout = () => {
         <Outlet />
       </main>
 
-      <footer className="py-12 border-t border-border/60 bg-background/60 backdrop-blur-md mt-24 relative overflow-hidden">
+      <footer className="py-12 border-t border-border/60 bg-background backdrop-blur-md mt-24 relative overflow-hidden">
         <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
