@@ -21,11 +21,11 @@
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 85%; /* Sharp Technical Lines */
+    --border: 214 32% 80%; /* Sharper Technical Lines */
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
     --glass-opacity: 0.7;
-    --grid-color: rgba(0, 0, 0, 0.05);
+    --grid-color: rgba(0, 0, 0, 0.08);
     --scan-opacity: 0.05;
     --industrial-bracket-opacity: 0.6;
     --radius: 0rem;
@@ -145,20 +145,23 @@
 
   .industrial-border::before {
     content: "";
-    @apply absolute -top-px -left-px w-4 h-4;
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    bottom: -1px;
+    left: -1px;
     pointer-events: none;
-    border-top: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-left: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-width: 1px;
-  }
-
-  .industrial-border::after {
-    content: "";
-    @apply absolute -bottom-px -right-px w-4 h-4;
-    pointer-events: none;
-    border-bottom: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-right: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-width: 1px;
+    z-index: 10;
+    /* 4-corner HUD "L" brackets: 1px stroke, 16px legs (Tailwind w-4/h-4). */
+    background:
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 16px 1px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top left / 1px 16px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 16px 1px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) top right / 1px 16px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 16px 1px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom left / 1px 16px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 16px 1px no-repeat,
+      linear-gradient(hsl(var(--primary) / var(--industrial-bracket-opacity)), hsl(var(--primary) / var(--industrial-bracket-opacity))) bottom right / 1px 16px no-repeat;
   }
 
   .pulse-status {
