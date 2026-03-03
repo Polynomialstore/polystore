@@ -1260,7 +1260,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                 <FileJson className="w-5 h-5 text-primary" />
             </div>
             <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
+                <div className="text-[10px] font-bold hud-path">/deal/explorer</div>
                 <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   <span
@@ -1322,7 +1322,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     <div className="space-y-1">
                         <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
                         <div
-                          className="font-mono-data break-all bg-secondary/50 border border-border rounded px-3 py-2 text-primary select-all"
+                          className="font-mono-data break-all bg-secondary/50 border border-border rounded px-3 py-2 text-foreground select-all"
                           data-testid="deal-detail-cid"
                         >
                           {deal.cid || 'Empty Container'}

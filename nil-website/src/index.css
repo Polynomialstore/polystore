@@ -60,7 +60,7 @@
     --input: 240 6% 18%;
     --ring: 20.5 90.2% 48.2%;
     --glass-opacity: 0.98;
-    --grid-color: hsl(var(--primary) / 0.04);
+    --grid-color: hsl(var(--primary) / 0.03);
     --scan-opacity: 0.12;
     --industrial-bracket-opacity: 0.8;
   }
@@ -94,6 +94,11 @@
     background-size: 20px 20px;
   }
 
+  .hud-path {
+    @apply font-mono-data uppercase;
+    letter-spacing: 0.2em;
+  }
+
   .glass-panel {
     @apply backdrop-blur-xl;
     background-color: var(--glass-bg, hsl(var(--card) / var(--glass-opacity)));
@@ -115,6 +120,7 @@
   }
 
   .dark .glass-panel {
+    background-color: hsl(var(--card) / 0.98);
     border-color: hsl(var(--border) / 0.4);
     border-top-color: hsl(var(--primary) / 0.2);
     box-shadow:
@@ -122,12 +128,13 @@
       var(--tw-ring-shadow, 0 0 #0000),
       inset 0 1px 0 hsl(var(--foreground) / 0.06),
       0 0 0 1px hsl(var(--primary) / 0.06),
-      0 0 40px hsl(0 0% 0% / 0.7),
-      0 0 18px hsl(var(--primary) / 0.03),
+      0 0 50px hsl(0 0% 0% / 1),
+      0 0 15px hsl(var(--primary) / 0.06),
       var(--tw-shadow, 0 0 #0000);
   }
 
   .dark .solid-panel {
+    background-color: hsl(var(--card));
     border-color: hsl(var(--border) / 0.4);
     border-top-color: hsl(var(--primary) / 0.2);
     box-shadow:
@@ -135,9 +142,33 @@
       var(--tw-ring-shadow, 0 0 #0000),
       inset 0 1px 0 hsl(var(--foreground) / 0.06),
       0 0 0 1px hsl(var(--primary) / 0.06),
-      0 0 40px hsl(0 0% 0% / 0.7),
-      0 0 18px hsl(var(--primary) / 0.03),
+      0 0 50px hsl(0 0% 0% / 1),
+      0 0 15px hsl(var(--primary) / 0.06),
       var(--tw-shadow, 0 0 #0000);
+  }
+
+  .dark .hud-path {
+    color: hsl(var(--primary) / 0.8);
+  }
+
+  .dark .font-mono-data.text-muted-foreground {
+    color: hsl(var(--foreground) / 0.9);
+  }
+
+  .dark .bg-background\/30 {
+    background-color: hsl(var(--card) / 0.95);
+  }
+
+  .dark .bg-background\/40 {
+    background-color: hsl(var(--card) / 0.96);
+  }
+
+  .dark .bg-background\/50 {
+    background-color: hsl(var(--card) / 0.97);
+  }
+
+  .dark .bg-background\/60 {
+    background-color: hsl(var(--card) / 0.98);
   }
 
   .recessed-input {
@@ -155,7 +186,7 @@
 
   .industrial-border::before {
     content: "";
-    @apply absolute -top-px -left-px w-3.5 h-3.5;
+    @apply absolute -top-px -left-px w-4 h-4;
     pointer-events: none;
     border-top: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-left: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
@@ -163,7 +194,7 @@
 
   .industrial-border::after {
     content: "";
-    @apply absolute -bottom-px -right-px w-3.5 h-3.5;
+    @apply absolute -bottom-px -right-px w-4 h-4;
     pointer-events: none;
     border-bottom: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-right: 1px solid hsl(var(--primary) / var(--industrial-bracket-opacity));

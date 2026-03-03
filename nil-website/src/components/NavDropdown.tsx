@@ -53,9 +53,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="relative w-[640px] solid-panel industrial-border shadow-[8px_8px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.10)] p-4 overflow-hidden">
-              <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none" />
-              
+            <div className="relative w-[640px] industrial-border border border-border/70 bg-background backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] dark:shadow-[0_0_50px_rgba(0,0,0,1)] p-4 overflow-hidden">
               {/* Grid Layout - 2 Columns */}
               <div className="relative grid grid-cols-2 gap-2">
                 {items.map((item) => {
@@ -77,7 +75,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                         }`}
                     >
                         {/* Icon Box */}
-                        <div className={`mt-0.5 p-2 border border-border/50 bg-background/50 dark:bg-black/30 shrink-0 transition-colors ${
+                        <div className={`mt-0.5 p-2 border border-border/50 bg-background shrink-0 transition-colors ${
                             active ? "border-primary/40 text-primary" : "text-muted-foreground group-hover:text-primary"
                         }`}>
                             {item.icon}

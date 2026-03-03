@@ -1627,7 +1627,7 @@ export function Dashboard() {
             className="glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
           >
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/gateway/tools</div>
+              <div className="text-[10px] font-bold hud-path">/gateway/tools</div>
               <div className="mt-1 font-semibold text-foreground">Advanced tools are hidden</div>
               <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Enable Advanced to access gateway sharding (Mode 1).</div>
             </div>
@@ -1857,10 +1857,9 @@ export function Dashboard() {
       )}
 
       <div className="relative overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]" data-testid="dashboard-utility-bar">
-          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           <div className="relative grid gap-3 p-4 lg:grid-cols-2">
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
+            <div className="text-[10px] font-bold hud-path">/wallet/testnet_funds</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div
@@ -1894,7 +1893,7 @@ export function Dashboard() {
           </div>
 
           <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/account</div>
+            <div className="text-[10px] font-bold hud-path">/wallet/account</div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-mono-data text-[11px] text-foreground" title={address || undefined}>
@@ -1956,7 +1955,7 @@ export function Dashboard() {
                   <div className="w-14 h-14 glass-panel industrial-border flex items-center justify-center mx-auto mb-4">
                     <HardDrive className="w-7 h-7 text-muted-foreground" />
                   </div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/storage_deals</div>
+                  <div className="text-[10px] font-bold hud-path">/mnt/storage_deals</div>
                   <div className="mt-2 text-sm font-semibold text-foreground">No deals yet</div>
                   <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Create a deal to start uploading files.</div>
                 </div>
@@ -1978,7 +1977,7 @@ export function Dashboard() {
                       <HardDrive className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/deal_explorer</div>
+                      <div className="text-[10px] font-bold hud-path">/mnt/deal_explorer</div>
                       <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
                         {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
                       </div>
@@ -2007,7 +2006,7 @@ export function Dashboard() {
           <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
           <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground dark:text-foreground/90">/registry/deals</div>
+              <div className="text-[10px] font-bold hud-path">/registry/deals</div>
               <p className="text-[11px] font-mono-data text-muted-foreground mt-1">
                 Select a deal to manage files (upload, list, download).
               </p>
@@ -2114,7 +2113,7 @@ export function Dashboard() {
           <div ref={allocRef} className="border-t border-border/60 bg-background/30 px-6 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/alloc/create_deal</div>
+                <div className="text-[10px] font-bold hud-path">/alloc/create_deal</div>
                 <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
                   Allocate a new deal on NilChain. Deals act like buckets for files.
                 </p>
@@ -2438,14 +2437,14 @@ export function Dashboard() {
 
       {showAdvanced ? (
         <div className="mt-6 overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+          <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold hud-path">
             /net/routing --advanced
           </div>
           <div className="p-6 space-y-6">
           {proofs.length > 0 && (
             <div className="overflow-hidden glass-panel industrial-border">
               <div className="px-6 py-3 border-b border-border/60 bg-background/40 flex items-center justify-between">
-                <span className="text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">/obs/liveness</span>
+                <span className="text-[10px] font-bold hud-path">/obs/liveness</span>
                 {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">Syncing proofs…</span>}
               </div>
               <table className="min-w-full divide-y divide-border/40 text-xs">
@@ -2492,7 +2491,7 @@ export function Dashboard() {
           )}
 
           <div className="overflow-hidden glass-panel industrial-border">
-            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+            <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold hud-path">
               /registry/providers
             </div>
             <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="providers-table">
@@ -2563,7 +2562,7 @@ export function Dashboard() {
 
           {!showAdvanced ? (
             <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-              <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+              <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold hud-path">
                 /retrieval/economics --advanced
               </div>
               <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
@@ -2604,7 +2603,7 @@ export function Dashboard() {
           ) : (
             <>
               <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold hud-path">
                   /retrieval/fees gamma-4
                 </div>
                 <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
@@ -2630,7 +2629,7 @@ export function Dashboard() {
               </div>
 
               <div className="overflow-hidden glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">
+                <div className="px-6 py-3 border-b border-border/60 bg-background/40 text-[10px] font-bold hud-path">
                   /retrieval/sessions
                 </div>
                 <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="retrieval-sessions-table">
