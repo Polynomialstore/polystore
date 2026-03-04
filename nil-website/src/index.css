@@ -31,29 +31,33 @@
   }
  
   .dark {
-    /* --- Dark Mode: Tactical Console --- */
-    --background: 240 10% 2%; 
-    --foreground: 0 0% 98%;
+    /* --- Dark Mode: Blade Runner / City at Night --- */
+    --background: 240 15% 4%; 
+    --foreground: 180 20% 90%;
     --card: 240 10% 6%; 
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 6%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 20.5 90.2% 48.2%; 
-    --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 240 10% 10%; 
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 10% 10%;
-    --muted-foreground: 240 5% 74%;
-    --accent: 142.1 70.6% 45.3%; 
-    --accent-foreground: 144.1 61.4% 10.5%;
-    --destructive: 0 84.2% 60.2%;
+    --card-foreground: 180 20% 98%;
+    --popover: 240 10% 8%;
+    --popover-foreground: 180 20% 98%;
+    
+    /* Neon Palette */
+    --primary: 190 100% 50%; /* Cyber Cyan */
+    --primary-foreground: 190 100% 10%;
+    --secondary: 240 10% 12%; 
+    --secondary-foreground: 180 10% 90%;
+    --muted: 240 10% 12%;
+    --muted-foreground: 240 5% 60%;
+    --accent: 300 100% 60%; /* Neon Magenta */
+    --accent-foreground: 300 100% 10%;
+    --destructive: 0 100% 60%; /* Flare Red */
     --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 22%;
-    --input: 240 6% 18%;
-    --ring: 20.5 90.2% 48.2%;
-    --grid-color: hsl(var(--foreground) / 0.03); 
-    --scan-color: hsl(var(--primary) / 0.04);
-    --industrial-bracket-opacity: 0.95;
+    
+    --border: 240 6% 15%;
+    --input: 240 6% 12%;
+    --ring: 190 100% 50%;
+    
+    --grid-color: hsl(190 100% 50% / 0.04); 
+    --scan-color: hsl(190 100% 50% / 0.08);
+    --industrial-bracket-opacity: 1;
   }
 }
  
@@ -65,11 +69,16 @@
     background-image: 
       linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 20px 20px;
+    background-size: 30px 30px;
     background-attachment: fixed;
   }
   
-  .dark body { background-image: none; }
+  .dark body { 
+    background-image: 
+      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.05), transparent 80%),
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  }
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
@@ -79,38 +88,30 @@
   position: absolute;
   top: -50%; left: 0; width: 100%; height: 50%;
   background: linear-gradient(to bottom, transparent, var(--scan-color), transparent);
-  animation: scan 10s linear infinite;
+  animation: scan 12s linear infinite;
 }
 
 @keyframes scan { 0% { top: -50%; } 100% { top: 100%; } }
 
 @layer utilities {
-  /* THE SLAB PRINCIPLE: Defined by Shadow and Brackets, NOT Borders */
-  .glass-panel, .solid-panel {
-    @apply relative;
-    background-color: hsl(var(--card) / 1); 
-    box-shadow: none;
-    background-image: none;
+  .glass-panel {
+    @apply relative transition-all duration-300;
+    background-color: hsl(var(--card) / 0.95);
+    backdrop-filter: blur(8px);
   }
 
-  .solid-slab {
-    @apply relative;
-    background-color: hsl(var(--card) / 1);
-    box-shadow: none;
-  }
-
-  .dark .glass-panel, .dark .solid-panel, .dark .solid-slab {
-    @apply border;
-    background-color: hsl(var(--card) / 1);
-    border-color: hsl(var(--border));
-    border-top-color: hsl(var(--primary) / 0.2);
-    box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  .dark .glass-panel {
+    @apply border-t border-l border-white/5;
+    background-color: hsl(var(--card) / 0.8);
+    box-shadow: 
+      -1px -1px 0px 0px hsl(var(--primary) / 0.1),
+      10px 10px 30px 0px rgba(0, 0, 0, 0.5);
   }
 
   .industrial-border { @apply relative; }
   .industrial-border::before, .industrial-border::after {
     content: "";
-    @apply absolute pointer-events-none z-[20] w-4 h-4;
+    @apply absolute pointer-events-none z-[20] w-6 h-6 transition-all duration-500;
   }
   .industrial-border::before {
     top: -1px; left: -1px;
@@ -122,6 +123,15 @@
     border-bottom: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
     border-right: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
   }
+
+  .dark .industrial-border::before, .dark .industrial-border::after {
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
+    filter: drop-shadow(0 0 2px hsl(var(--primary) / 0.8));
+  }
   
+  .pulse-status {
+    @apply animate-pulse;
+    box-shadow: 0 0 8px currentColor;
+  }
   .border-primary-frame { @apply border-2 border-border; }
 }
