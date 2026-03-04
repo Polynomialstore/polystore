@@ -24,7 +24,7 @@
     --border: 214 32% 88%; /* Frame borders only */
     --input: 214 32% 85%;
     --ring: 20.5 90% 45%;
-    --grid-color: hsl(var(--foreground) / 0.08); 
+    --grid-color: hsl(var(--foreground) / 0.05); 
     --scan-color: hsl(var(--primary) / 0.06); 
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
@@ -59,39 +59,43 @@
     --scan-color: hsl(190 100% 50% / 0.08);
     --industrial-bracket-opacity: 1;
   }
-}
- 
-@layer base {
+
   * { @apply border-border; }
+
   body {
     @apply bg-background text-foreground;
     font-family: "Montserrat", sans-serif;
     background-image: 
+      /* The Global Scan Line (Moving) - Broad Technical Wash */
+      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.10) 50%, transparent),
       linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 30px 30px;
+    background-size: 100% 1000px, 30px 30px, 30px 30px;
+    background-repeat: repeat-y, repeat, repeat;
     background-attachment: fixed;
+    animation: background-scan 20s linear infinite;
   }
   
   .dark body { 
     background-image: 
-      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.05), transparent 80%),
-      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.08), transparent 85%),
+      /* The Global Scan Line (Moving) - Broad Technical Wash */
+      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.04) 50%, transparent),
+      /* Grid Lines */
+      linear-gradient(to right, hsl(var(--primary) / 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.15) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 800px, 30px 30px, 30px 30px;
+    background-repeat: no-repeat, repeat-y, repeat, repeat;
+    animation: background-scan 20s linear infinite;
   }
+
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
-.scan-overlay { @apply absolute inset-0 pointer-events-none overflow-hidden z-[15]; }
-.scan-overlay::after {
-  content: "";
-  position: absolute;
-  top: -50%; left: 0; width: 100%; height: 50%;
-  background: linear-gradient(to bottom, transparent, var(--scan-color), transparent);
-  animation: scan 12s linear infinite;
+@keyframes background-scan {
+  0% { background-position: center top -1000px, center top -800px, 0 0, 0 0; }
+  100% { background-position: center top 100vh, center top 100vh, 0 0, 0 0; }
 }
-
-@keyframes scan { 0% { top: -50%; } 100% { top: 100%; } }
 
 @layer utilities {
   .glass-panel {
@@ -103,9 +107,7 @@
   .dark .glass-panel {
     @apply border-t border-l border-white/5;
     background-color: hsl(var(--card) / 0.8);
-    box-shadow: 
-      -1px -1px 0px 0px hsl(var(--primary) / 0.1),
-      10px 10px 30px 0px rgba(0, 0, 0, 0.5);
+    box-shadow: none; /* NO SHADOWS - SLAB PRINCIPLE */
   }
 
   .industrial-border { @apply relative; }
@@ -125,8 +127,7 @@
   }
 
   .dark .industrial-border::before, .dark .industrial-border::after {
-    box-shadow: 0 0 10px hsl(var(--primary) / 0.5);
-    filter: drop-shadow(0 0 2px hsl(var(--primary) / 0.8));
+    filter: drop-shadow(0 0 4px hsl(var(--primary) / 0.6));
   }
   
   .pulse-status {

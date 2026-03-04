@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, ExternalLink, Copy } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, ExternalLink, Copy, AlertTriangle } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -63,7 +63,7 @@ type RecentFileEntry = {
 }
 
 const RECENT_FILES_KEY = 'nil_recent_files_v1'
-const MAX_RECENT_FILES = 6
+const MAX_RECENT_FILES = 3
 const RETRIEVAL_SESSIONS_POLL_MS = 120_000
 const RETRIEVAL_SESSIONS_HIDDEN_POLL_MS = 600_000
 const RETRIEVAL_PARAMS_POLL_MS = 600_000
@@ -133,6 +133,7 @@ export function Dashboard() {
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showCreateDeal, setShowCreateDeal] = useState(false)
   const [compressUploads, setCompressUploads] = useState(true)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { refetch: refetchEvm } = useBalance({
@@ -1502,6 +1503,8 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
+  const recentActivity = recentFiles
+
   // Content downloads are tracked via Recent Files and Deal Explorer download actions.
 
   useEffect(() => {
@@ -1548,75 +1551,6 @@ export function Dashboard() {
               <Database className="h-3.5 w-3.5 text-muted-foreground" />
               {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
             </button>
-        </div>
-      ) : null}
-
-      {targetDealId ? (
-        <div className="glass-panel industrial-border p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Storage layout (MDUs)
-              </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
-                Education lives on{" "}
-                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
-                  Technology
-                </Link>
-                .
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setDealDetailRequestedTab('manifest')
-                  setDealDetailRequestedTabNonce((n) => n + 1)
-                  setPendingScrollTarget('deal')
-                }}
-                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                title="Jump to Deal Explorer → Manifest & MDUs"
-              >
-                Inspect MDUs
-                <ArrowDownRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-3 text-xs">
-            <div className="glass-panel industrial-border px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Manifest root</div>
-              <div className="mt-1 font-mono-data text-[11px] text-foreground truncate" title={contentManifestRoot || undefined}>
-                {contentManifestRoot ? `${contentManifestRoot.slice(0, 18)}…` : 'Empty container'}
-              </div>
-            </div>
-
-            <div className="glass-panel industrial-border px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Slab MDUs</div>
-              <div className="mt-1 font-mono-data text-[11px] text-foreground">
-                {contentSlab ? contentSlab.total_mdus : '—'}
-              </div>
-              <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                {contentSlab ? `1 meta • ${contentSlab.witness_mdus} witness • ${contentSlab.user_mdus} user` : 'Fetch in Deal Explorer to derive.'}
-              </div>
-            </div>
-
-            <div className="glass-panel industrial-border px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Mode</div>
-              <div className="mt-1 text-[11px] text-foreground font-semibold font-mono-data">
-                {isTargetDealMode2
-                  ? `Mode 2 RS(${targetDealService.rsK ?? appConfig.defaultRsK},${targetDealService.rsM ?? appConfig.defaultRsM})`
-                  : showAdvanced ? 'Mode 1 (gateway)' : 'Mode 2 (auto)'}
-              </div>
-              <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                {(() => {
-                  const k = targetDealService.rsK ?? appConfig.defaultRsK
-                  const mdu = contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024
-                  return isTargetDealMode2 && k ? `per-slot shard: ${formatBytes(Math.floor(mdu / k))}` : '—'
-                })()}
-              </div>
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -1824,141 +1758,264 @@ export function Dashboard() {
         </div>
       )}
 
-      {statusMsg && (
-        <div className={`relative overflow-hidden glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data ${
-          statusTone === 'error'
-            ? 'text-destructive ring-1 ring-destructive/40'
-            : statusTone === 'success'
-            ? 'text-accent ring-1 ring-accent/40'
-            : 'text-muted-foreground ring-1 ring-border/40'
-        }`}>
-          <div className="absolute inset-0 pointer-events-none animate-scan opacity-15" />
-          {statusMsg}
-        </div>
-      )}
-
-      {walletReconnectHint && (
-        <div className="glass-panel industrial-border px-4 py-3 ring-1 ring-primary/25 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">wallet_access</div>
-            <div className="mt-1 font-semibold text-foreground">Wallet access needs refresh</div>
-            <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">
-              If you switched accounts in MetaMask, reconnect and approve access for the active account.
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void requestWalletReconnect()}
-            className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
-          >
-            Reconnect Wallet
-          </button>
-        </div>
-      )}
-
-      <div className="relative overflow-hidden glass-panel industrial-border" data-testid="dashboard-utility-bar">
-          <div className="scan-overlay" />
-          <div className="relative grid gap-3 p-4 lg:grid-cols-2">
-          <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/testnet_funds</div>
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div
-                  className="truncate font-mono-data text-[11px] text-foreground"
-                  data-testid="cosmos-identity"
-                  title={nilAddress || undefined}
-                >
-                  {nilAddress ? `${nilAddress.slice(0, 12)}…${nilAddress.slice(-6)}` : '—'}
+      {/* TOP HEADER PANEL */}
+      <div className="glass-panel industrial-border shadow-sm overflow-hidden mb-6">
+        <div className="relative flex flex-wrap items-center justify-between gap-6 p-4 lg:flex-nowrap border-b border-border/10">
+          <div className="flex flex-wrap items-center gap-8">
+            {/* Identity Row */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-6 h-6 border border-border/30 bg-background/40 text-muted-foreground/60">
+                  <Database className="w-3.5 h-3.5" />
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
-                  Stake:{' '}
-                  <span className="text-foreground" data-testid="cosmos-stake-balance">
-                    {bankBalances.stake || '—'}
-                  </span>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none">NIL_PROTOCOL</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="font-mono-data text-[11px] text-foreground font-bold tracking-tight" data-testid="cosmos-identity">
+                      {nilAddress ? `${nilAddress.slice(0, 10)}…${nilAddress.slice(-4)}` : '—'}
+                    </div>
+                    <div className="text-[10px] text-accent font-mono-data font-bold bg-accent/10 px-1.5 py-0.5 border border-accent/20">
+                      {bankBalances.stake || '0'} NIL
+                    </div>
+                  </div>
                 </div>
               </div>
-              {appConfig.faucetEnabled ? (
-                <button
-                  data-testid="faucet-request"
-                  onClick={handleRequestFunds}
-                  disabled={!address || faucetBusy}
-                  className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  <Coins className="h-3.5 w-3.5" />
-                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
-                </button>
-              ) : (
-                <span className="text-[11px] text-muted-foreground">Faucet off</span>
-              )}
-            </div>
-          </div>
 
-          <div className="glass-panel industrial-border px-4 py-3">
-            <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/wallet/account</div>
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate font-mono-data text-[11px] text-foreground" title={address || undefined}>
-                  {walletAddressShort}
+              <div className="h-8 w-[1px] bg-border/20" />
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-6 h-6 border border-border/30 bg-background/40 text-muted-foreground/60">
+                  <Wallet className="w-3.5 h-3.5" />
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
-                  {accountPermissionMismatch
-                    ? 'Wallet access required'
-                    : isWrongNetwork
-                      ? `Wrong chain (${activeChainId})`
-                      : `Chain ${activeChainId}`}
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none">EVM_IDENTITY</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="font-mono-data text-[11px] text-foreground font-bold tracking-tight" title={address || undefined}>
+                      {walletAddressShort}
+                    </div>
+                    <div className={`text-[10px] font-mono-data font-bold px-1.5 py-0.5 border ${
+                      accountPermissionMismatch || isWrongNetwork 
+                        ? 'text-destructive bg-destructive/10 border-destructive/20' 
+                        : 'text-muted-foreground bg-background/40 border-border/20'
+                    }`}>
+                      {accountPermissionMismatch ? 'PERMISSION_ERR' : isWrongNetwork ? 'WRONG_NETWORK' : `CHAIN_${activeChainId}`}
+                    </div>
+                  </div>
                 </div>
               </div>
-              {walletReconnectHint ? (
-                <button
-                  type="button"
-                  onClick={() => void requestWalletReconnect()}
-                  className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
-                >
-                  <Wallet className="h-3.5 w-3.5" />
-                  Reconnect
-                </button>
-              ) : isWrongNetwork ? (
-                <button
-                  type="button"
-                  onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-                  className="inline-flex items-center gap-2 border border-border bg-background/80 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-secondary"
-                >
-                  <Wallet className="h-3.5 w-3.5" />
-                  Switch
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent">
-                  <span className="h-2 w-2 rounded-none bg-accent pulse-status" />
-                  Ready
-                </span>
-              )}
             </div>
           </div>
 
+          <div className="flex items-center gap-3 ml-auto shrink-0">
+            {appConfig.faucetEnabled && (
+              <button
+                data-testid="faucet-request"
+                onClick={handleRequestFunds}
+                disabled={!address || faucetBusy}
+                className="inline-flex items-center gap-2 border border-primary bg-primary/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-all hover:bg-primary/10 disabled:opacity-50"
+              >
+                <Coins className="h-3.5 w-3.5" />
+                {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
+              </button>
+            )}
+
+            {walletReconnectHint ? (
+              <button
+                type="button"
+                onClick={() => void requestWalletReconnect()}
+                className="inline-flex items-center gap-2 border border-primary bg-primary/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                Reconnect
+              </button>
+            ) : isWrongNetwork ? (
+              <button
+                type="button"
+                onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
+                className="inline-flex items-center gap-2 border border-destructive bg-destructive/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-destructive hover:bg-destructive/10"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Fix Network
+              </button>
+            ) : (
+               <div className="inline-flex items-center gap-2 px-3 py-2 border border-accent/30 bg-accent/5 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                System Ready
+              </div>
+            )}
           </div>
-        {faucetTx ? (
-          <div className="border-t border-border/80 px-4 py-2 text-[11px] text-muted-foreground">
-            Faucet tx: <span className="font-mono-data text-foreground">{faucetTx.slice(0, 10)}…</span>
-          </div>
-        ) : null}
+        </div>
+        <StatusBar noBorder />
       </div>
 
-      <StatusBar />
+      <div className="grid gap-10 lg:grid-cols-[360px_minmax(0,1fr)]">
+        {/* Sidebar: Registry + Recent Files */}
+        <div className="min-w-0 order-1 lg:order-1 space-y-6">
+          {/* Registry Panel */}
+          <div className="overflow-hidden bg-card glass-panel industrial-border shadow-sm">
+            <div className="px-6 py-4 border-b border-border/60 bg-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">/REGISTRY/DEALS</div>
+                <p className="text-[10px] font-mono-data text-muted-foreground mt-2 uppercase tracking-wider">
+                  Select container to manage files.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateDeal(!showCreateDeal)}
+                  className={`inline-flex items-center justify-center border border-primary px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
+                    showCreateDeal
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-transparent text-primary hover:bg-primary/5'
+                  }`}
+                >
+                  + New Deal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshSummary()}
+                  title="Refresh deals"
+                  className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
 
-      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
-        {/* Workspace panel intentionally removed (Deal Explorer + FileSharder cover this). */}
+            {showCreateDeal && (
+              <div className="p-6 border-b border-border/40 bg-secondary/5 space-y-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/ALLOC/CREATE_DEAL</div>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-bold uppercase text-muted-foreground">Duration</label>
+                    <select
+                      value={durationPreset}
+                      onChange={(e) => setDurationFromPreset(e.target.value)}
+                      className="recessed-input px-3 py-2 text-xs"
+                    >
+                      {DURATION_PRESETS.map((preset) => (
+                        <option key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground">Escrow</label>
+                      <input
+                        type="number"
+                        value={initialEscrow}
+                        onChange={(e) => setInitialEscrow(e.target.value)}
+                        className="recessed-input px-3 py-2 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground">Max Spend</label>
+                      <input
+                        type="number"
+                        value={maxMonthlySpend}
+                        onChange={(e) => setMaxMonthlySpend(e.target.value)}
+                        className="recessed-input px-3 py-2 text-xs"
+                      />
+                    </div>
+                  </div>
 
+                  <div className="p-3 border border-primary/20 bg-primary/5 text-[10px]">
+                    <span className="font-bold text-primary uppercase">Redundancy:</span>
+                    <span className="ml-2 text-muted-foreground">Mode 2 (default RS {defaultRsLabel}).</span>
+                  </div>
+
+                  <button
+                    onClick={handleCreateDealClick}
+                    disabled={dealLoading || !initialEscrow}
+                    className="w-full bg-primary py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {dealLoading ? 'Allocating...' : 'Create Deal Container'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="text-center py-10">
+                <div className="animate-spin rounded-none h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+                <p className="text-sm text-muted-foreground uppercase tracking-widest font-black">Syncing...</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/10">
+                {ownedDeals.length === 0 ? (
+                  <div className="px-6 py-8 text-center text-[10px] text-muted-foreground italic uppercase tracking-widest opacity-40">
+                    No deals detected.
+                  </div>
+                ) : (
+                  ownedDeals.map((deal) => {
+                    const isSelected = String(deal.id) === String(targetDealId || '')
+                    const sizeNum = Number(deal.size)
+                    const sizeLabel = formatBytes(sizeNum > 0 ? sizeNum : 0)
+                    return (
+                      <button
+                        key={deal.id}
+                        onClick={() => setTargetDealId(String(deal.id))}
+                        className={`w-full px-6 py-4 text-left transition-colors flex items-center justify-between group ${
+                          isSelected ? 'bg-primary/5' : 'hover:bg-secondary/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="font-mono-data text-xs font-black text-foreground">#{deal.id}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${
+                            deal.cid ? 'text-accent border-accent/20 bg-accent/5' : 'text-muted-foreground border-border/20 bg-background/40'
+                          }`}>
+                            {deal.cid ? 'ACTIVE' : 'EMPTY'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono-data">{sizeLabel}</span>
+                        </div>
+                        {isSelected && <div className="h-1.5 w-1.5 bg-primary" />}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Files Panel */}
+          <div className="glass-panel industrial-border shadow-sm overflow-hidden">
+            <div className="px-6 py-3 border-b border-border/60 bg-card">
+              <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">RECENT_FILES</div>
+              <p className="text-[9px] text-muted-foreground mt-1 uppercase tracking-widest">Last 3 tracked events</p>
+            </div>
+            <div className="divide-y divide-border/10">
+              {recentActivity.slice(0, 3).map((act, i) => (
+                <div key={`${act.dealId}-${act.filePath}-${i}`} className="px-6 py-3 flex items-center justify-between group hover:bg-secondary/20 transition-colors">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-bold text-foreground">{act.filePath}</div>
+                    <div className="text-[9px] text-muted-foreground font-mono-data mt-1 uppercase">Deal #{act.dealId}</div>
+                  </div>
+                  <div className={`h-1.5 w-1.5 ${
+                    act.status === 'success' ? 'bg-accent' : act.status === 'failed' ? 'bg-destructive' : 'bg-primary animate-pulse'
+                  }`} />
+                </div>
+              ))}
+              {recentActivity.length === 0 && (
+                <div className="px-6 py-8 text-center text-[10px] text-muted-foreground italic uppercase tracking-widest opacity-40">
+                  No recent activity.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Workspace: Deal Detail + Advanced */}
+        <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="deal-detail">
-                <div className="p-8 text-center">
-                  <div className="w-14 h-14 glass-panel industrial-border flex items-center justify-center mx-auto mb-4">
-                    <HardDrive className="w-7 h-7 text-muted-foreground" />
-                  </div>
-                  <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/storage_deals</div>
-                  <div className="mt-2 text-sm font-semibold text-foreground">No deals yet</div>
-                  <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Create a deal to start uploading files.</div>
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="p-12 text-center opacity-40">
+                  <Database className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Ready for protocol initialization.</p>
                 </div>
               </div>
             ) : targetDeal ? (
@@ -1971,748 +2028,87 @@ export function Dashboard() {
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]" data-testid="deal-detail">
-                <div className="flex items-center justify-between p-5 border-b border-border/60 bg-card">
-                  <div className="flex items-center gap-3">
-                    <div className="glass-panel industrial-border p-2">
-                      <HardDrive className="w-5 h-5 text-primary" />
+              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+                <div className="flex items-center justify-between p-6 border-b border-border/60 bg-card">
+                  <div className="flex items-center gap-4">
+                    <div className="glass-panel industrial-border p-2.5 bg-background/40">
+                      <HardDrive className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/mnt/deal_explorer</div>
-                      <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">
-                        {targetDealId ? `Deal #${targetDealId}` : 'Select a deal'}
-                      </div>
-                      <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">
-                        Upload, list, and download files inside a deal.
-                      </div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">/STORAGE/EXPLORER</div>
+                      <div className="text-xl font-bold text-foreground mt-1">Select a deal</div>
                     </div>
                   </div>
                 </div>
-                <div className="border-b border-border">{dealExplorerTopPanel}</div>
-                <div className="p-5 text-[11px] font-mono-data text-muted-foreground">
-                  {targetDealId ? 'Loading deal details…' : 'Select a deal from the left to view files.'}
+                <div className="p-12 text-center opacity-40">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Awaiting synchronization.</p>
                 </div>
               </div>
             )}
           </div>
-        </div>
 
-        <div className="min-w-0 order-1 lg:order-1 space-y-6">
-          {appConfig.faucetEnabled && !hasBuildFaucetAuthToken() ? (
-            <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] p-4">
-              <FaucetAuthTokenInput />
-            </div>
-          ) : null}
-
-          <div className="overflow-hidden bg-card glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/registry/deals</div>
-              <p className="text-[11px] font-mono-data text-muted-foreground mt-1">
-                Select a deal to manage files (upload, list, download).
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                data-testid="workspace-advanced-toggle"
-                className={`inline-flex items-center justify-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
-                  showAdvanced
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-background/60 text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                Advanced
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRefreshSummary()}
-                title="Refresh deals"
-                className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
-
-            {loading ? (
-              <div className="text-center py-10">
-                <div className="animate-spin rounded-none h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
-                <p className="text-sm text-muted-foreground">Syncing with NilChain...</p>
-              </div>
-            ) : ownedDeals.length === 0 ? null : (
-              <div className="p-2">
-                <div className="space-y-1">
-                  {ownedDeals.map((deal) => {
-                    const isSelected = String(deal.id) === String(targetDealId || '')
-                    const hint = parseServiceHint(deal.service_hint)
-                    const retrievalCount = retrievalCountsByDeal[deal.id] ?? 0
-                    const sizeNum = Number(deal.size)
-                    const sizeLabel =
-                      Number.isFinite(sizeNum) && sizeNum > 0 ? formatBytes(sizeNum) : '0 B'
-                    const endBlockNum = Number(deal.end_block)
-                    const dealExpired =
-                      rpcHeight !== null && Number.isFinite(endBlockNum) ? rpcHeight > endBlockNum : false
-                    return (
-                      <button
-                        key={deal.id}
-                        type="button"
-                        data-testid={`deal-row-${deal.id}`}
-                        onClick={() => {
-                          setTargetDealId(String(deal.id ?? ''))
-                          if (!showAdvanced && activeTab === 'content') {
-                            setActiveTab('mdu')
-                          }
-                          setPendingScrollTarget('workspace')
-                        }}
-                        className={`w-full border px-3 py-3 text-left transition-colors ${
-                          isSelected
-                            ? 'border-primary/40 bg-primary/10 ring-1 ring-primary/20'
-                            : 'border-border/60 bg-background/60 hover:bg-secondary'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-foreground">Deal #{deal.id}</div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
-                                {deal.cid ? 'Active' : 'Empty'}
-                              </span>
-                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
-                                {hint.mode === 'mode2' ? 'Mode 2' : 'Mode 1'}
-                              </span>
-                              <span className="border border-border/60 bg-background/60 px-2 py-0.5">
-                                {sizeLabel}
-                              </span>
-                              {dealExpired && (
-                                <span className="border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
-                                  Expired
+          {showAdvanced && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* Advanced Retrieval Sessions Table */}
+              <div className="glass-panel industrial-border shadow-sm overflow-hidden">
+                <div className="px-6 py-3 border-b border-border/60 bg-card text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">
+                  /RETRIEVAL/SESSIONS --ACTIVE
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border/40 text-xs">
+                    <thead className="bg-card">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">Session</th>
+                        <th className="px-4 py-2 text-right text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">Deal</th>
+                        <th className="px-4 py-2 text-left text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">Status</th>
+                        <th className="px-4 py-2 text-right text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">Transfer</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {retrievalSessions.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-8 text-center text-[10px] text-muted-foreground italic uppercase tracking-widest opacity-40">
+                            No active retrieval sessions.
+                          </td>
+                        </tr>
+                      ) : (
+                        retrievalSessions.map((raw) => {
+                          const s = raw as Record<string, unknown>
+                          const status = formatSessionStatus(s['status'])
+                          const totalBytes = formatBytesU64(s['total_bytes'])
+                          return (
+                            <tr key={String(s['session_id'])} className="hover:bg-secondary/40 transition-colors">
+                              <td className="px-4 py-3 font-mono-data text-[10px] text-primary font-bold">
+                                {String(s['session_id']).slice(0, 12)}...
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono-data">{String(s['deal_id'])}</td>
+                              <td className="px-4 py-3">
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 border border-border/40 bg-background/40 uppercase">
+                                  {status}
                                 </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                            <span className="text-foreground">{retrievalCount}</span>
-                            <span className="ml-1 hidden sm:inline">retrievals</span>
-                          </div>
-                        </div>
-                        <div
-                          className="mt-2 truncate font-mono-data text-[10px] text-muted-foreground dark:text-foreground"
-                          title={deal.cid || ''}
-                          data-testid={`deal-manifest-${deal.id}`}
-                        >
-                          {deal.cid ? `${deal.cid.slice(0, 22)}…` : 'Manifest: —'}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-          <div ref={allocRef} className="border-t border-border/60 bg-card px-6 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">/alloc/create_deal</div>
-                <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
-                  Allocate a new deal on NilChain. Deals act like buckets for files.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3 text-[11px]">
-              <label className="space-y-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Duration</span>
-                <select
-                  value={durationPreset}
-                  onChange={(e) => {
-                    setDurationFromPreset(e.target.value)
-                  }}
-                  data-testid="alloc-duration"
-                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                >
-                  {DURATION_PRESETS.map((preset) => (
-                    <option key={preset.value} value={preset.value}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Duration (seconds)</span>
-                <input
-                  value={duration ?? ''}
-                  onChange={(e) => setDuration(e.target.value ?? '')}
-                  readOnly={durationPreset !== 'custom'}
-                  data-testid="alloc-duration-seconds"
-                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Initial escrow</span>
-                <input
-                  defaultValue={initialEscrow ?? ''}
-                  onChange={(e) => setInitialEscrow(e.target.value ?? '')}
-                  data-testid="alloc-initial-escrow"
-                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Max monthly spend</span>
-                <input
-                  defaultValue={maxMonthlySpend ?? ''}
-                  onChange={(e) => setMaxMonthlySpend(e.target.value ?? '')}
-                  data-testid="alloc-max-monthly-spend"
-                  className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                />
-              </label>
-
-              {!showAdvanced ? (
-                <div className="glass-panel industrial-border px-3 py-2 text-[11px] text-muted-foreground space-y-1">
-                  <div>
-                    <span className="font-semibold text-foreground">Redundancy:</span> Mode 2 (default RS {defaultRsLabel}, recommended)
-                    <span className="ml-2 text-[11px] text-muted-foreground">
-                      Turn on Advanced to override K/M.
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Slots required:{' '}
-                    <span className="font-mono-data text-foreground">{defaultMode2Slots}</span>
-                    {' '}• Providers available:{' '}
-                    <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
-                    {autoMode2ProviderError && (
-                      <div className="mt-1 text-[11px] font-mono-data text-destructive">{autoMode2ProviderError}</div>
-                    )}
-                    {autoMode2ProviderError && (
-                      <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
-                            start chain + faucet + demo providers.
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                              className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                            >
-                              <Copy className="h-3 w-3" /> Copy
-                            </button>
-                            <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
-                              SP onboarding <ExternalLink className="h-3 w-3" />
-                            </Link>
-                          </div>
-                        </div>
-                        <div className="mt-2 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <label className="space-y-1">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Placement profile</span>
-                    <select
-                      value={placementProfile}
-                      onChange={(e) => setPlacementProfile((e.target.value as 'auto' | 'custom') || 'auto')}
-                      data-testid="alloc-placement-profile"
-                      className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                    >
-                      <option value="auto">Mode 2 (Default {defaultRsLabel}, recommended)</option>
-                      <option value="custom">Mode 2 (Custom RS)</option>
-                    </select>
-                  </label>
-
-                  {placementProfile === 'custom' && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="space-y-1">
-                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">RS K (Data)</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={64}
-                          defaultValue={rsK ?? ''}
-                          onChange={(e) => setRsK(e.target.value ?? '')}
-                          data-testid="alloc-rs-k"
-                          className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">RS M (Parity)</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={64}
-                          defaultValue={rsM ?? ''}
-                          onChange={(e) => setRsM(e.target.value ?? '')}
-                          data-testid="alloc-rs-m"
-                          className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30"
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  {placementProfile === 'custom' && (
-                    <div className="text-[11px] text-muted-foreground">
-                      Slots required:{' '}
-                      <span className="font-mono-data text-foreground">{mode2Config.slots ?? '—'}</span>
-                      {' '}• Providers available:{' '}
-                      <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
-                      {mode2Config.error && (
-                        <div className="mt-1 text-[11px] font-mono-data text-destructive">{mode2Config.error}</div>
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono-data">{totalBytes}</td>
+                            </tr>
+                          )
+                        })
                       )}
-                      {mode2Config.error && (
-                        <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
-                              start chain + faucet + demo providers.
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                              >
-                                <Copy className="h-3 w-3" /> Copy
-                              </button>
-                              <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
-                                SP onboarding <ExternalLink className="h-3 w-3" />
-                              </Link>
-                            </div>
-                          </div>
-                          <div className="mt-1 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {placementProfile === 'auto' && (
-                    <div className="text-[11px] text-muted-foreground">
-                      Slots required:{' '}
-                      <span className="font-mono-data text-foreground">{defaultMode2Slots}</span>
-                      {' '}• Providers available:{' '}
-                      <span className="font-mono-data text-foreground">{providerCount || '—'}</span>
-                      {autoMode2ProviderError && (
-                        <div className="mt-1 text-[11px] font-mono-data text-destructive">{autoMode2ProviderError}</div>
-                      )}
-                      {autoMode2ProviderError && (
-                        <div className="mt-2 glass-panel industrial-border p-2 text-[11px] text-muted-foreground">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <span className="font-semibold text-foreground">Local demo quickstart:</span>{' '}
-                              start chain + faucet + demo providers.
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void copyText(LOCAL_DEMO_STACK_CMD)}
-                                className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                              >
-                                <Copy className="h-3 w-3" /> Copy
-                              </button>
-                              <Link to="/sp-onboarding" className="inline-flex items-center gap-1 text-primary hover:underline">
-                                SP onboarding <ExternalLink className="h-3 w-3" />
-                              </Link>
-                            </div>
-                          </div>
-                          <div className="mt-2 font-mono-data text-foreground">{LOCAL_DEMO_STACK_CMD}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-start justify-between gap-3 pt-1">
-                <div className="text-xs text-muted-foreground">
-                  {createTx && (
-                    <div className="text-accent flex items-center gap-2 font-mono-data text-[10px] uppercase tracking-[0.2em]">
-                      <CheckCircle2 className="w-3 h-3" /> Alloc Tx: {createTx.slice(0, 10)}...
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <button
-                    onClick={
-                      accountPermissionMismatch
-                        ? () => void requestWalletReconnect()
-                        : isWrongNetwork
-                          ? () => void handleSwitchNetwork({ forceAdd: genesisMismatch })
-                          : handleCreateDealClick
-                    }
-                    disabled={dealLoading || Boolean(createDealProviderError)}
-                    data-testid="alloc-submit"
-                    className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] disabled:opacity-50 transition-all"
-                  >
-                    {dealLoading
-                      ? 'Creating...'
-                      : accountPermissionMismatch
-                        ? 'Reconnect wallet'
-                        : isWrongNetwork
-                        ? 'Switch network'
-                        : !walletReady
-                            ? 'Connect wallet'
-                            : 'Create deal'}
-                  </button>
-                  <div
-                    data-testid="alloc-provider-guard"
-                    className={createDealProviderError ? 'text-[11px] font-mono-data text-destructive text-right' : 'text-[11px] font-mono-data text-muted-foreground text-right'}
-                  >
-                    Need {createDealRequiredSlots ?? '—'} providers • Found {providerCount || 0}
-                    {createDealProviderError ? ` • ${createDealProviderError}` : ''}
-                  </div>
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-none border border-border bg-card shadow-sm">
-          <div className="px-4 py-3 border-b border-border bg-card flex items-center justify-between">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Files</div>
-            <div className="text-[10px] text-muted-foreground">{recentFiles.length} tracked</div>
-          </div>
-          <div className="p-4 space-y-3">
-            {recentFiles.length === 0 ? (
-              <div className="text-xs text-muted-foreground italic">
-                Upload or download a file to see it here.
-              </div>
-            ) : (
-              recentFiles.map((entry) => {
-                const isBusy = recentDownloadId === entry.id || downloading
-                const actionLabel =
-                  entry.status === 'pending'
-                    ? 'Downloading...'
-                    : entry.status === 'failed'
-                      ? 'Retry'
-                      : 'Download'
-                return (
-                  <div key={entry.id} className="glass-panel industrial-border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-semibold text-foreground truncate font-mono-data" title={entry.filePath}>
-                          {entry.filePath}
-                        </div>
-                        <div className="mt-1 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                          Deal #{entry.dealId} • {formatBytes(entry.sizeBytes)} • {formatRelativeTime(entry.updatedAt)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRecentDownload(entry)}
-                        disabled={isBusy}
-                        className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary hover:bg-primary/15 disabled:opacity-50"
-                      >
-                        <ArrowDownRight className="w-3 h-3" />
-                        {actionLabel}
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                      <span className="border border-border/60 bg-background/60 px-2 py-0.5">
-                        Last: {entry.lastAction}
-                      </span>
-                      <span className={`border px-2 py-0.5 ${
-                        entry.status === 'failed'
-                          ? 'border-destructive/40 text-destructive'
-                          : entry.status === 'pending'
-                            ? 'border-primary/40 text-primary'
-                            : 'border-accent/40 text-accent'
-                      }`}>
-                        {entry.status}
-                      </span>
-                    </div>
-                    {entry.error && (
-                      <div className="mt-2 text-[10px] text-destructive font-mono-data truncate" title={entry.error}>
-                        {entry.error}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
-      </div>
-      </div>
-
-      {showAdvanced ? (
-        <div className="mt-6 glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-          <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
-            /net/routing --advanced
-          </div>
-          <div className="p-6 space-y-6">
-          {proofs.length > 0 && (
-            <div className="glass-panel industrial-border">
-                <div className="px-6 py-3 border-b border-border/60 bg-card flex items-center justify-between">
-                <span className="text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">/obs/liveness</span>
-                {proofsLoading && <span className="text-[10px] font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-[0.2em]">Syncing proofs…</span>}
-              </div>
-              <table className="min-w-full divide-y divide-border/40 text-xs">
-                <thead className="bg-card">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
-                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Provider</th>
-                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Block</th>
-                    <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Valid</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {(() => {
-                    const myDealIds = new Set(deals.map((d) => d.id))
-                    const myProofs = proofs.filter((p) => p.dealId && myDealIds.has(p.dealId))
-                    return (myProofs.length > 0 ? myProofs : proofs).slice(0, 10).map((p) => (
-                      <tr key={p.id} className="hover:bg-secondary transition-colors">
-                        <td className="px-4 py-2 text-foreground font-mono-data">
-                          {p.dealId ? `#${p.dealId}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 font-mono-data text-[10px] text-primary">
-                          {p.creator ? `${p.creator.slice(0, 10)}...${p.creator.slice(-4)}` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground dark:text-foreground font-mono-data">
-                          {p.blockHeight || 0}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={`px-2 py-0.5 border text-[10px] font-bold font-mono-data uppercase tracking-[0.2em] ${
-                              p.valid
-                                ? 'border-accent/40 bg-accent/10 text-accent'
-                                : 'border-destructive/40 bg-destructive/10 text-destructive'
-                            }`}
-                          >
-                            {p.valid ? 'OK' : 'FAIL'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  })()}
-                </tbody>
-              </table>
             </div>
           )}
-
-          <div className="overflow-hidden glass-panel industrial-border">
-            <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
-              /registry/providers
-            </div>
-            <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="providers-table">
-              <thead className="bg-card">
-                <tr>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Address</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Capabilities</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Status</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Endpoints</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deals</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Active</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Retrievals</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Bytes Served</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Total Storage</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {providers.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-6 py-6 text-sm text-muted-foreground">
-                      No providers found.
-                    </td>
-                  </tr>
-                ) : (
-                  providers.map((p) => {
-                    const stats = providerStatsByAddress.get(p.address) ?? {
-                      assignedDeals: 0,
-                      activeDeals: 0,
-                      retrievals: 0,
-                      bytesServed: 0,
-                    }
-                    return (
-                      <tr key={p.address} className="hover:bg-secondary transition-colors">
-                        <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={p.address}>
-                          {p.address.slice(0, 12)}...{p.address.slice(-6)}
-                        </td>
-                        <td className="px-4 py-2 text-foreground">{p.capabilities}</td>
-                        <td className="px-4 py-2">
-                          <span className="px-2 py-0.5 border border-accent/40 bg-accent/10 text-accent text-[10px] font-bold font-mono-data uppercase tracking-[0.2em]">
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground dark:text-foreground">
-                          {Array.isArray(p.endpoints) && p.endpoints.length > 0 ? (
-                            <span title={p.endpoints.join('\n')}>{p.endpoints[0]}</span>
-                          ) : (
-                            <span className="italic">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.assignedDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.activeDeals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{stats.retrievals}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{formatBytes(stats.bytesServed)}</td>
-                        <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">
-                          {(() => {
-                            const totalStorage = Number(p.total_storage)
-                            if (!Number.isFinite(totalStorage) || totalStorage <= 0) return '—'
-                            return `${(totalStorage / (1024 ** 4)).toFixed(2)} TiB`
-                          })()}
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {!showAdvanced ? (
-            <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-              <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground uppercase tracking-widest">
-                /retrieval/economics --advanced
-              </div>
-              <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Base Fee</div>
-                  <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Per-Blob Fee</div>
-                  <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
-                </div>
-                <div className="flex items-end gap-2 sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(true)}
-                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                  >
-                    Show Advanced
-                    <ArrowDownRight className="h-4 w-4" />
-                  </button>
-                  <Link
-                    to="/proofs"
-                    className="inline-flex items-center gap-2 border border-border/70 bg-background/60 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-secondary"
-                    title="View receipts, proofs, and sessions"
-                  >
-                    Proofs
-                    <ArrowDownRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-              <div className="px-6 pb-4 text-[11px] font-mono-data text-muted-foreground">
-                Fees and on-chain retrieval sessions are developer-focused. Use Advanced mode for full tables.
-                {retrievalParamsError ? (
-                  <span className="block mt-1 text-[11px] text-destructive">{retrievalParamsError}</span>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground uppercase tracking-widest">
-                  /retrieval/fees gamma-4
-                </div>
-                <div className="px-6 py-4 grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-3">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Base Fee</div>
-                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.base_retrieval_fee)}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Per-Blob Fee</div>
-                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatCoin(retrievalParams?.retrieval_price_per_blob)}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Burn Cut</div>
-                    <div className="mt-1 text-[11px] font-mono-data text-foreground">{formatBps(retrievalParams?.retrieval_burn_bps)}</div>
-                  </div>
-                </div>
-                <div className="px-6 pb-4 text-[11px] font-mono-data text-muted-foreground">
-                  {retrievalFeeNote}
-                  {retrievalParamsError ? (
-                    <span className="block mt-1 text-[11px] text-destructive">{retrievalParamsError}</span>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="overflow-hidden glass-panel industrial-border shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-                <div className="px-6 py-3 border-b border-border/60 bg-card text-xs font-bold font-mono-data text-muted-foreground dark:text-foreground/90 uppercase tracking-widest">
-                  /retrieval/sessions
-                </div>
-                <table className="min-w-full divide-y divide-border/40 text-xs" data-testid="retrieval-sessions-table">
-                  <thead className="bg-card">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Session</th>
-                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Deal</th>
-                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Provider</th>
-                      <th className="px-4 py-2 text-left text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Status</th>
-                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Total Bytes</th>
-                      <th className="px-4 py-2 text-right text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {!nilAddress ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                          Connect a wallet to view retrieval sessions.
-                        </td>
-                      </tr>
-                    ) : retrievalSessionsLoading ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                          Loading sessions…
-                        </td>
-                      </tr>
-                    ) : retrievalSessions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
-                          No retrieval sessions found.
-                          {retrievalSessionsError ? (
-                            <span className="block mt-1 text-[11px] font-mono-data text-destructive">{retrievalSessionsError}</span>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ) : (
-                      retrievalSessions.map((raw) => {
-                        const s = raw as Record<string, unknown>
-                        const dealId = String(s['deal_id'] ?? '')
-                        const provider = String(s['provider'] ?? '')
-                        const status = formatSessionStatus(s['status'])
-                        const updatedHeight = String(s['updated_height'] ?? '')
-                        const totalBytes = formatBytesU64(s['total_bytes'])
-                        const sessionHex = toHexFromBase64OrHex(s['session_id'], { expectedBytes: [32] })
-                        const shortSession = sessionHex ? `${sessionHex.slice(0, 12)}…${sessionHex.slice(-6)}` : '—'
-                        return (
-                          <tr
-                            key={`${dealId}-${provider}-${updatedHeight}-${shortSession}`}
-                            className="hover:bg-secondary transition-colors"
-                          >
-                            <td className="px-4 py-2 font-mono-data text-[10px] text-primary" title={sessionHex || undefined}>
-                              {shortSession}
-                            </td>
-                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{dealId || '—'}</td>
-                            <td className="px-4 py-2 font-mono-data text-[10px] text-muted-foreground dark:text-foreground" title={provider || undefined}>
-                              {provider ? `${provider.slice(0, 12)}…${provider.slice(-6)}` : '—'}
-                            </td>
-                            <td className="px-4 py-2 text-muted-foreground dark:text-foreground font-mono-data">{status}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{totalBytes}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground dark:text-foreground font-mono-data">{updatedHeight || '—'}</td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-          </div>
         </div>
-      ) : null}
+      </div>
 
       {downloadToast && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <div className="flex items-center gap-2 glass-panel industrial-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent ring-1 ring-accent/30 shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+        <div className="fixed bottom-8 right-8 z-50">
+          <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-accent border border-accent/40 bg-accent/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
             <CheckCircle2 className="h-4 w-4" />
             {downloadToast}
           </div>
         </div>
       )}
-
     </div>
   )
 }

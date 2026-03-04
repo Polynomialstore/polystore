@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAccount } from 'wagmi'
 import { appConfig } from '../config'
-import { ArrowDownRight, FileJson, Server, Activity } from 'lucide-react'
+import { 
+  ArrowDownRight, 
+  FileJson, 
+  Server, 
+  Activity, 
+  MoreVertical, 
+  ExternalLink, 
+  Zap, 
+  Database, 
+  Cpu, 
+  Trash2,
+  Download,
+  CheckCircle2,
+  XCircle,
+  Clock
+} from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
 import { useFetch, type SponsoredRetrievalAuth } from '../hooks/useFetch'
 import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
@@ -177,6 +192,488 @@ interface LocalCacheFreshnessResult {
 
 type GatewayRuntimeMode = 'unknown' | 'standalone' | 'proxy'
 
+interface FileRowProps {
+  file: NilfsFileEntry
+  deal: LcdDeal
+  nilAddress: string
+  browserCached: boolean
+  gatewayCached: boolean
+  gatewayRuntimeMode: GatewayRuntimeMode
+  isBusy: boolean
+  isAnyDownloading: boolean
+  isOpen: boolean
+  onToggleMenu: () => void
+  onFileActivity?: (activity: FileActivity) => void
+  reconcileLocalMduCache: (dealId: string, chainManifestRoot: string) => Promise<LocalCacheFreshnessResult>
+  downloadBytesAsFile: (bytes: Uint8Array, filePath: string) => void
+  downloadBlobAsFile: (blob: Blob, filePath: string) => void
+  markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
+  downloadViaGatewayCache: (params: {
+    manifestRoot: string
+    dealId: string
+    owner: string
+    filePath: string
+    rangeStart?: number
+    rangeLen?: number
+    fileSizeBytes?: number
+    fileStartOffset?: number
+    mduSizeBytes?: number
+    blobSizeBytes?: number
+  }) => Promise<Blob>
+  fetchFile: (params: any) => Promise<any>
+  resolveProviderHttpBase: () => string
+  sponsoredAuth: SponsoredRetrievalAuth
+  slab: SlabLayoutData | null
+  setBrowserCachedByPath: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  setFileActionError: (error: string | null) => void
+  setBusyFilePath: (path: string | null) => void
+  downloadRangeStart: number
+  downloadRangeLen: number
+  allFiles: NilfsFileEntry[]
+  transportPreference?: string
+  setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
+  setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'heat') => void
+}
+
+function FileRow({
+  file,
+  deal,
+  nilAddress,
+  browserCached,
+  gatewayCached,
+  gatewayRuntimeMode,
+  isBusy,
+  isAnyDownloading,
+  isOpen,
+  onToggleMenu,
+  onFileActivity,
+  reconcileLocalMduCache,
+  downloadBytesAsFile,
+  downloadBlobAsFile,
+  markDownloadPath,
+  downloadViaGatewayCache,
+  fetchFile,
+  resolveProviderHttpBase,
+  sponsoredAuth,
+  slab,
+  setBrowserCachedByPath,
+  setFileActionError,
+  setBusyFilePath,
+  downloadRangeStart,
+  downloadRangeLen,
+  allFiles,
+  transportPreference,
+}: FileRowProps) {
+  const handleAutoDownload = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    try {
+      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      const cacheFreshness = await reconcileLocalMduCache(dealId, manifestHex)
+      if (cacheFreshness.usable) {
+        const cachedBytes = await readCachedFile(dealId, file.path)
+        if (cachedBytes) {
+          downloadBytesAsFile(cachedBytes, file.path)
+          markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
+          return
+        }
+      }
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'pending',
+      })
+      if (gatewayCached) {
+        try {
+          const gatewayBlob = await downloadViaGatewayCache({
+            manifestRoot: manifestHex,
+            dealId,
+            owner: String(deal.owner || nilAddress || ''),
+            filePath: file.path,
+            rangeStart: safeStart,
+            rangeLen: safeLen,
+            fileSizeBytes: file.size_bytes,
+            fileStartOffset: file.start_offset,
+            mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+            blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+          })
+          const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
+          await writeCachedFile(dealId, file.path, bytes)
+          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+          downloadBlobAsFile(gatewayBlob, file.path)
+          onFileActivity?.({
+            dealId,
+            filePath: file.path,
+            sizeBytes: file.size_bytes,
+            manifestRoot: manifestHex,
+            action: 'download',
+            status: 'success',
+          })
+          return
+        } catch (gatewayErr) {
+          const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
+          if (isGatewaySessionRequiredError(fallbackReason)) {
+            console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
+              dealId,
+              filePath: file.path,
+            })
+          } else {
+            console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
+              dealId,
+              filePath: file.path,
+              error: fallbackReason,
+            })
+          }
+        }
+      }
+      const autoRoutePreference =
+        transportPreference === 'prefer_p2p'
+          ? 'prefer_p2p'
+          : transportPreference === 'prefer_direct_sp'
+            ? 'prefer_direct_sp'
+            : undefined
+      const result = await fetchFile({
+        dealId,
+        manifestRoot: manifestHex,
+        owner: String(deal.owner || nilAddress || ''),
+        filePath: file.path,
+        routePreference: autoRoutePreference,
+        rangeStart: safeStart,
+        rangeLen: safeLen,
+        fileStartOffset: file.start_offset,
+        fileSizeBytes: file.size_bytes,
+        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+        sponsoredAuth,
+      })
+      if (!result) throw new Error('download failed')
+      const bytes = new Uint8Array(await result.blob.arrayBuffer())
+      await writeCachedFile(dealId, file.path, bytes)
+      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      downloadBlobAsFile(result.blob, file.path)
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'success',
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (deal.cid) {
+        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'failed',
+          error: msg,
+        })
+      }
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+    }
+  }
+
+  const handleOnchainRetrieval = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    try {
+      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'pending',
+      })
+      const result = await fetchFile({
+        dealId,
+        manifestRoot: manifestHex,
+        owner: String(deal.owner || nilAddress || ''),
+        filePath: file.path,
+        serviceBase: resolveProviderHttpBase(),
+        routePreference: 'prefer_direct_sp',
+        rangeStart: safeStart,
+        rangeLen: safeLen,
+        fileStartOffset: file.start_offset,
+        fileSizeBytes: file.size_bytes,
+        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+        sponsoredAuth,
+      })
+      if (!result) throw new Error('download failed')
+      const bytes = new Uint8Array(await result.blob.arrayBuffer())
+      await writeCachedFile(dealId, file.path, bytes)
+      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      downloadBlobAsFile(result.blob, file.path)
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'success',
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (deal.cid) {
+        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'failed',
+          error: msg,
+        })
+      }
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+      onToggleMenu()
+    }
+  }
+
+  const handleGatewayCacheDownload = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    try {
+      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
+      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'pending',
+      })
+      const gatewayBlob = await downloadViaGatewayCache({
+        manifestRoot: manifestHex,
+        dealId,
+        owner: String(deal.owner || nilAddress || ''),
+        filePath: file.path,
+        rangeStart: safeStart,
+        rangeLen: safeLen,
+        fileSizeBytes: file.size_bytes,
+        fileStartOffset: file.start_offset,
+        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+      })
+      const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
+      await writeCachedFile(dealId, file.path, bytes)
+      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      downloadBlobAsFile(gatewayBlob, file.path)
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'success',
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (deal.cid) {
+        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'failed',
+          error: msg,
+        })
+      }
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+      onToggleMenu()
+    }
+  }
+
+  const handleAssembleMdus = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    try {
+      const chainCid = String(deal.cid || '').trim()
+      const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
+      if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
+
+      const bytes = await readNilfsFileFromOpfs({
+        dealId,
+        file,
+        allFiles,
+        rangeStart: safeStart,
+        rangeLen: safeLen,
+      })
+      await writeCachedFile(dealId, file.path, bytes)
+      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      downloadBytesAsFile(bytes, file.path)
+      markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+      onToggleMenu()
+    }
+  }
+
+  const handleBrowserCacheDownload = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    try {
+      const chainCid = String(deal.cid || '').trim()
+      if (chainCid) {
+        const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
+        if (!cacheFreshness.usable) {
+          throw new Error(`browser cache unavailable (${cacheFreshness.reason})`)
+        }
+      }
+      const cachedBytes = await readCachedFile(dealId, file.path)
+      if (!cachedBytes) throw new Error('not cached in browser')
+      downloadBytesAsFile(cachedBytes, file.path)
+      markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+      onToggleMenu()
+    }
+  }
+
+  const handlePurgeCache = async () => {
+    setFileActionError(null)
+    const dealId = String(deal.id)
+    try {
+      await deleteCachedFile(dealId, file.path)
+      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: false }))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setFileActionError(msg)
+    } finally {
+      onToggleMenu()
+    }
+  }
+
+  return (
+    <div
+      data-testid="deal-detail-file-row"
+      data-file-path={file.path}
+      data-cache-browser={browserCached ? 'yes' : 'no'}
+      data-cache-gateway={gatewayCached ? 'yes' : 'no'}
+      className="relative flex items-center justify-between py-2 px-3 border border-border bg-background/60 hover:bg-background/80 transition-colors group"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-bold text-foreground" title={file.path}>
+          {file.path}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground font-mono-data tracking-tight">
+          <span className="text-foreground/70">{formatBytes(file.size_bytes)}</span>
+          <span className="text-border/60">|</span>
+          <span>BROWSER: <span className={browserCached ? 'text-accent font-bold' : ''}>{browserCached ? 'YES' : '—'}</span></span>
+          <span className="text-border/60">|</span>
+          <span>GATEWAY: <span className={gatewayCached ? 'text-accent font-bold' : ''}>{gatewayCached ? 'YES' : '—'}</span></span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleAutoDownload}
+          disabled={isAnyDownloading || isBusy || !deal.cid}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-none transition-colors disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+        >
+          {isBusy ? 'BUSY' : 'Download'}
+        </button>
+        <button
+          onClick={onToggleMenu}
+          className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
+        >
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </button>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={onToggleMenu} />
+            <div className="absolute right-0 top-full mt-1 w-52 bg-background border border-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] z-50 py-1 industrial-border">
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-b border-border/40 mb-1">
+                Retrieval Options
+              </div>
+              <button
+                onClick={handleOnchainRetrieval}
+                disabled={isAnyDownloading || isBusy || !deal.cid}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                On-chain Retrieval
+              </button>
+              <button
+                onClick={handleGatewayCacheDownload}
+                disabled={isAnyDownloading || isBusy || !deal.cid}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+              >
+                <Server className="w-3.5 h-3.5" />
+                Gateway Cache
+              </button>
+              <button
+                onClick={handleAssembleMdus}
+                disabled={isAnyDownloading || isBusy || !deal.cid}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+              >
+                <Database className="w-3.5 h-3.5" />
+                Assemble MDUs
+              </button>
+              <div className="h-px bg-border/40 my-1" />
+              <button
+                onClick={handleBrowserCacheDownload}
+                disabled={isAnyDownloading || isBusy || !browserCached}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                Browser Cache
+              </button>
+              <button
+                onClick={handlePurgeCache}
+                disabled={isAnyDownloading || isBusy || !browserCached}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Purge Cache
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, requestedTab, requestedTabNonce }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
@@ -234,6 +731,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [browserCachedByPath, setBrowserCachedByPath] = useState<Record<string, boolean>>({})
   const [busyFilePath, setBusyFilePath] = useState<string | null>(null)
+  const [openMenuFilePath, setOpenMenuFilePath] = useState<string | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
   const [downloadRangeStart, setDownloadRangeStart] = useState<number>(0)
   const [downloadRangeLen, setDownloadRangeLen] = useState<number>(0)
@@ -1315,842 +1813,255 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         </button>
       </div>
 
-      <div className="p-5">
-          {(activeTab === 'info' || activeTab === 'files') && (
-              <div className="grid sm:grid-cols-2 gap-4 text-xs text-muted-foreground">
-                  {activeTab === 'info' && (
-                    <div className="space-y-1">
-                        <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Content Hash (CID)</div>
+      <div className="p-6">
+          {activeTab === 'info' && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* Identity Section */}
+                  <div className="grid sm:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/CONTENT_HASH</div>
                         <div
-                          className="font-mono-data break-all bg-secondary/50 border border-border rounded-none px-3 py-2 text-primary select-all"
+                          className="font-mono-data break-all bg-secondary/30 border border-border/40 px-4 py-3 text-primary font-bold select-all"
                           data-testid="deal-detail-cid"
                         >
-                          {deal.cid || 'Empty Container'}
+                          {deal.cid || 'EMPTY_CONTAINER'}
                         </div>
                     </div>
-                  )}
-                    {activeTab === 'info' && (
-                      <div className="space-y-1">
-                        <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Owner</div>
-                        <div className="font-mono-data text-[11px] bg-secondary/50 border border-border rounded-none px-3 py-2 text-foreground select-all">
-                          {deal.owner}
-                        </div>
-                      </div>
-                    )}
-                  {activeTab === 'info' && (
-                    <div className="space-y-1">
-                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Economics</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-secondary/50 px-2 py-1 rounded-none border border-border">
-                          <span className="text-muted-foreground block text-[10px]">Escrow Remaining</span>
-                          <span className="text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</span>
-                        </div>
-                        <div className="bg-secondary/50 px-2 py-1 rounded-none border border-border">
-                          <span className="text-muted-foreground block text-[10px]">Max Spend</span>
-                          <span className="text-foreground">{deal.max_monthly_spend ? `${deal.max_monthly_spend} stake` : '—'}</span>
-                        </div>
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/OWNER_ID</div>
+                      <div className="font-mono-data text-[11px] bg-secondary/30 border border-border/40 px-4 py-3 text-foreground font-bold select-all">
+                        {deal.owner}
                       </div>
                     </div>
-                  )}
-                  {activeTab === 'info' && (
-                    <div className="space-y-1 sm:col-span-2">
-                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Providers</div>
-                      <div className="bg-secondary/50 border border-border rounded-none p-2">
-                          {deal.providers && deal.providers.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {deal.providers.map((p: string, idx: number) => (
-                                <div key={p} className="space-y-1">
-                                  <div className="font-mono-data text-[10px] text-foreground flex items-center gap-2">
-                                    <Server className="w-3 h-3 text-accent" />
-                                    {isMode2 && <span className="text-[10px] text-muted-foreground">Slot {idx}</span>}
-                                    {p}
+                  </div>
+
+                  {/* Economics Section */}
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/ECONOMICS</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
+                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Escrow</span>
+                        <span className="text-foreground font-mono-data font-bold">{deal.escrow ? `${deal.escrow} NIL` : '—'}</span>
+                      </div>
+                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
+                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Max Monthly</span>
+                        <span className="text-foreground font-mono-data font-bold">{deal.max_monthly_spend ? `${deal.max_monthly_spend} NIL` : '—'}</span>
+                      </div>
+                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
+                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Redundancy</span>
+                        <span className="text-accent font-bold uppercase">{isMode2 ? 'Mode 2 (RS)' : 'Mode 1'}</span>
+                      </div>
+                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
+                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Status</span>
+                        <span className={`font-bold uppercase ${deal.cid ? 'text-accent' : 'text-muted-foreground'}`}>
+                          {deal.cid ? 'Active' : 'Empty'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Infrastructure / Providers Section */}
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/INFRASTRUCTURE_NODES</div>
+                    <div className="bg-secondary/10 border border-border/20 divide-y divide-border/10">
+                        {deal.providers && deal.providers.length > 0 ? (
+                          deal.providers.map((p: string, idx: number) => (
+                            <div key={p} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-secondary/20 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 flex items-center justify-center border border-border/30 bg-background/40 text-muted-foreground/60">
+                                  <span className="text-[10px] font-black">{idx}</span>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="font-mono-data text-[11px] text-foreground font-bold flex items-center gap-2">
+                                    {shortAddr(p)}
                                     {providersByAddr[p]?.status && (
-                                      <span className="text-muted-foreground">({providersByAddr[p]?.status})</span>
+                                      <span className={`text-[9px] px-1.5 py-0.5 border ${
+                                        providersByAddr[p].status === 'ok' ? 'text-accent border-accent/30 bg-accent/5' : 'text-primary border-primary/30 bg-primary/5'
+                                      }`}>
+                                        {providersByAddr[p].status?.toUpperCase()}
+                                      </span>
                                     )}
                                   </div>
-                                  {providersByAddr[p]?.endpoints && providersByAddr[p].endpoints!.length > 0 && (
-                                    <div className="font-mono-data text-[10px] text-foreground break-all">
-                                      {providersByAddr[p].endpoints![0]}
-                                    </div>
-                                  )}
+                                  <div className="font-mono-data text-[10px] text-muted-foreground">
+                                    {providersByAddr[p]?.endpoints?.[0] || 'NO_ENDPOINT_REPORTED'}
+                                  </div>
                                 </div>
-                              ))}
+                              </div>
+                              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">
+                                {isMode2 ? `SLOT_ALLOCATION_${idx}` : 'REPLICA_NODE'}
+                              </div>
                             </div>
+                          ))
                         ) : (
-                          <span className="text-muted-foreground italic">No providers assigned yet</span>
+                          <div className="p-8 text-center text-muted-foreground italic text-xs uppercase tracking-widest opacity-40">
+                            No infrastructure nodes assigned to this container.
+                          </div>
                         )}
+                    </div>
+                  </div>
+
+                  {/* Technical Details Collapsible */}
+                  <div className="pt-4 border-t border-border/10">
+                    <details className="group">
+                      <summary className="cursor-pointer select-none flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 hover:text-primary transition-colors">
+                        <div className="w-4 h-4 border border-current flex items-center justify-center group-open:rotate-90 transition-transform">
+                          <span className="leading-none">+</span>
+                        </div>
+                        /TECHNICAL_DETAILS_AND_POLICIES
+                      </summary>
+                      <div className="mt-6 space-y-6 pl-7">
+                        <div className="grid sm:grid-cols-2 gap-6">
+                          {/* Retrieval Policy */}
+                          <div className="space-y-3">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/RETRIEVAL_POLICY</div>
+                            <div className="bg-secondary/20 p-4 border border-border/30 space-y-3">
+                                <div className="text-[9px] text-muted-foreground uppercase font-black">Current Configuration</div>
+                                <div className="text-xs font-bold text-foreground flex items-center gap-2">
+                                  <div className="h-1.5 w-1.5 bg-primary" />
+                                  {(deal.retrieval_policy?.mode ?? 1) === 1 && 'OWNER_ONLY'}
+                                  {(deal.retrieval_policy?.mode ?? 1) === 2 && 'ALLOWLIST_ONLY'}
+                                  {(deal.retrieval_policy?.mode ?? 1) === 3 && 'VOUCHER_ONLY'}
+                                  {(deal.retrieval_policy?.mode ?? 1) === 4 && 'HYBRID_AUTH'}
+                                  {(deal.retrieval_policy?.mode ?? 1) === 5 && 'PUBLIC_ACCESS'}
+                                </div>
+                                {deal.retrieval_policy?.allowlist_root && (
+                                  <div className="text-[10px] text-muted-foreground font-mono-data break-all bg-background/40 p-2">
+                                    ROOT: {deal.retrieval_policy.allowlist_root}
+                                  </div>
+                                )}
+                             </div>
+                          </div>
+
+                          {/* Admin Override */}
+                          {isDealOwner && (
+                            <div className="space-y-3">
+                              <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/ADMIN_OVERRIDE</div>
+                              <div className="bg-secondary/20 p-4 border border-border/30 space-y-4">
+                                <div className="grid gap-3">
+                                  <select
+                                    value={policyMode}
+                                    onChange={(e) => setPolicyMode(Number(e.target.value) as RetrievalPolicyMode)}
+                                    className="recessed-input px-3 py-2 text-[11px]"
+                                  >
+                                    <option value={1}>OWNER_ONLY</option>
+                                    <option value={2}>ALLOWLIST</option>
+                                    <option value={3}>VOUCHER</option>
+                                    <option value={4}>HYBRID</option>
+                                    <option value={5}>PUBLIC</option>
+                                  </select>
+                                  <button
+                                    onClick={handlePolicyUpdate}
+                                    disabled={policyUpdating}
+                                    className="w-full border border-primary/40 bg-primary/5 py-2 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors"
+                                  >
+                                    {policyUpdating ? 'COMMITING_CHANGES...' : 'UPDATE_POLICY_STATE'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Advanced Metrics */}
+                        <div className="space-y-3">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/ADVANCED_TELEMETRY</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div className="bg-secondary/20 p-3 border border-border/20">
+                                <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Traffic</div>
+                                <div className="font-mono-data text-[11px] text-foreground font-bold">
+                                  {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                </div>
+                              </div>
+                              <div className="bg-secondary/20 p-3 border border-border/20">
+                                <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Slab Source</div>
+                                <div className="font-mono-data text-[11px] text-accent font-bold uppercase">{slabSource || '—'}</div>
+                              </div>
+                              {lastPlan && (
+                                <div className="bg-secondary/20 p-3 border border-border/20 col-span-2">
+                                  <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Last Retrieval Window</div>
+                                  <div className="font-mono-data text-[10px] text-foreground mt-1 truncate">
+                                    MDU #{formatBigint(lastPlan.globalStart / lastPlan.leafCount)}..#{formatBigint(lastPlan.globalEnd / lastPlan.leafCount)}
+                                  </div>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+              </div>
+          )}
+
+          {activeTab === 'files' && deal.cid && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/VFS/CONTENT</div>
+                      {files && <span className="text-[10px] px-2 py-0.5 bg-secondary text-muted-foreground font-mono-data">{files.length} ENTRIES</span>}
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-4 text-[9px] font-mono-data text-muted-foreground/60 uppercase tracking-widest">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-[1px] bg-border/40" />
+                        ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-[1px] bg-border/40" />
+                        CACHE: <span className="text-foreground font-bold">{displayCacheSource || '—'}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {fileActionError && (
+                    <div className="p-3 border border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
+                      <XCircle className="w-3 h-3" />
+                      DOWNLOAD_FAILURE: {fileActionError}
+                    </div>
                   )}
-                
-                    {activeTab === 'files' && deal.cid && (
-                      <div className="sm:col-span-2 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
-                            Files
-                            {files ? (
-                              <span className="ml-2 text-[11px] font-normal normal-case">({files.length})</span>
-                            ) : null}
-                          </div>
-                          <div
-                            className="text-[11px] text-muted-foreground"
-                            data-testid="transport-route"
-                            data-download-route={lastTrace?.chosen?.backend || ''}
-                            data-route-mode={lastTrace?.preference || ''}
-                            data-transport-attempts={lastAttemptSummary}
-                            data-transport-failure={lastFailureSummary}
-                          >
-                            Route: {lastRouteLabel || '—'}{lastRouteMode ? ` · Mode: ${lastRouteMode}` : ''}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground" data-testid="transport-cache-source">
-                            Cache source: {displayCacheSource || '—'}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground" data-testid="transport-cache-freshness">
-                            Freshness: {displayCacheFreshness || '—'}
-                          </div>
-                          </div>
-                          {fileActionError && (
-                            <div className="text-[11px] text-destructive">
-                              Download failed{fileActionError ? `: ${fileActionError}` : ''}
-                            </div>
-                          )}
-                          {receiptStatus !== 'idle' && (
-                            <div className="text-[11px]">
-                              {receiptStatus === 'submitted' ? (
-                                <span className="text-accent">Receipt submitted on-chain</span>
-                              ) : (
-                                <span className="text-destructive">
-                                  Receipt failed{receiptError ? `: ${receiptError}` : ''}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                        {lastPlan && String(lastPlan.dealId) === String(deal.id) && (
-                          <details className="rounded-none border border-border bg-background/40 p-3 text-[11px]">
-                            <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                              Last retrieval plan
-                            </summary>
-                            <div className="mt-3 space-y-2 text-[11px] text-muted-foreground">
-                              <div className="grid sm:grid-cols-2 gap-2">
-                                <div className="rounded-none border border-border bg-background/60 px-3 py-2">
-                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Global blobs</div>
-                                    <div className="font-mono-data text-foreground">
-                                      {formatBigint(lastPlan.globalStart)}..{formatBigint(lastPlan.globalEnd)}
-                                    </div>
-                                  <div className="text-[10px] text-muted-foreground mt-1">
-                                    leaf_count={formatBigint(lastPlan.leafCount)} (blobs per MDU)
-                                  </div>
-                                </div>
-                                <div className="rounded-none border border-border bg-background/60 px-3 py-2">
-                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">MDU window</div>
-                                    <div className="font-mono-data text-foreground">
-                                      MDU #{formatBigint(lastPlan.globalStart / lastPlan.leafCount)}..#
-                                      {formatBigint(lastPlan.globalEnd / lastPlan.leafCount)}
-                                    </div>
-                                  <div className="text-[10px] text-muted-foreground mt-1">
-                                    blob_size={formatBytes(lastPlan.blobSizeBytes)} • mdu_size={formatBytes(lastPlan.mduSizeBytes)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="rounded-none border border-border bg-background/60 px-3 py-2">
-                                <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                                  Provider groups
-                                </div>
-                                <div className="mt-2 space-y-1">
-                                  {lastPlan.providers.map((p) => (
-                                    <div key={`${p.provider}:${String(p.startMduIndex)}:${p.startBlobIndex}`} className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="font-mono-data text-[11px] text-foreground">
-                                          {shortAddr(p.provider)}
-                                        </div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        {p.backend}
-                                        {p.endpoint ? ` • ${p.endpoint}` : ''}
-                                      </div>
-                                        <div className="font-mono-data text-[10px] text-foreground">
-                                          start=({formatBigint(p.startMduIndex)},{p.startBlobIndex}) • blobs={formatBigint(p.blobCount)}
-                                        </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </details>
-                        )}
-
-                        <details className="rounded-none border border-border bg-secondary/40 p-3 text-[11px]">
-                          <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                            Advanced
-                          </summary>
-                          <div className="mt-3 space-y-3">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
-                                  <div className="text-[10px] text-muted-foreground uppercase">Bytes Served</div>
-                                  <div className="font-mono-data text-foreground">
-                                    {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                  </div>
-                                </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
-                                  <div className="text-[10px] text-muted-foreground uppercase">Escrow Remaining</div>
-                                  <div className="font-mono-data text-foreground">{deal.escrow ? `${deal.escrow} stake` : '—'}</div>
-                                </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
-                                  <div className="text-[10px] text-muted-foreground uppercase">Chunks</div>
-                                  <div className="font-mono-data text-foreground">
-                                    {progress.phase === 'idle' ? '—' : `${progress.chunksFetched}/${progress.chunkCount || 0}`}
-                                  </div>
-                                </div>
-                                <div className="bg-secondary/50 px-2 py-2 rounded-none border border-border">
-                                  <div className="text-[10px] text-muted-foreground uppercase">Receipt</div>
-                                  <div className="font-mono-data text-foreground">
-                                    {progress.phase === 'idle'
-                                      ? '—'
-                                      : `${progress.receiptsSubmitted}/${progress.receiptsTotal || 0}`}
-                                  </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Download Range</div>
-                                <div className="text-[10px] text-muted-foreground">Len=0 downloads to EOF</div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase">Start</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={downloadRangeStart}
-                                    onChange={(e) =>
-                                      setDownloadRangeStart(Math.max(0, Number(e.target.value || 0) || 0))
-                                    }
-                                    className="recessed-input px-2 py-1 text-[11px]"
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase">Len</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={downloadRangeLen}
-                                    onChange={(e) => setDownloadRangeLen(Math.max(0, Number(e.target.value || 0) || 0))}
-                                    className="recessed-input px-2 py-1 text-[11px]"
-                                    />
-                                </label>
-                              </div>
-                              {progress.phase !== 'idle' ? (
-                                <div className="text-[10px] text-muted-foreground">
-                                  {progress.filePath ? `${progress.filePath} • ` : ''}
-                                  {progress.phase}
-                                  {progress.bytesTotal
-                                    ? ` • ${(progress.bytesFetched / 1024).toFixed(1)} KiB / ${(progress.bytesTotal / 1024).toFixed(1)} KiB`
-                                    : ''}
-                                  {progress.message ? ` • ${progress.message}` : ''}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </details>
-
-                        <details className="rounded-none border border-border bg-secondary/40 p-3 text-[11px]">
-                          <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                            Retrieval Access
-                          </summary>
-                          <div className="mt-3 space-y-3">
-                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-2">
-                              <div className="text-[10px] text-muted-foreground uppercase font-semibold">Current Policy</div>
-                              <div className="text-[11px] text-foreground">
-                                {(deal.retrieval_policy?.mode ?? 1) === 1 && 'Owner only'}
-                                {(deal.retrieval_policy?.mode ?? 1) === 2 && 'Allowlist'}
-                                {(deal.retrieval_policy?.mode ?? 1) === 3 && 'Voucher'}
-                                {(deal.retrieval_policy?.mode ?? 1) === 4 && 'Allowlist or voucher'}
-                                {(deal.retrieval_policy?.mode ?? 1) === 5 && 'Public'}
-                                </div>
-                                {deal.retrieval_policy?.allowlist_root ? (
-                                  <div className="text-[10px] text-foreground font-mono-data break-all">
-                                    allowlist_root: {deal.retrieval_policy.allowlist_root}
-                                  </div>
-                                ) : null}
-                                {deal.retrieval_policy?.voucher_signer ? (
-                                  <div className="text-[10px] text-foreground font-mono-data break-all">
-                                    voucher_signer: {deal.retrieval_policy.voucher_signer}
-                                  </div>
-                                ) : null}
-                            </div>
-
-                            {isDealOwner && (
-                              <div className="rounded-none border border-border bg-background/40 p-3 space-y-3">
-                                <div className="text-[10px] text-muted-foreground uppercase font-semibold">
-                                  Update Policy (owner)
-                                </div>
-                                <div className="grid sm:grid-cols-2 gap-2">
-                                  <label className="flex flex-col gap-1">
-                                    <span className="text-[10px] text-muted-foreground uppercase">Mode</span>
-                                    <select
-                                      value={policyMode}
-                                      onChange={(e) => setPolicyMode(Number(e.target.value) as RetrievalPolicyMode)}
-                                      className="px-2 py-1 rounded-none border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
-                                    >
-                                      <option value={1}>Owner only</option>
-                                      <option value={2}>Allowlist</option>
-                                      <option value={3}>Voucher</option>
-                                      <option value={4}>Allowlist or voucher</option>
-                                      <option value={5}>Public</option>
-                                    </select>
-                                  </label>
-                                  {(policyMode === 2 || policyMode === 4) && (
-                                    <label className="flex flex-col gap-1">
-                                      <span className="text-[10px] text-muted-foreground uppercase">Allowlist Root</span>
-                                      <input
-                                        value={policyAllowlistRoot}
-                                        onChange={(e) => setPolicyAllowlistRoot(e.target.value)}
-                                        placeholder="0x... (32 bytes)"
-                                        className="recessed-input px-2 py-1 text-[11px]"
-                                        />
-                                    </label>
-                                  )}
-                                  {(policyMode === 3 || policyMode === 4) && (
-                                    <label className="flex flex-col gap-1">
-                                      <span className="text-[10px] text-muted-foreground uppercase">Voucher Signer</span>
-                                      <input
-                                        value={policyVoucherSigner}
-                                        onChange={(e) => setPolicyVoucherSigner(e.target.value)}
-                                        placeholder="0x... (EVM address)"
-                                        className="recessed-input px-2 py-1 text-[11px]"
-                                        />
-                                    </label>
-                                  )}
-                                  </div>
-                                  {policyError ? (
-                                    <div className="text-[10px] text-destructive">{policyError}</div>
-                                  ) : null}
-                                  {policyStatus ? (
-                                    <div className="text-[10px] text-accent">{policyStatus}</div>
-                                  ) : null}
-                                  {policyTx ? (
-                                    <div className="text-[10px] text-foreground font-mono-data break-all">
-                                      tx: {policyTx}
-                                    </div>
-                                  ) : null}
-                                <button
-                                  onClick={handlePolicyUpdate}
-                                  disabled={policyUpdating}
-                                  className="inline-flex items-center justify-center rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
-                                >
-                                  {policyUpdating ? 'Updating…' : 'Update policy'}
-                                </button>
-                              </div>
-                            )}
-
-                            <div className="rounded-none border border-border bg-background/40 p-3 space-y-3">
-                              <div className="text-[10px] text-muted-foreground uppercase font-semibold">
-                                Sponsored Auth (non-owner)
-                              </div>
-                              <label className="flex flex-col gap-1">
-                                <span className="text-[10px] text-muted-foreground uppercase">Auth Type</span>
-                                <select
-                                  value={authType}
-                                  onChange={(e) => setAuthType(e.target.value as 'none' | 'allowlist' | 'voucher')}
-                                  className="px-2 py-1 rounded-none border border-border bg-background/60 text-foreground text-[11px] dark:bg-black/40"
-                                >
-                                  <option value="none">None (public)</option>
-                                  <option value="allowlist">Allowlist proof</option>
-                                  <option value="voucher">Voucher</option>
-                                </select>
-                              </label>
-                              {authType === 'allowlist' && (
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase">Allowlist Proof (JSON)</span>
-                                  <textarea
-                                    value={allowlistProofInput}
-                                    onChange={(e) => setAllowlistProofInput(e.target.value)}
-                                    placeholder='{"leafIndex":0,"merklePath":["0x...","0x..."]}'
-                                    rows={4}
-                                    className="recessed-input px-2 py-1 text-[11px]"
-                                    />
-                                </label>
-                              )}
-                              {authType === 'voucher' && (
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase">Voucher (JSON)</span>
-                                  <textarea
-                                    value={voucherInput}
-                                    onChange={(e) => setVoucherInput(e.target.value)}
-                                    placeholder='{"nonce":1,"expiresAt":12345,"signature":"0x...","provider":"","redeemer":""}'
-                                    rows={4}
-                                    className="recessed-input px-2 py-1 text-[11px]"
-                                    />
-                                </label>
-                                )}
-                                {authError ? (
-                                  <div className="text-[10px] text-destructive">{authError}</div>
-                                ) : null}
-                                {authStatus ? (
-                                  <div className="text-[10px] text-accent">{authStatus}</div>
-                                ) : null}
-                              <div className="text-[10px] text-muted-foreground">
-                                Voucher auth supports a single provider range per download.
-                              </div>
-                              <button
-                                onClick={applySponsoredAuth}
-                                className="inline-flex items-center justify-center rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
-                              >
-                                Save sponsored auth
-                              </button>
-                            </div>
-                          </div>
-                        </details>
 
                       {loadingFiles ? (
                         <div className="text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
-                        <div className="space-y-2" data-testid="deal-detail-file-list">
-                          {files.map((f) => {
-                            const browserCached = !!browserCachedByPath[f.path]
-                            const gatewayCached = f.cache_present === true
-                              const gatewayCacheLabel =
-                                gatewayRuntimeMode === 'proxy'
-                                  ? gatewayCached
-                                    ? 'provider-backed (proxy mode; legacy "router" alias)'
-                                    : 'not reported (proxy mode; legacy "router" alias)'
-                                  : gatewayCached
-                                    ? 'yes'
-                                    : 'no'
-                              const isBusy = busyFilePath === f.path
-                              const mduRange = computeFileSlabMduRange(f)
-                              return (
-                              <div
-                                key={`${f.path}:${f.start_offset}`}
-                                data-testid="deal-detail-file-row"
-                                data-file-path={f.path}
-                                data-cache-browser={browserCached ? 'yes' : 'no'}
-                                data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-                                className="rounded-none border border-border bg-background/60 px-3 py-2 space-y-2"
-                              >
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold text-foreground" title={f.path}>
-                                      {f.path}
-                                    </div>
-                                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                                          <span className="font-mono-data">{f.size_bytes} bytes</span>
-                                          <span className="text-border">|</span>
-                                          <span>Browser cache: {browserCached ? 'yes' : 'no'}</span>
-                                          <span className="text-border">|</span>
-                                          <span>Gateway cache: {gatewayCacheLabel}</span>
-                                          {mduRange ? (
-                                            <>
-                                              <span className="text-border">|</span>
-                                              <span className="font-mono-data">
-                                                MDUs: #{mduRange.start}..#{mduRange.end}
-                                              </span>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedMdu(mduRange.start)
-                                                setActiveTab('manifest')
-                                              }}
-                                              className="text-primary hover:underline"
-                                              title="Jump to Manifest & MDUs and preselect the first MDU for this file"
-                                            >
-                                              Inspect
-                                            </button>
-                                          </>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                  <div className="contents">
-                                    <div className="contents">
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          setBusyFilePath(f.path)
-                                          const dealId = String(deal.id)
-                                          try {
-                                            const chainCid = String(deal.cid || '').trim()
-                                            if (chainCid) {
-                                              const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
-                                              if (!cacheFreshness.usable) {
-                                                throw new Error(`browser cache unavailable (${cacheFreshness.reason})`)
-                                              }
-                                            }
-                                            const cachedBytes = await readCachedFile(dealId, f.path)
-                                            if (!cachedBytes) throw new Error('not cached in browser')
-                                            downloadBytesAsFile(cachedBytes, f.path)
-                                            markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            setFileActionError(msg)
-                                          } finally {
-                                            setBusyFilePath(null)
-                                          }
-                                        }}
-                                        disabled={isBusy || !browserCached}
-                                        data-testid="deal-detail-download-browser-cache"
-                                        data-file-path={f.path}
-                                        className="order-6 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download file bytes cached in this browser (no network)."
-                                      >
-                                        Download from Browser cache
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          setBusyFilePath(f.path)
-                                            const dealId = String(deal.id)
-                                            const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                            const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-                                          try {
-                                            const chainCid = String(deal.cid || '').trim()
-                                            const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
-                                            if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
-
-                                            const bytes = await readNilfsFileFromOpfs({
-                                              dealId,
-                                              file: f,
-                                              allFiles: files || [],
-                                              rangeStart: safeStart,
-                                              rangeLen: safeLen,
-                                            })
-                                            await writeCachedFile(dealId, f.path, bytes)
-                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBytesAsFile(bytes, f.path)
-                                            markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            setFileActionError(msg)
-                                          } finally {
-                                            setBusyFilePath(null)
-                                          }
-                                        }}
-                                        disabled={isBusy}
-                                        data-testid="deal-detail-download-browser-slab"
-                                        data-file-path={f.path}
-                                        className="order-3 inline-flex items-center gap-2 rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Rebuild file from browser OPFS MDU cache, then download."
-                                      >
-                                        <ArrowDownRight className="w-4 h-4" />
-                                        {isBusy ? 'Loading...' : 'Assemble from Browser MDUs'}
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          const dealId = String(deal.id)
-                                          try {
-                                            await deleteCachedFile(dealId, f.path)
-                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: false }))
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            setFileActionError(msg)
-                                          }
-                                        }}
-                                        disabled={downloading || isBusy || !browserCached}
-                                        data-testid="deal-detail-clear-browser-cache"
-                                        data-file-path={f.path}
-                                        className="order-5 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Remove cached file bytes from this browser."
-                                      >
-                                        Clear Browser cache
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          setBusyFilePath(f.path)
-                                          const dealId = String(deal.id)
-                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-                                          try {
-                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                            const cacheFreshness = await reconcileLocalMduCache(dealId, manifestHex)
-                                            if (cacheFreshness.usable) {
-                                              const cachedBytes = await readCachedFile(dealId, f.path)
-                                              if (cachedBytes) {
-                                                downloadBytesAsFile(cachedBytes, f.path)
-                                                markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-                                                return
-                                              }
-                                            }
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'pending',
-                                            })
-                                            if (gatewayCached) {
-                                              try {
-                                                const gatewayBlob = await downloadViaGatewayCache({
-                                                  manifestRoot: manifestHex,
-                                                  dealId,
-                                                  owner: String(deal.owner || nilAddress || ''),
-                                                  filePath: f.path,
-                                                  rangeStart: safeStart,
-                                                  rangeLen: safeLen,
-                                                  fileSizeBytes: f.size_bytes,
-                                                  fileStartOffset: f.start_offset,
-                                                  mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                                  blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                                })
-                                                const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-                                                await writeCachedFile(dealId, f.path, bytes)
-                                                setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                                downloadBlobAsFile(gatewayBlob, f.path)
-                                                onFileActivity?.({
-                                                  dealId,
-                                                  filePath: f.path,
-                                                  sizeBytes: f.size_bytes,
-                                                  manifestRoot: manifestHex,
-                                                  action: 'download',
-                                                  status: 'success',
-                                                })
-                                                return
-                                              } catch (gatewayErr) {
-                                                const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
-                                                if (isGatewaySessionRequiredError(fallbackReason)) {
-                                                  console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
-                                                    dealId,
-                                                    filePath: f.path,
-                                                  })
-                                                } else {
-                                                  console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
-                                                    dealId,
-                                                    filePath: f.path,
-                                                    error: fallbackReason,
-                                                  })
-                                                }
-                                              }
-                                            }
-                                            const autoRoutePreference =
-                                              transportPreference === 'prefer_p2p'
-                                                ? 'prefer_p2p'
-                                                : transportPreference === 'prefer_direct_sp'
-                                                  ? 'prefer_direct_sp'
-                                                  : undefined
-                                            const result = await fetchFile({
-                                              dealId,
-                                              manifestRoot: manifestHex,
-                                              owner: String(deal.owner || nilAddress || ''),
-                                              filePath: f.path,
-                                              routePreference: autoRoutePreference,
-                                              rangeStart: safeStart,
-                                              rangeLen: safeLen,
-                                              fileStartOffset: f.start_offset,
-                                              fileSizeBytes: f.size_bytes,
-                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                              sponsoredAuth,
-                                            })
-                                            if (!result) throw new Error('download failed')
-                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
-                                            await writeCachedFile(dealId, f.path, bytes)
-                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBlobAsFile(result.blob, f.path)
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'success',
-                                            })
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            if (deal.cid) {
-                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                              onFileActivity?.({
-                                                dealId,
-                                                filePath: f.path,
-                                                sizeBytes: f.size_bytes,
-                                                manifestRoot: manifestHex,
-                                                action: 'download',
-                                                status: 'failed',
-                                                error: msg,
-                                              })
-                                            }
-                                            setFileActionError(msg)
-                                          } finally {
-                                            setBusyFilePath(null)
-                                          }
-                                        }}
-                                        disabled={downloading || isBusy || !deal.cid}
-                                        data-testid="deal-detail-download"
-                                        data-file-path={f.path}
-                                        className="order-1 inline-flex items-center justify-center rounded-none bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Download using best available path (gateway cache first, then provider path, then browser cache)."
-                                      >
-                                        Download (auto source)
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  <div className="contents">
-                                    <div className="contents">
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          setBusyFilePath(f.path)
-                                          const dealId = String(deal.id)
-                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-                                          try {
-                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'pending',
-                                            })
-                                            const gatewayBlob = await downloadViaGatewayCache({
-                                              manifestRoot: manifestHex,
-                                              dealId,
-                                              owner: String(deal.owner || nilAddress || ''),
-                                              filePath: f.path,
-                                              rangeStart: safeStart,
-                                              rangeLen: safeLen,
-                                              fileSizeBytes: f.size_bytes,
-                                              fileStartOffset: f.start_offset,
-                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                            })
-                                            const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-                                            await writeCachedFile(dealId, f.path, bytes)
-                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBlobAsFile(gatewayBlob, f.path)
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'success',
-                                            })
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            if (deal.cid) {
-                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                              onFileActivity?.({
-                                                dealId,
-                                                filePath: f.path,
-                                                sizeBytes: f.size_bytes,
-                                                manifestRoot: manifestHex,
-                                                action: 'download',
-                                                status: 'failed',
-                                                error: msg,
-                                              })
-                                            }
-                                            setFileActionError(msg)
-                                          } finally {
-                                            setBusyFilePath(null)
-                                          }
-                                        }}
-                                        disabled={downloading || isBusy || gatewaySlabStatus !== 'present'}
-                                        data-testid="deal-detail-download-gateway"
-                                        data-file-path={f.path}
-                                        className="order-4 inline-flex items-center justify-center rounded-none border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Request file through local Gateway endpoint."
-                                      >
-                                        Download via Gateway
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  <div className="contents">
-                                    <div className="contents">
-                                      <button
-                                        onClick={async () => {
-                                          setFileActionError(null)
-                                          setBusyFilePath(f.path)
-                                          const dealId = String(deal.id)
-                                          const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-                                          const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-                                          try {
-                                            if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-                                            const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'pending',
-                                            })
-                                            const result = await fetchFile({
-                                              dealId,
-                                              manifestRoot: manifestHex,
-                                              owner: String(deal.owner || nilAddress || ''),
-                                              filePath: f.path,
-                                              serviceBase: resolveProviderHttpBase(),
-                                              routePreference: 'prefer_direct_sp',
-                                              rangeStart: safeStart,
-                                              rangeLen: safeLen,
-                                              fileStartOffset: f.start_offset,
-                                              fileSizeBytes: f.size_bytes,
-                                              mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-                                              blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-                                              sponsoredAuth,
-                                            })
-                                            if (!result) throw new Error('download failed')
-                                            const bytes = new Uint8Array(await result.blob.arrayBuffer())
-                                            await writeCachedFile(dealId, f.path, bytes)
-                                            setBrowserCachedByPath((prev) => ({ ...prev, [f.path]: true }))
-                                            downloadBlobAsFile(result.blob, f.path)
-                                            onFileActivity?.({
-                                              dealId,
-                                              filePath: f.path,
-                                              sizeBytes: f.size_bytes,
-                                              manifestRoot: manifestHex,
-                                              action: 'download',
-                                              status: 'success',
-                                            })
-                                          } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : String(e)
-                                            if (deal.cid) {
-                                              const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-                                              onFileActivity?.({
-                                                dealId,
-                                                filePath: f.path,
-                                                sizeBytes: f.size_bytes,
-                                                manifestRoot: manifestHex,
-                                                action: 'download',
-                                                status: 'failed',
-                                                error: msg,
-                                              })
-                                            }
-                                            setFileActionError(msg)
-                                          } finally {
-                                            setBusyFilePath(null)
-                                          }
-                                        }}
-                                        disabled={downloading || isBusy || !deal.cid}
-                                        data-testid="deal-detail-download-sp"
-                                        data-file-path={f.path}
-                                        className="order-2 inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none"
-                                        title="Force fresh network retrieval and submit on-chain receipt."
-                                      >
-                                        <ArrowDownRight className="w-4 h-4" />
-                                        On-chain Retrieval
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })}
+                        <div className="space-y-1.5" data-testid="deal-detail-file-list">
+                          {files.map((f) => (
+                            <FileRow
+                              key={`${f.path}:${f.start_offset}`}
+                              file={f}
+                              allFiles={files}
+                              deal={deal}
+                              nilAddress={nilAddress}
+                              browserCached={!!browserCachedByPath[f.path]}
+                              gatewayCached={f.cache_present === true}
+                              gatewayRuntimeMode={gatewayRuntimeMode}
+                              isBusy={busyFilePath === f.path}
+                              isAnyDownloading={downloading}
+                              isOpen={openMenuFilePath === f.path}
+                              onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
+                              onFileActivity={onFileActivity}
+                              reconcileLocalMduCache={reconcileLocalMduCache}
+                              downloadBytesAsFile={downloadBytesAsFile}
+                              downloadBlobAsFile={downloadBlobAsFile}
+                              markDownloadPath={markDownloadPath}
+                              downloadViaGatewayCache={downloadViaGatewayCache}
+                              fetchFile={fetchFile}
+                              resolveProviderHttpBase={resolveProviderHttpBase}
+                              sponsoredAuth={sponsoredAuth}
+                              slab={slab}
+                              setBrowserCachedByPath={setBrowserCachedByPath}
+                              setFileActionError={setFileActionError}
+                              setBusyFilePath={setBusyFilePath}
+                              downloadRangeStart={downloadRangeStart}
+                              downloadRangeLen={downloadRangeLen}
+                              transportPreference={transportPreference}
+                              setSelectedMdu={setSelectedMdu}
+                              setActiveTab={setActiveTab}
+                            />
+                          ))}
                         </div>
                       ) : (
                         <div className="text-xs text-muted-foreground italic">No files found for this manifest root.</div>
-                        )}
-                      </div>
+                      )}
+                    </div>
                   )}
 
                   {activeTab === 'files' && !deal.cid && (
@@ -2161,8 +2072,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                       </div>
                     </div>
                   )}
-              </div>
-          )}
 
         {activeTab === 'manifest' && (
             <div className="space-y-4">

@@ -6,7 +6,14 @@ import { useTransportContext } from '../context/TransportContext'
 import { useMetaMaskUnlockState } from '../hooks/useMetaMaskUnlockState'
 import { useLocalGateway } from '../hooks/useLocalGateway'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
-import { CheckCircle2, Copy, Download, ExternalLink, RefreshCw } from 'lucide-react'
+import { 
+  CheckCircle2, 
+  AlertTriangle, 
+  XCircle, 
+  Copy, 
+  Download, 
+  RefreshCw 
+} from 'lucide-react'
 
 const STATUS_POLL_MS = 60_000
 const STATUS_HIDDEN_POLL_MS = 300_000
@@ -34,33 +41,20 @@ async function copyText(text: string) {
   document.body.removeChild(el)
 }
 
-function Badge({ label, status, value }: { label: string; status: ServiceStatus; value?: string }) {
-  const resolvedValue = value ?? (status === 'ok' ? 'OK' : status === 'warn' ? 'WARN' : 'ERR')
-  const borderClass =
-    status === 'ok'
-      ? 'border-accent/40'
-      : status === 'warn'
-        ? 'border-primary/40'
-        : 'border-destructive/40'
-  const dotClass =
-    status === 'ok'
-      ? 'bg-accent pulse-status dark:shadow-[0_0_16px_hsl(var(--accent)_/_0.25)]'
-      : status === 'warn'
-        ? 'bg-primary dark:shadow-[0_0_16px_hsl(var(--primary)_/_0.2)]'
-        : 'bg-destructive dark:shadow-[0_0_16px_hsl(var(--destructive)_/_0.22)]'
-  const statusTextClass = status === 'ok' ? 'text-accent' : status === 'warn' ? 'text-primary' : 'text-destructive'
+function SystemLabel({ label, status, value }: { label: string; status: ServiceStatus; value?: string }) {
+  const Icon = status === 'ok' ? CheckCircle2 : status === 'warn' ? AlertTriangle : XCircle
+  const colorClass = status === 'ok' ? 'text-accent' : status === 'warn' ? 'text-primary' : 'text-destructive'
+  
   return (
-    <span
-      className={`inline-flex items-center gap-2 border ${borderClass} bg-transparent px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-none ${dotClass}`} aria-hidden="true" />
-      <span className="text-muted-foreground">{label}:</span>
-      <span className={statusTextClass}>{resolvedValue}</span>
-    </span>
+    <div className="flex items-center gap-1.5 px-1.5">
+      <Icon className={`h-3 w-3 ${colorClass}`} />
+      <span className="text-muted-foreground/50 font-medium">{label}</span>
+      {value && <span className={`font-bold ${colorClass}`}>{value}</span>}
+    </div>
   )
 }
 
-export function StatusBar() {
+export function StatusBar({ noBorder }: { noBorder?: boolean }) {
   const chainId = useChainId()
   const { isConnected } = useAccount()
   const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 15_000 })
@@ -165,13 +159,13 @@ export function StatusBar() {
           : ('error' as const)
         : ('warn' as const)
   const walletValue = accountPermissionMismatch
-    ? 'ACCESS'
+    ? 'ACC'
     : isLocked
       ? 'LOCK'
       : isConnected && chainId
         ? chainId === appConfig.chainId
           ? 'OK'
-          : `CHAIN${chainId}`
+          : `CH${chainId}`
         : 'MISS'
 
   const lastRoute = lastTrace?.chosen?.backend ? lastTrace.chosen.backend.replace('_', ' ') : '—'
@@ -238,129 +232,121 @@ export function StatusBar() {
   }
 
   return (
-    <div className="relative overflow-hidden glass-panel industrial-border px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.06)]">
-      <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-40" />
+    <div className={noBorder 
+      ? "relative px-3 py-2 border-t border-border/40 bg-background/50" 
+      : "relative glass-panel industrial-border px-3 py-2 shadow-sm"
+    }>
+      <div className="relative flex flex-wrap items-center gap-4 text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest font-bold">
+        
+        {/* SYSTEMS GROUP */}
+        <div className="flex items-center divide-x divide-border/20 border border-border/30 bg-background/40">
+          <SystemLabel label="LCD" status={summary.lcd} />
+          <SystemLabel label="EVM" status={summary.evm} />
+          {!appConfig.gatewayDisabled && <SystemLabel label="GW" status={summary.gateway} />}
+          {appConfig.faucetEnabled && <SystemLabel label="FAC" status={summary.faucet} />}
+          <SystemLabel label="PROV" status={providerStatus} value={String(providerCount ?? '—')} />
+          <SystemLabel label="CHAIN" status={summary.chainIdMatch} />
+          <SystemLabel label="WAL" status={walletStatus} value={walletValue} />
+        </div>
 
-      <div className="relative flex flex-wrap items-center gap-2 text-[10px] font-mono-data text-muted-foreground">
-        <span className="inline-flex items-center border border-border/50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
-          /sys/diag
-        </span>
-
-        <Badge label="LCD" status={summary.lcd} />
-        <Badge label="EVM" status={summary.evm} />
-        {!appConfig.gatewayDisabled && <Badge label="GW" status={summary.gateway} />}
-        {appConfig.faucetEnabled && <Badge label="FAC" status={summary.faucet} />}
-        <Badge label="PROV" status={providerStatus} value={String(providerCount ?? '—')} />
-        <Badge label="CHAIN" status={summary.chainIdMatch} />
-        <Badge label="WAL" status={walletStatus} value={walletValue} />
-
-        <span className="mx-1 h-3 w-[1px] bg-border/40" aria-hidden="true" />
-
-        <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-          <span className="text-muted-foreground">H:</span>
-          <span className="text-foreground">{height ?? '—'}</span>
-        </span>
-
-        {evmChainId !== undefined && (
-          <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-            <span className="text-muted-foreground">EVM:</span>
-            <span className="text-foreground">{evmChainId}</span>
-          </span>
-        )}
-
-        <span
-          className={`inline-flex items-center gap-2 border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data ${
-            routeDegraded ? 'border-primary/40' : 'border-border/40'
-          }`}
-        >
-          <span className="text-muted-foreground">ROUTE:</span>
-          <span className={routeDegraded ? 'text-primary' : 'text-foreground'}>{lastRoute}{lastReason}</span>
-          {routeDegraded ? <span className="text-muted-foreground">(DEGRADED)</span> : null}
-        </span>
-
-        {!appConfig.gatewayDisabled ? (
-          <span className="inline-flex items-center gap-2 border border-border/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-            <span className="text-muted-foreground">LCL_GW:</span>
-            <span className={localGateway.status === 'connected' ? 'text-accent' : 'text-primary'}>
-              {localGateway.status === 'connected' ? 'OK' : 'MISS'}
-            </span>
-            <a
-              href={GATEWAY_DESKTOP_RELEASE_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 border border-border/50 bg-background/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground hover:bg-muted/40 transition-colors"
-              title="Download the desktop gateway app"
-            >
-              <Download className="h-3.5 w-3.5" />
-              GET_APP
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </span>
-        ) : null}
-
-        <label className="inline-flex items-center gap-2 border border-border/40 bg-background/30 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-          <span className="text-muted-foreground">PREF</span>
-          <select
-            value={preference ?? 'auto'}
-            onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
-            className="bg-transparent text-foreground outline-none"
-          >
-            <option value="auto">AUTO</option>
-            <option value="prefer_gateway">PREFER_LOCAL_GW</option>
-            <option value="prefer_direct_sp">PREFER_DIRECT_SP</option>
-            {appConfig.p2pEnabled && <option value="prefer_p2p">PREFER_LIBP2P</option>}
-          </select>
-        </label>
-
-        <button
-          type="button"
-          onClick={() => void handleCopyDiagnostics()}
-          className={`inline-flex items-center gap-2 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
-            copyState === 'copied'
-              ? 'border-accent/40 bg-accent/10 text-accent'
-              : copyState === 'error'
-                ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                : 'border-border/50 bg-background/40 text-foreground hover:bg-muted/40'
-          }`}
-          title={copyError ? `Copy failed: ${copyError}` : 'Copy diagnostics bundle for the devs'}
-        >
-          {copyState === 'copied' ? (
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
+        {/* METRICS */}
+        <div className="flex items-center gap-4 px-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/40">HEIGHT</span>
+            <span className="text-foreground font-bold">{height ?? '—'}</span>
+          </div>
+          {evmChainId !== undefined && (
+            <div className="flex items-center gap-1.5 border-l border-border/20 pl-4">
+              <span className="text-muted-foreground/40">CHAIN_ID</span>
+              <span className="text-foreground font-bold">{evmChainId}</span>
+            </div>
           )}
-          {copyState === 'copied' ? 'SYNCED' : 'COPY_DIAG'}
-        </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            if (refreshing) return
-            setRefreshing(true)
-            void fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
-              .then((res) => {
-                setSummary({
-                  lcd: res.lcd,
-                  evm: res.evm,
-                  faucet: res.faucet,
-                  gateway: res.gateway,
-                  chainIdMatch: res.chainIdMatch,
+        {/* NETWORK */}
+        <div className="flex items-center gap-4 border-l border-border/20 pl-4">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground/40">NET</span>
+            <span className={routeDegraded ? 'text-primary' : 'text-foreground'}>{lastRoute}{lastReason}</span>
+          </div>
+          {!appConfig.gatewayDisabled && (
+            <div className="flex items-center gap-2 border-l border-border/20 pl-4">
+              <span className="text-muted-foreground/40">LCL_GW</span>
+              <span className={localGateway.status === 'connected' ? 'text-accent' : 'text-primary font-bold'}>
+                {localGateway.status === 'connected' ? 'OK' : 'MISSING'}
+              </span>
+              <a
+                href={GATEWAY_DESKTOP_RELEASE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+                title="Download desktop gateway"
+              >
+                <Download className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* ACTIONS */}
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 bg-background/20 px-2 py-1 border border-border/20">
+            <span className="text-muted-foreground/40 text-[9px]">PREF</span>
+            <select
+              value={preference ?? 'auto'}
+              onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
+              className="bg-transparent text-foreground outline-none cursor-pointer text-[9px]"
+            >
+              <option value="auto">AUTO</option>
+              <option value="prefer_gateway">GATEWAY</option>
+              <option value="prefer_direct_sp">DIRECT</option>
+              {appConfig.p2pEnabled && <option value="prefer_p2p">P2P</option>}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleCopyDiagnostics()}
+            className={`flex items-center gap-1.5 border px-2 py-1 transition-colors ${
+              copyState === 'copied'
+                ? 'border-accent/40 bg-accent/10 text-accent'
+                : copyState === 'error'
+                  ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                  : 'border-border/30 bg-background/40 text-foreground hover:bg-secondary'
+            }`}
+          >
+            {copyState === 'copied' ? <CheckCircle2 className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            <span className="text-[9px]">{copyState === 'copied' ? 'COPIED' : 'DIAG'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (refreshing) return
+              setRefreshing(true)
+              void fetchStatus(appConfig.chainId, { probeOptionalHealth: true })
+                .then((res) => {
+                  setSummary({
+                    lcd: res.lcd,
+                    evm: res.evm,
+                    faucet: res.faucet,
+                    gateway: res.gateway,
+                    chainIdMatch: res.chainIdMatch,
+                  })
+                  setHeight(res.height)
+                  setChainName(res.networkName)
+                  setEvmChainId(res.evmChainId)
+                  setProviderCount(res.providerCount)
                 })
-                setHeight(res.height)
-                setChainName(res.networkName)
-                setEvmChainId(res.evmChainId)
-                setProviderCount(res.providerCount)
-              })
-              .finally(() => setRefreshing(false))
-          }}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 border border-border/50 bg-background/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground hover:bg-muted/40 transition-colors disabled:opacity-60"
-          title="Refresh status"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          RESCAN
-        </button>
+                .finally(() => setRefreshing(false))
+            }}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 border border-border/30 bg-background/40 px-2 py-1 text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="text-[9px]">SYNC</span>
+          </button>
+        </div>
       </div>
     </div>
   )
