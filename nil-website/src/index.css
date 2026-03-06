@@ -80,14 +80,18 @@
 
   .cyber-grid-layer {
     background-image: 
-      linear-gradient(to right, hsl(var(--primary) / 0.4) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.4) 1px, transparent 1px);
-    background-size: 30px 30px;
+      /* Structural Box Fills: Provides the "filled in" weight - slightly higher opacity */
+      linear-gradient(to right, hsl(var(--primary) / 0.1) 29px, transparent 29px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.1) 29px, transparent 29px),
+      /* Bold structural lines - High Intensity */
+      linear-gradient(to right, hsl(var(--primary) / 0.9) 2px, transparent 2px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.9) 2px, transparent 2px);
+    background-size: 30px 30px, 30px 30px, 30px 30px, 30px 30px;
     /* Decoupled "Boiling" Mask: Three independent wandering spots */
     -webkit-mask-image: 
-      radial-gradient(circle at var(--boil-x1) var(--boil-y1), black, transparent 40%),
-      radial-gradient(circle at var(--boil-x2) var(--boil-y2), black, transparent 40%),
-      radial-gradient(circle at var(--boil-x3) var(--boil-y3), black, transparent 50%);
+      radial-gradient(circle at var(--boil-x1) var(--boil-y1), black, transparent 55%),
+      radial-gradient(circle at var(--boil-x2) var(--boil-y2), black, transparent 55%),
+      radial-gradient(circle at var(--boil-x3) var(--boil-y3), black, transparent 65%);
     -webkit-mask-composite: source-over;
     mask-composite: add;
     /* Independent prime-number durations ensure patterns never synchronize or jump */
@@ -107,7 +111,11 @@
   }
 
   .dark .cyber-grid-layer {
+    filter: drop-shadow(0 0 4px hsl(var(--primary)));
     background-image: 
+      /* Dark mode bleed - Cyber Cyan */
+      radial-gradient(circle at var(--boil-x1) var(--boil-y1), hsl(var(--primary) / 0.1), transparent 40%),
+      radial-gradient(circle at var(--boil-x2) var(--boil-y2), hsl(var(--primary) / 0.1), transparent 40%),
       linear-gradient(to right, hsl(var(--primary) / 0.6) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--primary) / 0.6) 1px, transparent 1px);
   }

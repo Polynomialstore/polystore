@@ -1,20 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 
-interface WaveEntity {
+interface SubLine {
+  dx: number; // grid offset from entity center
+  dy: number; // grid offset from entity center
+  horizontal: boolean;
+  length: number; // in grid cells
+  offset: number; // animation offset for the "glow"
+  speed: number;  // animation speed for the "glow"
+}
+
+interface ThetaEntity {
   id: number;
-  x: number; // Smooth sub-pixel X
-  y: number; // Smooth sub-pixel Y
-  theta: number;
+  x: number; // Screen pixel X
+  y: number; // Screen pixel Y
+  theta: number; // Intended direction
   speed: number;
   life: number;
   color: string;
-  size: number; // Radius of activation
-  pulsePhase: number;
+  subLines: SubLine[];
 }
 
 export const LivingGrid: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const entitiesRef = useRef<WaveEntity[]>([]);
+  const entitiesRef = useRef<ThetaEntity[]>([]);
   const mouseRef = useRef({ x: 0, y: 0, v: 0, accumulator: 0 });
   const lastTimeRef = useRef(0);
   const idCounter = useRef(0);
@@ -34,12 +42,26 @@ export const LivingGrid: React.FC = () => {
       canvas.height = window.innerHeight;
     };
 
-    const spawnEntity = (x: number, y: number, isStochastic = false) => {
-      if (entitiesRef.current.length > 15) return;
+    const spawnEntity = (x: number, y: number) => {
+      if (entitiesRef.current.length > 12) return;
 
       const color = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
       const hslColor = `hsl(${color})`;
       
+      const subLines: SubLine[] = [];
+      const lineCount = 3 + Math.floor(Math.random() * 3);
+      
+      for (let i = 0; i < lineCount; i++) {
+        subLines.push({
+          dx: (Math.floor(Math.random() * 5) - 2) * gridSize,
+          dy: (Math.floor(Math.random() * 5) - 2) * gridSize,
+          horizontal: Math.random() > 0.5,
+          length: 1 + Math.floor(Math.random() * 3),
+          offset: Math.random() * 100,
+          speed: 0.05 + Math.random() * 0.1
+        });
+      }
+
       entitiesRef.current.push({
         id: idCounter.current++,
         x,
@@ -48,8 +70,7 @@ export const LivingGrid: React.FC = () => {
         speed: 1.2 + Math.random() * 1.8,
         life: 1.0,
         color: hslColor,
-        size: 60 + Math.random() * 60, // Sharper, smaller activation radius
-        pulsePhase: Math.random() * Math.PI * 2
+        subLines
       });
     };
 
@@ -81,82 +102,67 @@ export const LivingGrid: React.FC = () => {
       for (let i = entities.length - 1; i >= 0; i--) {
         const ent = entities[i];
         
+        // Smooth movement in Theta direction
         ent.x += Math.cos(ent.theta) * ent.speed * dt;
         ent.y += Math.sin(ent.theta) * ent.speed * dt;
         ent.life -= 0.004 * dt;
-        ent.pulsePhase += 0.08 * dt;
 
-        if (ent.life <= 0 || ent.x < -200 || ent.x > canvas.width + 200 || ent.y < -200 || ent.y > canvas.height + 200) {
+        if (ent.life <= 0 || ent.x < -300 || ent.x > canvas.width + 300 || ent.y < -300 || ent.y > canvas.height + 300) {
           entities.splice(i, 1);
           continue;
         }
 
-        const startX = Math.floor((ent.x - ent.size) / gridSize) * gridSize;
-        const endX = Math.ceil((ent.x + ent.size) / gridSize) * gridSize;
-        const startY = Math.floor((ent.y - ent.size) / gridSize) * gridSize;
-        const endY = Math.ceil((ent.y + ent.size) / gridSize) * gridSize;
-
-        // Draw Vertical Active Lines
-        for (let gx = startX; gx <= endX; gx += gridSize) {
-          const dx = Math.abs(gx - ent.x);
-          if (dx > ent.size) continue;
-
-          // Aggressive falloff for tighter packets
-          const falloff = Math.pow(1 - dx / ent.size, 4);
-          const phase = ent.pulsePhase + (gx / 100);
-          const pulse = (Math.sin(phase) + 1) / 2;
+        ent.subLines.forEach(line => {
+          line.offset += line.speed * dt;
           
+          // Drift the sub-lines slightly from center
+          line.dx += (Math.random() - 0.5) * 0.4 * dt;
+          line.dy += (Math.random() - 0.5) * 0.4 * dt;
+
+          // Snap drawing to grid relative to entity center
+          const gx = Math.round((ent.x + line.dx) / gridSize) * gridSize;
+          const gy = Math.round((ent.y + line.dy) / gridSize) * gridSize;
+          
+          const x1 = line.horizontal ? gx - gridSize : gx;
+          const y1 = line.horizontal ? gy : gy - gridSize;
+          const x2 = line.horizontal ? gx + gridSize * line.length : gx;
+          const y2 = line.horizontal ? gy : gy + gridSize * line.length;
+
+          // Drawing with "Bleed"
+          const pulse = (Math.sin(line.offset) + 1) / 2;
+          const baseAlpha = ent.life * (0.4 + pulse * 0.6);
+
+          // 1. THE BLEED: Wide, soft stroke that "blurs into the boxes"
           ctx.beginPath();
-          ctx.lineWidth = 2; // Thicker lines
-          const grad = ctx.createLinearGradient(gx, ent.y - ent.size, gx, ent.y + ent.size);
-          grad.addColorStop(0, 'transparent');
-          grad.addColorStop(0.5, ent.color);
-          grad.addColorStop(1, 'transparent');
-
-          ctx.strokeStyle = grad;
-          // Much higher intensity near center
-          ctx.globalAlpha = ent.life * falloff * (0.4 + pulse * 0.6);
-          ctx.moveTo(gx, ent.y - ent.size);
-          ctx.lineTo(gx, ent.y + ent.size);
+          ctx.lineWidth = 15; // Spans half the grid cell
+          ctx.strokeStyle = ent.color;
+          ctx.globalAlpha = baseAlpha * 0.15;
+          ctx.lineCap = 'round';
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
           ctx.stroke();
-          
-          // Core "Fiber" glow
-          ctx.lineWidth = 4;
-          ctx.globalAlpha = ent.life * falloff * 0.2;
-          ctx.stroke();
-        }
 
-        // Draw Horizontal Active Lines
-        for (let gy = startY; gy <= endY; gy += gridSize) {
-          const dy = Math.abs(gy - ent.y);
-          if (dy > ent.size) continue;
-
-          const falloff = Math.pow(1 - dy / ent.size, 4);
-          const phase = ent.pulsePhase + (gy / 100);
-          const pulse = (Math.sin(phase) + 1) / 2;
-
+          // 2. THE CORE: Sharp, bright grid line
           ctx.beginPath();
           ctx.lineWidth = 2;
-          const grad = ctx.createLinearGradient(ent.x - ent.size, gy, ent.x + ent.size, gy);
-          grad.addColorStop(0, 'transparent');
-          grad.addColorStop(0.5, ent.color);
-          grad.addColorStop(1, 'transparent');
-
-          ctx.strokeStyle = grad;
-          ctx.globalAlpha = ent.life * falloff * (0.4 + pulse * 0.6);
-          ctx.moveTo(ent.x - ent.size, gy);
-          ctx.lineTo(ent.x + ent.size, gy);
+          ctx.globalAlpha = baseAlpha * 0.8;
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
           ctx.stroke();
 
-          // Core "Fiber" glow
+          // 3. OPTIONAL GLOW: Tighter bloom
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = ent.color;
+          ctx.globalAlpha = baseAlpha * 0.3;
           ctx.lineWidth = 4;
-          ctx.globalAlpha = ent.life * falloff * 0.2;
           ctx.stroke();
-        }
+          ctx.shadowBlur = 0;
+        });
       }
 
-      if (Math.random() < 0.02) {
-        spawnEntity(Math.random() * canvas.width, Math.random() * canvas.height, true);
+      // Stochastic spawn
+      if (Math.random() < 0.015) {
+        spawnEntity(Math.random() * canvas.width, Math.random() * canvas.height);
       }
 
       animationFrameId = requestAnimationFrame(animate);
@@ -177,7 +183,7 @@ export const LivingGrid: React.FC = () => {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-[1] opacity-70 dark:opacity-100"
+      className="fixed inset-0 pointer-events-none z-[1] opacity-70 dark:opacity-90"
     />
   );
 };
