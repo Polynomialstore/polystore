@@ -25,7 +25,6 @@
     --input: 214 32% 85%;
     --ring: 300 100% 75%;
     --grid-color: hsl(var(--foreground) / 0.05); 
-    --scan-color: hsl(var(--primary) / 0.06); 
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
   }
@@ -56,7 +55,6 @@
     --ring: 190 100% 50%;
     
     --grid-color: hsl(190 100% 50% / 0.04); 
-    --scan-color: hsl(190 100% 50% / 0.08);
     --industrial-bracket-opacity: 1;
   }
 
@@ -66,35 +64,66 @@
     @apply bg-background text-foreground;
     font-family: "Montserrat", sans-serif;
     background-image: 
-      /* The Global Scan Line (Moving) - Broad Technical Wash */
-      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.10) 50%, transparent),
+      /* Static Subtle Base Grid - Solid 1px for consistency */
       linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 100% 1000px, 30px 30px, 30px 30px;
-    background-repeat: repeat-y, repeat, repeat;
+    background-size: 30px 30px, 30px 30px;
     background-attachment: fixed;
-    animation: background-scan 20s linear infinite;
+  }
+
+  .cyber-grid-layer {
+    background-image: 
+      linear-gradient(to right, hsl(var(--primary) / 0.4) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.4) 1px, transparent 1px);
+    background-size: 30px 30px;
+    /* Decoupled "Boiling" Mask: Overlapping spots with independent drift */
+    -webkit-mask-image: 
+      radial-gradient(circle at var(--boil-x1, 20%) var(--boil-y1, 30%), black, transparent 40%),
+      radial-gradient(circle at var(--boil-x2, 80%) var(--boil-y2, 70%), black, transparent 40%),
+      radial-gradient(circle at var(--boil-x3, 50%) var(--boil-y3, 50%), black, transparent 50%);
+    -webkit-mask-composite: source-over;
+    mask-composite: add;
+    animation: grid-boil 12s ease-in-out infinite alternate, grid-breath 6s ease-in-out infinite;
   }
   
   .dark body { 
     background-image: 
-      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.08), transparent 85%),
-      /* The Global Scan Line (Moving) - Broad Technical Wash */
-      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.04) 50%, transparent),
-      /* Grid Lines */
-      linear-gradient(to right, hsl(var(--primary) / 0.15) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.15) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 800px, 30px 30px, 30px 30px;
-    background-repeat: no-repeat, repeat-y, repeat, repeat;
-    animation: background-scan 20s linear infinite;
+      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.05), transparent 85%),
+      linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+    background-size: 100% 100%, 30px 30px, 30px 30px;
+  }
+
+  .dark .cyber-grid-layer {
+    background-image: 
+      linear-gradient(to right, hsl(var(--primary) / 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.6) 1px, transparent 1px);
   }
 
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
-@keyframes background-scan {
-  0% { background-position: center top -1000px, center top -800px, 0 0, 0 0; }
-  100% { background-position: center top 100vh, center top 100vh, 0 0, 0 0; }
+@keyframes grid-boil {
+  0% {
+    --boil-x1: 15%; --boil-y1: 25%;
+    --boil-x2: 85%; --boil-y2: 75%;
+    --boil-x3: 45%; --boil-y3: 45%;
+  }
+  50% {
+    --boil-x1: 40%; --boil-y1: 60%;
+    --boil-x2: 60%; --boil-y2: 40%;
+    --boil-x3: 55%; --boil-y3: 55%;
+  }
+  100% {
+    --boil-x1: 75%; --boil-y1: 15%;
+    --boil-x2: 25%; --boil-y2: 85%;
+    --boil-x3: 50%; --boil-y3: 50%;
+  }
+}
+
+@keyframes grid-breath {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.45; }
 }
 
 @layer utilities {

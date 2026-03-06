@@ -4,7 +4,7 @@ export const LogoShowcase = () => {
       <div className="absolute inset-0 cyber-grid opacity-35 pointer-events-none" />
 
       <div className="relative w-full max-w-3xl glass-panel industrial-border p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.08)]">
-        <div className="absolute inset-0 opacity-10 pointer-events-none animate-scan" />
+        <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
 
         <div className="text-center space-y-10">
           <div className="inline-flex items-center border border-border/50 bg-background/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">

@@ -1,9 +1,10 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
+import { LivingGrid } from "./LivingGrid";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,6 +12,41 @@ export const Layout = () => {
   const location = useLocation();
   const buildCommit = String(__NIL_BUILD_COMMIT__ || '').trim();
   const shortCommit = buildCommit ? buildCommit.slice(0, 8) : '';
+
+  useEffect(() => {
+    let lastX = 0;
+    let lastY = 0;
+    let lastTime = Date.now();
+    let velocity = 0;
+    let frameId: number;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      const dt = now - lastTime;
+      if (dt > 0) {
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Calculate velocity (pixels per ms) and smooth it
+        const newVelocity = dist / dt;
+        velocity = velocity * 0.9 + newVelocity * 0.1;
+        
+        lastX = e.clientX;
+        lastY = e.clientY;
+        lastTime = now;
+
+        document.documentElement.style.setProperty("--mouse-x", `${e.clientX}px`);
+        document.documentElement.style.setProperty("--mouse-y", `${e.clientY}px`);
+        document.documentElement.style.setProperty("--mouse-v", `${velocity.toFixed(2)}`);
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      cancelAnimationFrame(frameId);
+    };
+  }, []);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -58,6 +94,15 @@ export const Layout = () => {
   return (
     <div className="min-h-screen font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30 relative">
       
+      {/* --- THE LIVING DIGITAL GRID --- */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        {/* Base Breathing Grid */}
+        <div className="absolute inset-0 opacity-20 dark:opacity-40 animate-grid-breath cyber-grid-layer" />
+        
+        {/* Reactive Canvas-based Data Packets */}
+        <LivingGrid />
+      </div>
+
       {/* --- NAVBAR --- */}
       <nav className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300">
         

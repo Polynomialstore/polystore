@@ -1704,7 +1704,6 @@ export function Dashboard() {
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       {rpcMismatch && (
         <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-destructive/40">
-          <div className="absolute inset-0 pointer-events-none animate-scan opacity-30" />
           <div className="flex items-center gap-3">
             <div className="p-2 bg-destructive/10 border border-destructive/30">
               <RefreshCw className="w-5 h-5 text-destructive" />
@@ -1725,7 +1724,6 @@ export function Dashboard() {
 
       {isWrongNetwork && (
         <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-primary/30">
-          <div className="absolute inset-0 pointer-events-none animate-scan opacity-20" />
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 border border-primary/30">
               <RefreshCw className="w-5 h-5 text-primary" />

@@ -13,9 +13,6 @@ export const Home = () => {
           transition={{ duration: 0.6 }}
           className="relative glass-panel industrial-border border-primary-frame p-10 md:p-14 text-center"
         >
-          {/* CRT Scan Overlay */}
-          <div className="scan-overlay" />
-
           <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3">
             <img
               src="/brand/logo-light-256.png"

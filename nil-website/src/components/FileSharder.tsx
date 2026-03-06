@@ -2544,9 +2544,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 }
               `}
             >
-               {/* Background scanning effect */}
+               {/* Grid highlight only */}
                <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
-               <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none animate-scan" />
 
               <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-4">
@@ -2616,7 +2615,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         >
           <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
           {processing ? (
-            <div className="absolute inset-0 pointer-events-none animate-scan opacity-25" />
+            <div className="absolute inset-0 pointer-events-none opacity-10 bg-primary/5" />
           ) : null}
 
           <p className="relative text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground mb-2">
@@ -2933,7 +2932,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   title={shard.commitments[0] || 'Pending...'}
                 >
                   {shard.status === 'processing' ? (
-                    <div className="absolute inset-0 pointer-events-none animate-scan opacity-20" />
+                    <div className="absolute inset-0 pointer-events-none opacity-10 bg-primary/5" />
                   ) : null}
 
                   <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
