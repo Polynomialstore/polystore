@@ -80,21 +80,21 @@
 
   .cyber-grid-layer {
     background-image: 
-      /* Structural Box Fills: Provides the "filled in" weight - slightly higher opacity */
+      /* Structural Box Fills: Homogenous 30px cells */
       linear-gradient(to right, hsl(var(--primary) / 0.1) 29px, transparent 29px),
       linear-gradient(to bottom, hsl(var(--primary) / 0.1) 29px, transparent 29px),
-      /* Bold structural lines - High Intensity */
+      /* Bold structural lines - Uniform 30px tiling */
       linear-gradient(to right, hsl(var(--primary) / 0.9) 2px, transparent 2px),
       linear-gradient(to bottom, hsl(var(--primary) / 0.9) 2px, transparent 2px);
     background-size: 30px 30px, 30px 30px, 30px 30px, 30px 30px;
-    /* Decoupled "Boiling" Mask: Three independent wandering spots */
+    background-repeat: repeat;
+    /* Decoupled "Boiling" Mask */
     -webkit-mask-image: 
       radial-gradient(circle at var(--boil-x1) var(--boil-y1), black, transparent 55%),
       radial-gradient(circle at var(--boil-x2) var(--boil-y2), black, transparent 55%),
       radial-gradient(circle at var(--boil-x3) var(--boil-y3), black, transparent 65%);
     -webkit-mask-composite: source-over;
     mask-composite: add;
-    /* Independent prime-number durations ensure patterns never synchronize or jump */
     animation: 
       boil-spot1 13s ease-in-out infinite alternate,
       boil-spot2 17s ease-in-out infinite alternate,
@@ -111,13 +111,10 @@
   }
 
   .dark .cyber-grid-layer {
-    filter: drop-shadow(0 0 4px hsl(var(--primary)));
     background-image: 
-      /* Dark mode bleed - Cyber Cyan */
-      radial-gradient(circle at var(--boil-x1) var(--boil-y1), hsl(var(--primary) / 0.1), transparent 40%),
-      radial-gradient(circle at var(--boil-x2) var(--boil-y2), hsl(var(--primary) / 0.1), transparent 40%),
-      linear-gradient(to right, hsl(var(--primary) / 0.6) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.6) 1px, transparent 1px);
+      linear-gradient(to right, hsl(var(--primary) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.5) 1px, transparent 1px);
+    background-size: 30px 30px, 30px 30px;
   }
 
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }

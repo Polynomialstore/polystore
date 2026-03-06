@@ -1,28 +1,21 @@
 import React, { useEffect, useRef } from 'react';
 
-interface SubLine {
-  dx: number; // grid offset from entity center
-  dy: number; // grid offset from entity center
-  horizontal: boolean;
-  length: number; // in grid cells
-  offset: number; // animation offset for the "glow"
-  speed: number;  // animation speed for the "glow"
-}
-
-interface ThetaEntity {
+interface SmoothEntity {
   id: number;
-  x: number; // Screen pixel X
-  y: number; // Screen pixel Y
-  theta: number; // Intended direction
+  x: number; // Smooth pixel center X
+  y: number; // Smooth pixel center Y
+  theta: number; // Movement direction
+  thetaDrift: number; // Angular velocity
   speed: number;
   life: number;
   color: string;
-  subLines: SubLine[];
+  radius: number; // Spacial extent of the wave packet
+  wavePhase: number;
 }
 
 export const LivingGrid: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const entitiesRef = useRef<ThetaEntity[]>([]);
+  const entitiesRef = useRef<SmoothEntity[]>([]);
   const mouseRef = useRef({ x: 0, y: 0, v: 0, accumulator: 0 });
   const lastTimeRef = useRef(0);
   const idCounter = useRef(0);
@@ -43,34 +36,22 @@ export const LivingGrid: React.FC = () => {
     };
 
     const spawnEntity = (x: number, y: number) => {
-      if (entitiesRef.current.length > 12) return;
+      if (entitiesRef.current.length > 15) return;
 
       const color = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
       const hslColor = `hsl(${color})`;
       
-      const subLines: SubLine[] = [];
-      const lineCount = 3 + Math.floor(Math.random() * 3);
-      
-      for (let i = 0; i < lineCount; i++) {
-        subLines.push({
-          dx: (Math.floor(Math.random() * 5) - 2) * gridSize,
-          dy: (Math.floor(Math.random() * 5) - 2) * gridSize,
-          horizontal: Math.random() > 0.5,
-          length: 1 + Math.floor(Math.random() * 3),
-          offset: Math.random() * 100,
-          speed: 0.05 + Math.random() * 0.1
-        });
-      }
-
       entitiesRef.current.push({
         id: idCounter.current++,
         x,
         y,
         theta: Math.random() * Math.PI * 2,
+        thetaDrift: (Math.random() - 0.5) * 0.02, // Subtle curve to break cardinal bias
         speed: 1.2 + Math.random() * 1.8,
         life: 1.0,
         color: hslColor,
-        subLines
+        radius: 100 + Math.random() * 80,
+        wavePhase: Math.random() * Math.PI * 2
       });
     };
 
@@ -102,70 +83,110 @@ export const LivingGrid: React.FC = () => {
       for (let i = entities.length - 1; i >= 0; i--) {
         const ent = entities[i];
         
-        // Smooth movement in Theta direction
+        // 1. SMOOTH UNDERLYING MOTION WITH CURVATURE
+        ent.theta += ent.thetaDrift * dt;
         ent.x += Math.cos(ent.theta) * ent.speed * dt;
         ent.y += Math.sin(ent.theta) * ent.speed * dt;
-        ent.life -= 0.004 * dt;
+        ent.life -= 0.003 * dt;
+        ent.wavePhase += 0.06 * dt;
 
         if (ent.life <= 0 || ent.x < -300 || ent.x > canvas.width + 300 || ent.y < -300 || ent.y > canvas.height + 300) {
           entities.splice(i, 1);
           continue;
         }
 
-        ent.subLines.forEach(line => {
-          line.offset += line.speed * dt;
-          
-          // Drift the sub-lines slightly from center
-          line.dx += (Math.random() - 0.5) * 0.4 * dt;
-          line.dy += (Math.random() - 0.5) * 0.4 * dt;
+        // 2. FIXED-GRID CONDUIT ACTIVATION
+        const minX = Math.floor((ent.x - ent.radius) / gridSize) * gridSize;
+        const maxX = Math.ceil((ent.x + ent.radius) / gridSize) * gridSize;
+        const minY = Math.floor((ent.y - ent.radius) / gridSize) * gridSize;
+        const maxY = Math.ceil((ent.y + ent.radius) / gridSize) * gridSize;
 
-          // Snap drawing to grid relative to entity center
-          const gx = Math.round((ent.x + line.dx) / gridSize) * gridSize;
-          const gy = Math.round((ent.y + line.dy) / gridSize) * gridSize;
-          
-          const x1 = line.horizontal ? gx - gridSize : gx;
-          const y1 = line.horizontal ? gy : gy - gridSize;
-          const x2 = line.horizontal ? gx + gridSize * line.length : gx;
-          const y2 = line.horizontal ? gy : gy + gridSize * line.length;
+        const pulse = (Math.sin(ent.wavePhase) + 1) / 2;
+        const globalOpacity = ent.life * (0.4 + pulse * 0.6);
 
-          // Drawing with "Bleed"
-          const pulse = (Math.sin(line.offset) + 1) / 2;
-          const baseAlpha = ent.life * (0.4 + pulse * 0.6);
+        // Draw Vertical Conduits
+        for (let gx = minX; gx <= maxX; gx += gridSize) {
+          const dx = Math.abs(gx - ent.x);
+          if (dx > ent.radius) continue;
 
-          // 1. THE BLEED: Wide, soft stroke that "blurs into the boxes"
-          ctx.beginPath();
-          ctx.lineWidth = 15; // Spans half the grid cell
-          ctx.strokeStyle = ent.color;
-          ctx.globalAlpha = baseAlpha * 0.15;
-          ctx.lineCap = 'round';
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
+          const horizontalIntensity = Math.pow(1 - dx / ent.radius, 4);
+          const yStart = minY;
+          const yEnd = maxY;
 
-          // 2. THE CORE: Sharp, bright grid line
-          ctx.beginPath();
-          ctx.lineWidth = 2;
-          ctx.globalAlpha = baseAlpha * 0.8;
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
+          const grad = ctx.createLinearGradient(gx, yStart, gx, yEnd);
+          const relativeCenter = (ent.y - yStart) / (yEnd - yStart);
+          const gradWidth = (ent.radius * horizontalIntensity) / (yEnd - yStart);
 
-          // 3. OPTIONAL GLOW: Tighter bloom
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = ent.color;
-          ctx.globalAlpha = baseAlpha * 0.3;
-          ctx.lineWidth = 4;
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-        });
+          grad.addColorStop(Math.max(0, relativeCenter - gradWidth), 'transparent');
+          grad.addColorStop(Math.max(0, Math.min(1, relativeCenter)), ent.color);
+          grad.addColorStop(Math.min(1, relativeCenter + gradWidth), 'transparent');
+
+          drawConduit(ctx, gx, yStart, gx, yEnd, grad, globalOpacity * horizontalIntensity);
+        }
+
+        // Draw Horizontal Conduits
+        for (let gy = minY; gy <= maxY; gy += gridSize) {
+          const dy = Math.abs(gy - ent.y);
+          if (dy > ent.size) continue;
+
+          const verticalIntensity = Math.pow(1 - dy / ent.radius, 4);
+          const xStart = minX;
+          const xEnd = maxX;
+
+          const grad = ctx.createLinearGradient(xStart, gy, xEnd, gy);
+          const relativeCenter = (ent.x - xStart) / (xEnd - xStart);
+          const gradWidth = (ent.radius * verticalIntensity) / (xEnd - xStart);
+
+          grad.addColorStop(Math.max(0, relativeCenter - gradWidth), 'transparent');
+          grad.addColorStop(Math.max(0, Math.min(1, relativeCenter)), ent.color);
+          grad.addColorStop(Math.min(1, relativeCenter + gradWidth), 'transparent');
+
+          drawConduit(ctx, xStart, gy, xEnd, gy, grad, globalOpacity * verticalIntensity);
+        }
       }
 
-      // Stochastic spawn
       if (Math.random() < 0.015) {
         spawnEntity(Math.random() * canvas.width, Math.random() * canvas.height);
       }
 
       animationFrameId = requestAnimationFrame(animate);
+    };
+
+    const drawConduit = (
+      ctx: CanvasRenderingContext2D, 
+      x1: number, y1: number, 
+      x2: number, y2: number, 
+      gradient: CanvasGradient, 
+      alpha: number
+    ) => {
+      if (alpha < 0.01) return;
+
+      const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+
+      // 1. THE BLEED (Wide and soft)
+      ctx.beginPath();
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = gradient;
+      ctx.globalAlpha = alpha * 0.12;
+      ctx.lineCap = 'butt';
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      // 2. THE CORE (Sharp and precise)
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      
+      // 3. THE GLOW (Tight bloom)
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = `hsl(${primaryColor})`;
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     };
 
     window.addEventListener('resize', resize);
