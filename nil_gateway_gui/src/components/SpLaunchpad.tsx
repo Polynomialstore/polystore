@@ -556,12 +556,12 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
   }, [busy, onboardingSnapshot.nextStep, runStepById]);
 
   return (
-    <div className="surface-card p-5">
+    <div className="glass-panel industrial-border p-5">
       <div className="sp-topbar">
         <div>
           <p className="soft-label">Storage Provider</p>
-          <h2 className="text-2xl font-semibold text-slate-900">SP Launchpad</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <h2 className="text-2xl font-semibold text-foreground">SP Launchpad</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Guided onboarding and operations for NilStore Storage Providers.
           </p>
         </div>
@@ -604,7 +604,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         </span>
       </div>
 
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+      <div className="mt-4 rounded-none border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
         {statusMessage}
       </div>
 
@@ -613,23 +613,23 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           <div className="sp-overview-grid">
             <div className="metric-card p-4">
               <p className="soft-label">Guided onboarding</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-900">
+              <h3 className="mt-2 text-lg font-semibold text-foreground">
                 {onboardingSnapshot.nextStep
                   ? `Next step: ${onboardingSnapshot.nextStep.label}`
                   : "Setup complete"}
               </h3>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {onboardingSnapshot.nextStep
                   ? "Run the next step, review result, then continue."
                   : "All onboarding steps are complete. Use Operations for ongoing management."}
               </p>
-              <div className="sp-progress-track mt-3">
+              <div className="sp-progress-track mt-3 bg-muted/40">
                 <div
-                  className="sp-progress-fill"
+                  className="sp-progress-fill bg-primary"
                   style={{ width: `${onboardingSnapshot.progressPercent}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-muted-foreground/60">
                 {onboardingSnapshot.progressPercent}% complete ({onboardingProgress})
               </p>
               <div className="sp-actions mt-3">
@@ -659,23 +659,23 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-4">
               <p className="soft-label">Current configuration</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <div className="sp-summary-cell">
-                  <span>Deployment</span>
-                  <strong>{deploymentMode === "local" ? "Local provider" : "Remote provider"}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Deployment</span>
+                  <strong className="text-foreground">{deploymentMode === "local" ? "Local provider" : "Remote provider"}</strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Endpoint mode</span>
-                  <strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Endpoint mode</span>
+                  <strong className="text-foreground">
                     {endpointMode === "direct" ? "Direct" : "Cloudflare tunnel"}
                   </strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Chain ID</span>
-                  <strong>{chainId}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Chain ID</span>
+                  <strong className="text-foreground">{chainId}</strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Provider route</span>
-                  <strong>{providerBaseUrl}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Provider route</span>
+                  <strong className="text-foreground">{providerBaseUrl}</strong>
                 </div>
               </div>
             </div>
@@ -695,13 +695,13 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                 return (
                   <li
                     key={step.id}
-                    className={["sp-step-card", isNext ? "sp-step-card-next" : ""].join(" ")}
+                    className={["sp-step-card border-border/40", isNext ? "sp-step-card-next border-primary/40 bg-primary/5" : ""].join(" ")}
                   >
                     <div className="sp-step-main">
-                      <span className="sp-step-index">{index + 1}</span>
+                      <span className="sp-step-index bg-muted text-muted-foreground">{index + 1}</span>
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{step.label}</p>
-                        <p className="text-xs text-slate-500">{status.detail}</p>
+                        <p className="text-sm font-semibold text-foreground">{step.label}</p>
+                        <p className="text-xs text-muted-foreground">{status.detail}</p>
                       </div>
                     </div>
                     <div className="sp-step-tail">
@@ -721,9 +721,9 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             </ol>
           </div>
 
-          <details className="sp-collapsible">
-            <summary>Network + identity settings</summary>
-            <div className="sp-collapsible-body">
+          <details className="sp-collapsible group">
+            <summary className="bg-muted/20 hover:bg-muted/40 text-foreground font-semibold">Network + identity settings</summary>
+            <div className="sp-collapsible-body border-border/40">
               <div className="mb-3 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -771,31 +771,31 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                 </button>
               </div>
               <div className="sp-form-grid">
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Chain ID
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={chainId}
                     onChange={(event) => setChainId(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Hub LCD
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={hubLcd}
                     onChange={(event) => setHubLcd(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Hub RPC
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={hubNode}
                     onChange={(event) => setHubNode(event.target.value)}
                   />
                 </label>
-                <div className="sp-field">
+                <div className="sp-field text-muted-foreground">
                   Action
                   <button
                     type="button"
@@ -808,51 +808,51 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                       : "Load defaults"}
                   </button>
                 </div>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Provider key alias
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerKey}
                     onChange={(event) => setProviderKey(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Provider address
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerAddress}
                     onChange={(event) => setProviderAddress(event.target.value)}
                     placeholder="nil1..."
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Provider endpoint (multiaddr)
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerEndpoint}
                     onChange={(event) => setProviderEndpoint(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Provider base URL
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerBaseUrl}
                     onChange={(event) => setProviderBaseUrl(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Listen address
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerListen}
                     onChange={(event) => setProviderListen(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Shared auth token
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={sharedAuth}
                     onChange={(event) => setSharedAuth(event.target.value)}
                     placeholder="NIL_GATEWAY_SP_AUTH"
@@ -862,22 +862,22 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             </div>
           </details>
 
-          <details className="sp-collapsible">
-            <summary>Registration settings + step outputs</summary>
-            <div className="sp-collapsible-body">
+          <details className="sp-collapsible group">
+            <summary className="bg-muted/20 hover:bg-muted/40 text-foreground font-semibold">Registration settings + step outputs</summary>
+            <div className="sp-collapsible-body border-border/40">
               <div className="sp-form-grid">
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Capabilities
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerCapabilities}
                     onChange={(event) => setProviderCapabilities(event.target.value)}
                   />
                 </label>
-                <label className="sp-field">
+                <label className="sp-field text-muted-foreground">
                   Total storage (bytes)
                   <input
-                    className="sp-input"
+                    className="sp-input rounded-none border-border bg-background"
                     value={providerTotalStorage}
                     onChange={(event) => setProviderTotalStorage(event.target.value)}
                   />
@@ -887,13 +887,13 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                 <div className="metric-card p-3">
                   <p className="soft-label">Funding result</p>
                   {balanceCheck ? (
-                    <p className="mt-2 text-xs text-slate-700">
+                    <p className="mt-2 text-xs text-foreground font-mono-data">
                       {balanceCheck.amount} {balanceCheck.denom} · minimum{" "}
                       {balanceCheck.min_recommended} ·{" "}
                       {balanceCheck.sufficient ? "sufficient" : "insufficient"}
                     </p>
                   ) : (
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Run Check funding to populate this step.
                     </p>
                   )}
@@ -902,9 +902,9 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                 <div className="metric-card p-3">
                   <p className="soft-label">Endpoint checks</p>
                   {endpointValidationText ? (
-                    <pre className="sp-pre mt-2">{endpointValidationText}</pre>
+                    <pre className="sp-pre mt-2 bg-background border-border/40 text-muted-foreground">{endpointValidationText}</pre>
                   ) : (
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Run Validate endpoint to populate this step.
                     </p>
                   )}
@@ -921,21 +921,21 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-4">
               <p className="soft-label">Operations summary</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <div className="sp-summary-cell">
-                  <span>Health</span>
-                  <strong>{statusLabel(healthStatus)}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Health</span>
+                  <strong className="text-foreground">{statusLabel(healthStatus)}</strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Issues</span>
-                  <strong>{issueCount}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Issues</span>
+                  <strong className="text-foreground">{issueCount}</strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Provider</span>
-                  <strong>{providerAddress || "unknown"}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Provider</span>
+                  <strong className="text-foreground">{providerAddress || "unknown"}</strong>
                 </div>
-                <div className="sp-summary-cell">
-                  <span>Route</span>
-                  <strong>{providerBaseUrl}</strong>
+                <div className="sp-summary-cell border-border/40">
+                  <span className="text-muted-foreground">Route</span>
+                  <strong className="text-foreground">{providerBaseUrl}</strong>
                 </div>
               </div>
               <div className="sp-actions mt-3">
@@ -984,7 +984,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-4">
               <p className="soft-label">Recent activity</p>
               {launchpadLogs.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">No SP actions yet.</p>
+                <p className="mt-2 text-xs text-muted-foreground">No SP actions yet.</p>
               ) : (
                 <div className="sp-log-lite mt-2">
                   {launchpadLogs
@@ -992,7 +992,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                     .reverse()
                     .slice(0, 12)
                     .map((line, index) => (
-                      <p key={`${index}-${line}`} className="text-xs text-slate-700">
+                      <p key={`${index}-${line}`} className="text-xs text-muted-foreground">
                         {line}
                       </p>
                     ))}
@@ -1005,18 +1005,18 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-3">
               <p className="soft-label">Issues and remediation</p>
               {!health || health.issues.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">No current issues detected.</p>
+                <p className="mt-2 text-xs text-muted-foreground">No current issues detected.</p>
               ) : (
                 <ul className="mt-2 space-y-2">
                   {health.issues.map((issue) => (
                     <li
                       key={`${issue.code}-${issue.message}`}
-                      className="sp-issue-row"
+                      className="sp-issue-row border-border/40"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{issue.code}</p>
-                        <p className="text-xs text-slate-600">{issue.message}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-foreground">{issue.code}</p>
+                        <p className="text-xs text-muted-foreground">{issue.message}</p>
+                        <p className="text-xs text-muted-foreground/60">
                           Fix: {issue.recommended_action}
                         </p>
                       </div>
@@ -1036,18 +1036,18 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-3">
               <p className="soft-label">Health checks</p>
               {!health ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Run health check to populate checks.
                 </p>
               ) : (
                 <div className="mt-2 space-y-1.5">
                   {health.checks.map((check) => (
-                    <div key={`${check.name}-${check.detail}`} className="sp-check-row">
-                      <span className={check.ok ? "text-emerald-700" : "text-rose-600"}>
+                    <div key={`${check.name}-${check.detail}`} className="sp-check-row border-border/20">
+                      <span className={check.ok ? "text-accent" : "text-destructive"}>
                         {check.ok ? "OK" : "FAIL"}
                       </span>
-                      <span className="font-semibold text-slate-700">{check.name}</span>
-                      <span className="text-slate-500">{check.detail}</span>
+                      <span className="font-semibold text-foreground">{check.name}</span>
+                      <span className="text-muted-foreground">{check.detail}</span>
                     </div>
                   ))}
                 </div>
@@ -1056,30 +1056,30 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           </div>
 
           {remoteBundle ? (
-            <details className="sp-collapsible" open>
-              <summary>Remote runbook</summary>
-              <div className="sp-collapsible-body">
-                <p className="mb-2 text-xs text-slate-600">
+            <details className="sp-collapsible group" open>
+              <summary className="bg-muted/20 hover:bg-muted/40 text-foreground font-semibold">Remote runbook</summary>
+              <div className="sp-collapsible-body border-border/40">
+                <p className="mb-2 text-xs text-muted-foreground">
                   Use this on the remote provider host. It includes environment bootstrap,
                   registration/start commands, and health checks.
                 </p>
                 <div className="space-y-2">
-                  <label className="sp-field">
+                  <label className="sp-field text-muted-foreground">
                     Environment
-                    <textarea className="sp-textarea" value={remoteBundle.env_block} readOnly />
+                    <textarea className="sp-textarea rounded-none border-border bg-background font-mono-data" value={remoteBundle.env_block} readOnly />
                   </label>
-                  <label className="sp-field">
+                  <label className="sp-field text-muted-foreground">
                     Start command
                     <textarea
-                      className="sp-textarea"
+                      className="sp-textarea rounded-none border-border bg-background font-mono-data"
                       value={remoteBundle.start_command}
                       readOnly
                     />
                   </label>
-                  <label className="sp-field">
+                  <label className="sp-field text-muted-foreground">
                     Healthcheck command
                     <textarea
-                      className="sp-textarea"
+                      className="sp-textarea rounded-none border-border bg-background font-mono-data"
                       value={remoteBundle.healthcheck_command}
                       readOnly
                     />
@@ -1089,19 +1089,19 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             </details>
           ) : null}
 
-          <details className="sp-collapsible">
-            <summary>Raw command output</summary>
-            <div className="sp-collapsible-body">
+          <details className="sp-collapsible group">
+            <summary className="bg-muted/20 hover:bg-muted/40 text-foreground font-semibold">Raw command output</summary>
+            <div className="sp-collapsible-body border-border/40">
               <div className="grid gap-2 lg:grid-cols-2">
                 <div>
-                  <p className="text-xs font-semibold text-slate-700">Register result</p>
-                  <pre className="sp-pre mt-1">
+                  <p className="text-xs font-semibold text-foreground">Register result</p>
+                  <pre className="sp-pre mt-1 bg-background border-border/40 text-muted-foreground">
                     {renderCommandResult(registerResult) || "No register action yet."}
                   </pre>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-700">Service result</p>
-                  <pre className="sp-pre mt-1">
+                  <p className="text-xs font-semibold text-foreground">Service result</p>
+                  <pre className="sp-pre mt-1 bg-background border-border/40 text-muted-foreground">
                     {renderCommandResult(serviceResult) || "No service action yet."}
                   </pre>
                 </div>
@@ -1112,11 +1112,11 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           <div className="metric-card p-3">
             <p className="soft-label">Full SP activity log</p>
             {launchpadLogs.length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500">No SP actions yet.</p>
+              <p className="mt-2 text-xs text-muted-foreground">No SP actions yet.</p>
             ) : (
-              <div className="sp-log-panel mt-2">
+              <div className="sp-log-panel mt-2 bg-muted/20 border border-border/40 rounded-none p-3 max-h-[400px] overflow-y-auto">
                 {launchpadLogs.slice().reverse().map((line, index) => (
-                  <p key={`${index}-${line}`} className="text-xs text-emerald-200">
+                  <p key={`${index}-${line}`} className="text-xs text-primary/80 font-mono-data">
                     {line}
                   </p>
                 ))}
@@ -1126,7 +1126,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+      <div className="mt-4 rounded-none border border-border bg-card p-3 text-xs text-muted-foreground">
         Target onboarding window: time-to-first-healthy SP under 10 minutes on trusted devnet.
       </div>
     </div>

@@ -4,32 +4,31 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
-    /* --- Dark Mode: Tactical Console --- */
-    --background: 240 10% 2%; /* Level 0 (Floor) */
-    --foreground: 0 0% 98%;
-    --card: 240 10% 6%; /* Level 1 (Panels) */
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 6%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 20.5 90.2% 48.2%; /* Safety Orange */
-    --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 240 10% 10%; /* Level 2 (Active/Hover) */
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 10% 10%;
-    --muted-foreground: 240 5% 74%;
-    --accent: 142.1 70.6% 45.3%; /* Success Green */
+    /* --- Light Mode: Ultra-Clean Tactical Blueprint --- */
+    --background: 210 20% 96%;
+    --foreground: 222 47% 11%; 
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 300 100% 75%; /* Neon Pale Fuschia */
+    --primary-foreground: 300 100% 10%;
+    --secondary: 210 40% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 142 70% 30%; /* Darker Green for Light Mode contrast */
     --accent-foreground: 144.1 61.4% 10.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 22%;
-    --input: 240 6% 18%;
-    --ring: 20.5 90.2% 48.2%;
-    --grid-color: hsl(var(--primary) / 0.02);
-    --scan-opacity: 0.12;
-    --industrial-bracket-opacity: 0.9;
+    --border: 214 32% 88%;
+    --input: 214 32% 85%;
+    --ring: 300 100% 75%;
+    --grid-color: hsl(var(--foreground) / 0.05); 
+    --industrial-bracket-opacity: 0.95;
+    --radius: 0rem;
 
-    /* Legacy NG vars for compatibility with App.tsx */
+    /* Legacy compatibility */
     --ng-bg: hsl(var(--background));
     --ng-surface: hsl(var(--card));
     --ng-surface-strong: hsl(var(--secondary));
@@ -37,42 +36,102 @@
     --ng-ink-700: hsl(var(--muted-foreground));
     --ng-ink-500: hsl(var(--muted-foreground) / 0.7);
     --ng-line: hsl(var(--border));
-    --ng-line-strong: hsl(var(--border) / 1.5);
     --ng-accent: hsl(var(--primary));
     --ng-success: hsl(var(--accent));
-    --ng-warn: #f59e0b;
+    --ng-danger: hsl(var(--destructive));
+  }
+ 
+  .dark {
+    /* --- Dark Mode: Blade Runner / City at Night --- */
+    --background: 240 15% 4%; 
+    --foreground: 180 20% 90%;
+    --card: 240 10% 6%; 
+    --card-foreground: 180 20% 98%;
+    --popover: 240 10% 8%;
+    --popover-foreground: 180 20% 98%;
+    
+    /* Neon Palette */
+    --primary: 190 100% 50%; /* Cyber Cyan */
+    --primary-foreground: 190 100% 10%;
+    --secondary: 240 10% 12%; 
+    --secondary-foreground: 180 10% 90%;
+    --muted: 240 10% 12%;
+    --muted-foreground: 240 5% 60%;
+    --accent: 300 100% 60%; /* Neon Magenta */
+    --accent-foreground: 300 100% 10%;
+    --destructive: 0 100% 60%; /* Flare Red */
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 6% 15%;
+    --input: 240 6% 12%;
+    --ring: 190 100% 50%;
+    
+    --grid-color: hsl(190 100% 50% / 0.15); 
+    --industrial-bracket-opacity: 1;
+
+    /* Legacy compatibility */
+    --ng-bg: hsl(var(--background));
+    --ng-surface: hsl(var(--card));
+    --ng-surface-strong: hsl(var(--secondary));
+    --ng-ink-900: hsl(var(--foreground));
+    --ng-ink-700: hsl(var(--muted-foreground));
+    --ng-accent: hsl(var(--primary));
+    --ng-success: hsl(var(--accent));
     --ng-danger: hsl(var(--destructive));
   }
 
+  * { @apply border-border; }
+
   body {
     @apply bg-background text-foreground;
-    font-family: "Montserrat", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
-      "Segoe UI Emoji";
-    /* Pure Black Void - No grid in Dark Mode as per Manifesto */
-    background-image: none;
+    font-family: "Montserrat", sans-serif;
+    background-image: 
+      /* The Global Scan Line (Moving) - Broad Technical Wash */
+      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.10) 50%, transparent),
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+    background-size: 100% 1000px, 30px 30px, 30px 30px;
+    background-repeat: repeat-y, repeat, repeat;
+    background-attachment: fixed;
+    animation: background-scan 20s linear infinite;
     margin: 0;
     min-height: 100vh;
   }
-
-  #root {
-    min-height: 100vh;
+  
+  .dark body { 
+    background-image: 
+      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.08), transparent 85%),
+      /* The Global Scan Line (Moving) - Broad Technical Wash */
+      linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.04) 50%, transparent),
+      /* Grid Lines */
+      linear-gradient(to right, hsl(var(--primary) / 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.15) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 800px, 30px 30px, 30px 30px;
+    background-repeat: no-repeat, repeat-y, repeat, repeat;
+    animation: background-scan 20s linear infinite;
   }
+
+  .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
-.gateway-app {
-  position: relative;
-  z-index: 1;
+@keyframes background-scan {
+  0% { background-position: center top -1000px, center top -800px, 0 0, 0 0; }
+  100% { background-position: center top 100vh, center top 100vh, 0 0, 0 0; }
 }
 
-/* The Slab Principle: 100% Occlusion */
+/* The Slab Principle: Solid Panels */
 .surface-card, .glass-panel, .solid-panel {
   @apply border bg-card;
   border-color: hsl(var(--border));
-  /* Rim Lighting: Defining edges in the dark */
-  border-top-color: hsl(var(--primary) / 0.2);
-  /* Grounding Glow */
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  box-shadow: none;
   border-radius: 0;
+  opacity: 1; /* 100% Opaque in Light Mode */
+}
+
+.dark .glass-panel, .dark .surface-card {
+  @apply border-t border-l border-white/5;
+  background-color: hsl(var(--card) / 0.98);
+  backdrop-filter: blur(8px);
 }
 
 .surface-hero {
@@ -81,61 +140,53 @@
 }
 
 .status-pill {
-  @apply inline-flex items-center gap-2 border border-border/80 bg-black/40 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data;
-  color: var(--ng-ink-700);
+  @apply inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data;
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 0; /* NO ROUNDED CORNERS */
+  border-radius: 0;
   background: currentColor;
-  box-shadow: 0 0 10px currentColor;
-}
-
-@keyframes ng-pulse {
-  0%, 100% { opacity: 1; filter: brightness(1.2); }
-  50% { opacity: 0.6; filter: brightness(0.8); }
 }
 
 .status-dot-live {
-  animation: ng-pulse 2.4s ease-in-out infinite;
+  @apply animate-pulse;
+  box-shadow: 0 0 8px currentColor;
 }
 
 .control-btn {
-  @apply rounded-none border border-border/80 bg-black/30 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground/80 transition-all;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  @apply rounded-none border border-border bg-card/80 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-all hover:bg-secondary;
+  backdrop-filter: blur(4px);
 }
 
 .control-btn:hover {
-  @apply bg-primary/10 border-primary/60 text-foreground;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
-}
-
-.control-btn:active {
-  transform: translate(1px, 1px);
+  @apply border-primary/60 text-primary;
 }
 
 .control-btn-primary {
-  @apply bg-primary text-primary-foreground border-primary border-2;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  @apply bg-primary text-primary-foreground border-primary;
 }
 
 .control-btn-primary:hover {
   @apply brightness-110;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
 }
 
 .meta-chip {
-  @apply inline-flex items-center gap-2 border border-border/60 bg-black/20 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground;
+  @apply inline-flex items-center gap-2 border border-border/60 bg-background/20 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground;
 }
 
-.meta-chip strong {
-  @apply text-foreground;
+.sp-badge {
+  @apply inline-flex items-center gap-2 border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.15em] font-mono-data text-primary;
 }
+
+.sp-badge-success { @apply border-accent/40 bg-accent/10 text-accent; }
+.sp-badge-pending { @apply border-primary/40 bg-primary/10 text-primary; }
+.sp-badge-error { @apply border-destructive/40 bg-destructive/10 text-destructive; }
+.sp-badge-idle { @apply border-muted/40 bg-muted/10 text-muted-foreground; }
 
 .panel-tab {
-  @apply rounded-none border border-border/60 bg-black/20 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-all;
+  @apply rounded-none border border-border/60 bg-background/20 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-all;
 }
 
 .panel-tab:hover {
@@ -151,24 +202,15 @@
 }
 
 .soft-label {
-  @apply text-[9px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground;
+  @apply text-[9px] uppercase tracking-[0.2em] font-black text-muted-foreground/40 leading-none;
 }
 
-.log-panel {
-  @apply relative glass-panel;
-  background: linear-gradient(180deg, rgba(2, 6, 18, 1) 0%, rgba(4, 10, 28, 1) 100%);
+.sp-progress-track {
+  @apply h-1.5 w-full bg-muted/40 rounded-none overflow-hidden;
 }
 
-.log-panel::before {
-  content: "";
-  @apply absolute inset-0 pointer-events-none opacity-10;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 1) 0px,
-    rgba(255, 255, 255, 1) 1px,
-    transparent 1px,
-    transparent 3px
-  );
+.sp-progress-fill {
+  @apply h-full bg-primary transition-all duration-500;
 }
 
 /* Precision HUD Brackets */
@@ -179,7 +221,7 @@
 .industrial-border::before,
 .industrial-border::after {
   content: "";
-  @apply absolute pointer-events-none z-10 w-4 h-4;
+  @apply absolute pointer-events-none z-10 w-4 h-4 transition-all duration-500;
 }
 
 .industrial-border::before {
@@ -196,34 +238,17 @@
   border-right: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
 }
 
+.dark .industrial-border::before, .dark .industrial-border::after {
+  filter: drop-shadow(0 0 4px hsl(var(--primary) / 0.6));
+}
+
+.subtle-divider {
+  @apply border-border/40;
+}
+
 @layer utilities {
   .font-mono-data {
-    font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: "JetBrains Mono", monospace;
     letter-spacing: -0.02em;
-  }
-
-  .glass-panel {
-    @apply border bg-card;
-    border-color: hsl(var(--border));
-    box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
-    border-top-color: hsl(var(--primary) / 0.2);
-  }
-
-  @keyframes ng-scan {
-    0% { transform: translateY(-100%); opacity: 0; }
-    10% { opacity: 0.5; }
-    90% { opacity: 0.5; }
-    100% { transform: translateY(100%); opacity: 0; }
-  }
-
-  .animate-scan {
-    @apply relative overflow-hidden;
-  }
-
-  .animate-scan::after {
-    content: "";
-    @apply absolute inset-x-0 h-24 top-0 pointer-events-none;
-    background: linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.15), transparent);
-    animation: ng-scan 4s linear infinite;
   }
 }

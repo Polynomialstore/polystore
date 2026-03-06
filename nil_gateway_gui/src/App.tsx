@@ -1,9 +1,11 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
+import { Moon, Sun } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import logoDark from "./assets/nilstore-dark.png";
+import logoDark from "./assets/logo-dark.png";
+import logoLight from "./assets/logo-light.png";
 import { DealSlabPanel } from "./components/DealSlabPanel";
 import { SpLaunchpad } from "./components/SpLaunchpad";
 import {
@@ -123,12 +125,12 @@ function gatewayStatusBoundaryError(
 }
 
 function statusBadgeClass(phase: GatewayPhase): string {
-  if (phase === "online") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (phase === "online") return "border-accent/40 bg-accent/5 text-accent";
   if (phase === "starting" || phase === "checking" || phase === "booting") {
-    return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+    return "border-primary/40 bg-primary/5 text-primary";
   }
-  if (phase === "error") return "border-rose-500/40 bg-rose-500/10 text-rose-200";
-  return "border-white/10 bg-white/5 text-slate-200";
+  if (phase === "error") return "border-destructive/40 bg-destructive/10 text-destructive";
+  return "border-border bg-muted/10 text-muted-foreground";
 }
 
 function statusLabel(phase: GatewayPhase): string {
@@ -151,9 +153,9 @@ function statusLabel(phase: GatewayPhase): string {
 }
 
 function readinessBadgeClass(state: ReadinessState): string {
-  if (state === "ready") return "border-emerald-500/40 text-emerald-200";
-  if (state === "pending") return "border-amber-500/40 text-amber-200";
-  return "border-rose-500/40 text-rose-200";
+  if (state === "ready") return "border-accent/40 text-accent";
+  if (state === "pending") return "border-primary/40 text-primary";
+  return "border-destructive/40 text-destructive";
 }
 
 function readinessLabel(state: ReadinessState): string {
@@ -185,6 +187,13 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://127.0.0.1:8080");
   const [gateway, setGateway] = useState<GatewayStatusResponse | null>(null);
   const [gatewayManaged, setGatewayManaged] = useState<boolean | null>(null);
@@ -829,12 +838,6 @@ export default function App() {
     [readinessItems],
   );
 
-  const gatewaySourceLabel = useMemo(() => {
-    if (gatewayManaged === true) return "user-gateway managed by GUI";
-    if (gatewayManaged === false) return "user-gateway attached (external)";
-    return "user-gateway source unknown";
-  }, [gatewayManaged]);
-
   const gatewayLogMessage = useMemo(() => {
     if (gatewayManaged === true) {
       return "Waiting for user-gateway logs. Start a local upload now to stream upload activity.";
@@ -848,7 +851,7 @@ export default function App() {
   const recentActivity = useMemo(() => logs.slice(-RECENT_ACTIVITY_LIMIT).reverse(), [logs]);
 
   const formFieldClass =
-    "font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:outline-none focus:ring-2 focus:ring-orange-500/30";
+    "font-mono-data w-full rounded-none border border-border bg-card/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:outline-none focus:ring-2 focus:ring-orange-500/30";
 
   const handleCopyDiagnostics = useCallback(async () => {
     setDiagCopyBusy(true);
@@ -918,34 +921,28 @@ export default function App() {
 
   return (
     <div className="gateway-app min-h-screen">
-      <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
-        <header className="surface-card surface-hero industrial-border p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
+      <div className="mx-auto max-w-6xl space-y-3 px-5 py-6">
+        <header className="glass-panel industrial-border p-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <img
+                src={theme === "dark" ? logoDark : logoLight}
+                alt="NilStore"
+                className="h-8 w-8 rounded-none border border-border bg-card p-1.5"
+              />
               <div className="flex items-center gap-3">
-                <img
-                  src={logoDark}
-                  alt="NilStore"
-                  className="h-10 w-10 rounded-none border border-white/10 bg-black/30 p-2 shadow-[0_0_0_1px_rgba(249,115,22,0.12),0_18px_40px_rgba(0,0,0,0.45)]"
-                />
-                <div>
-                  <p className="soft-label">NilStore</p>
-                  <h1 className="text-[34px] font-semibold leading-none text-slate-50">Local Gateway</h1>
-                </div>
+                <h1 className="text-xl font-bold tracking-tight text-foreground uppercase">Local Gateway</h1>
+                <span className={`status-pill border px-2 py-1 font-mono-data h-7 text-[10px] ${statusBadgeClass(phase)}`}>
+                  <span className={`status-dot ${phase === "online" ? "status-dot-live" : ""}`} />
+                  {statusLabel(phase)}
+                </span>
               </div>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                Keep your local Gateway ready for uploads and retrievals in the NilStore dashboard.
-              </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`status-pill border px-3 py-2 font-mono-data ${statusBadgeClass(phase)}`}>
-                <span className={`status-dot ${phase === "online" ? "status-dot-live" : ""}`} />
-                {statusLabel(phase)}
-              </span>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="control-btn control-btn-primary"
+                className="control-btn control-btn-primary h-8 px-3"
                 onClick={() => {
                   if (phase === "online") {
                     void handleOpenDashboard();
@@ -956,100 +953,105 @@ export default function App() {
                 disabled={actionBusy || isConnecting}
               >
                 {phase === "online"
-                  ? "Open NilStore Dashboard"
+                  ? "OPEN DASHBOARD"
                   : isConnecting
-                    ? "Connecting..."
-                    : "Start local Gateway"}
+                    ? "CONNECTING..."
+                    : "START GATEWAY"}
               </button>
               <button
                 type="button"
-                className="control-btn"
+                className="control-btn flex items-center justify-center h-8 w-8 p-0 text-foreground"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? (
+                  <Sun size={16} strokeWidth={2.5} />
+                ) : (
+                  <Moon size={16} strokeWidth={2.5} />
+                )}
+              </button>
+              <button
+                type="button"
+                className="control-btn h-8 px-3"
                 onClick={() => setActivePanel("diagnostics")}
               >
-                Diagnostics
+                DIAGNOSTICS
               </button>
               <button
                 type="button"
-                className="control-btn"
+                className="control-btn h-8 px-3"
                 onClick={() => setWorkspace("sp")}
               >
-                SP Launchpad
+                SP LAUNCHPAD
               </button>
             </div>
           </div>
+        </header>
 
-          <div
-            className={[
-              "mt-4 glass-panel industrial-border px-4 py-3",
-              isConnecting ? "animate-scan" : "",
-            ].join(" ")}
-          >
-            <p className="text-sm font-semibold text-slate-100">{phaseMessage}</p>
-            {statusDetail ? <p className="mt-1 text-xs text-slate-400">{statusDetail}</p> : null}
-            <p className="mt-1 text-xs text-slate-400 font-mono-data">
+        <div className={["glass-panel industrial-border px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 bg-muted/5", isConnecting ? "animate-scan" : ""].join(" ")}>
+          <div className="flex items-center gap-4">
+            <p className="text-[11px] font-bold text-foreground font-mono-data flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 ${phase === 'online' ? 'bg-primary animate-pulse' : 'bg-muted-foreground'}`} />
+              {phaseMessage.toUpperCase()}
+            </p>
+            <p className="text-[10px] text-muted-foreground font-mono-data uppercase tracking-wider">
               {readinessCounts.ready}/3 checks ready
               {readinessCounts.blocked > 0
                 ? ` · ${readinessCounts.blocked} needs attention`
                 : readinessCounts.pending > 0
                   ? ` · ${readinessCounts.pending} in progress`
                   : " · system healthy"}
-              {lastStatusAt ? ` · checked ${new Date(lastStatusAt).toLocaleTimeString()}` : ""}
+              {lastStatusAt ? ` · sync: ${new Date(lastStatusAt).toLocaleTimeString()}` : ""}
             </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="meta-chip font-mono-data">
-                  <strong>Endpoint</strong> {gatewayBaseUrl}
-                </span>
-                <span className="meta-chip font-mono-data">
-                  <strong>Mode</strong> {gateway?.mode || "standalone"}
-                </span>
-                <span className="meta-chip font-mono-data">
-                  <strong>Gateway source</strong> {gatewaySourceLabel}
-                </span>
-                <span className="meta-chip font-mono-data">
-                  <strong>Auto-start</strong> {autoStartEnabled ? "enabled" : "paused"}
-                </span>
-              </div>
-            {diagCopyMessage ? (
-              <p
-                className={[
-                  "mt-2 text-xs font-mono-data font-bold",
-                  diagCopyMessage.startsWith("SYNCED") ? "text-emerald-200" : "text-rose-200",
-                ].join(" ")}
-              >
-                {diagCopyMessage}
-              </p>
-            ) : null}
           </div>
+          <div className="flex flex-wrap gap-3">
+            <span className="text-[9px] font-mono-data uppercase tracking-wider text-muted-foreground/80">
+              <strong className="text-muted-foreground/40 mr-1">Endpoint</strong> {gatewayBaseUrl}
+            </span>
+            <span className="text-[9px] font-mono-data uppercase tracking-wider text-muted-foreground/80">
+              <strong className="text-muted-foreground/40 mr-1">Mode</strong> {gateway?.mode || "standalone"}
+            </span>
+            <span className="text-[9px] font-mono-data uppercase tracking-wider text-muted-foreground/80">
+              <strong className="text-muted-foreground/40 mr-1">Source</strong> {gatewayManaged ? "Managed" : "Attached"}
+            </span>
+          </div>
+        </div>
 
-          {!baseIsLoopback ? (
-            <div className="mt-3 border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 font-mono-data">
-              Non-local endpoint configured. Use `http://127.0.0.1:8080` for normal local Gateway flows.
-            </div>
-          ) : null}
-        </header>
+        {statusDetail ? (
+          <div className="border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] text-rose-200 font-mono-data uppercase tracking-wider">
+            Fault: {statusDetail}
+          </div>
+        ) : null}
 
-        <section className="surface-card industrial-border p-5">
-          <div className="flex flex-wrap items-center gap-2">
+        {!baseIsLoopback ? (
+          <div className="border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-200 font-mono-data uppercase tracking-wider">
+            Non-local endpoint configured. Use `http://127.0.0.1:8080` for normal local Gateway flows.
+          </div>
+        ) : null}
+
+
+        <section className="glass-panel industrial-border p-4">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-4">
             <button
               type="button"
               className={tabButtonClass("overview")}
               onClick={() => setActivePanel("overview")}
             >
-              Overview
+              OVERVIEW
             </button>
             <button
               type="button"
               className={tabButtonClass("storage")}
               onClick={() => setActivePanel("storage")}
             >
-              Storage
+              STORAGE
             </button>
             <button
               type="button"
               className={tabButtonClass("diagnostics")}
               onClick={() => setActivePanel("diagnostics")}
             >
-              Diagnostics
+              DIAGNOSTICS
             </button>
           </div>
 
@@ -1060,17 +1062,17 @@ export default function App() {
                   <div key={item.key} className="metric-card industrial-border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                           {item.title}
                         </p>
                         <div className="mt-2 flex items-center gap-2">
                           <span
                             className={[
                               item.state === "ready"
-                                ? "text-emerald-200"
+                                ? "text-accent"
                                 : item.state === "pending"
-                                  ? "text-amber-200"
-                                  : "text-rose-200",
+                                  ? "text-primary"
+                                  : "text-destructive",
                             ].join(" ")}
                           >
                             <span
@@ -1084,16 +1086,16 @@ export default function App() {
                             className={[
                               "font-mono-data text-lg leading-none",
                               item.state === "ready"
-                                ? "text-emerald-200"
+                                ? "text-accent"
                                 : item.state === "pending"
-                                  ? "text-amber-200"
-                                  : "text-rose-200",
+                                  ? "text-primary"
+                                  : "text-destructive",
                             ].join(" ")}
                           >
                             {readinessLabel(item.state).toUpperCase()}
                           </p>
                         </div>
-                        <p className="mt-1 text-xs text-slate-400">{item.detail}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
                       </div>
 
                       <span
@@ -1127,12 +1129,12 @@ export default function App() {
                 </div>
               ) : null}
 
-              <div className="metric-card">
+              <div className="metric-card industrial-border">
                 <div className="border-b subtle-divider px-3 py-2 soft-label">
                   Recent activity
                 </div>
                 {recentActivity.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-slate-400">
+                  <p className="px-3 py-3 text-sm text-muted-foreground">
                     No recent activity yet.
                   </p>
                 ) : (
@@ -1140,7 +1142,7 @@ export default function App() {
                     {recentActivity.map((line, index) => (
                       <li
                         key={`activity-${index}-${line}`}
-                        className="list-disc pl-1 text-xs text-slate-300 marker:text-slate-500"
+                        className="list-disc pl-1 text-xs text-muted-foreground/90 marker:text-muted-foreground/50"
                       >
                         {line}
                       </li>
@@ -1169,11 +1171,11 @@ export default function App() {
               />
 
               <details className="metric-card industrial-border p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground/90">
                   Connection controls
                 </summary>
                 <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <label className="text-xs font-semibold text-slate-400">
+                  <label className="text-xs font-semibold text-muted-foreground">
                     Gateway URL
                     <input
                       className={`mt-1 ${formFieldClass}`}
@@ -1214,7 +1216,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-slate-400 font-mono-data">
+                <p className="mt-2 text-xs text-muted-foreground font-mono-data">
                   Auto-start: {autoStartEnabled ? "enabled" : "paused"}
                 </p>
               </details>
@@ -1227,25 +1229,25 @@ export default function App() {
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="metric-card industrial-border px-3 py-2">
                     <p className="soft-label">Deals</p>
-                    <p className="font-mono-data text-lg font-semibold text-slate-100 tabular-nums">
+                    <p className="font-mono-data text-lg font-semibold text-foreground tabular-nums">
                       {storageSummary?.deal_count ?? 0}
                     </p>
                   </div>
                   <div className="metric-card industrial-border px-3 py-2">
                     <p className="soft-label">Manifests</p>
-                    <p className="font-mono-data text-lg font-semibold text-slate-100 tabular-nums">
+                    <p className="font-mono-data text-lg font-semibold text-foreground tabular-nums">
                       {storageSummary?.manifest_count ?? 0}
                     </p>
                   </div>
                   <div className="metric-card industrial-border px-3 py-2">
                     <p className="soft-label">Files</p>
-                    <p className="font-mono-data text-lg font-semibold text-slate-100 tabular-nums">
+                    <p className="font-mono-data text-lg font-semibold text-foreground tabular-nums">
                       {storageSummary?.total_files ?? 0}
                     </p>
                   </div>
                   <div className="metric-card industrial-border px-3 py-2">
                     <p className="soft-label">Disk</p>
-                    <p className="font-mono-data text-lg font-semibold text-slate-100 tabular-nums">
+                    <p className="font-mono-data text-lg font-semibold text-foreground tabular-nums">
                       {formatBytes(storageSummary?.total_bytes ?? 0)}
                     </p>
                   </div>
@@ -1275,10 +1277,10 @@ export default function App() {
               </div>
 
               <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
-                <label className="text-xs font-semibold text-slate-400">
+                <label className="text-xs font-semibold text-muted-foreground">
                   Deal filter
                   <select
-                    className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-2 py-2 text-sm text-slate-100"
+                    className="font-mono-data mt-1 w-full rounded-none border border-border bg-card/30 px-2 py-2 text-sm text-foreground"
                     value={storageDealFilter}
                     onChange={(event) => setStorageDealFilter(event.target.value)}
                   >
@@ -1290,10 +1292,10 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <label className="text-xs font-semibold text-slate-400">
+                <label className="text-xs font-semibold text-muted-foreground">
                   File search
                   <input
-                    className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                    className="font-mono-data mt-1 w-full rounded-none border border-border bg-card/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50"
                     placeholder="Filter cached files by path..."
                     value={storageFileQuery}
                     onChange={(event) => setStorageFileQuery(event.target.value)}
@@ -1318,29 +1320,29 @@ export default function App() {
                 <p className="text-xs text-rose-300 font-mono-data">{storageError}</p>
               ) : null}
 
-              <div className="metric-card industrial-border px-3 py-2 text-xs text-slate-300 font-mono-data">
+              <div className="metric-card industrial-border px-3 py-2 text-xs text-muted-foreground/90 font-mono-data">
                 <p className="break-all">
-                  <span className="font-semibold text-slate-400">Uploads dir:</span>{" "}
+                  <span className="font-semibold text-muted-foreground">Uploads dir:</span>{" "}
                   {storageSummary?.uploads_dir || "n/a"}
                 </p>
                 <p className="break-all">
-                  <span className="font-semibold text-slate-400">Session DB:</span>{" "}
+                  <span className="font-semibold text-muted-foreground">Session DB:</span>{" "}
                   {storageSummary?.session_db_path || "n/a"}{" "}
                   {storageSummary?.session_db_exists ? "(present)" : "(not created yet)"}
                 </p>
                 <p>
-                  <span className="font-semibold text-slate-400">Last cache scan:</span>{" "}
+                  <span className="font-semibold text-muted-foreground">Last cache scan:</span>{" "}
                   {storageLastAt ? new Date(storageLastAt).toLocaleTimeString() : "n/a"}
                 </p>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="metric-card">
+                <div className="metric-card industrial-border">
                   <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Cached deals
                   </div>
                   {filteredStorageDealEntries.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-slate-400">
+                    <div className="px-3 py-3 text-xs text-muted-foreground">
                       {storageDealEntries.length === 0
                         ? "No deal cache folders yet."
                         : "No deals match the current filter."}
@@ -1349,9 +1351,9 @@ export default function App() {
                     filteredStorageDealEntries.map((deal) => (
                       <div
                         key={deal.deal_id}
-                        className="grid grid-cols-[0.7fr_0.7fr_0.7fr_0.7fr_auto] gap-2 border-b border-white/5 px-3 py-2 text-xs text-slate-200 last:border-b-0"
+                        className="grid grid-cols-[0.7fr_0.7fr_0.7fr_0.7fr_auto] gap-2 border-b border-border/50 px-3 py-2 text-xs text-foreground/90 last:border-b-0"
                       >
-                        <span className="font-mono-data font-semibold text-slate-100">{deal.deal_id}</span>
+                        <span className="font-mono-data font-semibold text-foreground">{deal.deal_id}</span>
                         <span>{formatBytes(deal.total_bytes)}</span>
                         <span>{deal.file_count} files</span>
                         <span>{deal.manifest_count} manifests</span>
@@ -1367,12 +1369,12 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="metric-card">
+                <div className="metric-card industrial-border">
                   <div className="border-b subtle-divider px-3 py-2 soft-label">
                     Recent cached files
                   </div>
                   {filteredStorageRecentFiles.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-slate-400">
+                    <div className="px-3 py-3 text-xs text-muted-foreground">
                       {storageRecentFiles.length === 0 && storageDealFilter === "all" && !storageFileQuery
                         ? "No cached files yet."
                         : "No cached files match this filter/search."}
@@ -1381,12 +1383,12 @@ export default function App() {
                     filteredStorageRecentFiles.map((file) => (
                       <div
                         key={`${file.relative_path}-${file.modified_unix}`}
-                        className="border-b border-white/5 px-3 py-2 text-xs text-slate-200 last:border-b-0"
+                        className="border-b border-border/50 px-3 py-2 text-xs text-foreground/90 last:border-b-0"
                       >
-                        <p className="truncate font-mono-data font-medium text-slate-100">
+                        <p className="truncate font-mono-data font-medium text-foreground">
                           {file.relative_path}
                         </p>
-                        <p className="mt-0.5 text-slate-400 font-mono-data">
+                        <p className="mt-0.5 text-muted-foreground font-mono-data">
                           {formatBytes(file.size_bytes)} · deal {file.deal_id} · {formatUnixTime(file.modified_unix)}
                         </p>
                       </div>
@@ -1399,10 +1401,10 @@ export default function App() {
 
           {activePanel === "diagnostics" ? (
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="metric-card p-3">
+              <div className="metric-card industrial-border p-3">
                 <div className="flex items-center justify-between">
                   <h2 className="soft-label">Live gateway logs</h2>
-                  <div className="flex items-center gap-3 text-xs text-slate-400 font-mono-data">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono-data">
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -1454,24 +1456,24 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                <div className="metric-card p-3">
+                <div className="metric-card industrial-border p-3">
                   <p className="soft-label">Gateway internals</p>
-                  <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono-data">
+                  <div className="mt-2 space-y-1 text-xs text-muted-foreground/90 font-mono-data">
                     <p>
-                      <span className="font-semibold text-slate-400">Listening:</span>{" "}
+                      <span className="font-semibold text-muted-foreground">Listening:</span>{" "}
                       {gateway?.listening_addr || "—"}
                     </p>
                     <p>
-                      <span className="font-semibold text-slate-400">Mode:</span> {gateway?.mode || "—"}
+                      <span className="font-semibold text-muted-foreground">Mode:</span> {gateway?.mode || "—"}
                     </p>
                     <p className="break-all">
-                      <span className="font-semibold text-slate-400">Dependencies:</span> {depsSummary}
+                      <span className="font-semibold text-muted-foreground">Dependencies:</span> {depsSummary}
                     </p>
                     <p className="break-all">
-                      <span className="font-semibold text-slate-400">Capabilities:</span> {capabilitiesSummary}
+                      <span className="font-semibold text-muted-foreground">Capabilities:</span> {capabilitiesSummary}
                     </p>
                     <p className="break-all">
-                      <span className="font-semibold text-slate-400">Provider base:</span>{" "}
+                      <span className="font-semibold text-muted-foreground">Provider base:</span>{" "}
                       {gateway?.provider_base || "Not reported"}
                     </p>
                   </div>
@@ -1521,7 +1523,7 @@ export default function App() {
 
               <details className="metric-card industrial-border p-3 lg:col-span-2" open={showAdvanced}>
                 <summary
-                  className="cursor-pointer text-sm font-semibold text-slate-200"
+                  className="cursor-pointer text-sm font-semibold text-foreground/90"
                   onClick={(e) => {
                     e.preventDefault();
                     setShowAdvanced((prev) => !prev);
@@ -1532,11 +1534,11 @@ export default function App() {
                 {showAdvanced ? (
                   <div className="mt-3 space-y-6 border-t subtle-divider pt-3">
                     <div>
-                      <p className="text-xs font-semibold text-slate-400 font-mono-data">
+                      <p className="text-xs font-semibold text-muted-foreground font-mono-data">
                         Upload (`/gateway/upload`)
                       </p>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                        <label className="text-sm text-slate-300">
+                        <label className="text-sm text-muted-foreground/90">
                           Deal ID
                           <input
                             className={formFieldClass}
@@ -1544,7 +1546,7 @@ export default function App() {
                             onChange={(event) => setUploadDealId(event.target.value)}
                           />
                         </label>
-                        <label className="text-sm text-slate-300">
+                        <label className="text-sm text-muted-foreground/90">
                           Owner
                           <input
                             className={formFieldClass}
@@ -1553,7 +1555,7 @@ export default function App() {
                             placeholder="nil1..."
                           />
                         </label>
-                        <label className="text-sm text-slate-300">
+                        <label className="text-sm text-muted-foreground/90">
                           NilFS path
                           <input
                             className={formFieldClass}
@@ -1561,7 +1563,7 @@ export default function App() {
                             onChange={(event) => setUploadFilePath(event.target.value)}
                           />
                         </label>
-                        <div className="text-sm text-slate-300">
+                        <div className="text-sm text-muted-foreground/90">
                           Local file
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <button
@@ -1571,7 +1573,7 @@ export default function App() {
                             >
                               Choose file
                             </button>
-                            <span className="text-xs text-slate-400 break-all font-mono-data">
+                            <span className="text-xs text-muted-foreground break-all font-mono-data">
                               {localFilePath || "No file selected"}
                             </span>
                           </div>
@@ -1597,9 +1599,9 @@ export default function App() {
                       ) : null}
                     </div>
 
-                    <div className="border-t subtle-divider pt-5 text-xs text-slate-300">
+                    <div className="border-t subtle-divider pt-5 text-xs text-muted-foreground/90">
                       List/download and slab ranges are now first-class on the Overview panel:{" "}
-                      <span className="font-semibold text-slate-100">
+                      <span className="font-semibold text-foreground">
                         Deal storage layout (Slab / MDUs)
                       </span>
                       .
@@ -1607,10 +1609,10 @@ export default function App() {
 
                     {gateway ? (
                       <details className="metric-card industrial-border p-3">
-                        <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                        <summary className="cursor-pointer text-xs font-semibold text-muted-foreground/90">
                           Raw /status payload
                         </summary>
-                        <pre className="mt-2 overflow-auto text-[11px] text-slate-200 font-mono-data">
+                        <pre className="mt-2 overflow-auto text-[11px] text-foreground/90 font-mono-data">
                           {JSON.stringify(gateway, null, 2)}
                         </pre>
                       </details>

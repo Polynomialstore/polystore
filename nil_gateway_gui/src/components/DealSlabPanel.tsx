@@ -193,7 +193,7 @@ export function DealSlabPanel(props: {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b subtle-divider px-3 py-2">
         <div>
           <p className="soft-label">Deal storage layout (Slab / MDUs)</p>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             MDU education lives on the Technology page. This panel focuses on
             visibility and developer-grade ranges.
           </p>
@@ -220,26 +220,26 @@ export function DealSlabPanel(props: {
 
       <div className="px-3 py-3 space-y-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
-          <label className="text-xs font-semibold text-slate-400">
+          <label className="text-xs font-semibold text-muted-foreground">
             Manifest root
             <input
-              className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+              className="font-mono-data mt-1 w-full rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40"
               value={manifestRoot}
               onChange={(event) => onChangeManifestRoot(event.target.value)}
               placeholder="0x…"
             />
           </label>
-          <label className="text-xs font-semibold text-slate-400">
+          <label className="text-xs font-semibold text-muted-foreground">
             Deal ID / Owner
             <div className="mt-1 grid gap-2 sm:grid-cols-2">
               <input
-                className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                className="font-mono-data w-full rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40"
                 value={dealId}
                 onChange={(event) => onChangeDealId(event.target.value)}
                 placeholder="123"
               />
               <input
-                className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                className="font-mono-data w-full rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40"
                 value={owner}
                 onChange={(event) => onChangeOwner(event.target.value)}
                 placeholder="nil1…"
@@ -261,47 +261,47 @@ export function DealSlabPanel(props: {
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="glass-panel industrial-border px-3 py-2">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               Constants
             </p>
-            <p className="mt-1 text-xs text-slate-200 font-mono-data">
+            <p className="mt-1 text-xs text-foreground font-mono-data">
               mdu_size={inferred.mduSizeBytes.toLocaleString()} · blob_size=
               {inferred.blobSizeBytes.toLocaleString()} · blobs_per_mdu=
               {inferred.blobsPerMdu}
             </p>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[11px] text-muted-foreground/60">
               Retrieval sessions and receipts often reference global blob indices.
             </p>
           </div>
           <div className="glass-panel industrial-border px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Slab breakdown
               </p>
               {!inferred.uploadMatches ? (
-                <span className="font-mono-data border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-bold text-slate-300 tracking-[0.18em]">
+                <span className="font-mono-data border border-border bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground tracking-[0.18em]">
                   best-effort
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-xs text-slate-200 font-mono-data">
+            <p className="mt-1 text-xs text-foreground font-mono-data">
               meta=1 · witness=
               {inferred.witnessMdus !== null ? inferred.witnessMdus : "?"} ·
               user=
               {inferred.userMdus !== null ? inferred.userMdus : "?"} · total=
               {inferred.totalMdus !== null ? inferred.totalMdus : "?"}
             </p>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[11px] text-muted-foreground/60">
               Override witness MDUs if you loaded a manifest without an upload
               response.
             </p>
           </div>
           <div className="glass-panel industrial-border px-3 py-2">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               Witness override (optional)
             </p>
             <input
-              className="font-mono-data mt-1 w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+              className="font-mono-data mt-1 w-full rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40"
               value={witnessOverride}
               onChange={(event) =>
                 setWitnessOverride(event.target.value.replace(/[^\d]/g, ""))
@@ -312,13 +312,13 @@ export function DealSlabPanel(props: {
         </div>
 
         {listError ? (
-          <div className="border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 font-mono-data">
+          <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive font-mono-data">
             {listError}
           </div>
         ) : null}
 
         {downloadError ? (
-          <div className="border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 font-mono-data">
+          <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive font-mono-data">
             {downloadError}
           </div>
         ) : null}
@@ -329,10 +329,8 @@ export function DealSlabPanel(props: {
               key={tab}
               type="button"
               className={[
-                "font-mono-data border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] transition-colors",
-                tab === activeTab
-                  ? "border-orange-500/50 bg-orange-500/10 text-orange-200"
-                  : "border-white/10 bg-black/20 text-slate-200 hover:bg-orange-500/10 hover:border-orange-500/40 hover:text-orange-200",
+                "panel-tab",
+                tab === activeTab ? "panel-tab-active" : "",
               ].join(" ")}
               onClick={() => setActiveTab(tab)}
             >
@@ -348,10 +346,10 @@ export function DealSlabPanel(props: {
         {activeTab === "overview" ? (
           <div className="grid gap-3 md:grid-cols-2">
             <div className="glass-panel industrial-border px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Artifact map
               </p>
-              <ul className="mt-1 space-y-1 text-xs text-slate-200">
+              <ul className="mt-1 space-y-1 text-xs text-foreground">
                 <li>
                   <span className="font-semibold">MDU #0</span>: NilFS metadata
                   (file table + root table)
@@ -367,15 +365,15 @@ export function DealSlabPanel(props: {
               </ul>
             </div>
             <div className="glass-panel industrial-border px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Used range (from list-files)
               </p>
-              <p className="mt-1 text-xs text-slate-200 font-mono-data">
+              <p className="mt-1 text-xs text-foreground font-mono-data">
                 {inferred.usedMduMin !== null && inferred.usedMduMax !== null
                   ? formatIntRange(inferred.usedMduMin, inferred.usedMduMax)
                   : "Load files to derive the used MDU range."}
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">
+              <p className="mt-1 text-[11px] text-muted-foreground/60">
                 Meta MDUs assumed as {inferred.metaMdus} (1 + witness).
               </p>
             </div>
@@ -384,7 +382,7 @@ export function DealSlabPanel(props: {
 
         {activeTab === "files" ? (
           <div className="glass-panel industrial-border">
-            <div className="font-mono-data grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+            <div className="font-mono-data grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b subtle-divider px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               <span>Path</span>
               <span className="text-right">Bytes</span>
               <span className="text-right">Start offset</span>
@@ -392,7 +390,7 @@ export function DealSlabPanel(props: {
               <span className="text-right">Actions</span>
             </div>
             {inferred.fileRows.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-slate-400 font-mono-data">
+              <div className="px-3 py-3 text-xs text-muted-foreground font-mono-data">
                 No file rows yet. Load files from the gateway to derive MDU
                 ranges.
               </div>
@@ -400,9 +398,9 @@ export function DealSlabPanel(props: {
               inferred.fileRows.map((row) => (
                 <div
                   key={row.path}
-                  className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b border-white/5 px-3 py-2 text-xs text-slate-200 last:border-b-0"
+                  className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_auto] gap-2 border-b border-border/20 px-3 py-2 text-xs text-foreground last:border-b-0"
                 >
-                  <span className="truncate font-mono-data font-medium text-slate-100">
+                  <span className="truncate font-mono-data font-medium text-foreground">
                     {row.path}
                   </span>
                   <span className="text-right tabular-nums font-mono-data">
@@ -446,7 +444,7 @@ export function DealSlabPanel(props: {
         {activeTab === "mdus" ? (
           <div className="grid gap-3 md:grid-cols-2">
             <div className="glass-panel industrial-border px-3 py-2">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Slab map (MDU #0..#63)
               </p>
 
@@ -478,22 +476,22 @@ export function DealSlabPanel(props: {
                           : "unknown";
 
                   const cellClass = !allocated
-                    ? "border-white/5 bg-black/10 opacity-40"
+                    ? "border-border/10 bg-muted/10 opacity-40"
                     : isMeta
-                      ? "border-orange-400/60 bg-orange-500/30"
+                      ? "border-primary/60 bg-primary/30"
                       : isWitness
-                        ? "border-violet-400/50 bg-violet-500/20"
+                        ? "border-accent/50 bg-accent/20"
                         : isUser
                           ? "border-emerald-400/50 bg-emerald-500/25"
-                          : "border-white/10 bg-black/20";
+                          : "border-border/40 bg-muted/20";
 
                   return (
                     <div
                       key={`mdu-cell-${idx}`}
                       className={[
-                        "h-6 w-6 border",
+                        "h-6 w-6 border rounded-none",
                         cellClass,
-                        inUsedRange ? "shadow-[0_0_0_1px_rgba(226,232,240,0.18)]" : "",
+                        inUsedRange ? "shadow-[0_0_0_1px_hsl(var(--primary)/0.3)]" : "",
                       ].join(" ")}
                       title={`MDU #${idx} · ${role}`}
                     />
@@ -501,22 +499,22 @@ export function DealSlabPanel(props: {
                 })}
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono-data font-bold uppercase tracking-[0.18em] text-slate-400">
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono-data font-bold uppercase tracking-[0.18em] text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-3 w-3 border border-orange-400/60 bg-orange-500/30" /> MDU0
+                  <span className="h-3 w-3 border border-primary/60 bg-primary/30" /> MDU0
                 </span>
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-3 w-3 border border-violet-400/50 bg-violet-500/20" /> Witness
+                  <span className="h-3 w-3 border border-accent/50 bg-accent/20" /> Witness
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3 w-3 border border-emerald-400/50 bg-emerald-500/25" /> User
                 </span>
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-3 w-3 border border-white/10 bg-black/20" /> ?
+                  <span className="h-3 w-3 border border-border/40 bg-muted/20" /> ?
                 </span>
               </div>
 
-              <p className="mt-2 text-[11px] text-slate-400">
+              <p className="mt-2 text-[11px] text-muted-foreground/60">
                 Totals inferred from the most recent upload response (when available). Used range
                 comes from list-files.
               </p>
@@ -524,10 +522,10 @@ export function DealSlabPanel(props: {
 
             <div className="grid gap-3">
               <div className="glass-panel industrial-border px-3 py-2">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Ranges
                 </p>
-                <div className="mt-1 space-y-1 text-xs text-slate-200 font-mono-data">
+                <div className="mt-1 space-y-1 text-xs text-foreground font-mono-data">
                   <p>
                     meta: <span>#0</span>
                   </p>
@@ -552,18 +550,18 @@ export function DealSlabPanel(props: {
                     </span>
                   </p>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-[11px] text-muted-foreground/60">
                   If totals are unknown, use list-files derived ranges instead.
                 </p>
               </div>
 
               <div className="glass-panel industrial-border px-3 py-2">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   MDU inspector
                 </p>
                 <div className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                   <input
-                    className="font-mono-data w-full rounded-none border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                    className="font-mono-data w-full rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40"
                     value={mduInspectorIndex}
                     onChange={(event) =>
                       setMduInspectorIndex(event.target.value.replace(/[^\d]/g, ""))
@@ -585,12 +583,12 @@ export function DealSlabPanel(props: {
                     Copy
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-slate-200 font-mono-data break-all">
+                <p className="mt-2 text-xs text-foreground font-mono-data break-all">
                   {inspector
                     ? `global_blobs: ${formatBigintRange(inspector.startBlob, inspector.endBlob)}`
                     : "Enter an MDU index to compute its global blob range."}
                 </p>
-                <p className="mt-1 text-[11px] text-slate-400 font-mono-data">
+                <p className="mt-1 text-[11px] text-muted-foreground font-mono-data">
                   global_blob = mdu_index * {inferred.blobsPerMdu} + blob_index
                 </p>
               </div>
