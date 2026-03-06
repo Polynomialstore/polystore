@@ -76,14 +76,14 @@
       linear-gradient(to right, hsl(var(--primary) / 0.4) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--primary) / 0.4) 1px, transparent 1px);
     background-size: 30px 30px;
-    /* Decoupled "Boiling" Mask: Overlapping spots with independent drift */
+    /* Improved Dynamic Boiling: Multi-axis wandering */
     -webkit-mask-image: 
-      radial-gradient(circle at var(--boil-x1, 20%) var(--boil-y1, 30%), black, transparent 40%),
-      radial-gradient(circle at var(--boil-x2, 80%) var(--boil-y2, 70%), black, transparent 40%),
-      radial-gradient(circle at var(--boil-x3, 50%) var(--boil-y3, 50%), black, transparent 50%);
+      radial-gradient(circle at var(--boil-x1, 20%) var(--boil-y1, 30%), black, transparent 35%),
+      radial-gradient(circle at var(--boil-x2, 80%) var(--boil-y2, 70%), black, transparent 35%),
+      radial-gradient(circle at var(--boil-x3, 50%) var(--boil-y3, 50%), black, transparent 45%);
     -webkit-mask-composite: source-over;
     mask-composite: add;
-    animation: grid-boil 12s ease-in-out infinite alternate, grid-breath 6s ease-in-out infinite;
+    animation: grid-boil 8s ease-in-out infinite alternate, grid-breath 4s ease-in-out infinite;
   }
   
   .dark body { 
@@ -105,25 +105,25 @@
 
 @keyframes grid-boil {
   0% {
-    --boil-x1: 15%; --boil-y1: 25%;
-    --boil-x2: 85%; --boil-y2: 75%;
-    --boil-x3: 45%; --boil-y3: 45%;
+    --boil-x1: 10%; --boil-y1: 20%;
+    --boil-x2: 90%; --boil-y2: 80%;
+    --boil-x3: 40%; --boil-y3: 40%;
   }
   50% {
-    --boil-x1: 40%; --boil-y1: 60%;
-    --boil-x2: 60%; --boil-y2: 40%;
-    --boil-x3: 55%; --boil-y3: 55%;
+    --boil-x1: 50%; --boil-y1: 50%;
+    --boil-x2: 50%; --boil-y2: 50%;
+    --boil-x3: 60%; --boil-y3: 60%;
   }
   100% {
-    --boil-x1: 75%; --boil-y1: 15%;
-    --boil-x2: 25%; --boil-y2: 85%;
+    --boil-x1: 80%; --boil-y1: 10%;
+    --boil-x2: 20%; --boil-y2: 90%;
     --boil-x3: 50%; --boil-y3: 50%;
   }
 }
 
 @keyframes grid-breath {
-  0%, 100% { opacity: 0.15; }
-  50% { opacity: 0.45; }
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.5; }
 }
 
 @layer utilities {
