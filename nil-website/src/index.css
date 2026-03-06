@@ -1,3 +1,10 @@
+@property --boil-x1 { syntax: '<percentage>'; inherits: false; initial-value: 10%; }
+@property --boil-y1 { syntax: '<percentage>'; inherits: false; initial-value: 20%; }
+@property --boil-x2 { syntax: '<percentage>'; inherits: false; initial-value: 90%; }
+@property --boil-y2 { syntax: '<percentage>'; inherits: false; initial-value: 80%; }
+@property --boil-x3 { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
+@property --boil-y3 { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -76,14 +83,19 @@
       linear-gradient(to right, hsl(var(--primary) / 0.4) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--primary) / 0.4) 1px, transparent 1px);
     background-size: 30px 30px;
-    /* Improved Dynamic Boiling: Multi-axis wandering */
+    /* Decoupled "Boiling" Mask: Three independent wandering spots */
     -webkit-mask-image: 
-      radial-gradient(circle at var(--boil-x1, 20%) var(--boil-y1, 30%), black, transparent 35%),
-      radial-gradient(circle at var(--boil-x2, 80%) var(--boil-y2, 70%), black, transparent 35%),
-      radial-gradient(circle at var(--boil-x3, 50%) var(--boil-y3, 50%), black, transparent 45%);
+      radial-gradient(circle at var(--boil-x1) var(--boil-y1), black, transparent 40%),
+      radial-gradient(circle at var(--boil-x2) var(--boil-y2), black, transparent 40%),
+      radial-gradient(circle at var(--boil-x3) var(--boil-y3), black, transparent 50%);
     -webkit-mask-composite: source-over;
     mask-composite: add;
-    animation: grid-boil 8s ease-in-out infinite alternate, grid-breath 4s ease-in-out infinite;
+    /* Independent prime-number durations ensure patterns never synchronize or jump */
+    animation: 
+      boil-spot1 13s ease-in-out infinite alternate,
+      boil-spot2 17s ease-in-out infinite alternate,
+      boil-spot3 19s ease-in-out infinite alternate,
+      grid-breath 6s ease-in-out infinite;
   }
   
   .dark body { 
@@ -103,26 +115,23 @@
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
-@keyframes grid-boil {
-  0% {
-    --boil-x1: 10%; --boil-y1: 20%;
-    --boil-x2: 90%; --boil-y2: 80%;
-    --boil-x3: 40%; --boil-y3: 40%;
-  }
-  50% {
-    --boil-x1: 50%; --boil-y1: 50%;
-    --boil-x2: 50%; --boil-y2: 50%;
-    --boil-x3: 60%; --boil-y3: 60%;
-  }
-  100% {
-    --boil-x1: 80%; --boil-y1: 10%;
-    --boil-x2: 20%; --boil-y2: 90%;
-    --boil-x3: 50%; --boil-y3: 50%;
-  }
+@keyframes boil-spot1 {
+  0% { --boil-x1: 10%; --boil-y1: 20%; }
+  100% { --boil-x1: 80%; --boil-y1: 40%; }
+}
+
+@keyframes boil-spot2 {
+  0% { --boil-x2: 90%; --boil-y2: 80%; }
+  100% { --boil-x2: 20%; --boil-y2: 30%; }
+}
+
+@keyframes boil-spot3 {
+  0% { --boil-x3: 40%; --boil-y3: 40%; }
+  100% { --boil-x3: 60%; --boil-y3: 60%; }
 }
 
 @keyframes grid-breath {
-  0%, 100% { opacity: 0.1; }
+  0%, 100% { opacity: 0.2; }
   50% { opacity: 0.5; }
 }
 
