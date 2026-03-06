@@ -96,13 +96,6 @@ export const LivingGrid: React.FC = () => {
         const startY = Math.floor((ent.y - ent.size) / gridSize) * gridSize;
         const endY = Math.ceil((ent.y + ent.size) / gridSize) * gridSize;
 
-        // Draw the core bright seed
-        ctx.beginPath();
-        ctx.fillStyle = ent.color;
-        ctx.globalAlpha = ent.life * 0.9;
-        ctx.arc(ent.x, ent.y, 2, 0, Math.PI * 2);
-        ctx.fill();
-
         // Draw Vertical Active Lines
         for (let gx = startX; gx <= endX; gx += gridSize) {
           const dx = Math.abs(gx - ent.x);
