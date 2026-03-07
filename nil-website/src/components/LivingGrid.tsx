@@ -19,6 +19,7 @@ export const LivingGrid: React.FC = () => {
   const mouseRef = useRef({ x: 0, y: 0, v: 0, accumulator: 0 });
   const lastTimeRef = useRef(0);
   const idCounter = useRef(0);
+  const lastMouseSpawnAtRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -36,8 +37,6 @@ export const LivingGrid: React.FC = () => {
     };
 
     const spawnEntity = (x: number, y: number) => {
-      if (entitiesRef.current.length > 15) return;
-
       const color = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
       const hslColor = `hsl(${color})`;
       
@@ -67,8 +66,12 @@ export const LivingGrid: React.FC = () => {
 
       mouseRef.current.accumulator += dist;
       if (mouseRef.current.accumulator > 120) {
-        spawnEntity(e.clientX, e.clientY);
-        mouseRef.current.accumulator = 0;
+        const now = performance.now();
+        if (now - lastMouseSpawnAtRef.current >= 1000) {
+          spawnEntity(e.clientX, e.clientY);
+          lastMouseSpawnAtRef.current = now;
+          mouseRef.current.accumulator = 0;
+        }
       }
     };
 
