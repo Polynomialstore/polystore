@@ -67,7 +67,7 @@ export const LivingGrid: React.FC = () => {
       mouseRef.current.accumulator += dist;
       if (mouseRef.current.accumulator > 120) {
         const now = performance.now();
-        if (now - lastMouseSpawnAtRef.current >= 1000) {
+        if (now - lastMouseSpawnAtRef.current >= 300) {
           spawnEntity(e.clientX, e.clientY);
           lastMouseSpawnAtRef.current = now;
           mouseRef.current.accumulator = 0;
