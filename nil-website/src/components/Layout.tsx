@@ -18,8 +18,6 @@ export const Layout = () => {
     let lastY = 0;
     let lastTime = Date.now();
     let velocity = 0;
-    let frameId: number;
-
     const handleMouseMove = (e: MouseEvent) => {
       const now = Date.now();
       const dt = now - lastTime;
@@ -44,7 +42,6 @@ export const Layout = () => {
     window.addEventListener("mousemove", handleMouseMove);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      cancelAnimationFrame(frameId);
     };
   }, []);
 

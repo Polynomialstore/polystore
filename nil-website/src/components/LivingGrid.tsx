@@ -127,7 +127,7 @@ export const LivingGrid: React.FC = () => {
         // Draw Horizontal Conduits
         for (let gy = minY; gy <= maxY; gy += gridSize) {
           const dy = Math.abs(gy - ent.y);
-          if (dy > ent.size) continue;
+          if (dy > ent.radius) continue;
 
           const verticalIntensity = Math.pow(1 - dy / ent.radius, 4);
           const xStart = minX;
