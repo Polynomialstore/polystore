@@ -1,32 +1,25 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, ExternalLink, Copy, AlertTriangle } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, HardDrive, Database, AlertTriangle } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
 import { useUpload } from '../hooks/useUpload'
-import { useProofs } from '../hooks/useProofs'
 import { useNetwork } from '../hooks/useNetwork'
-import { useFetch } from '../hooks/useFetch'
 import { appConfig } from '../config'
 import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
-import { FaucetAuthTokenInput } from './FaucetAuthTokenInput'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { maybeWrapNilceZstd } from '../lib/nilce'
-import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
 import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
-import type { SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
-import { useTransportRouter } from '../hooks/useTransportRouter'
-import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
+import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
-import { Link } from 'react-router-dom'
 
 interface Provider {
   address: string
@@ -68,32 +61,8 @@ const RETRIEVAL_SESSIONS_POLL_MS = 120_000
 const RETRIEVAL_SESSIONS_HIDDEN_POLL_MS = 600_000
 const RETRIEVAL_PARAMS_POLL_MS = 600_000
 const RETRIEVAL_PARAMS_HIDDEN_POLL_MS = 1_800_000
-const PROOFS_POLL_MS = 120_000
-const PROOFS_HIDDEN_POLL_MS = 600_000
 const RPC_HEALTH_POLL_MS = 60_000
 const RPC_HEALTH_HIDDEN_POLL_MS = 300_000
-const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
-
-async function copyText(text: string) {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-  if (typeof document === 'undefined') {
-    throw new Error('clipboard unavailable')
-  }
-  const el = document.createElement('textarea')
-  el.value = text
-  el.setAttribute('readonly', 'true')
-  el.style.position = 'fixed'
-  el.style.top = '0'
-  el.style.left = '0'
-  el.style.opacity = '0'
-  document.body.appendChild(el)
-  el.select()
-  document.execCommand('copy')
-  document.body.removeChild(el)
-}
 
 const DURATION_PRESETS = [
   { value: '1d', label: '1 day', seconds: 24 * 60 * 60 },
@@ -115,7 +84,7 @@ export function Dashboard() {
   const chainId = useChainId()
   const { openConnectModal } = useConnectModal()
   const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
-  const { submitDeal, loading: dealLoading, lastTx: createTx } = useCreateDeal()
+  const { submitDeal, loading: dealLoading } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
   const { switchNetwork } = useNetwork()
@@ -145,8 +114,6 @@ export function Dashboard() {
   const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
   const activeChainId = walletChainId ?? chainId
   const isWrongNetwork = isConnected && walletIsWrongNetwork
-  const walletReady = Boolean(isConnected && address && !accountPermissionMismatch && !isWrongNetwork)
-
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
   const [rpcHeight, setRpcHeight] = useState<number | null>(null)
@@ -250,22 +217,20 @@ export function Dashboard() {
   const [durationPreset, setDurationPreset] = useState('1y')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
-  const [placementProfile, setPlacementProfile] = useState<'auto' | 'custom'>('auto')
-  const [rsK, setRsK] = useState(String(appConfig.defaultRsK))
-  const [rsM, setRsM] = useState(String(appConfig.defaultRsM))
+  const [placementProfile] = useState<'auto' | 'custom'>('auto')
+  const [rsK] = useState(String(appConfig.defaultRsK))
+  const [rsM] = useState(String(appConfig.defaultRsM))
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
-  const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
   const [, setContentSlabLoading] = useState(false)
   const [, setContentSlabError] = useState<string | null>(null)
 
-  const [statusMsg, setStatusMsg] = useState<string | null>(null)
-  const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const [, setStatusMsg] = useState<string | null>(null)
+  const [, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
   const [walletReconnectHint, setWalletReconnectHint] = useState(false)
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
-  const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
   const toastTimerRef = useRef<number | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -277,15 +242,8 @@ export function Dashboard() {
   const optimisticCidTtlMs = 2 * 60_000
   const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
-  const [dealDetailRequestedTab, setDealDetailRequestedTab] = useState<'files' | 'info' | 'manifest' | 'heat' | null>(null)
-  const [dealDetailRequestedTabNonce, setDealDetailRequestedTabNonce] = useState(0)
-  const { proofs, loading: proofsLoading } = useProofs({
-    enabled: Boolean(nilAddress),
-    pollMs: PROOFS_POLL_MS,
-    hiddenPollMs: PROOFS_HIDDEN_POLL_MS,
-  })
-  const { fetchFile, loading: downloading } = useFetch()
-  const { listFiles, slab } = useTransportRouter()
+  const [dealDetailRequestedTab] = useState<'files' | 'info' | 'manifest' | 'heat' | null>(null)
+  const [dealDetailRequestedTabNonce] = useState(0)
 
   const handleWalletError = useCallback((error: unknown, fallback: string) => {
     const walletError = classifyWalletError(error, fallback)
@@ -354,10 +312,10 @@ export function Dashboard() {
   ])
 
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
-  const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
-  const [retrievalSessionsError, setRetrievalSessionsError] = useState<string | null>(null)
-  const [retrievalParams, setRetrievalParams] = useState<LcdParams | null>(null)
-  const [retrievalParamsError, setRetrievalParamsError] = useState<string | null>(null)
+  const [, setRetrievalSessionsLoading] = useState(false)
+  const [, setRetrievalSessionsError] = useState<string | null>(null)
+  const [, setRetrievalParams] = useState<LcdParams | null>(null)
+  const [, setRetrievalParamsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!nilAddress) {
@@ -486,28 +444,6 @@ export function Dashboard() {
     }
   }, [])
 
-  const retrievalCountsByDeal = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const proof of proofs) {
-      if (!proof.valid) continue
-      const dealId = String(proof.dealId || '').trim()
-      if (!dealId) continue
-      counts[dealId] = (counts[dealId] || 0) + 1
-    }
-    return counts
-  }, [proofs])
-
-  const bytesServedByDeal = useMemo(() => {
-    const totals: Record<string, bigint> = {}
-    for (const raw of retrievalSessions) {
-      const session = raw as Record<string, unknown>
-      const dealId = String(session['deal_id'] ?? '').trim()
-      if (!dealId) continue
-      totals[dealId] = (totals[dealId] || 0n) + parseUint64(session['total_bytes'])
-    }
-    return totals
-  }, [retrievalSessions])
-
   const ownedDeals = useMemo(
     () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
     [deals, nilAddress],
@@ -593,7 +529,6 @@ export function Dashboard() {
     return null
   }, [defaultMode2Slots, placementProfile, providerCount])
   const createDealProviderError = placementProfile === 'custom' ? mode2Config.error : autoMode2ProviderError
-  const createDealRequiredSlots = placementProfile === 'custom' ? mode2Config.slots : defaultMode2Slots
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -620,76 +555,11 @@ export function Dashboard() {
     [providerEndpointsByAddr],
   )
 
-  const resolveProviderP2pTarget = useCallback(
-    (deal: Deal | null) => {
-      if (!deal || !deal.providers || deal.providers.length === 0) return undefined
-      const primary = deal.providers[0]
-      const endpoints = providerEndpointsByAddr.get(primary) ?? []
-      for (const ep of endpoints) {
-        const target = multiaddrToP2pTarget(ep)
-        if (target) return target
-      }
-      return undefined
-    },
-    [providerEndpointsByAddr],
-  )
-
-  const contentManifestRoot = targetDeal?.cid || ''
-
   useEffect(() => {
     setStagedUpload(null)
-    setContentSlab(null)
     setContentSlabError(null)
     setContentSlabLoading(false)
   }, [targetDealId])
-
-  useEffect(() => {
-    const manifestRoot = targetDeal?.cid
-    const owner = nilAddress || targetDeal?.owner || ''
-    if (!manifestRoot || !targetDealId || !owner) {
-      setContentSlab(null)
-      setContentSlabError(null)
-      setContentSlabLoading(false)
-      return
-    }
-
-    let cancelled = false
-
-    const load = async () => {
-      setContentSlabLoading(true)
-      setContentSlabError(null)
-      try {
-        const directBase = resolveProviderBase(targetDeal)
-        const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(targetDeal) : undefined
-        const slabResult = await slab({
-          manifestRoot,
-          dealId: targetDealId,
-          owner,
-          directBase,
-          p2pTarget,
-        })
-
-        if (cancelled) return
-
-        setContentSlab(slabResult.data)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load deal content observables'
-        if (!cancelled) {
-          setContentSlab(null)
-          setContentSlabError(msg)
-        }
-      } finally {
-        if (!cancelled) {
-          setContentSlabLoading(false)
-        }
-      }
-    }
-
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, slab])
 
   useEffect(() => {
     if (address) {
@@ -866,18 +736,6 @@ export function Dashboard() {
     return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
   }
 
-  function formatRelativeTime(ts: number): string {
-    if (!Number.isFinite(ts) || ts <= 0) return 'just now'
-    const diff = Math.max(0, Date.now() - ts)
-    if (diff < 60_000) return 'just now'
-    const mins = Math.floor(diff / 60_000)
-    if (mins < 60) return `${mins}m ago`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
   function parseUint64(v: unknown): bigint {
     if (typeof v === 'bigint') return v
     if (typeof v === 'number') return BigInt(Math.max(0, Math.floor(v)))
@@ -927,50 +785,6 @@ export function Dashboard() {
     return '—'
   }
 
-  function formatCoin(coin?: { amount: string; denom: string } | null): string {
-    if (!coin) return '—'
-    const amount = String(coin.amount || '')
-    const denom = String(coin.denom || '')
-    if (!amount && !denom) return '—'
-    if (!denom) return amount || '0'
-    return `${amount || '0'} ${denom}`
-  }
-
-  function formatBps(value: unknown): string {
-    const num = typeof value === 'number' ? value : Number(value)
-    if (!Number.isFinite(num)) return '—'
-    return `${(num / 100).toFixed(num % 100 === 0 ? 0 : 2)}%`
-  }
-
-  const providerStatsByAddress = useMemo(() => {
-    const byProvider = new Map<string, { assignedDeals: number; activeDeals: number; retrievals: number; bytesServed: number }>()
-
-    for (const deal of allDeals) {
-      for (const providerAddr of deal.providers || []) {
-        const entry = byProvider.get(providerAddr) ?? {
-          assignedDeals: 0,
-          activeDeals: 0,
-          retrievals: 0,
-          bytesServed: 0,
-        }
-        entry.assignedDeals += 1
-        if (String(deal.cid || '').trim().startsWith('0x')) entry.activeDeals += 1
-        const dealRetrievals = retrievalCountsByDeal[deal.id] || 0
-        const dealBytesServed = bytesServedByDeal[deal.id] || 0n
-        entry.retrievals += dealRetrievals
-        entry.bytesServed +=
-          dealBytesServed <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(dealBytesServed) : Number.MAX_SAFE_INTEGER
-        byProvider.set(providerAddr, entry)
-      }
-    }
-
-    return byProvider
-  }, [allDeals, bytesServedByDeal, retrievalCountsByDeal])
-
-  const retrievalFeeNote = retrievalParams
-    ? 'Base fee burned on session open. Variable fee locked until completion or cancel.'
-    : 'Loading retrieval parameters...'
-
   const upsertRecentFile = useCallback((entry: Omit<RecentFileEntry, 'id' | 'updatedAt'>) => {
     const id = `${entry.dealId}:${entry.filePath}`
     setRecentFiles((prev) => {
@@ -989,12 +803,6 @@ export function Dashboard() {
       const merged = { ...existing, ...next }
       return [merged, ...prev.filter((item) => item.id !== id)].slice(0, MAX_RECENT_FILES)
     })
-  }, [])
-
-  const updateRecentFile = useCallback((id: string, patch: Partial<RecentFileEntry>) => {
-    setRecentFiles((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item)),
-    )
   }, [])
 
   const showDownloadToast = useCallback((filePath: string) => {
@@ -1379,102 +1187,6 @@ export function Dashboard() {
       })
     }
   }
-
-  const resolveDealById = useCallback(
-    (dealId: string): Deal | null =>
-      allDeals.find((deal) => String(deal.id) === dealId) ||
-      deals.find((deal) => String(deal.id) === dealId) ||
-      null,
-    [allDeals, deals],
-  )
-
-  const handleRecentDownload = useCallback(
-    async (entry: RecentFileEntry) => {
-      const id = entry.id
-      setRecentDownloadId(id)
-      updateRecentFile(id, { status: 'pending', lastAction: 'download', error: undefined })
-      try {
-        const deal = resolveDealById(entry.dealId)
-        if (!deal) throw new Error('Deal not found')
-        const owner = String(nilAddress || deal.owner || '').trim()
-        if (!owner) throw new Error('Deal owner not available')
-        const manifestRootRaw = String(deal.cid || entry.manifestRoot || '').trim()
-        if (!manifestRootRaw) throw new Error('Manifest root missing')
-        const manifestHex = toHexFromBase64OrHex(manifestRootRaw) || manifestRootRaw
-        const directBase = resolveProviderBase(deal)
-        const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(deal) : undefined
-
-        const [filesResult, slabResult] = await Promise.allSettled([
-          listFiles({
-            manifestRoot: manifestRootRaw,
-            dealId: entry.dealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-          slab({
-            manifestRoot: manifestRootRaw,
-            dealId: entry.dealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-        ])
-
-        if (filesResult.status !== 'fulfilled') {
-          throw filesResult.reason instanceof Error ? filesResult.reason : new Error('Failed to load file list')
-        }
-        const fileEntry = filesResult.value.data.find((f) => f.path === entry.filePath)
-        if (!fileEntry) throw new Error('File not found on provider')
-
-        const slabLayout = slabResult.status === 'fulfilled' ? slabResult.value.data : null
-        const result = await fetchFile({
-          dealId: entry.dealId,
-          manifestRoot: manifestHex,
-          owner,
-          filePath: entry.filePath,
-          rangeStart: 0,
-          rangeLen: fileEntry.size_bytes,
-          fileStartOffset: fileEntry.start_offset,
-          fileSizeBytes: fileEntry.size_bytes,
-          mduSizeBytes: slabLayout?.mdu_size_bytes ?? 8 * 1024 * 1024,
-          blobSizeBytes: slabLayout?.blob_size_bytes ?? 128 * 1024,
-        })
-        if (!result?.url) throw new Error('Download failed')
-
-        const anchor = document.createElement('a')
-        anchor.href = result.url
-        anchor.download = entry.filePath.split('/').pop() || 'download'
-        anchor.click()
-        setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
-
-        updateRecentFile(id, {
-          status: 'success',
-          lastAction: 'download',
-          sizeBytes: fileEntry.size_bytes,
-          manifestRoot: manifestHex,
-          error: undefined,
-        })
-        showDownloadToast(entry.filePath)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
-      } finally {
-        setRecentDownloadId(null)
-      }
-    },
-    [
-      fetchFile,
-      listFiles,
-      nilAddress,
-      resolveDealById,
-      resolveProviderBase,
-      resolveProviderP2pTarget,
-      showDownloadToast,
-      slab,
-      updateRecentFile,
-    ],
-  )
 
   const recordRecentActivity = useCallback(
     (event: {

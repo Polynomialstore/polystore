@@ -2,23 +2,18 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useAccount } from 'wagmi'
 import { appConfig } from '../config'
 import { 
-  ArrowDownRight, 
   FileJson, 
   Server, 
   Activity, 
   MoreVertical, 
-  ExternalLink, 
   Zap, 
   Database, 
   Cpu, 
   Trash2,
-  Download,
-  CheckCircle2,
-  XCircle,
-  Clock
+  XCircle
 } from 'lucide-react'
 import { useProofs } from '../hooks/useProofs'
-import { useFetch, type SponsoredRetrievalAuth } from '../hooks/useFetch'
+import { useFetch, type FetchInput, type FetchResult, type SponsoredRetrievalAuth } from '../hooks/useFetch'
 import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
 import type { Hex } from 'viem'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
@@ -190,15 +185,12 @@ interface LocalCacheFreshnessResult {
   chainManifestRoot: string
 }
 
-type GatewayRuntimeMode = 'unknown' | 'standalone' | 'proxy'
-
 interface FileRowProps {
   file: NilfsFileEntry
   deal: LcdDeal
   nilAddress: string
   browserCached: boolean
   gatewayCached: boolean
-  gatewayRuntimeMode: GatewayRuntimeMode
   isBusy: boolean
   isAnyDownloading: boolean
   isOpen: boolean
@@ -220,7 +212,7 @@ interface FileRowProps {
     mduSizeBytes?: number
     blobSizeBytes?: number
   }) => Promise<Blob>
-  fetchFile: (params: any) => Promise<any>
+  fetchFile: (params: FetchInput) => Promise<FetchResult | null>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
   slab: SlabLayoutData | null
@@ -241,7 +233,6 @@ function FileRow({
   nilAddress,
   browserCached,
   gatewayCached,
-  gatewayRuntimeMode,
   isBusy,
   isAnyDownloading,
   isOpen,
@@ -700,7 +691,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
   }, [isMode2, serviceHint.rsK, serviceHint.rsM])
   const { address } = useAccount()
-  const { submitPolicyUpdate, loading: policyUpdating, lastTx: policyTx } = useUpdateDealRetrievalPolicy()
+  const { submitPolicyUpdate, loading: policyUpdating } = useUpdateDealRetrievalPolicy()
   const [policyMode, setPolicyMode] = useState<RetrievalPolicyMode>(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
     return (raw >= 1 && raw <= 5 ? raw : 1) as RetrievalPolicyMode
@@ -711,19 +702,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [policyVoucherSigner, setPolicyVoucherSigner] = useState<string>(() => {
     return String(deal.retrieval_policy?.voucher_signer || '')
   })
-  const [policyError, setPolicyError] = useState<string | null>(null)
-  const [policyStatus, setPolicyStatus] = useState<string | null>(null)
+  const [, setPolicyError] = useState<string | null>(null)
+  const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
-  const [authType, setAuthType] = useState<'none' | 'allowlist' | 'voucher'>('none')
-  const [allowlistProofInput, setAllowlistProofInput] = useState<string>('')
-  const [voucherInput, setVoucherInput] = useState<string>('')
-  const [authError, setAuthError] = useState<string | null>(null)
-  const [authStatus, setAuthStatus] = useState<string | null>(null)
   const authStorageKey = useMemo(() => `nilstore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
-  const [gatewaySlabStatus, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
-  const [gatewayRuntimeMode, setGatewayRuntimeMode] = useState<GatewayRuntimeMode>('unknown')
+  const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
@@ -733,8 +718,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [busyFilePath, setBusyFilePath] = useState<string | null>(null)
   const [openMenuFilePath, setOpenMenuFilePath] = useState<string | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
-  const [downloadRangeStart, setDownloadRangeStart] = useState<number>(0)
-  const [downloadRangeLen, setDownloadRangeLen] = useState<number>(0)
+  const [downloadRangeStart] = useState<number>(0)
+  const [downloadRangeLen] = useState<number>(0)
   const [manifestInfo, setManifestInfo] = useState<ManifestInfoData | null>(null)
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
@@ -751,41 +736,20 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setAuthError(null)
-    setAuthStatus(null)
     const raw = window.localStorage.getItem(authStorageKey)
     if (!raw) {
       setSponsoredAuth({ type: 'none' })
-      setAuthType('none')
-      setAllowlistProofInput('')
-      setVoucherInput('')
       return
     }
     try {
       const parsed = JSON.parse(raw) as SponsoredRetrievalAuth
-      if (parsed?.type === 'allowlist') {
+      if (parsed?.type === 'allowlist' || parsed?.type === 'voucher') {
         setSponsoredAuth(parsed)
-        setAuthType('allowlist')
-        setAllowlistProofInput(JSON.stringify({ leafIndex: parsed.leafIndex, merklePath: parsed.merklePath }, null, 2))
-        setVoucherInput('')
-        return
-      }
-      if (parsed?.type === 'voucher') {
-        setSponsoredAuth(parsed)
-        setAuthType('voucher')
-        setVoucherInput(JSON.stringify(parsed.voucher, null, 2))
-        setAllowlistProofInput('')
         return
       }
       setSponsoredAuth({ type: 'none' })
-      setAuthType('none')
-      setAllowlistProofInput('')
-      setVoucherInput('')
     } catch {
       setSponsoredAuth({ type: 'none' })
-      setAuthType('none')
-      setAllowlistProofInput('')
-      setVoucherInput('')
     }
   }, [authStorageKey])
   const [mduKzg, setMduKzg] = useState<MduKzgData | null>(null)
@@ -795,7 +759,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'heat'>('files')
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, progress, lastPlan } = useFetch()
   const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
@@ -812,44 +776,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     setActiveTab(requestedTab)
   }, [requestedTab, requestedTabNonce])
 
-  useEffect(() => {
-    let cancelled = false
-    async function detectGatewayRuntimeMode() {
-      for (const gatewayBase of gatewayDownloadBases) {
-        try {
-          const res = await fetch(`${gatewayBase}/status`, {
-            method: 'GET',
-            signal: AbortSignal.timeout(2500),
-          })
-          if (!res.ok) continue
-          const payload = (await res.json().catch(() => null)) as { mode?: unknown } | null
-          const mode = typeof payload?.mode === 'string' ? payload.mode.trim().toLowerCase() : ''
-          if (cancelled) return
-          if (mode === 'router' || mode === 'proxy') {
-            setGatewayRuntimeMode('proxy')
-            return
-          }
-          if (mode === 'standalone') {
-            setGatewayRuntimeMode('standalone')
-            return
-          }
-          if (mode) {
-            setGatewayRuntimeMode('standalone')
-            return
-          }
-        } catch {
-          // Try the next base candidate.
-        }
-      }
-      if (!cancelled) setGatewayRuntimeMode('unknown')
-    }
-
-    void detectGatewayRuntimeMode()
-    return () => {
-      cancelled = true
-    }
-  }, [gatewayDownloadBases])
-
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
   const dealProviders = deal.providers || []
@@ -857,37 +783,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const primaryProvider = dealProviders[0] || ''
   const isDealOwner = Boolean(nilAddress && deal.owner === nilAddress)
   const [routeOverride, setRouteOverride] = useState<string>('')
-  const [routeModeOverride, setRouteModeOverride] = useState<string>('')
+  const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
-  const [cacheFreshnessOverride, setCacheFreshnessOverride] = useState<string>('')
+  const [, setCacheFreshnessOverride] = useState<string>('')
   const lastRouteLabel = useMemo(() => {
     if (routeOverride) return routeOverride
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
   }, [lastTrace, routeOverride])
-  const lastAttemptSummary = useMemo(() => {
-    if (!lastTrace?.attempts?.length) return ''
-    return lastTrace.attempts
-      .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}:${attempt.endpoint}`)
-      .join(',')
-  }, [lastTrace])
-  const lastFailureSummary = useMemo(() => {
-    const failed = lastTrace?.attempts?.find((attempt) => !attempt.ok)
-    if (!failed) return ''
-    const msg = failed.errorMessage ? `:${failed.errorMessage}` : ''
-    return `${failed.backend}${msg}`
-  }, [lastTrace])
-  const lastRouteMode = useMemo(() => {
-    if (routeModeOverride) return routeModeOverride
-    const pref = lastTrace?.preference || ''
-    if (pref === 'prefer_gateway') return 'gateway_mode'
-    if (pref === 'prefer_direct_sp') return 'fallback_direct'
-    if (pref === 'prefer_p2p') return 'p2p'
-    if (pref === 'auto') return 'auto'
-    return ''
-  }, [lastTrace, routeModeOverride])
   const displayCacheSource = cacheSourceOverride || progress.cacheSource || ''
-  const displayCacheFreshness = cacheFreshnessOverride || progress.cacheFreshness || ''
 
   const markDownloadPath = useCallback(
     (route: string, mode: string, cacheSource: string, freshness: string) => {
@@ -960,81 +864,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setPolicyError(msg)
     }
   }, [address, deal.id, policyAllowlistRoot, policyMode, policyVoucherSigner, submitPolicyUpdate])
-
-  const applySponsoredAuth = useCallback(() => {
-    setAuthError(null)
-    setAuthStatus(null)
-    try {
-      if (authType === 'none') {
-        const next: SponsoredRetrievalAuth = { type: 'none' }
-        setSponsoredAuth(next)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
-        }
-        setAuthStatus('Cleared sponsored auth')
-        return
-      }
-      if (authType === 'allowlist') {
-        const raw = allowlistProofInput.trim() || '{}'
-        const parsed = JSON.parse(raw) as { leafIndex?: number; leaf_index?: number; merklePath?: string[]; merkle_path?: string[] }
-        const leafIndex = Number(parsed.leafIndex ?? parsed.leaf_index)
-        const merklePathRaw = parsed.merklePath ?? parsed.merkle_path
-        if (!Number.isFinite(leafIndex) || leafIndex < 0) {
-          throw new Error('allowlist leafIndex is required')
-        }
-        if (!Array.isArray(merklePathRaw) || merklePathRaw.length === 0) {
-          throw new Error('allowlist merklePath is required')
-        }
-        const merklePath = merklePathRaw.map((v) => String(v).trim()).filter(Boolean) as Hex[]
-        const next: SponsoredRetrievalAuth = { type: 'allowlist', leafIndex, merklePath }
-        setSponsoredAuth(next)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
-        }
-        setAuthStatus('Allowlist proof saved for sponsored sessions')
-        return
-      }
-      if (authType === 'voucher') {
-        const raw = voucherInput.trim() || '{}'
-        const parsed = JSON.parse(raw) as {
-          provider?: string
-          redeemer?: string
-          expiresAt?: number
-          expires_at?: number
-          nonce?: number
-          signature?: string
-        }
-        const nonce = Number(parsed.nonce)
-        const signature = String(parsed.signature || '').trim()
-        if (!Number.isFinite(nonce) || nonce <= 0) {
-          throw new Error('voucher nonce is required')
-        }
-        if (!/^0x[0-9a-fA-F]+$/.test(signature)) {
-          throw new Error('voucher signature must be 0x hex')
-        }
-        const expiresAt = Number(parsed.expiresAt ?? parsed.expires_at ?? 0) || 0
-        const next: SponsoredRetrievalAuth = {
-          type: 'voucher',
-          voucher: {
-            provider: String(parsed.provider || '').trim() || undefined,
-            redeemer: String(parsed.redeemer || '').trim() || undefined,
-            expiresAt: expiresAt || undefined,
-            nonce,
-            signature: signature as Hex,
-          },
-        }
-        setSponsoredAuth(next)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(authStorageKey, JSON.stringify(next))
-        }
-        setAuthStatus('Voucher saved for sponsored sessions')
-        return
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setAuthError(msg)
-    }
-  }, [allowlistProofInput, authStorageKey, authType, voucherInput])
 
   const resolveProviderP2pTarget = useCallback(() => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -1673,19 +1502,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     return `${a.slice(0, head)}…${a.slice(-tail)}`
   }
 
-  function computeFileSlabMduRange(file: NilfsFileEntry): { start: number; end: number } | null {
-    if (!slab) return null
-    const mduSize = Number(slab.mdu_size_bytes || 0)
-    if (!Number.isFinite(mduSize) || mduSize <= 0) return null
-    const metaMdus = 1 + Number(slab.witness_mdus || 0)
-    const startOffset = Math.max(0, Number(file.start_offset || 0) || 0)
-    const sizeBytes = Math.max(0, Number(file.size_bytes || 0) || 0)
-    if (sizeBytes === 0) return { start: metaMdus, end: metaMdus }
-    const startOrdinal = Math.floor(startOffset / mduSize)
-    const endOrdinal = Math.floor((startOffset + sizeBytes - 1) / mduSize)
-    return { start: metaMdus + startOrdinal, end: metaMdus + endOrdinal }
-  }
-
   function formatBigint(v: bigint): string {
     try {
       return v.toString()
@@ -2032,7 +1848,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               nilAddress={nilAddress}
                               browserCached={!!browserCachedByPath[f.path]}
                               gatewayCached={f.cache_present === true}
-                              gatewayRuntimeMode={gatewayRuntimeMode}
                               isBusy={busyFilePath === f.path}
                               isAnyDownloading={downloading}
                               isOpen={openMenuFilePath === f.path}

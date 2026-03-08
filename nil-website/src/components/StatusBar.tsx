@@ -74,7 +74,7 @@ export function StatusBar({ noBorder }: { noBorder?: boolean }) {
   const [providerCount, setProviderCount] = useState<number | undefined>(undefined)
   const [evmChainId, setEvmChainId] = useState<number | undefined>(undefined)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const [copyError, setCopyError] = useState<string | null>(null)
+  const [, setCopyError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const providerStatus = useMemo<ServiceStatus>(() => {
