@@ -12,7 +12,7 @@
 @layer base {
   :root {
     /* --- Light Mode: Ultra-Clean Tactical Blueprint --- */
-    --background: 210 20% 96%; /* Technical Gray Floor */
+    --background: 0 0% 100%; /* Pure White Floor */
     --foreground: 222 47% 11%; 
     --card: 0 0% 100%; /* Pure White Slabs */
     --card-foreground: 222 47% 11%;
@@ -31,7 +31,7 @@
     --border: 214 32% 88%; /* Frame borders only */
     --input: 214 32% 85%;
     --ring: 300 100% 75%;
-    --grid-color: hsl(var(--foreground) / 0.05); 
+    --grid-color: hsl(var(--border) / 0.35); 
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
   }
