@@ -261,6 +261,14 @@ EOF
 sudo systemctl restart caddy
 ```
 
+Operational note:
+- `web.<domain>` serves whatever files exist under `/opt/nilstore/nil-website/dist` (or whatever path you configure in Caddy).
+- If you build the website from a different checkout than the one Caddy serves, you **must** publish that build output into the served `dist/` directory or `web.<domain>` will keep showing the older site.
+- Recommended pattern for this host profile:
+  - build from the checkout you actually want to publish
+  - sync the resulting `nil-website/dist/` into `/opt/nilstore/nil-website/dist`
+  - then verify `http://127.0.0.1:8088/` before checking `https://web.<domain>/`
+
 4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
 Package-manager path (preferred when apt/dnf is healthy):
 
@@ -404,6 +412,21 @@ VITE_FAUCET_AUTH_TOKEN=<token> \
 npm run build
 ```
 
+If `/opt/nilstore` is your long-running hub checkout and you built from that same checkout, the build is already in the served location.
+
+If you built from a different checkout (for example a newer workspace under `~/dev/...`), publish the output into the hub-served path:
+
+```bash
+rm -rf /opt/nilstore/nil-website/dist
+cp -a /path/to/your/current/checkout/nil-website/dist /opt/nilstore/nil-website/dist
+```
+
+Then verify the local static server is serving the new build:
+
+```bash
+curl -fsS http://127.0.0.1:8088/ >/dev/null
+```
+
 Helper script (from repo root):
 
 ```bash
@@ -436,6 +459,8 @@ curl -fsS -o /dev/null -w '%{http_code}\n' https://faucet.<domain>/faucet
 curl -fsS https://web.<domain>/ >/dev/null
 # local-only router gateway check (run on hub host):
 curl -fsS http://127.0.0.1:8080/health >/dev/null
+# local static website check (run on hub host if web is served here):
+curl -fsS http://127.0.0.1:8088/ >/dev/null
 ```
 
 ## Economics knobs (soft launch)
