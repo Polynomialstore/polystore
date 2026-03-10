@@ -195,6 +195,39 @@ func TestGlobalCORS_MethodNotAllowedStillReturnsCORSHeaders(t *testing.T) {
 	}
 }
 
+func TestSpUploadMdu_PreflightReturnsCORSHeaders(t *testing.T) {
+	h := withGlobalCORS(testRouter())
+
+	req := httptest.NewRequest(http.MethodOptions, "/sp/upload_mdu", nil)
+	req.Header.Set("Origin", "https://web.nilstore.org")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-mdu-index,x-nil-manifest-root,x-nil-full-size,content-type")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 preflight for /sp/upload_mdu, got %d", w.Code)
+	}
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://web.nilstore.org" {
+		t.Fatalf("expected Access-Control-Allow-Origin to echo request origin, got %q", got)
+	}
+	if !csvHeaderContains(w.Header().Get("Access-Control-Allow-Methods"), http.MethodPost) {
+		t.Fatalf("expected Access-Control-Allow-Methods to include POST, got %q", w.Header().Get("Access-Control-Allow-Methods"))
+	}
+	for _, needed := range []string{
+		"x-nil-deal-id",
+		"x-nil-mdu-index",
+		"x-nil-manifest-root",
+		"x-nil-full-size",
+		"content-type",
+	} {
+		if !csvHeaderContains(w.Header().Get("Access-Control-Allow-Headers"), needed) {
+			t.Fatalf("expected Access-Control-Allow-Headers to include %q, got %q", needed, w.Header().Get("Access-Control-Allow-Headers"))
+		}
+	}
+}
+
 func TestPanicRecovery_ReturnsJSONAndCORSHeaders(t *testing.T) {
 	h := withPanicRecovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("upload worker crashed")
