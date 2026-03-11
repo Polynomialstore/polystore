@@ -142,7 +142,7 @@
 
 @layer utilities {
   .glass-panel {
-    @apply relative transition-all duration-300;
+    @apply relative transition-all duration-300 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.03)];
     background-color: hsl(var(--card) / 0.95);
     backdrop-filter: blur(8px);
   }
@@ -150,11 +150,10 @@
   .dark .glass-panel {
     @apply border-t border-l border-white/5;
     background-color: hsl(var(--card) / 0.8);
-    box-shadow: none; /* NO SHADOWS - SLAB PRINCIPLE */
   }
 
   .glass-panel.industrial-border {
-    @apply shadow-md ring-1 ring-primary/20;
+    @apply ring-1 ring-primary/20;
   }
 
   .industrial-border { @apply relative border border-border; }
@@ -184,6 +183,11 @@
 
   /* Shared CTA shadow token (used by primary CTAs and dashboard CTA). */
   .cta-shadow {
-    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.12);
+    @apply shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)];
+  }
+
+  /* Brand alias for shared shadow token. */
+  .nil-shadow {
+    @apply cta-shadow;
   }
 }
