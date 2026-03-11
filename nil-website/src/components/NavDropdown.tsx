@@ -77,12 +77,10 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
 
                   return (
                     <Wrapper
-                        key={item.path}
-                        className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color] duration-200 ease-out ${
-                          active
-                            ? "border-primary/40"
-                            : "hover:border-primary/40 hover:bg-primary/10"
-                        }`}
+                      key={item.path}
+                      className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 ${
+                        active ? "border-primary/40" : ""
+                      }`}
                     >
                         {/* Icon Box */}
                         <div
