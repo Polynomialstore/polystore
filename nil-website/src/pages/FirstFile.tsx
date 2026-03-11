@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { formatUnits, numberToHex } from 'viem'
 import { AlertCircle, CheckCircle2, Coins, HardDrive, Rocket } from 'lucide-react'
 
 import { appConfig } from '../config'
 import { ConnectWallet } from '../components/ConnectWallet'
+import { DashboardCta } from '../components/DashboardCta'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFaucet } from '../hooks/useFaucet'
@@ -370,13 +370,7 @@ export function FirstFile() {
           </div>
         </div>
 
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-2 rounded-none border border-primary bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <HardDrive className="w-4 h-4" />
-          Open Dashboard
-        </Link>
+        <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
       </section>
     </div>
   )

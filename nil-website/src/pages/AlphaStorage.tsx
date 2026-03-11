@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Database, Download, Upload, Wallet } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
+import { DashboardCta } from "../components/DashboardCta";
 import { PromptPanel } from "../components/marketing/PromptPanel";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { FaucetWidget } from "../components/FaucetWidget";
@@ -71,12 +72,7 @@ export function AlphaStorage() {
                 Start First File
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link
-                to="/dashboard"
-                className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
-              >
-                Open Dashboard
-              </Link>
+              <DashboardCta className="inline-flex justify-center font-mono-data" label="Dashboard" to="/dashboard" />
             </>
           }
         />
@@ -168,12 +164,7 @@ export function AlphaStorage() {
                 Start Guided Flow
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link
-                to="/dashboard"
-                className="inline-flex items-center justify-center rounded-none border border-border bg-card px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
-              >
-                Open Full Dashboard
-              </Link>
+              <DashboardCta className="inline-flex justify-center font-mono-data" label="Dashboard" to="/dashboard" />
             </div>
           </div>
         </section>

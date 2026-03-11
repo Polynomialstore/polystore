@@ -5,6 +5,7 @@ import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { LivingGrid } from "./LivingGrid";
+import { DashboardCta } from "./DashboardCta";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -169,6 +170,8 @@ export const Layout = () => {
               </a>
 
               <ModeToggle />
+
+              <DashboardCta className="hidden sm:flex" label="Dashboard" to="/dashboard" />
               
               {/* Mobile Toggle */}
               <button 

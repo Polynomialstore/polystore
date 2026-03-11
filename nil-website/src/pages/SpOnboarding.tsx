@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
+import { DashboardCta } from "../components/DashboardCta";
 
 type OnboardingTrack = "local_demo" | "desktop_local" | "remote_headless";
 
@@ -428,12 +429,7 @@ export function SpOnboarding() {
             {healthCheckScript}
           </pre>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Link
-              to="/dashboard"
-              className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              Open Dashboard
-            </Link>
+            <DashboardCta className="inline-flex justify-center" label="Dashboard" to="/dashboard" />
             <Link
               to="/devnet"
               className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
