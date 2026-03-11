@@ -93,7 +93,7 @@ export const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30 relative">
+    <div className="min-h-screen flex flex-col font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30 relative">
       
       {/* --- THE LIVING DIGITAL GRID --- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -262,7 +262,7 @@ export const Layout = () => {
       </nav>
 
       {/* Main Content Spacer */}
-      <main className="pt-20 relative z-10">
+      <main className="pt-20 relative z-10 flex-1">
         <Outlet />
       </main>
 
