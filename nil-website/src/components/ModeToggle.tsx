@@ -7,7 +7,7 @@ export function ModeToggle() {
   return (
     <button
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="p-2 glass-panel industrial-border text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] flex items-center justify-center relative"
+      className="p-2 glass-panel industrial-border text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-[transform,color,background-color] duration-200 ease-out hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] flex items-center justify-center relative"
       aria-label="Toggle Theme"
     >
       <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

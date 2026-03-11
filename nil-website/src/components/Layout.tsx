@@ -164,7 +164,7 @@ export const Layout = () => {
                 href="https://github.com/Nil-Store/nil-store" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="hidden sm:flex items-center justify-center w-9 h-9 glass-panel industrial-border text-muted-foreground hover:text-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+                className="hidden sm:flex items-center justify-center w-9 h-9 glass-panel industrial-border text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-[transform,color,background-color] duration-200 ease-out hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
               >
                 <Github className="w-5 h-5" />
               </a>
