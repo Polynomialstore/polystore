@@ -29,7 +29,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       onMouseLeave={() => setIsOpen(false)}
     >
       <button 
-        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-transparent transition-colors flex items-center gap-2 group ${
+        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-transparent transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2 group ${
           isActive || isOpen
             ? "text-foreground bg-secondary border-border/60" 
             : "text-muted-foreground hover:text-foreground hover:bg-secondary hover:border-border/60"
@@ -53,7 +53,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             className="fixed top-14 left-1/2 z-[110]"
           >
             {/* The Mega Menu Card */}
-            <div className="relative w-[640px] bg-card border border-border rounded-none solid-slab industrial-border p-4 overflow-hidden">
+            <div className="relative w-[640px] glass-panel industrial-border p-4 overflow-hidden">
               
               {/* Grid Layout - 2 Columns */}
               <div className="relative grid grid-cols-2 gap-2">
@@ -71,13 +71,15 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   return (
                     <Wrapper
                         key={item.path}
-                        className={`group flex items-start gap-3 p-3 border border-border/50 transition-colors ${
-                            active ? "bg-secondary border-primary/40" : "hover:bg-secondary hover:border-border/70"
+                        className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color,color] duration-200 ease-out ${
+                            active
+                              ? "border-primary/40 bg-primary/10"
+                              : "hover:border-primary/40 hover:bg-primary/10 hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
                         }`}
                     >
                         {/* Icon Box */}
-                            <div className={`mt-0.5 p-2 border border-border/50 bg-card shrink-0 transition-colors ${
-                                active ? "border-primary/40 text-primary" : "text-muted-foreground group-hover:text-primary"
+                            <div className={`mt-0.5 p-2 glass-panel industrial-border shrink-0 transition-[color,background-color,border-color] duration-200 ease-out ${
+                                active ? "text-primary bg-primary/10" : "text-muted-foreground group-hover:text-primary group-hover:bg-primary/10"
                             }`}>
                             {item.icon}
                         </div>
