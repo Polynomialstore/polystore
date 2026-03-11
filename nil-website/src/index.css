@@ -181,4 +181,9 @@
     @apply animate-pulse;
     box-shadow: 0 0 8px currentColor;
   }
+
+  /* Shared CTA shadow token (used by primary CTAs and dashboard CTA). */
+  .cta-shadow {
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.12);
+  }
 }
