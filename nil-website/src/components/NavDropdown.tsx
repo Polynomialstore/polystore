@@ -29,10 +29,10 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       onMouseLeave={() => setIsOpen(false)}
     >
       <button 
-        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border border-transparent transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2 group ${
-          isActive || isOpen
-            ? "text-primary bg-primary/10 border-primary/30"
-            : "text-muted-foreground hover:text-primary hover:bg-primary/10 hover:border-primary/30"
+        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2 group ${
+          isActive ? "text-primary" : "text-muted-foreground"
+        } ${
+          isOpen ? "bg-primary/10 border-primary/30" : "border-transparent hover:bg-primary/10 hover:border-primary/30"
         }`}
       >
         {label}
@@ -41,7 +41,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
             // Default = "up" (rotated). Open/active = "down".
             isOpen || isActive
               ? "rotate-0 text-primary"
-              : "rotate-180 text-muted-foreground group-hover:text-primary"
+              : "rotate-180 text-muted-foreground"
           }`}
         />
       </button>
