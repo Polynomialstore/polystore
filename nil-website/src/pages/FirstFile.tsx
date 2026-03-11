@@ -5,7 +5,6 @@ import { formatUnits, numberToHex } from 'viem'
 import { AlertCircle, CheckCircle2, Coins, Download, HardDrive, Rocket, Upload } from 'lucide-react'
 
 import { appConfig } from '../config'
-import { StatusBar } from '../components/StatusBar'
 import { ConnectWallet } from '../components/ConnectWallet'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { useNetwork } from '../hooks/useNetwork'
@@ -368,7 +367,8 @@ export function FirstFile() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="glass-panel industrial-border border border-border p-6">
+        <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-3">
             <Rocket className="w-8 h-8 text-primary" />
@@ -380,14 +380,13 @@ export function FirstFile() {
         </div>
         <Link
           to="/dashboard"
-          className="hidden sm:inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40 transition-colors"
+          className="hidden sm:inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
         >
           <HardDrive className="w-4 h-4" />
           Open Dashboard
         </Link>
+        </div>
       </div>
-
-      <StatusBar />
 
       {error && (
         <div className="rounded-none border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive flex items-start gap-3">
@@ -409,7 +408,7 @@ export function FirstFile() {
         </div>
       )}
 
-    <section className="bg-card rounded-none border border-border p-6 space-y-4">
+    <section className="glass-panel industrial-border border border-border p-6 space-y-4">
       <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
@@ -439,7 +438,7 @@ export function FirstFile() {
         </div>
       </section>
 
-      <section className="bg-card rounded-none border border-border p-6 space-y-4">
+      <section className="glass-panel industrial-border border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
@@ -481,7 +480,7 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-none border border-border p-6 space-y-4">
+      <section className="glass-panel industrial-border border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
@@ -508,7 +507,7 @@ export function FirstFile() {
                   setDuration(String(presetSeconds))
                 }
               }}
-              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
             >
               {DURATION_PRESETS.map((preset) => (
                 <option key={preset.value} value={preset.value}>
@@ -523,7 +522,7 @@ export function FirstFile() {
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               readOnly={durationPreset !== 'custom'}
-              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
             />
           </label>
           <label className="block">
@@ -531,7 +530,7 @@ export function FirstFile() {
             <input
               value={initialEscrow}
               onChange={(e) => setInitialEscrow(e.target.value)}
-              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
             />
           </label>
           <label className="block">
@@ -539,7 +538,7 @@ export function FirstFile() {
             <input
               value={maxMonthlySpend}
               onChange={(e) => setMaxMonthlySpend(e.target.value)}
-              className="mt-1 w-full rounded-none border border-border bg-background/60 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
             />
           </label>
         </div>
@@ -566,7 +565,7 @@ export function FirstFile() {
         </div>
       </section>
 
-      <section className="bg-card rounded-none border border-border p-6 space-y-4">
+      <section className="glass-panel industrial-border border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
@@ -589,7 +588,7 @@ export function FirstFile() {
           <button
             type="button"
             onClick={() => void handleUseSampleFile()}
-            className="inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-4 py-2 text-sm font-semibold hover:bg-secondary/40 transition-colors"
+            className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-secondary transition-colors"
           >
             <Upload className="w-4 h-4" />
             Use sample file
@@ -632,7 +631,7 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-none border border-border p-6 space-y-4">
+      <section className="glass-panel industrial-border border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
@@ -662,7 +661,7 @@ export function FirstFile() {
         )}
       </section>
 
-      <section className="bg-card rounded-none border border-border p-6 space-y-4">
+      <section className="glass-panel industrial-border border border-border p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-none bg-secondary/40 flex items-center justify-center font-bold text-foreground">
