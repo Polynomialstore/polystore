@@ -8,7 +8,7 @@
     "wasm:build": "command -v wasm-pack >/dev/null 2>&1 || { echo \"wasm-pack not found\"; exit 1; }; cd ../nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core",
     "predev": "npm run wasm:build",
     "prebuild": "npm run wasm:build",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc && vite build",
     "ci:build": "export RUST_DIR=$PWD/.cache/rust && mkdir -p $RUST_DIR && export RUSTUP_HOME=$RUST_DIR && export CARGO_HOME=$RUST_DIR && export PATH=$RUST_DIR/bin:$PATH && if [ ! -f $RUST_DIR/bin/cargo ]; then echo 'Rust not found. Installing...' && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable && rustup target add wasm32-unknown-unknown; else echo 'Rust found in cache!'; fi && npm run build",
     "test:unit": "tsx --test $(find src/lib -name '*.test.ts')",
