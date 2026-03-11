@@ -78,7 +78,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                         className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color] duration-200 ease-out ${
                           active
                             ? "border-primary/40 bg-primary/10"
-                            : "hover:border-primary/40 hover:bg-primary/10"
+                            : "hover:border-primary/40 hover:bg-primary"
                         }`}
                     >
                         {/* Icon Box */}
@@ -97,14 +97,14 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                             <div className="flex items-center justify-between">
                                 <span
                                   className={`text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data truncate ${
-                                    active ? "text-primary" : "text-foreground group-hover:text-primary"
+                                    active ? "text-primary" : "text-foreground group-hover:text-primary-foreground"
                                   }`}
                                 >
                                     {item.name}
                                 </span>
                                 {item.external && <ArrowUpRight className="w-3 h-3 text-muted-foreground" />}
                             </div>
-                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2">
+                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2 group-hover:text-primary-foreground/70">
                                 {item.description}
                             </p>
                         </div>
