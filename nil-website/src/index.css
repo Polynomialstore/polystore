@@ -153,6 +153,10 @@
     box-shadow: none; /* NO SHADOWS - SLAB PRINCIPLE */
   }
 
+  .glass-panel.industrial-border {
+    @apply shadow-md ring-1 ring-primary/20;
+  }
+
   .industrial-border { @apply relative border-2 border-border; }
   .industrial-border::before, .industrial-border::after {
     content: "";
