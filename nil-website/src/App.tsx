@@ -25,6 +25,9 @@ import { Devnet } from "./pages/Devnet";
 import { FirstFile } from "./pages/FirstFile";
 import { SpOnboarding } from "./pages/SpOnboarding";
 import { SpDashboard } from "./pages/SpDashboard";
+import { AlphaStorage } from "./pages/AlphaStorage";
+import { AlphaProvider } from "./pages/AlphaProvider";
+import { AlphaStatus } from "./pages/AlphaStatus";
 
 function App() {
   return (
@@ -35,6 +38,9 @@ function App() {
             <Route path="/brand" element={<LogoShowcase />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
+              <Route path="alpha/storage" element={<AlphaStorage />} />
+              <Route path="alpha/provider" element={<AlphaProvider />} />
+              <Route path="alpha/status" element={<AlphaStatus />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="first-file" element={<FirstFile />} />
               <Route path="sp-onboarding" element={<SpOnboarding />} />

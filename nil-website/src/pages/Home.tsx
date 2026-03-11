@@ -1,4 +1,4 @@
-import { ArrowRight, Database, Shield, Activity } from "lucide-react"
+import { ArrowRight, Database, Shield, Activity, Server } from "lucide-react"
 import { Link } from "react-router-dom"
 import { AlphaHero } from "../components/marketing/AlphaHero"
 import { TrackCard } from "../components/marketing/TrackCard"
@@ -31,33 +31,45 @@ export const Home = () => {
               <span className="text-primary">STORE</span>
             </h1>
           }
-          description="NilStore is a decentralized, autonomous, self-governing storage and distribution network built for verifiable retrieval at protocol speed."
+          description="NilStore alpha has two primary user paths: people who want to store data, and operators who want to run storage providers. Start from the path that matches your job."
           actions={
             <>
               <Link
-                to="/testnet"
+                to="/alpha/storage"
                 className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
               >
-                Join Store Wars
+                Store Data
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                to="/whitepaper"
+                to="/alpha/provider"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
-                Read Whitepaper
+                Run A Provider
               </Link>
               <Link
-                to="/litepaper"
+                to="/alpha/status"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
-                Read Litepaper
+                Alpha Status
               </Link>
             </>
           }
         />
 
-        {/* Feature Grid */}
+        <div className="mt-12 grid gap-6 md:grid-cols-2">
+          <TrackCard
+            icon={<Database className="w-6 h-6 text-accent" />}
+            title="Store Data"
+            description="Connect a wallet, fund your account, create a deal, upload a file, and retrieve it back. This is the browser-first alpha path."
+          />
+          <TrackCard
+            icon={<Server className="w-6 h-6 text-primary" />}
+            title="Run A Provider"
+            description="Set up a provider host, expose a public endpoint, register on-chain, and verify health. This path is being optimized for local coding agents."
+          />
+        </div>
+
         <div className="mt-12 grid md:grid-cols-3 gap-6">
           <TrackCard
             icon={<Shield className="w-6 h-6 text-accent" />}

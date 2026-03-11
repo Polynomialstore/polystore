@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState, useEffect } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { LivingGrid } from "./LivingGrid";
@@ -48,11 +48,14 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   // Navigation Hierarchy (Rich Data)
-  const navStructure: { type: "link" | "dropdown", name: "Dashboard" | "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
+  const navStructure: { type: "link" | "dropdown", name: "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
       name: "Explore", 
       items: [
+        { name: "Store Data", path: "/alpha/storage", description: "Alpha user quickstart.", icon: <Database className="w-5 h-5" /> },
+        { name: "Become A Provider", path: "/alpha/provider", description: "Alpha provider onboarding.", icon: <Server className="w-5 h-5" /> },
+        { name: "Alpha Status", path: "/alpha/status", description: "Shared launch status surface.", icon: <Activity className="w-5 h-5" /> },
         { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
         { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
@@ -67,7 +70,7 @@ export const Layout = () => {
         { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         { name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
         { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Rocket className="w-5 h-5" /> },
-        { name: "SP Onboarding", path: "/sp-onboarding", description: "Local demo Storage Provider quickstart.", icon: <Server className="w-5 h-5" /> },
+        { name: "SP Onboarding", path: "/sp-onboarding", description: "Legacy local demo SP quickstart.", icon: <Server className="w-5 h-5" /> },
         { name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
         { name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
         { name: "Devnet Join", path: "/devnet", description: "Join a multi-provider devnet.", icon: <Terminal className="w-5 h-5" /> },
@@ -169,11 +172,11 @@ export const Layout = () => {
               
               {/* PRIMARY CTA: Launch Console */}
               <Link 
-                to="/dashboard"
+                to="/alpha/storage"
                 className="hidden sm:flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
               >
-                <Rocket className="w-4 h-4 fill-current" />
-                Launch Console
+                <Database className="w-4 h-4 fill-current" />
+                Start Storing
               </Link>
 
               {/* Mobile Toggle */}
@@ -201,12 +204,12 @@ export const Layout = () => {
                 
                 {/* Mobile CTA */}
                 <Link 
-                    to="/dashboard" 
+                    to="/alpha/storage" 
                     onClick={() => setIsOpen(false)}
                     className="block w-full py-4 bg-primary text-primary-foreground font-bold text-center text-[11px] uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] active:translate-x-[2px] active:translate-y-[2px] transition-transform flex items-center justify-center gap-3"
                   >
-                    <Rocket className="w-6 h-6 fill-current" />
-                    Launch Console
+                    <Database className="w-6 h-6 fill-current" />
+                    Start Storing
                 </Link>
 
                 <div className="h-[1px] bg-border/50"></div>
