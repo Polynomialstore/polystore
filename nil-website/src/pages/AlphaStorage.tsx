@@ -1,12 +1,10 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, CheckCircle2, Database, Download, Terminal, Upload, Wallet } from "lucide-react";
+import { ArrowRight, CheckCircle2, Database, Download, Upload, Wallet } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
-import { TrackCard } from "../components/marketing/TrackCard";
 import { PromptPanel } from "../components/marketing/PromptPanel";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
-import { StatusBar } from "../components/StatusBar";
 
 const storageCodexPrompt = `You are helping a NilStore alpha storage user complete the first successful storage flow.
 
@@ -82,29 +80,6 @@ export function AlphaStorage() {
             </>
           }
         />
-
-        <div className="mt-6">
-          <StatusBar />
-        </div>
-
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          <TrackCard
-            icon={<Wallet className="h-6 w-6 text-accent" />}
-            title="Wallet First"
-            description="Connect MetaMask, switch to the NilStore alpha network, and fund your address before creating a deal."
-          />
-          <TrackCard
-            icon={<Database className="h-6 w-6 text-primary" />}
-            title="Browser Path"
-            description="The alpha storage path is browser-first. You should be able to create a deal, upload a file, and retrieve it without running a server."
-          />
-          <TrackCard
-            icon={<Terminal className="h-6 w-6 text-primary" />}
-            title="Power User Mode"
-            description="A Codex and Claude Code assisted local path will follow in the next PRs for users who want a local gateway and repo-driven setup."
-          />
-        </div>
-
         <section className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="glass-panel industrial-border border border-border p-6">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
