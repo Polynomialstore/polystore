@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { motion } from "framer-motion";
 
 type AlphaHeroProps = {
   badge: ReactNode;
@@ -12,10 +11,7 @@ type AlphaHeroProps = {
 
 export function AlphaHero({ badge, logo, title, description, actions, className = "" }: AlphaHeroProps) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
+    <section
       className={`relative glass-panel industrial-border border-primary-frame p-10 text-center md:p-14 ${className}`.trim()}
     >
       <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3">{logo}</div>
@@ -31,6 +27,6 @@ export function AlphaHero({ badge, logo, title, description, actions, className 
       </div>
 
       {actions ? <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">{actions}</div> : null}
-    </motion.section>
+    </section>
   );
 }
