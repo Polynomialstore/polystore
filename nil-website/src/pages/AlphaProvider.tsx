@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Server, Shield, Globe } from "lucide-react";
+import { ArrowRight, Copy, Server, Shield, Globe, Terminal } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
 import { TrackCard } from "../components/marketing/TrackCard";
 
@@ -29,7 +29,7 @@ export function AlphaProvider() {
                 to="/devnet"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
-                View Provider Join Info
+                View Live Provider Join Info
               </Link>
             </>
           }
@@ -52,6 +52,71 @@ export function AlphaProvider() {
             description="Provider onboarding, status, and public endpoint visibility will be consolidated under the alpha provider path rather than hidden in generic devnet docs."
           />
         </div>
+
+        <section className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="glass-panel industrial-border border border-border p-6">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+              /alpha/provider/recommended
+            </div>
+            <h2 className="mt-3 text-2xl font-bold text-foreground">Recommended alpha path</h2>
+            <div className="mt-4 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              <p>
+                Use a dedicated provider machine. Preferred order:
+                <span className="ml-2 font-mono text-foreground">home server + Cloudflare Tunnel</span>,
+                then <span className="ml-2 font-mono text-foreground">public VPS / direct ingress</span>.
+              </p>
+              <p>
+                The operator should clone the repo locally and let Codex or Claude Code drive setup, verification, and repair loops.
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <TrackCard
+                icon={<Globe className="h-6 w-6 text-accent" />}
+                title="Home Server + Tunnel"
+                description="Best fit for friends-and-family alpha. No public inbound port required; publish the provider over Cloudflare Tunnel HTTPS."
+              />
+              <TrackCard
+                icon={<Server className="h-6 w-6 text-primary" />}
+                title="Public Host"
+                description="Use this when the provider already has a public hostname and ingress path. It is simpler but less home-server friendly."
+              />
+            </div>
+          </div>
+
+          <div className="glass-panel industrial-border border border-border p-6">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+              /alpha/provider/cta
+            </div>
+            <h2 className="mt-3 text-2xl font-bold text-foreground">Next actions</h2>
+            <div className="mt-5 space-y-3">
+              <Link
+                to="/sp-onboarding"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+              >
+                <Terminal className="h-4 w-4" />
+                Open Remote-First Onboarding
+              </Link>
+              <Link
+                to="/devnet"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-border bg-card px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
+              >
+                <Globe className="h-4 w-4" />
+                Check Hub Endpoints
+              </Link>
+            </div>
+
+            <div className="mt-6 rounded-none border border-border bg-background/60 p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Copy className="h-4 w-4 text-primary" />
+                Agent-first
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                The onboarding page now includes a copyable agent bootstrap brief. A later PR in this stack will upgrade that to generated Codex and Claude Code prompts plus downloadable onboarding bundles.
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

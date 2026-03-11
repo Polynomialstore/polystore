@@ -79,8 +79,8 @@ const desktopLocalSteps: Step[] = [
 const remoteTrackSteps: Step[] = [
   {
     id: "remote-identity",
-    title: "Prepare provider key + endpoint",
-    detail: "Create/import provider key and choose a public endpoint (direct or tunnel) for the remote host.",
+    title: "Prepare provider key + public hostname",
+    detail: "Create or import the provider key, then decide whether this machine will publish through Cloudflare Tunnel or direct public ingress.",
     successSignal: "Provider address and endpoint are finalized.",
   },
   {
@@ -91,8 +91,8 @@ const remoteTrackSteps: Step[] = [
   },
   {
     id: "remote-runbook",
-    title: "Run remote bootstrap",
-    detail: "Apply generated environment and start commands on the remote machine.",
+    title: "Run remote bootstrap + service install",
+    detail: "Apply the generated environment, start the provider gateway, and move it under a persistent service manager on the remote machine.",
     successSignal: "Remote provider process is listening and responding on /health.",
   },
   {
@@ -126,27 +126,54 @@ npm run desktop
 const remoteBootstrapScript = `# Provider host bootstrap
 PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
 
-# Register endpoint on chain
+# Home-server / Cloudflare Tunnel example
 PROVIDER_KEY=provider1 \\
 CHAIN_ID=20260211 \\
-HUB_LCD=http://127.0.0.1:1317 \\
-HUB_NODE=tcp://127.0.0.1:26657 \\
-PROVIDER_ENDPOINT=/ip4/<public-ip>/tcp/8091/http \\
+HUB_LCD=https://lcd.<domain> \\
+HUB_NODE=https://rpc.<domain> \\
+PROVIDER_ENDPOINT=/dns4/sp.<domain>/tcp/443/https \\
 ./scripts/run_devnet_provider.sh register
 
 # Start provider service
 PROVIDER_KEY=provider1 \\
 NIL_GATEWAY_SP_AUTH=<shared-auth-token> \\
+NIL_LCD_BASE=https://lcd.<domain> \\
+NIL_NODE=https://rpc.<domain> \\
+NIL_CHAIN_ID=20260211 \\
 PROVIDER_LISTEN=:8091 \\
 ./scripts/run_devnet_provider.sh start`;
 
 const healthCheckScript = `# Provider and chain health checks
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd http://127.0.0.1:1317
-nilchaind query nilchain list-providers --home _artifacts/nilchain_data_devnet_alpha
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain>
+curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq '.providers | length'
+curl -sf https://sp.<domain>/health
 
 # Gateway download path verification
 # Dashboard -> Deal -> Download via gateway
 # Expect gateway path + successful receipt pipeline`;
+
+const agentBrief = `You are setting up this machine as a NilStore alpha Storage Provider.
+
+Context:
+- The repo is already cloned locally.
+- Preferred mode: home server behind NAT with Cloudflare Tunnel.
+- Use docs/REMOTE_SP_JOIN_QUICKSTART.md and docs/networking/PROVIDER_ENDPOINTS.md.
+
+Your job:
+1. Verify toolchains and repo prerequisites.
+2. Create or import the provider key.
+3. Configure the public endpoint and local listener.
+4. Register the provider on-chain.
+5. Start the provider service and verify /health locally.
+6. Verify public reachability and on-chain visibility.
+7. If anything fails, inspect logs, repair, and retry until healthy.
+
+At the end, print:
+- provider address
+- registered endpoint
+- local health URL
+- public health URL
+- exact commands or files changed`;
 
 function CopyButton({ onClick }: { onClick: () => void }) {
   return (
@@ -177,7 +204,7 @@ function PrimaryLinkButton({ href, children }: { href: string; children: ReactNo
 }
 
 export function SpOnboarding() {
-  const [track, setTrack] = useState<OnboardingTrack>("local_demo");
+  const [track, setTrack] = useState<OnboardingTrack>("remote_headless");
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
@@ -218,11 +245,11 @@ export function SpOnboarding() {
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
             <Server className="h-4 w-4" />
-            Storage Provider Companion
+            Alpha Provider Onboarding
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">SP Onboarding Companion</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
-            Local demo onboarding: bring up a full single-machine stack (chain + faucet + demo providers + trusted user-gateway + web UI) and validate end-to-end store + retrieve before moving to real SP ops.
+            The primary alpha operator path is a remote provider machine, ideally a home server behind Cloudflare Tunnel or a public VPS. Local demo onboarding still exists, but it is not the recommended launch path.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <PrimaryLinkButton href={repoRootUrl}>
@@ -230,11 +257,11 @@ export function SpOnboarding() {
               Open Repo
             </PrimaryLinkButton>
             <Link
-              to="/dashboard"
+              to="/alpha/provider"
               className="inline-flex items-center gap-2 rounded-none border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Rocket className="h-4 w-4" />
-              Open Dashboard
+              Alpha Provider Path
             </Link>
             <a
               href={devnetPlaybookUrl}
@@ -260,12 +287,12 @@ export function SpOnboarding() {
           <div className="mt-4 flex rounded-none border border-border bg-secondary/20 p-1">
             <button
               type="button"
-              onClick={() => setTrack("local_demo")}
+              onClick={() => setTrack("remote_headless")}
               className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Local demo (single machine)
+              Home server + tunnel
             </button>
             <button
               type="button"
@@ -274,22 +301,22 @@ export function SpOnboarding() {
                 track === "desktop_local" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Desktop (managed gateway)
+              Public host / managed
             </button>
             <button
               type="button"
-              onClick={() => setTrack("remote_headless")}
+              onClick={() => setTrack("local_demo")}
               className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Remote (deferred)
+              Local demo (legacy)
             </button>
           </div>
           <div className="mt-3 rounded-none border border-border bg-background/60 p-3 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground">Scope</div>
             <div className="mt-1">
-              This page targets <span className="font-mono text-foreground">local demo</span> onboarding (no systemd). Remote/headless SP onboarding is deferred.
+              This page now targets <span className="font-mono text-foreground">remote/headless alpha provider onboarding</span> first. Local demo remains available for development and smoke testing.
             </div>
           </div>
 
@@ -374,7 +401,7 @@ export function SpOnboarding() {
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
-                Keep local loopback access enabled (<span className="font-mono">localhost</span> + <span className="font-mono">127.0.0.1</span>) in your browser when testing dashboard-to-gateway flows.
+                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. Use local demo only for development, not as the main onboarding path for alpha providers.
               </div>
             </div>
           </div>
@@ -415,6 +442,19 @@ export function SpOnboarding() {
             </Link>
           </div>
         </div>
+      </section>
+
+      <section className="mt-8 rounded-none border border-border bg-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-foreground">Agent bootstrap brief</h2>
+          <CopyButton onClick={() => void copyText("Agent bootstrap brief", agentBrief)} />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          If the operator has Codex or Claude Code on the provider machine, this is the recommended starting prompt. Later PRs will replace this generic brief with generated host-specific prompts and bundles.
+        </p>
+        <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
+          {agentBrief}
+        </pre>
       </section>
 
       <section className="mt-8 rounded-none border border-border bg-card p-6">
