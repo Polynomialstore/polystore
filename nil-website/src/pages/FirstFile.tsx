@@ -263,7 +263,7 @@ export function FirstFile() {
                 type="button"
                 onClick={() => void handleRequestFunds()}
                 disabled={!isConnected || faucetLoading}
-                className="inline-flex items-center gap-2 rounded-none border border-border bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
               >
                 <Coins className="w-4 h-4" />
                 {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
