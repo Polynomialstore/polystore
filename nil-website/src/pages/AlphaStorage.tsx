@@ -2,10 +2,54 @@ import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Database, Download, Terminal, Upload, Wallet } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
 import { TrackCard } from "../components/marketing/TrackCard";
+import { PromptPanel } from "../components/marketing/PromptPanel";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
 import { StatusBar } from "../components/StatusBar";
+
+const storageCodexPrompt = `You are helping a NilStore alpha storage user complete the first successful storage flow.
+
+Context:
+- The repo is already cloned locally.
+- Prefer the browser-first path first.
+- Use docs/ALPHA_STORAGE_USER_QUICKSTART.md and docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md.
+
+Your job:
+1. Verify the website endpoint, EVM RPC, and wallet network settings.
+2. Help the user connect MetaMask and fund the wallet.
+3. Verify the first create-deal, upload, and retrieve flow.
+4. If a local gateway is available, verify it and use it for diagnostics.
+5. If anything fails, inspect the relevant browser, gateway, or chain-facing checks and retry until healthy.
+
+At the end, print:
+- website URL
+- chain ID
+- wallet address
+- whether deal creation succeeded
+- whether upload and retrieval succeeded
+- exact commands or files changed`;
+
+const storageClaudePrompt = `Help a NilStore alpha storage user complete the first successful store and retrieve cycle.
+
+Assumptions:
+- The repository is already cloned locally.
+- Start with the browser-first flow and only use local gateway steps if needed.
+- Use docs/ALPHA_STORAGE_USER_QUICKSTART.md and docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md.
+
+Tasks:
+1. Confirm website and EVM RPC reachability.
+2. Confirm the wallet is on the expected NilStore alpha chain.
+3. Help the user get test funds.
+4. Verify create deal, upload, and retrieve.
+5. If there is a failure, inspect the relevant checks and loop until the path is healthy.
+
+Final output:
+- website URL
+- chain ID
+- wallet address
+- deal/upload/retrieve result
+- files changed`;
 
 export function AlphaStorage() {
   return (
@@ -157,6 +201,31 @@ export function AlphaStorage() {
               </Link>
             </div>
           </div>
+        </section>
+
+        <section className="mt-12 grid gap-6 lg:grid-cols-2">
+          <PromptPanel
+            badge="/alpha/storage/codex"
+            title="Codex prompt"
+            description="For power users who want a local repo-driven setup, this prompt tells Codex to validate the browser path first, then use local gateway diagnostics only when needed."
+            prompt={storageCodexPrompt}
+            copyLabel="Copy Codex Prompt"
+            links={[
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_STORAGE_USER_QUICKSTART.md", label: "Alpha storage quickstart" },
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/storage_codex.md", label: "Prompt in repo" },
+            ]}
+          />
+          <PromptPanel
+            badge="/alpha/storage/claude"
+            title="Claude Code prompt"
+            description="This gives Claude Code the same storage-user job: check the website path, help with wallet and funding, then verify create, upload, and retrieve."
+            prompt={storageClaudePrompt}
+            copyLabel="Copy Claude Prompt"
+            links={[
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md", label: "Collaborator packet" },
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/storage_claude_code.md", label: "Prompt in repo" },
+            ]}
+          />
         </section>
       </div>
     </div>

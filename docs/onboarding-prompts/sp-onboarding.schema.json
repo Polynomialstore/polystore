@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NilStore Provider Onboarding Bundle",
+  "type": "object",
+  "required": [
+    "chain_id",
+    "hub_node",
+    "hub_lcd",
+    "provider_hostname",
+    "provider_mode"
+  ],
+  "properties": {
+    "chain_id": {
+      "type": "string"
+    },
+    "hub_node": {
+      "type": "string",
+      "format": "uri"
+    },
+    "hub_lcd": {
+      "type": "string",
+      "format": "uri"
+    },
+    "provider_hostname": {
+      "type": "string"
+    },
+    "provider_mode": {
+      "type": "string",
+      "enum": [
+        "home_server_cloudflare_tunnel",
+        "public_host"
+      ]
+    },
+    "provider_key": {
+      "type": "string"
+    },
+    "provider_listen": {
+      "type": "string"
+    },
+    "provider_endpoint": {
+      "type": "string"
+    },
+    "sp_auth_token": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}
