@@ -90,7 +90,7 @@ export function FirstFile() {
   const stepSectionClass = (active: boolean) =>
     [
       "glass-panel industrial-border border border-border p-6 space-y-4 transition-all duration-200",
-      active ? "bg-card" : "bg-muted/80",
+      active ? "bg-card opacity-100" : "bg-card opacity-45 saturate-50",
     ].join(" ")
 
   const stepBadgeClass = (active: boolean) =>
