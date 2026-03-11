@@ -75,10 +75,10 @@ export function AlphaProvider() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                to="/devnet"
+                to="/alpha/status"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
-                View Live Provider Join Info
+                View Alpha Status
               </Link>
             </>
           }
@@ -147,11 +147,11 @@ export function AlphaProvider() {
                 Open Remote-First Onboarding
               </Link>
               <Link
-                to="/devnet"
+                to="/alpha/status"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-border bg-card px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
                 <Globe className="h-4 w-4" />
-                Check Hub Endpoints
+                Check Network Status
               </Link>
             </div>
 

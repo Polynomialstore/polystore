@@ -70,10 +70,10 @@ export const Layout = () => {
         { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         { name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
         { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Rocket className="w-5 h-5" /> },
-        { name: "SP Onboarding", path: "/sp-onboarding", description: "Legacy local demo SP quickstart.", icon: <Server className="w-5 h-5" /> },
+        { name: "Provider Runbook", path: "/sp-onboarding", description: "Remote-first provider runbook with legacy local demo path.", icon: <Server className="w-5 h-5" /> },
         { name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
         { name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
-        { name: "Devnet Join", path: "/devnet", description: "Join a multi-provider devnet.", icon: <Terminal className="w-5 h-5" /> },
+        { name: "Provider Debug", path: "/devnet", description: "Live provider list and low-level join diagnostics.", icon: <Terminal className="w-5 h-5" /> },
         { name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
       ] 
     },

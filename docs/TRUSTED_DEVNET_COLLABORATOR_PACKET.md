@@ -2,6 +2,10 @@
 
 This is the “send this to collaborators” doc for the **trusted devnet soft launch**.
 
+Recommended public entry points:
+- Storage users: `docs/ALPHA_STORAGE_USER_QUICKSTART.md`
+- Provider operators: `docs/ALPHA_PROVIDER_QUICKSTART.md`
+
 For a concrete example with real hostnames, see:
 - `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md`
 
@@ -33,6 +37,8 @@ If you are running an SP, you also need:
 ## Path A — Website tester (no server)
 
 Goal: run the end-to-end flow **create deal → upload → commit → retrieve** from the website using MetaMask.
+
+If you want the shorter alpha-facing version of this path, use `docs/ALPHA_STORAGE_USER_QUICKSTART.md`.
 
 ### 1) Open the website + connect wallet
 
@@ -74,6 +80,7 @@ Tip: if you test with a text file, change a line and re-upload to confirm the co
 Goal: register a provider on-chain and run a provider gateway so the hub router can place data on you.
 
 This packet is intentionally short; the canonical SP join docs are:
+- Alpha quickstart: `docs/ALPHA_PROVIDER_QUICKSTART.md`
 - Fast path: `docs/REMOTE_SP_JOIN_QUICKSTART.md`
 - Full guide: `DEVNET_MULTI_PROVIDER.md`
 - Endpoint formats: `docs/networking/PROVIDER_ENDPOINTS.md`
@@ -152,6 +159,14 @@ scripts/devnet_healthcheck.sh provider \
   --provider http://127.0.0.1:8091 \
   --hub-lcd "$HUB_LCD" \
   --provider-addr <nil1...>
+```
+
+Agent-oriented helpers:
+
+```bash
+./scripts/run_devnet_provider.sh print-config
+./scripts/run_devnet_provider.sh doctor
+./scripts/run_devnet_provider.sh verify
 ```
 
 ### 6) Tell the hub operator
