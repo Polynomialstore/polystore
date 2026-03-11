@@ -58,7 +58,7 @@ export const Home = () => {
                 to="/alpha/provider"
                 className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
               >
-                Run A Provider
+                Provide Storage
                 <ArrowRight className="w-4 h-4" />
               </Link>
             }
