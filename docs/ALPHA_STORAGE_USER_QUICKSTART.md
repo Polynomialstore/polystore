@@ -1,6 +1,8 @@
-# Alpha Storage User Quickstart
+# Testnet Storage User Quickstart
 
-This is the primary alpha path for users who want to store data on NilStore.
+This is the primary testnet path for users who want to store data on NilStore.
+
+Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
 Recommended target:
 - browser-first flow through `https://web.<domain>`
@@ -12,7 +14,7 @@ Optional power-user target:
 
 1. Open `https://web.<domain>`.
 2. Connect MetaMask.
-3. Switch to the NilStore alpha network.
+3. Switch to the NilStore testnet network.
 4. Fund your wallet through the faucet if available.
 5. Create a deal.
 6. Upload a small file.
@@ -31,7 +33,7 @@ Optional power-user target:
 
 - Collaborator packet: `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
 - Dashboard flow: `nil-website/src/pages/FirstFile.tsx`
-- Alpha storage page: `nil-website/src/pages/AlphaStorage.tsx`
+- Testnet storage page: `nil-website/src/pages/AlphaStorage.tsx`
 
 ## Success criteria
 

@@ -1,6 +1,6 @@
 # Provider Prompt For Codex
 
-You are setting up this machine as a NilStore alpha Storage Provider.
+You are setting up this machine as a NilStore testnet Storage Provider.
 
 Context:
 - The repo is already cloned locally.

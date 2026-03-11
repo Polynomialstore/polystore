@@ -1,6 +1,6 @@
 # Provider Prompt For Claude Code
 
-Set up this machine as a NilStore alpha Storage Provider.
+Set up this machine as a NilStore testnet Storage Provider.
 
 Assumptions:
 - The repository is already cloned locally.

@@ -1,6 +1,8 @@
-# Alpha Provider Quickstart
+# Testnet Provider Quickstart
 
-This is the shortest supported path for a NilStore alpha Storage Provider.
+This is the shortest supported path for a NilStore testnet Storage Provider.
+
+Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
 Recommended target:
 - home server behind NAT with Cloudflare Tunnel

@@ -1,6 +1,6 @@
 # Storage Prompt For Codex
 
-You are helping a NilStore alpha storage user complete the first successful storage flow.
+You are helping a NilStore testnet storage user complete the first successful storage flow.
 
 Context:
 - The repo is already cloned locally.

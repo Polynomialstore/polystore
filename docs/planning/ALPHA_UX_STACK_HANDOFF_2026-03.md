@@ -1,6 +1,6 @@
-# Alpha UX Stack Handoff (March 2026)
+# Testnet UX Stack Handoff (March 2026)
 
-This document records the stacked branch sequence for the alpha launch UX work.
+This document records the stacked branch sequence for the testnet launch UX work.
 
 Status:
 - complete as a stacked branch set
@@ -8,7 +8,7 @@ Status:
 
 ## Intent
 
-This stack reframes the website and onboarding around the two alpha personas:
+This stack reframes the website and onboarding around the two testnet personas:
 
 - data storage users
 - data provider operators

@@ -1,6 +1,6 @@
 # Storage Prompt For Claude Code
 
-Help a NilStore alpha storage user complete the first successful store and retrieve cycle.
+Help a NilStore testnet storage user complete the first successful store and retrieve cycle.
 
 Assumptions:
 - The repository is already cloned locally.
@@ -11,7 +11,7 @@ Assumptions:
 
 Tasks:
 1. Confirm website and EVM RPC reachability.
-2. Confirm the wallet is on the expected NilStore alpha chain.
+2. Confirm the wallet is on the expected NilStore testnet chain.
 3. Help the user get test funds.
 4. Verify create deal, upload, and retrieve.
 5. If there is a failure, inspect the relevant checks and loop until the path is healthy.

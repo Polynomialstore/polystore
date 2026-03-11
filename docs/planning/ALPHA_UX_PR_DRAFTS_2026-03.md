@@ -1,4 +1,4 @@
-# Alpha UX PR Drafts (March 2026)
+# Testnet UX PR Drafts (March 2026)
 
 This document contains ready-to-paste PR bodies for the alpha UX stacked branch set.
 
