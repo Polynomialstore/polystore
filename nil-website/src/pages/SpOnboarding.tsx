@@ -247,7 +247,7 @@ export function SpOnboarding() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
-            The primary alpha operator path is a remote provider machine, ideally a home server behind Cloudflare Tunnel or a public VPS. Local demo onboarding still exists, but it is not the recommended launch path.
+            The recommended alpha setup is a dedicated provider host with a stable public endpoint, either a home server behind Cloudflare Tunnel or a small VPS.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <PrimaryLinkButton href={repoRootUrl}>
