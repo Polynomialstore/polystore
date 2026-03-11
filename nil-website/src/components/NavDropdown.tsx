@@ -86,7 +86,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                           className={`mt-0.5 p-2 glass-panel industrial-border shrink-0 transition-[color,background-color,border-color] duration-200 ease-out ${
                             active
                               ? "text-primary bg-primary/10 border-primary/40"
-                              : "text-muted-foreground bg-muted/40"
+                              : "text-muted-foreground bg-muted/40 group-hover:bg-primary/10 group-hover:border-primary/40"
                           }`}
                         >
                             {item.icon}
