@@ -7,6 +7,7 @@ import { appConfig } from '../config'
 import { ConnectWallet } from '../components/ConnectWallet'
 import { DashboardCta } from '../components/DashboardCta'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
+import { lcdFetchDeals } from '../api/lcdClient'
 import { useNetwork } from '../hooks/useNetwork'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -50,6 +51,7 @@ export function FirstFile() {
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
 
   const [dealId, setDealId] = useState<string | null>(null)
+  const [hasExistingDeal, setHasExistingDeal] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const autoSwitchKeyRef = useRef<string | null>(null)
@@ -61,7 +63,12 @@ export function FirstFile() {
     return address.startsWith('0x') ? ethToNil(address) : address
   }, [address])
 
-  const { data: balance } = useBalance({
+  useEffect(() => {
+    setDealId(null)
+    setHasExistingDeal(false)
+  }, [address])
+
+  const { data: balance, refetch: refetchBalance } = useBalance({
     address,
     chainId: appConfig.chainId,
     query: { enabled: Boolean(address) },
@@ -83,14 +90,69 @@ export function FirstFile() {
     return `${trimmed} ${balance.symbol || 'NIL'}`
   }, [balance])
 
+  useEffect(() => {
+    // After faucet confirms, wagmi balance can lag; poll briefly so the UI unlocks without a refresh.
+    if (hasBalance) return
+    if (faucetTxStatus !== 'pending' && faucetTxStatus !== 'confirmed') return
+
+    let canceled = false
+    let ticks = 0
+    const tick = async () => {
+      if (canceled) return
+      ticks += 1
+      try {
+        await refetchBalance()
+      } catch {
+        // best-effort
+      }
+      if (canceled) return
+      if (ticks >= 12) return // ~18s
+      setTimeout(() => void tick(), 1500)
+    }
+    void tick()
+
+    return () => {
+      canceled = true
+    }
+  }, [faucetTxStatus, hasBalance, refetchBalance])
+
+  useEffect(() => {
+    if (!nilAddress) return
+    let canceled = false
+    const owner = nilAddress
+
+    void lcdFetchDeals(appConfig.lcdBase)
+      .then((all) => {
+        if (canceled) return
+        const owned = all.filter((deal) => deal.owner === owner)
+        const found = owned.length > 0
+        setHasExistingDeal(found)
+        if (!dealId && found) {
+          const id = String(owned[0]?.id ?? '').trim()
+          if (id) setDealId(id)
+        }
+      })
+      .catch(() => {
+        if (canceled) return
+        setHasExistingDeal(false)
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [dealId, nilAddress])
+
   const step2Ready = isConnected && !isWrongNetwork
-  const step3Ready = step2Ready && hasBalance
+  const funded = hasBalance || faucetTxStatus === 'confirmed'
+  const step2Complete = funded
+  const step3Ready = step2Ready && (funded || hasExistingDeal)
+  const step3Complete = Boolean(dealId)
   const step4Ready = step3Ready && Boolean(dealId)
 
   const stepSectionClass = (active: boolean) =>
     [
       "glass-panel industrial-border border border-border p-6 space-y-4 transition-all duration-200",
-      active ? "bg-card opacity-100" : "bg-card opacity-45 saturate-50",
+      active ? "bg-card opacity-100" : "bg-card opacity-45 saturate-50 pointer-events-none select-none",
     ].join(" ")
 
   const stepBadgeClass = (active: boolean) =>
@@ -234,9 +296,6 @@ export function FirstFile() {
             </button>
           )}
         </div>
-        <div className="text-xs text-muted-foreground">
-          Owner address (Nil bech32): <span className="font-mono text-foreground">{nilAddress || '—'}</span>
-        </div>
       </section>
 
       <section className={stepSectionClass(step2Ready)}>
@@ -262,8 +321,12 @@ export function FirstFile() {
               <button
                 type="button"
                 onClick={() => void handleRequestFunds()}
-                disabled={!isConnected || faucetLoading}
-                className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+                disabled={!isConnected || faucetLoading || step2Complete}
+                className={
+                  step2Complete
+                    ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
+                    : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+                }
               >
                 <Coins className="w-4 h-4" />
                 {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
@@ -348,8 +411,12 @@ export function FirstFile() {
           <button
             type="button"
             onClick={() => void handleCreateDeal()}
-            disabled={!isConnected || isWrongNetwork || dealLoading}
-            className="inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+            disabled={!isConnected || isWrongNetwork || dealLoading || step3Complete}
+            className={
+              step3Complete
+                ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
+                : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+            }
           >
             <HardDrive className="w-4 h-4" />
             {dealLoading ? 'Creating…' : 'Create deal'}
