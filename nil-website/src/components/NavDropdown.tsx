@@ -78,7 +78,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                         className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color] duration-200 ease-out ${
                           active
                             ? "border-primary/40 bg-primary/10"
-                            : "hover:border-primary/40 hover:bg-primary/10 hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+                            : "hover:border-primary/40 hover:bg-primary/10"
                         }`}
                     >
                         {/* Icon Box */}
