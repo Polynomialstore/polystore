@@ -103,7 +103,7 @@ export function AlphaProvider() {
         </div>
 
         <section className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="glass-panel industrial-border border border-border p-6">
+          <div className="glass-panel industrial-border p-6">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
               /alpha/provider/recommended
             </div>
@@ -133,7 +133,7 @@ export function AlphaProvider() {
             </div>
           </div>
 
-          <div className="glass-panel industrial-border border border-border p-6">
+          <div className="glass-panel industrial-border p-6">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
               /alpha/provider/cta
             </div>

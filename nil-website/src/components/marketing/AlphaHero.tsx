@@ -12,7 +12,7 @@ type AlphaHeroProps = {
 export function AlphaHero({ badge, logo, title, description, actions, className = "" }: AlphaHeroProps) {
   return (
     <section
-      className={`relative glass-panel industrial-border border border-border transition-colors p-10 text-center md:p-14 ${className}`.trim()}
+      className={`relative glass-panel industrial-border transition-colors p-10 text-center md:p-14 ${className}`.trim()}
     >
       <div className="relative mx-auto mb-6 h-28 w-28 glass-panel industrial-border p-3">{logo}</div>
 

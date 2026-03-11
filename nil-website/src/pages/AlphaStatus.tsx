@@ -170,7 +170,7 @@ export function AlphaStatus() {
         </div>
 
         <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="glass-panel industrial-border border border-border p-6">
+          <div className="glass-panel industrial-border p-6">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
               /alpha/status/overview
             </div>
@@ -214,7 +214,7 @@ export function AlphaStatus() {
             </div>
           </div>
 
-          <div className="glass-panel industrial-border border border-border p-6">
+          <div className="glass-panel industrial-border p-6">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
               /alpha/status/endpoints
             </div>
@@ -235,7 +235,7 @@ export function AlphaStatus() {
           </div>
         </section>
 
-        <section className="mt-12 glass-panel industrial-border border border-border p-6">
+        <section className="mt-12 glass-panel industrial-border p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">

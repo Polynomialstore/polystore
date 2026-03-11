@@ -34,7 +34,7 @@ export function PromptPanel({ badge, title, description, prompt, copyLabel, link
   };
 
   return (
-    <div className="glass-panel industrial-border border border-border p-6">
+    <div className="glass-panel industrial-border p-6">
       <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">{badge}</div>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>

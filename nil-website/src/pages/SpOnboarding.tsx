@@ -239,7 +239,7 @@ export function SpOnboarding() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden industrial-border border border-border bg-card p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
+      <section className="relative overflow-hidden industrial-border bg-card p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
         <div className="absolute -top-24 -right-24 h-72 w-72 bg-primary/20 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-72 w-72 bg-accent/20 blur-3xl" />
         <div className="relative space-y-4">

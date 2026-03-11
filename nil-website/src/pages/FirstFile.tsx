@@ -151,7 +151,7 @@ export function FirstFile() {
 
   const stepSectionClass = (active: boolean) =>
     [
-      "glass-panel industrial-border border border-border p-6 space-y-4 transition-all duration-200",
+      "glass-panel industrial-border p-6 space-y-4 transition-all duration-200",
       active ? "bg-card opacity-100" : "bg-card opacity-45 saturate-50 pointer-events-none select-none",
     ].join(" ")
 
@@ -239,7 +239,7 @@ export function FirstFile() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl space-y-6">
-      <div className="glass-panel industrial-border border border-border p-6">
+      <div className="glass-panel industrial-border p-6">
         <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-3">
