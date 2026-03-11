@@ -4,8 +4,6 @@ import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
 import { DashboardCta } from "../components/DashboardCta";
 
-type OnboardingTrack = "local_demo" | "desktop_local" | "remote_headless";
-
 type Step = {
   id: string;
   title: string;
@@ -17,132 +15,47 @@ const repoRootUrl = "https://github.com/Nil-Store/nil-store";
 const gatewayDesktopReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
 const devnetPlaybookUrl = "https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md";
 
-const localDemoSteps: Step[] = [
+const providerHappyPathSteps: Step[] = [
   {
-    id: "demo-stack",
-    title: "Start the local demo stack",
-    detail: "Start chain + faucet + demo providers + trusted user-gateway + web UI on one machine (no systemd).",
-    successSignal: "Terminal prints “=== Stack ready ===” and the dashboard loads at http://localhost:5173/#/dashboard.",
+    id: "inputs",
+    title: "Collect hub inputs",
+    detail: "Get your chain ID, hub RPC/LCD, shared provider auth token, and your public hostname from the hub operator.",
+    successSignal: "You have CHAIN_ID, HUB_NODE, HUB_LCD, NIL_GATEWAY_SP_AUTH, and a public hostname.",
   },
   {
-    id: "demo-providers",
-    title: "Confirm providers are available",
-    detail: "Mode 2 deals require K+M providers. The dashboard must see providers before it can create a deal.",
-    successSignal: "Status bar shows Providers: OK and the deal form does not warn about missing providers.",
+    id: "clone",
+    title: "Clone the repo on the provider host",
+    detail: "Run onboarding from the provider machine. The happy path is repo-first: clone, set env vars, run one bootstrap command.",
+    successSignal: "You can run ./scripts/run_devnet_provider.sh on the provider host.",
   },
   {
-    id: "demo-upload",
-    title: "Create a deal + upload",
-    detail: "Create a deal in the dashboard, then upload a file through the local user-gateway.",
-    successSignal: "Upload completes and the file appears in the deal file table.",
+    id: "bootstrap",
+    title: "Run the provider bootstrap script",
+    detail: "Initialize the provider key (if missing), register your public endpoint on-chain, start the provider gateway, and run a doctor snapshot.",
+    successSignal: "Local /health is reachable and the provider is visible in the LCD provider list.",
   },
   {
-    id: "demo-retrieve",
-    title: "Retrieve via gateway (default)",
-    detail: "Download using Auto source. When the local user-gateway is healthy, downloads should route through it by default.",
-    successSignal: "Download succeeds with gateway routing and no provider/session errors.",
-  },
-];
-
-const desktopLocalSteps: Step[] = [
-  {
-    id: "local-download",
-    title: "Install Gateway Desktop",
-    detail: "Download the latest nil_gateway_gui build and launch the desktop app on the provider machine.",
-    successSignal: "Desktop app opens and shows the SP Launchpad workspace.",
-  },
-  {
-    id: "local-identity",
-    title: "Create provider identity",
-    detail: "In SP Launchpad, create provider key identity (or import an existing key for continuity).",
-    successSignal: "Provider address is visible and key step is marked ready.",
-  },
-  {
-    id: "local-funding",
-    title: "Fund provider key",
-    detail: "Fund the provider account with chain gas/stake and verify balance in the onboarding step.",
-    successSignal: "Funding check passes with sufficient balance.",
-  },
-  {
-    id: "local-register",
-    title: "Validate endpoint and register",
-    detail: "Use the endpoint validator, then register the provider on-chain with the validated endpoint.",
-    successSignal: "Registration step succeeds and provider is visible in list-providers.",
-  },
-  {
-    id: "local-health",
-    title: "Start service and verify health",
-    detail: "Start the provider service and run health snapshot checks until status is healthy.",
-    successSignal: "Health snapshot is healthy with no critical issues.",
+    id: "verify",
+    title: "Verify in the Provider Console",
+    detail: "Use the Provider Console to confirm on-chain registration, endpoints, and /health reachability.",
+    successSignal: "Your provider shows up and probes OK in /sp-dashboard.",
   },
 ];
 
-const remoteTrackSteps: Step[] = [
-  {
-    id: "remote-identity",
-    title: "Prepare provider key + public hostname",
-    detail: "Create or import the provider key, then decide whether this machine will publish through Cloudflare Tunnel or direct public ingress.",
-    successSignal: "Provider address and endpoint are finalized.",
-  },
-  {
-    id: "remote-register",
-    title: "Register on-chain",
-    detail: "Register provider endpoint and capability settings against the target chain.",
-    successSignal: "Provider appears in on-chain provider list.",
-  },
-  {
-    id: "remote-runbook",
-    title: "Run remote bootstrap + service install",
-    detail: "Apply the generated environment, start the provider gateway, and move it under a persistent service manager on the remote machine.",
-    successSignal: "Remote provider process is listening and responding on /health.",
-  },
-  {
-    id: "remote-health",
-    title: "Continuous health verification",
-    detail: "Run provider health checks and repair issues (auth mismatch, endpoint drift, chain mismatch).",
-    successSignal: "Checks report healthy/degraded with no critical blockers.",
-  },
-];
+const cloneScript = `git clone ${repoRootUrl}
+cd nil-store`;
 
-const localDemoScript = `# Local demo SP onboarding (single machine; no systemd)
-# From repo root:
-./scripts/ensure_stack_local.sh
-
-# Stop everything started by the stack script:
-./scripts/run_local_stack.sh stop
-
-# Optional: force 3 demo providers (default is 3)
-NIL_LOCAL_PROVIDER_COUNT=3 ./scripts/ensure_stack_local.sh`;
-
-const localBootstrapScript = `# 1) Launch Desktop Gateway GUI
-cd nil_gateway_gui
-npm ci
-npm run desktop
-
-# 2) In the app:
-#    SP Launchpad -> Onboarding -> Local mode
-#    Create key -> Check funding -> Validate endpoint
-#    Register provider -> Start service -> Run health check`;
-
-const remoteBootstrapScript = `# Provider host bootstrap
-PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
-
-# Home-server / Cloudflare Tunnel example
+const bootstrapScript = `# Happy path: initialize key + register + start + doctor
 PROVIDER_KEY=provider1 \\
-CHAIN_ID=20260211 \\
+CHAIN_ID=<chain-id> \\
 HUB_LCD=https://lcd.<domain> \\
 HUB_NODE=https://rpc.<domain> \\
 PROVIDER_ENDPOINT=/dns4/sp.<domain>/tcp/443/https \\
-./scripts/run_devnet_provider.sh register
-
-# Start provider service
-PROVIDER_KEY=provider1 \\
 NIL_GATEWAY_SP_AUTH=<shared-auth-token> \\
-NIL_LCD_BASE=https://lcd.<domain> \\
-NIL_NODE=https://rpc.<domain> \\
-NIL_CHAIN_ID=20260211 \\
-PROVIDER_LISTEN=:8091 \\
-./scripts/run_devnet_provider.sh start`;
+./scripts/run_devnet_provider.sh bootstrap
+
+# Optional: print current config as JSON
+PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config`;
 
 const healthCheckScript = `# Provider and chain health checks
 scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain>
@@ -205,19 +118,12 @@ function PrimaryLinkButton({ href, children }: { href: string; children: ReactNo
 }
 
 export function SpOnboarding() {
-  const [track, setTrack] = useState<OnboardingTrack>("remote_headless");
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
-  const activeSteps =
-    track === "local_demo"
-      ? localDemoSteps
-      : track === "desktop_local"
-        ? desktopLocalSteps
-        : remoteTrackSteps;
-  const checkedCount = useMemo(() => activeSteps.filter((step) => checkedSteps[step.id]).length, [activeSteps, checkedSteps]);
-  const completionPercent = activeSteps.length === 0 ? 0 : Math.round((checkedCount / activeSteps.length) * 100);
-  const activeScript = track === "local_demo" ? localDemoScript : track === "desktop_local" ? localBootstrapScript : remoteBootstrapScript;
+  const steps = providerHappyPathSteps;
+  const checkedCount = useMemo(() => steps.filter((step) => checkedSteps[step.id]).length, [steps, checkedSteps]);
+  const completionPercent = steps.length === 0 ? 0 : Math.round((checkedCount / steps.length) * 100);
 
   const toggleStep = (id: string) => {
     setCheckedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -247,9 +153,16 @@ export function SpOnboarding() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
-            The recommended testnet setup is a dedicated provider host with a stable public endpoint, either a home server behind Cloudflare Tunnel or a small VPS.
+            The recommended testnet setup is a dedicated provider host with a stable public endpoint. Most operators use a home server behind Cloudflare Tunnel or a small VPS with direct HTTPS.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
+            <a
+              href="#setup"
+              className="inline-flex items-center gap-2 rounded-none border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+            >
+              <Rocket className="h-4 w-4" />
+              Start Setup
+            </a>
             <PrimaryLinkButton href={repoRootUrl}>
               <Terminal className="h-4 w-4" />
               Open Repo
@@ -275,51 +188,22 @@ export function SpOnboarding() {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
+      <section id="setup" className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
         <div className="glass-panel industrial-border p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Guided onboarding flow</h2>
-            <div className="text-sm font-medium text-muted-foreground">{checkedCount}/{activeSteps.length} complete ({completionPercent}%)</div>
+            <div className="text-sm font-medium text-muted-foreground">{checkedCount}/{steps.length} complete ({completionPercent}%)</div>
           </div>
 
-          <div className="mt-4 flex rounded-none border border-border bg-secondary/20 p-1">
-            <button
-              type="button"
-              onClick={() => setTrack("remote_headless")}
-              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Home server + tunnel
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrack("desktop_local")}
-              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "desktop_local" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Public host / managed
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrack("local_demo")}
-              className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Local demo (legacy)
-            </button>
-          </div>
           <div className="mt-3 glass-panel industrial-border p-3 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground">Scope</div>
             <div className="mt-1">
-              This page now targets <span className="font-mono text-foreground">remote/headless testnet provider onboarding</span> first. Local demo remains available for development and smoke testing.
+              This page targets <span className="font-mono text-foreground">remote/headless testnet provider onboarding</span>. Cloudflare Tunnel and a public VPS are configuration details of the same flow.
             </div>
           </div>
 
           <div className="mt-5 space-y-3">
-            {activeSteps.map((step, index) => {
+            {steps.map((step, index) => {
               const checked = Boolean(checkedSteps[step.id]);
               return (
                 <div
@@ -349,6 +233,41 @@ export function SpOnboarding() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="glass-panel industrial-border p-4 text-sm text-muted-foreground">
+              <div className="font-semibold text-foreground">Endpoint examples</div>
+              <div className="mt-2 space-y-2">
+                <details className="border border-border bg-card px-3 py-2">
+                  <summary className="cursor-pointer font-semibold text-foreground">Home server + Cloudflare Tunnel</summary>
+                  <div className="mt-2 font-mono-data text-xs text-muted-foreground">
+                    PROVIDER_ENDPOINT=/dns4/sp.&lt;domain&gt;/tcp/443/https
+                  </div>
+                </details>
+                <details className="border border-border bg-card px-3 py-2">
+                  <summary className="cursor-pointer font-semibold text-foreground">Public VPS (direct HTTPS)</summary>
+                  <div className="mt-2 font-mono-data text-xs text-muted-foreground">
+                    PROVIDER_ENDPOINT=/ip4/&lt;public-ip&gt;/tcp/443/https
+                  </div>
+                </details>
+              </div>
+            </div>
+            <div className="glass-panel industrial-border p-4 text-sm text-muted-foreground">
+              <div className="font-semibold text-foreground">Where to verify</div>
+              <div className="mt-2">
+                After bootstrap, open the Provider Console to confirm registration and probe your endpoint.
+              </div>
+              <div className="mt-3">
+                <Link
+                  to="/sp-dashboard"
+                  className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open Provider Console
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -386,7 +305,7 @@ export function SpOnboarding() {
               className="block glass-panel industrial-border p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-foreground">Devnet multi-provider guide</div>
+                <div className="font-semibold text-foreground">Multi-provider playbook</div>
                 <ExternalLink className="h-4 w-4 text-primary" />
               </div>
               <p className="mt-1 text-muted-foreground">Canonical operator playbook and environment details.</p>
@@ -397,7 +316,7 @@ export function SpOnboarding() {
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
-                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. Use local demo only for development, not as the main onboarding path for testnet providers.
+                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. A public VPS with direct HTTPS works too if you have a stable endpoint.
               </div>
             </div>
           </div>
@@ -407,12 +326,11 @@ export function SpOnboarding() {
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="glass-panel industrial-border p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">Bootstrap commands</h2>
-            <CopyButton onClick={() => void copyText("Bootstrap script", activeScript)} />
+            <h2 className="text-xl font-semibold text-foreground">Clone + bootstrap</h2>
+            <CopyButton onClick={() => void copyText("Clone + bootstrap", `${cloneScript}\n\n${bootstrapScript}`)} />
           </div>
-          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
-            {activeScript}
-          </pre>
+          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">{cloneScript}</pre>
+          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">{bootstrapScript}</pre>
         </div>
 
         <div className="glass-panel industrial-border p-6">
@@ -426,10 +344,10 @@ export function SpOnboarding() {
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <DashboardCta className="inline-flex justify-center" label="Dashboard" to="/dashboard" />
             <Link
-              to="/devnet"
+              to="/sp-dashboard"
               className="rounded-none border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
-              Open Devnet Join
+              Open Provider Console
             </Link>
           </div>
         </div>

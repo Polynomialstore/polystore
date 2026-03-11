@@ -42,10 +42,12 @@ export function SpDashboard() {
   const [providers, setProviders] = useState<LcdProvider[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [onlyLocal, setOnlyLocal] = useState(true)
+  const [onlyLocal, setOnlyLocal] = useState(false)
   const [search, setSearch] = useState('')
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [probe, setProbe] = useState<HealthProbeState>({ status: 'idle' })
+  const [myProviderAddress, setMyProviderAddress] = useState('')
+  const [myProviderBase, setMyProviderBase] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -75,6 +77,12 @@ export function SpDashboard() {
   }, [onlyLocal, providers, search])
 
   const localCount = useMemo(() => providers.filter(isLocalDemoProvider).length, [providers])
+  const myProvider = useMemo(() => {
+    const addr = myProviderAddress.trim()
+    if (!addr) return null
+    return providers.find((p) => String(p.address || '').trim() === addr) ?? null
+  }, [myProviderAddress, providers])
+  const myBases = useMemo(() => (myProvider ? extractProviderHttpBases(myProvider.endpoints) : []), [myProvider])
 
   const handleCopy = async (label: string, text: string) => {
     try {
@@ -109,15 +117,15 @@ export function SpDashboard() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden glass-panel industrial-border cyber-grid p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_30px_hsl(var(--primary)_/_0.10)]">
+      <section className="relative overflow-hidden glass-panel industrial-border p-8">
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 border border-border bg-background/40 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
             <Server className="h-4 w-4 text-primary" />
             <span className="font-mono-data text-foreground/80">/sp/console</span>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Storage Provider Dashboard</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Provider Console</h1>
           <p className="max-w-3xl text-muted-foreground">
-            This is the SP-facing console. It focuses on on-chain provider registration + endpoints, and local demo SP bring-up. The data-client UI lives in the regular Dashboard.
+            This is the SP-facing console. It focuses on on-chain provider registration, endpoint reachability, and health probes. The data-client UI lives in the regular Dashboard.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
@@ -137,49 +145,109 @@ export function SpDashboard() {
       </div>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="glass-panel industrial-border cyber-grid p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]">
+        <div className="glass-panel industrial-border p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">Local demo stack</h2>
-            <button
-              type="button"
-              onClick={() => void handleCopy('Start command', LOCAL_DEMO_STACK_CMD)}
-              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
-            >
-              <Copy className="h-3.5 w-3.5" /> Copy start
-            </button>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Single-machine local dev: chain + faucet + demo providers + trusted <span className="font-mono-data">user-gateway</span> + web UI.
-          </p>
-          <pre className="mt-4 overflow-x-auto border border-border bg-background/40 p-4 text-xs text-muted-foreground font-mono-data">
-            {LOCAL_DEMO_STACK_CMD}
-            {'\n'}
-            {LOCAL_DEMO_STOP_CMD}
-          </pre>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void handleCopy('Stop command', LOCAL_DEMO_STOP_CMD)}
-              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              <Terminal className="h-4 w-4" /> Copy stop
-            </button>
+            <h2 className="text-xl font-semibold text-foreground">My provider</h2>
             <button
               type="button"
               onClick={() => void load()}
               className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh providers
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </button>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Paste your provider address to find it in the on-chain registry, then probe your public <span className="font-mono-data">/health</span> endpoint.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Provider address</div>
+              <input
+                value={myProviderAddress}
+                onChange={(e) => setMyProviderAddress(e.target.value ?? '')}
+                placeholder="nil1…"
+                className="mt-2 w-full bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
+              />
+              {myProvider ? (
+                <div className="mt-2 text-xs text-accent">Registered on-chain</div>
+              ) : myProviderAddress.trim() ? (
+                <div className="mt-2 text-xs text-destructive">Not found in provider list (yet)</div>
+              ) : (
+                <div className="mt-2 text-xs text-muted-foreground">Tip: use `./scripts/run_devnet_provider.sh print-config`.</div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Health base URL</div>
+              <input
+                value={myProviderBase}
+                onChange={(e) => setMyProviderBase(e.target.value ?? '')}
+                placeholder="https://sp.example.com"
+                className="mt-2 w-full bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={!myProviderBase.trim()}
+                    onClick={() => void probeHealth(myProviderBase.trim().replace(/\/$/, ''))}
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${probe.status === 'loading' && probe.base === myProviderBase.trim().replace(/\/$/, '') ? 'animate-spin' : ''}`} />
+                    Probe /health
+                  </button>
+                {myBases.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setMyProviderBase(myBases[0])}
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                  >
+                    Use on-chain URL
+                  </button>
+                ) : null}
+              </div>
+              {probe.status !== 'idle' && probe.base === myProviderBase.trim().replace(/\/$/, '') ? (
+                probe.status === 'ok' ? (
+                  <div className="mt-2 text-xs text-accent font-mono-data">OK ({probe.ms}ms)</div>
+                ) : probe.status === 'error' ? (
+                  <div className="mt-2 text-xs text-destructive">{probe.error}</div>
+                ) : null
+              ) : null}
+            </div>
           </div>
           {copyStatus ? (
             <div className="mt-3 border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent">
               {copyStatus}
             </div>
           ) : null}
+          <details className="mt-6 border border-border bg-background/40 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">Local demo stack (optional)</summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Single-machine local dev: chain + faucet + demo providers + trusted <span className="font-mono-data">user-gateway</span> + web UI.
+            </p>
+            <pre className="mt-3 overflow-x-auto border border-border bg-background/40 p-4 text-xs text-muted-foreground font-mono-data">
+              {LOCAL_DEMO_STACK_CMD}
+              {'\n'}
+              {LOCAL_DEMO_STOP_CMD}
+            </pre>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleCopy('Start command', LOCAL_DEMO_STACK_CMD)}
+                className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              >
+                <Copy className="h-4 w-4" /> Copy start
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopy('Stop command', LOCAL_DEMO_STOP_CMD)}
+                className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              >
+                <Terminal className="h-4 w-4" /> Copy stop
+              </button>
+            </div>
+          </details>
         </div>
 
-        <div className="glass-panel industrial-border cyber-grid p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]">
+        <div className="glass-panel industrial-border p-6">
           <h2 className="text-xl font-semibold text-foreground">Provider registry (on-chain)</h2>
           <div className="mt-2 text-sm text-muted-foreground">
             Total providers: <span className="font-mono-data text-foreground">{providers.length}</span> • Local endpoints:{' '}
