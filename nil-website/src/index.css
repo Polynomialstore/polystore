@@ -153,7 +153,11 @@
     box-shadow: none; /* NO SHADOWS - SLAB PRINCIPLE */
   }
 
-  .industrial-border { @apply relative; }
+  .glass-panel.industrial-border {
+    @apply shadow-md ring-1 ring-primary/20;
+  }
+
+  .industrial-border { @apply relative border border-border; }
   .industrial-border::before, .industrial-border::after {
     content: "";
     @apply absolute pointer-events-none z-[20] w-6 h-6 transition-all duration-500;
@@ -177,5 +181,4 @@
     @apply animate-pulse;
     box-shadow: 0 0 8px currentColor;
   }
-  .border-primary-frame { @apply border-2 border-border; }
 }

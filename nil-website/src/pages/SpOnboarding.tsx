@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
+import { DashboardCta } from "../components/DashboardCta";
 
 type OnboardingTrack = "local_demo" | "desktop_local" | "remote_headless";
 
@@ -79,8 +80,8 @@ const desktopLocalSteps: Step[] = [
 const remoteTrackSteps: Step[] = [
   {
     id: "remote-identity",
-    title: "Prepare provider key + endpoint",
-    detail: "Create/import provider key and choose a public endpoint (direct or tunnel) for the remote host.",
+    title: "Prepare provider key + public hostname",
+    detail: "Create or import the provider key, then decide whether this machine will publish through Cloudflare Tunnel or direct public ingress.",
     successSignal: "Provider address and endpoint are finalized.",
   },
   {
@@ -91,8 +92,8 @@ const remoteTrackSteps: Step[] = [
   },
   {
     id: "remote-runbook",
-    title: "Run remote bootstrap",
-    detail: "Apply generated environment and start commands on the remote machine.",
+    title: "Run remote bootstrap + service install",
+    detail: "Apply the generated environment, start the provider gateway, and move it under a persistent service manager on the remote machine.",
     successSignal: "Remote provider process is listening and responding on /health.",
   },
   {
@@ -126,27 +127,54 @@ npm run desktop
 const remoteBootstrapScript = `# Provider host bootstrap
 PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
 
-# Register endpoint on chain
+# Home-server / Cloudflare Tunnel example
 PROVIDER_KEY=provider1 \\
 CHAIN_ID=20260211 \\
-HUB_LCD=http://127.0.0.1:1317 \\
-HUB_NODE=tcp://127.0.0.1:26657 \\
-PROVIDER_ENDPOINT=/ip4/<public-ip>/tcp/8091/http \\
+HUB_LCD=https://lcd.<domain> \\
+HUB_NODE=https://rpc.<domain> \\
+PROVIDER_ENDPOINT=/dns4/sp.<domain>/tcp/443/https \\
 ./scripts/run_devnet_provider.sh register
 
 # Start provider service
 PROVIDER_KEY=provider1 \\
 NIL_GATEWAY_SP_AUTH=<shared-auth-token> \\
+NIL_LCD_BASE=https://lcd.<domain> \\
+NIL_NODE=https://rpc.<domain> \\
+NIL_CHAIN_ID=20260211 \\
 PROVIDER_LISTEN=:8091 \\
 ./scripts/run_devnet_provider.sh start`;
 
 const healthCheckScript = `# Provider and chain health checks
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd http://127.0.0.1:1317
-nilchaind query nilchain list-providers --home _artifacts/nilchain_data_devnet_alpha
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain>
+curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq '.providers | length'
+curl -sf https://sp.<domain>/health
 
 # Gateway download path verification
 # Dashboard -> Deal -> Download via gateway
 # Expect gateway path + successful receipt pipeline`;
+
+const agentBrief = `You are setting up this machine as a NilStore testnet Storage Provider.
+
+Context:
+- The repo is already cloned locally.
+- Preferred mode: home server behind NAT with Cloudflare Tunnel.
+- Use docs/REMOTE_SP_JOIN_QUICKSTART.md and docs/networking/PROVIDER_ENDPOINTS.md.
+
+Your job:
+1. Verify toolchains and repo prerequisites.
+2. Create or import the provider key.
+3. Configure the public endpoint and local listener.
+4. Register the provider on-chain.
+5. Start the provider service and verify /health locally.
+6. Verify public reachability and on-chain visibility.
+7. If anything fails, inspect logs, repair, and retry until healthy.
+
+At the end, print:
+- provider address
+- registered endpoint
+- local health URL
+- public health URL
+- exact commands or files changed`;
 
 function CopyButton({ onClick }: { onClick: () => void }) {
   return (
@@ -177,7 +205,7 @@ function PrimaryLinkButton({ href, children }: { href: string; children: ReactNo
 }
 
 export function SpOnboarding() {
-  const [track, setTrack] = useState<OnboardingTrack>("local_demo");
+  const [track, setTrack] = useState<OnboardingTrack>("remote_headless");
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
@@ -211,18 +239,15 @@ export function SpOnboarding() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden glass-panel industrial-border p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-        <div className="absolute inset-0 cyber-grid opacity-25 pointer-events-none" />
-          <div className="absolute -top-24 -right-24 h-72 w-72 bg-primary/20 blur-3xl" />
-          <div className="absolute -bottom-24 -left-24 h-72 w-72 bg-accent/20 blur-3xl" />
+      <section className="glass-panel industrial-border p-8">
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
             <Server className="h-4 w-4" />
-            Storage Provider Companion
+            Testnet Provider Onboarding
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">SP Onboarding Companion</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
-            Local demo onboarding: bring up a full single-machine stack (chain + faucet + demo providers + trusted user-gateway + web UI) and validate end-to-end store + retrieve before moving to real SP ops.
+            The recommended testnet setup is a dedicated provider host with a stable public endpoint, either a home server behind Cloudflare Tunnel or a small VPS.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <PrimaryLinkButton href={repoRootUrl}>
@@ -230,17 +255,17 @@ export function SpOnboarding() {
               Open Repo
             </PrimaryLinkButton>
             <Link
-              to="/dashboard"
-              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              to="/alpha/provider"
+              className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Rocket className="h-4 w-4" />
-              Open Dashboard
+              Testnet Provider Path
             </Link>
             <a
               href={devnetPlaybookUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Globe className="h-4 w-4" />
               Operator Playbook
@@ -251,7 +276,7 @@ export function SpOnboarding() {
       </section>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
-        <div className="rounded-none border border-border bg-card p-6">
+        <div className="glass-panel industrial-border p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Guided onboarding flow</h2>
             <div className="text-sm font-medium text-muted-foreground">{checkedCount}/{activeSteps.length} complete ({completionPercent}%)</div>
@@ -260,12 +285,12 @@ export function SpOnboarding() {
           <div className="mt-4 flex rounded-none border border-border bg-secondary/20 p-1">
             <button
               type="button"
-              onClick={() => setTrack("local_demo")}
+              onClick={() => setTrack("remote_headless")}
               className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Local demo (single machine)
+              Home server + tunnel
             </button>
             <button
               type="button"
@@ -274,22 +299,22 @@ export function SpOnboarding() {
                 track === "desktop_local" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Desktop (managed gateway)
+              Public host / managed
             </button>
             <button
               type="button"
-              onClick={() => setTrack("remote_headless")}
+              onClick={() => setTrack("local_demo")}
               className={`flex-1 rounded-none px-3 py-2 text-sm font-semibold transition-colors ${
-                track === "remote_headless" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                track === "local_demo" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Remote (deferred)
+              Local demo (legacy)
             </button>
           </div>
-          <div className="mt-3 rounded-none border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+          <div className="mt-3 glass-panel industrial-border p-3 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground">Scope</div>
             <div className="mt-1">
-              This page targets <span className="font-mono text-foreground">local demo</span> onboarding (no systemd). Remote/headless SP onboarding is deferred.
+              This page now targets <span className="font-mono text-foreground">remote/headless testnet provider onboarding</span> first. Local demo remains available for development and smoke testing.
             </div>
           </div>
 
@@ -299,9 +324,7 @@ export function SpOnboarding() {
               return (
                 <div
                   key={step.id}
-                  className={`rounded-none border p-4 transition-colors ${
-                    checked ? "border-accent/40 bg-accent/5" : "border-border bg-background/70"
-                  }`}
+                  className={`glass-panel industrial-border p-4 transition-colors ${checked ? "border-accent/40 bg-accent/5" : ""}`}
                 >
                   <div className="flex items-start gap-3">
                     <button
@@ -310,7 +333,7 @@ export function SpOnboarding() {
                         className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center border ${
                           checked
                             ? "border-accent/50 bg-accent/20 text-accent"
-                            : "border-border bg-background text-muted-foreground"
+                            : "border-border bg-card text-muted-foreground"
                         }`}
                     >
                       {checked ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-xs font-bold">{index + 1}</span>}
@@ -329,14 +352,14 @@ export function SpOnboarding() {
           </div>
         </div>
 
-        <div className="rounded-none border border-border bg-card p-6">
+        <div className="glass-panel industrial-border p-6">
           <h2 className="text-xl font-semibold text-foreground">Download + assets</h2>
           <div className="mt-4 space-y-3 text-sm">
             <a
               href={gatewayDesktopReleaseUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block glass-panel industrial-border p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Gateway Desktop GUI</div>
@@ -348,7 +371,7 @@ export function SpOnboarding() {
               href={repoRootUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block glass-panel industrial-border p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Repo source + scripts</div>
@@ -360,7 +383,7 @@ export function SpOnboarding() {
               href={devnetPlaybookUrl}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-none border border-border bg-background/70 p-4 hover:border-primary/50"
+              className="block glass-panel industrial-border p-4 hover:border-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-foreground">Devnet multi-provider guide</div>
@@ -374,7 +397,7 @@ export function SpOnboarding() {
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
-                Keep local loopback access enabled (<span className="font-mono">localhost</span> + <span className="font-mono">127.0.0.1</span>) in your browser when testing dashboard-to-gateway flows.
+                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. Use local demo only for development, not as the main onboarding path for testnet providers.
               </div>
             </div>
           </div>
@@ -382,7 +405,7 @@ export function SpOnboarding() {
       </section>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-none border border-border bg-card p-6">
+        <div className="glass-panel industrial-border p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Bootstrap commands</h2>
             <CopyButton onClick={() => void copyText("Bootstrap script", activeScript)} />
@@ -392,7 +415,7 @@ export function SpOnboarding() {
           </pre>
         </div>
 
-        <div className="rounded-none border border-border bg-card p-6">
+        <div className="glass-panel industrial-border p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Health + download verification</h2>
             <CopyButton onClick={() => void copyText("Health script", healthCheckScript)} />
@@ -401,15 +424,10 @@ export function SpOnboarding() {
             {healthCheckScript}
           </pre>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Link
-              to="/dashboard"
-              className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              Open Dashboard
-            </Link>
+            <DashboardCta className="inline-flex justify-center" label="Dashboard" to="/dashboard" />
             <Link
               to="/devnet"
-              className="rounded-none border border-border bg-background/70 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              className="rounded-none border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               Open Devnet Join
             </Link>
@@ -417,18 +435,31 @@ export function SpOnboarding() {
         </div>
       </section>
 
-      <section className="mt-8 rounded-none border border-border bg-card p-6">
+      <section className="mt-8 glass-panel industrial-border p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-foreground">Agent bootstrap brief</h2>
+          <CopyButton onClick={() => void copyText("Agent bootstrap brief", agentBrief)} />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          If the operator has Codex or Claude Code on the provider machine, this is the recommended starting prompt. Later PRs will replace this generic brief with generated host-specific prompts and bundles.
+        </p>
+        <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
+          {agentBrief}
+        </pre>
+      </section>
+
+      <section className="mt-8 glass-panel industrial-border p-6">
         <h2 className="text-xl font-semibold text-foreground">Operational UX model</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="rounded-none border border-border bg-background/70 p-4">
+          <div className="glass-panel industrial-border p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><Shield className="h-4 w-4 text-accent" /> Healthy</div>
             <p className="mt-2 text-sm text-muted-foreground">All critical checks pass: chain connectivity, service availability, endpoint reachability, auth compatibility.</p>
           </div>
-          <div className="rounded-none border border-border bg-background/70 p-4">
+          <div className="glass-panel industrial-border p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><Server className="h-4 w-4 text-primary" /> Degraded</div>
             <p className="mt-2 text-sm text-muted-foreground">Provider is reachable but drift or partial check failures exist. Review remediation actions before serving production traffic.</p>
           </div>
-          <div className="rounded-none border border-border bg-background/70 p-4">
+          <div className="glass-panel industrial-border p-4">
             <div className="flex items-center gap-2 font-semibold text-foreground"><HardDrive className="h-4 w-4 text-destructive" /> Critical</div>
             <p className="mt-2 text-sm text-muted-foreground">Service down, chain mismatch, auth mismatch, or endpoint failure. Upload/download reliability is blocked until fixed.</p>
           </div>

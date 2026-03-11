@@ -2,6 +2,10 @@
 
 This is the concrete collaborator packet for the current trusted devnet hub deployment.
 
+Recommended public entry points:
+- Storage users: `docs/ALPHA_STORAGE_USER_QUICKSTART.md`
+- Provider operators: `docs/ALPHA_PROVIDER_QUICKSTART.md`
+
 ## Live Endpoints
 
 - Website: `https://nilstore.org` (primary) / `https://web.nilstore.org` (if enabled)
@@ -45,6 +49,7 @@ Notes:
 ## SP Operator Quickstart
 
 Canonical docs:
+- `docs/ALPHA_PROVIDER_QUICKSTART.md`
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
 - `docs/networking/PROVIDER_ENDPOINTS.md`
 
@@ -58,7 +63,7 @@ export PROVIDER_KEY="provider1"
 export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 ```
 
-Use `scripts/run_devnet_provider.sh` for `init`, `register`, and `start`.
+Use `scripts/run_devnet_provider.sh` for `init`, `register`, `start`, `print-config`, `doctor`, and `verify`.
 
 ## Healthcheck Commands
 

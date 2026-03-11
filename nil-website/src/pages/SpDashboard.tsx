@@ -5,6 +5,7 @@ import { appConfig } from '../config'
 import { lcdFetchProviders } from '../api/lcdClient'
 import type { LcdProvider } from '../domain/lcd'
 import { StatusBar } from '../components/StatusBar'
+import { DashboardCta } from '../components/DashboardCta'
 import { extractProviderHttpBases, isLocalDemoProvider, isLikelyLocalHttpBase } from '../lib/spDashboard'
 
 const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
@@ -119,13 +120,7 @@ export function SpDashboard() {
             This is the SP-facing console. It focuses on on-chain provider registration + endpoints, and local demo SP bring-up. The data-client UI lives in the regular Dashboard.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open Client Dashboard
-            </Link>
+            <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
             <Link
               to="/sp-onboarding"
               className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"

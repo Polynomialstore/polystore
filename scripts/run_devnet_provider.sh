@@ -7,6 +7,10 @@ set -euo pipefail
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
 #   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
+#   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
+#   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh doctor
+#   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh verify
+#   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh stop
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,6 +46,103 @@ GO_BIN="${GO_BIN:-$(command -v go)}"
 NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
+
+json_escape() {
+  local value="${1-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+provider_pid_file() {
+  echo "$PID_DIR/provider.pid"
+}
+
+provider_running() {
+  local pid_file
+  pid_file="$(provider_pid_file)"
+  if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+provider_local_base_url() {
+  case "$PROVIDER_LISTEN" in
+    http://*|https://*)
+      printf '%s' "${PROVIDER_LISTEN%/}"
+      ;;
+    :*)
+      printf 'http://127.0.0.1%s' "$PROVIDER_LISTEN"
+      ;;
+    0.0.0.0:*)
+      printf 'http://127.0.0.1:%s' "${PROVIDER_LISTEN#*:}"
+      ;;
+    localhost:*|127.0.0.1:*)
+      printf 'http://%s' "$PROVIDER_LISTEN"
+      ;;
+    *)
+      printf 'http://%s' "$PROVIDER_LISTEN"
+      ;;
+  esac
+}
+
+first_provider_endpoint() {
+  IFS=',' read -r -a endpoints <<<"$PROVIDER_ENDPOINTS_RAW"
+  for ep in "${endpoints[@]}"; do
+    ep="$(echo "$ep" | xargs)"
+    if [ -n "$ep" ]; then
+      printf '%s' "$ep"
+      return 0
+    fi
+  done
+  return 1
+}
+
+multiaddr_to_url() {
+  local multiaddr="$1"
+  local trimmed="${multiaddr#/}"
+  local parts=()
+  local proto host port scheme
+
+  IFS='/' read -r -a parts <<<"$trimmed"
+  proto="${parts[0]:-}"
+  host="${parts[1]:-}"
+  port="${parts[3]:-}"
+  scheme="${parts[4]:-}"
+
+  case "$proto" in
+    ip4|dns4) ;;
+    *) return 1 ;;
+  esac
+
+  case "$scheme" in
+    http|https) ;;
+    *) return 1 ;;
+  esac
+
+  if [ -z "$host" ] || [ -z "$port" ]; then
+    return 1
+  fi
+
+  printf '%s://%s:%s' "$scheme" "$host" "$port"
+}
+
+provider_public_base_url() {
+  local endpoint
+  endpoint="$(first_provider_endpoint || true)"
+  if [ -z "$endpoint" ]; then
+    return 1
+  fi
+  multiaddr_to_url "$endpoint"
+}
 
 find_nil_core_lib_dir() {
   local candidate
@@ -99,6 +200,173 @@ ensure_nil_cli() {
 
 provider_addr() {
   "$NILCHAIND_BIN" keys show "$PROVIDER_KEY" -a --home "$HOME_DIR" --keyring-backend test 2>/dev/null || true
+}
+
+provider_registered() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)"
+  [ "$code" = "200" ]
+}
+
+print_config() {
+  local addr local_url public_url pid pid_file
+  addr="$(provider_addr)"
+  local_url="$(provider_local_base_url)"
+  public_url="$(provider_public_base_url || true)"
+  pid_file="$(provider_pid_file)"
+  pid=""
+  if [ -f "$pid_file" ]; then
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+  fi
+
+  cat <<EOF
+{
+  "provider_key": "$(json_escape "$PROVIDER_KEY")",
+  "provider_address": "$(json_escape "$addr")",
+  "chain_id": "$(json_escape "$CHAIN_ID")",
+  "hub_lcd": "$(json_escape "$LCD_BASE")",
+  "hub_node": "$(json_escape "$NODE_ADDR")",
+  "provider_listen": "$(json_escape "$PROVIDER_LISTEN")",
+  "provider_local_url": "$(json_escape "$local_url")",
+  "provider_endpoint": "$(json_escape "$PROVIDER_ENDPOINTS_RAW")",
+  "provider_public_url": "$(json_escape "$public_url")",
+  "provider_capabilities": "$(json_escape "$PROVIDER_CAPABILITIES")",
+  "provider_total_storage": "$(json_escape "$PROVIDER_TOTAL_STORAGE")",
+  "nil_home": "$(json_escape "$HOME_DIR")",
+  "nil_upload_dir": "$(json_escape "$UPLOAD_DIR")",
+  "trusted_setup": "$(json_escape "$TRUSTED_SETUP")",
+  "nilchaind_bin": "$(json_escape "$NILCHAIND_BIN")",
+  "nil_cli_bin": "$(json_escape "$NIL_CLI_BIN")",
+  "go_bin": "$(json_escape "$GO_BIN")",
+  "pid_file": "$(json_escape "$pid_file")",
+  "pid": "$(json_escape "$pid")",
+  "provider_running": $(provider_running && printf 'true' || printf 'false'),
+  "provider_registered": $(provider_registered && printf 'true' || printf 'false'),
+  "sp_auth_present": $([ -n "${NIL_GATEWAY_SP_AUTH:-}" ] && printf 'true' || printf 'false')
+}
+EOF
+}
+
+doctor_provider() {
+  local failures=0
+  local addr local_url public_url pid_file
+  addr="$(provider_addr)"
+  local_url="$(provider_local_base_url)"
+  public_url="$(provider_public_base_url || true)"
+  pid_file="$(provider_pid_file)"
+
+  echo "==> Provider doctor"
+  echo "  key:    $PROVIDER_KEY"
+  echo "  home:   $HOME_DIR"
+  echo "  lcd:    $LCD_BASE"
+  echo "  node:   $NODE_ADDR"
+
+  if [ -n "$GO_BIN" ] && have_cmd "$GO_BIN"; then
+    echo "OK: go available at $GO_BIN"
+  else
+    echo "FAIL: go not found"
+    failures=$((failures + 1))
+  fi
+
+  if [ -x "$NILCHAIND_BIN" ] || [ -f "$NILCHAIND_BIN" ]; then
+    echo "OK: nilchaind binary present at $NILCHAIND_BIN"
+  else
+    echo "WARN: nilchaind binary missing at $NILCHAIND_BIN"
+  fi
+
+  if [ -x "$NIL_CLI_BIN" ] || [ -f "$NIL_CLI_BIN" ]; then
+    echo "OK: nil_cli binary present at $NIL_CLI_BIN"
+  else
+    echo "WARN: nil_cli binary missing at $NIL_CLI_BIN"
+  fi
+
+  if [ -f "$TRUSTED_SETUP" ]; then
+    echo "OK: trusted setup present at $TRUSTED_SETUP"
+  else
+    echo "FAIL: trusted setup missing at $TRUSTED_SETUP"
+    failures=$((failures + 1))
+  fi
+
+  if [ -n "$addr" ]; then
+    echo "OK: provider key exists ($addr)"
+  else
+    echo "FAIL: provider key missing; run ./scripts/run_devnet_provider.sh init"
+    failures=$((failures + 1))
+  fi
+
+  if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
+    echo "OK: provider endpoint configured ($PROVIDER_ENDPOINTS_RAW)"
+  else
+    echo "WARN: provider endpoint not set; registration will be skipped until PROVIDER_ENDPOINT is configured"
+  fi
+
+  if provider_registered; then
+    echo "OK: provider is visible on-chain via $LCD_BASE"
+  else
+    if [ -n "$addr" ] && have_cmd curl; then
+      echo "WARN: provider is not visible on-chain yet via $LCD_BASE"
+    else
+      echo "WARN: on-chain registration could not be checked"
+    fi
+  fi
+
+  if provider_running; then
+    echo "OK: provider process is running (pid $(cat "$pid_file"))"
+  else
+    echo "WARN: provider process is not running"
+  fi
+
+  if have_cmd curl; then
+    if curl -fsS --max-time 5 "$local_url/health" >/dev/null 2>&1; then
+      echo "OK: local provider health reachable at $local_url/health"
+    else
+      echo "WARN: local provider health unreachable at $local_url/health"
+    fi
+
+    if [ -n "$public_url" ]; then
+      if curl -fsS --max-time 5 "$public_url/health" >/dev/null 2>&1; then
+        echo "OK: public provider health reachable at $public_url/health"
+      else
+        echo "WARN: public provider health unreachable at $public_url/health"
+      fi
+    fi
+  else
+    echo "WARN: curl not available; skipping health checks"
+  fi
+
+  if [ "$failures" -gt 0 ]; then
+    echo "Doctor found $failures critical issue(s)." >&2
+    return 1
+  fi
+
+  echo "Doctor finished with no critical issues."
+}
+
+verify_provider() {
+  local addr local_url public_url
+  local args=()
+
+  local_url="$(provider_local_base_url)"
+  public_url="$(provider_public_base_url || true)"
+  addr="$(provider_addr)"
+
+  args=(provider --provider "$local_url")
+  if [ -n "$LCD_BASE" ]; then
+    args+=(--hub-lcd "$LCD_BASE")
+  fi
+  if [ -n "$addr" ]; then
+    args+=(--provider-addr "$addr")
+  fi
+  if [ -n "$public_url" ]; then
+    args+=(--provider-public "$public_url")
+  fi
+
+  "$ROOT_DIR/scripts/devnet_healthcheck.sh" "${args[@]}"
 }
 
 init_provider() {
@@ -218,6 +486,28 @@ start_provider() {
   echo "  logs:  $LOG_DIR/provider.log"
 }
 
+bootstrap_provider() {
+  init_provider
+
+  if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
+    if provider_registered; then
+      echo "==> Provider is already registered on-chain; skipping register."
+    else
+      register_provider
+    fi
+  else
+    echo "==> Skipping register: PROVIDER_ENDPOINT is not set."
+  fi
+
+  if [ -n "${NIL_GATEWAY_SP_AUTH:-}" ]; then
+    start_provider
+  else
+    echo "==> Skipping start: NIL_GATEWAY_SP_AUTH is not set."
+  fi
+
+  doctor_provider
+}
+
 stop_provider() {
   local pid_file="$PID_DIR/provider.pid"
   if [ ! -f "$pid_file" ]; then
@@ -237,9 +527,13 @@ case "$ACTION" in
   init) init_provider ;;
   register) register_provider ;;
   start) start_provider ;;
+  print-config) print_config ;;
+  doctor) doctor_provider ;;
+  verify) verify_provider ;;
+  bootstrap) bootstrap_provider ;;
   stop) stop_provider ;;
   *)
-    echo "Usage: $0 [init|register|start|stop]" >&2
+    echo "Usage: $0 [init|register|start|print-config|doctor|verify|bootstrap|stop]" >&2
     exit 1
     ;;
 esac

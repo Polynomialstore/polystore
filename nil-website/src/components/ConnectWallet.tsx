@@ -39,6 +39,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
         }
 
         const currentAccount = account!
+        const accountLabel = currentAccount.address || currentAccount.displayName
 
         return (
           <div className={`flex items-center gap-2 ${className}`}>
@@ -47,7 +48,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
               className="inline-flex items-center gap-3 px-4 py-2 bg-secondary/40 border border-border/40"
               title={currentAccount.address}
             >
-              <span className="font-mono-data text-xs text-foreground">{currentAccount.displayName}</span>
+              <span className="font-mono-data text-xs text-foreground">{accountLabel}</span>
               <span className="text-xs text-muted-foreground">{currentAccount.displayBalance ?? '—'}</span>
             </button>
 

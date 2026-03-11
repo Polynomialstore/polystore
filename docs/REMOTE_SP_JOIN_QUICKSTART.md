@@ -30,6 +30,12 @@ PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
 
 This prints your provider address (`nil1...`).
 
+Optional: print the resolved provider config in machine-readable form:
+
+```bash
+PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
+```
+
 ### 2) Get funded for gas
 
 Ask the hub operator to send you some `aatom` (gas) via the faucet or a direct bank send.
@@ -70,6 +76,14 @@ export PROVIDER_KEY="provider1"
 ./scripts/run_devnet_provider.sh register
 ```
 
+If you are letting Codex or Claude Code drive setup locally, you can also use:
+
+```bash
+./scripts/run_devnet_provider.sh bootstrap
+```
+
+`bootstrap` runs `init`, registers the provider if `PROVIDER_ENDPOINT` is set, starts the provider if `NIL_GATEWAY_SP_AUTH` is set, then runs a local doctor pass.
+
 ### 5) Start your provider gateway
 
 ```bash
@@ -98,6 +112,16 @@ Or run the healthcheck script (recommended):
 ```bash
 scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "$HUB_LCD" --provider-addr <nil1...>
 ```
+
+Agent-oriented diagnostics:
+
+```bash
+./scripts/run_devnet_provider.sh doctor
+./scripts/run_devnet_provider.sh verify
+```
+
+- `doctor` checks prerequisites, key state, endpoint configuration, local/public `/health`, and on-chain visibility when possible.
+- `verify` runs the repo healthcheck with the current provider and hub settings.
 
 From the hub (or anywhere with LCD access):
 

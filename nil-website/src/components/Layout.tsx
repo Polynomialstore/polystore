@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState, useEffect } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { LivingGrid } from "./LivingGrid";
+import { DashboardCta } from "./DashboardCta";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,11 +49,14 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   // Navigation Hierarchy (Rich Data)
-  const navStructure: { type: "link" | "dropdown", name: "Dashboard" | "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
+  const navStructure: { type: "link" | "dropdown", name: "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
       name: "Explore", 
       items: [
+        { name: "Store Data", path: "/alpha/storage", description: "Testnet user quickstart.", icon: <Database className="w-5 h-5" /> },
+        { name: "Become A Provider", path: "/alpha/provider", description: "Testnet provider onboarding.", icon: <Server className="w-5 h-5" /> },
+        { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
         { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
         { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
@@ -67,10 +71,10 @@ export const Layout = () => {
         { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         { name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
         { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Rocket className="w-5 h-5" /> },
-        { name: "SP Onboarding", path: "/sp-onboarding", description: "Local demo Storage Provider quickstart.", icon: <Server className="w-5 h-5" /> },
+        { name: "Provider Runbook", path: "/sp-onboarding", description: "Remote-first provider runbook with legacy local demo path.", icon: <Server className="w-5 h-5" /> },
         { name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
         { name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
-        { name: "Devnet Join", path: "/devnet", description: "Join a multi-provider devnet.", icon: <Terminal className="w-5 h-5" /> },
+        { name: "Provider Debug", path: "/devnet", description: "Live provider list and low-level join diagnostics.", icon: <Terminal className="w-5 h-5" /> },
         { name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
       ] 
     },
@@ -166,16 +170,9 @@ export const Layout = () => {
               </a>
 
               <ModeToggle />
-              
-              {/* PRIMARY CTA: Launch Console */}
-              <Link 
-                to="/dashboard"
-                className="hidden sm:flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
-              >
-                <Rocket className="w-4 h-4 fill-current" />
-                Launch Console
-              </Link>
 
+              <DashboardCta className="hidden sm:flex" label="Dashboard" to="/dashboard" />
+              
               {/* Mobile Toggle */}
               <button 
                 onClick={() => setIsOpen(!isOpen)} 
@@ -201,12 +198,12 @@ export const Layout = () => {
                 
                 {/* Mobile CTA */}
                 <Link 
-                    to="/dashboard" 
+                    to="/alpha/storage" 
                     onClick={() => setIsOpen(false)}
                     className="block w-full py-4 bg-primary text-primary-foreground font-bold text-center text-[11px] uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] active:translate-x-[2px] active:translate-y-[2px] transition-transform flex items-center justify-center gap-3"
                   >
-                    <Rocket className="w-6 h-6 fill-current" />
-                    Launch Console
+                    <Database className="w-6 h-6 fill-current" />
+                    Start Storing
                 </Link>
 
                 <div className="h-[1px] bg-border/50"></div>
@@ -265,11 +262,11 @@ export const Layout = () => {
       </nav>
 
       {/* Main Content Spacer */}
-      <main className="pt-20">
+      <main className="pt-20 relative z-10">
         <Outlet />
       </main>
 
-      <footer className="py-12 border-t border-border bg-card mt-24 relative overflow-hidden">
+      <footer className="py-12 border-t border-border bg-card mt-24 relative z-10 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm relative z-10">

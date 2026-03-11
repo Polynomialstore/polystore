@@ -33,10 +33,10 @@ export const TestnetDocs = () => {
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4 text-foreground">Testnet Launch Guide (v0.1.1)</h1>
         <p className="text-xl text-muted-foreground">
-          Welcome to "Store Wars". This guide covers everything you need to participate: installing the release binaries, getting testnet funds, and running your first deal.
+          This guide covers wallet-first testnet participation: installing the release binaries, getting testnet funds, and running your first deal.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
-          For the multi-provider devnet join flow, see <a className="text-primary underline" href="/#/devnet">Devnet Join</a>.
+          For the testnet storage and provider launch paths, start with <a className="text-primary underline" href="/#/alpha/storage">Store Data</a> or <a className="text-primary underline" href="/#/alpha/provider">Become A Provider</a>. Use <a className="text-primary underline" href="/#/devnet">Provider Debug</a> for low-level provider diagnostics.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           For the full provider onboarding companion (desktop + remote, downloads, health checks), see{" "}

@@ -90,7 +90,7 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 
 NilStore supports two redundancy modes conceptually:
 
-*   **Mode 1 – FullReplica (Alpha, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
+*   **Mode 1 – FullReplica (Testnet, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
 *   **Mode 2 – StripeReplica (Implemented):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer (RS(K, K+M)).
 
 ### Step 1: Ingestion & Placement

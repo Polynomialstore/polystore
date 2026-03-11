@@ -1813,7 +1813,7 @@ export function Dashboard() {
 
       {downloadToast && (
         <div className="fixed bottom-8 right-8 z-50">
-          <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-accent border border-accent/40 bg-accent/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
+          <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-accent border-accent/40 bg-accent/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
             <CheckCircle2 className="h-4 w-4" />
             {downloadToast}
           </div>

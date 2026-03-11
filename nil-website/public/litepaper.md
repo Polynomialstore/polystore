@@ -55,7 +55,7 @@ We don't ban S3. We just pay for speed.
 3.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
 
 *Devnet note:* A gateway relay/faucet can sponsor gas for demos, but it is disabled by default in mainnet-parity mode.
-4.  **Placement:** In the current **FullReplica (Mode 1)** alpha implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In **StripeReplica (Mode 2)**, the Chain assigns an ordered slot list of size `N = K+M`, replicating metadata to all slots while striping user data per slot.
+4.  **Placement:** In the current **FullReplica (Mode 1)** testnet implementation, the Chain deterministically assigns a set of Providers to hold *full replicas* of the file (targeting 12, capped by available Providers). In **StripeReplica (Mode 2)**, the Chain assigns an ordered slot list of size `N = K+M`, replicating metadata to all slots while striping user data per slot.
 
 ### Step 2: The Loop
 *   **Traffic (Mode 1):** Users request data via retrieval sessions. After a successful download, the user confirms the session and the provider submits the session proof for liveness and bandwidth fees.
