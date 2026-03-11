@@ -239,9 +239,7 @@ export function SpOnboarding() {
 
   return (
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden glass-panel industrial-border p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-        <div className="absolute -top-24 -right-24 h-72 w-72 bg-primary/20 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 bg-accent/20 blur-3xl" />
+      <section className="glass-panel industrial-border p-8">
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
             <Server className="h-4 w-4" />
