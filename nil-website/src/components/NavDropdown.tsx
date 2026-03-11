@@ -38,7 +38,10 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
         {label}
         <ChevronDown
           className={`w-3 h-3 transition-transform duration-200 ${
-            isOpen || isActive ? "rotate-180 text-primary" : "text-muted-foreground group-hover:text-primary"
+            // Default = "up" (rotated). Open/active = "down".
+            isOpen || isActive
+              ? "rotate-0 text-primary"
+              : "rotate-180 text-muted-foreground group-hover:text-primary"
           }`}
         />
       </button>
