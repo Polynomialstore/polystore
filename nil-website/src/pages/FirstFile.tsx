@@ -161,6 +161,8 @@ export function FirstFile() {
       active ? "bg-secondary/40 text-foreground" : "bg-muted/40 text-muted-foreground",
     ].join(" ")
 
+  const stepBodyClass = "p-5"
+
   useEffect(() => {
     if (!accountPermissionMismatch) return
     setError('MetaMask account changed. Reconnect wallet and approve access for the active account.')
@@ -284,17 +286,19 @@ export function FirstFile() {
           </div>
           {isConnected && !isWrongNetwork && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <ConnectWallet />
-          {isWrongNetwork && (
-            <button
-              type="button"
-              onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
-              className="inline-flex items-center justify-center rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
-            >
-              {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
-            </button>
-          )}
+        <div className={stepBodyClass}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <ConnectWallet />
+            {isWrongNetwork && (
+              <button
+                type="button"
+                onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
+                className="inline-flex items-center justify-center rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
+              >
+                {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -311,37 +315,39 @@ export function FirstFile() {
           </div>
           {hasBalance && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
-        {!appConfig.faucetEnabled ? (
-          <div className="text-sm text-muted-foreground">
-            Faucet is disabled in this build. Fund your wallet externally, then continue.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => void handleRequestFunds()}
-                disabled={!isConnected || faucetLoading || step2Complete}
-                className={
-                  step2Complete
-                    ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
-                    : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
-                }
-              >
-                <Coins className="w-4 h-4" />
-                {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
-              </button>
-              <div className="text-xs text-muted-foreground">
-                {faucetTx ? (
-                  <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
-                ) : (
-                  <span>Balance: {balanceLabel}</span>
-                )}
-              </div>
+        <div className={stepBodyClass}>
+          {!appConfig.faucetEnabled ? (
+            <div className="text-sm text-muted-foreground">
+              Faucet is disabled in this build. Fund your wallet externally, then continue.
             </div>
-            <FaucetAuthTokenInput />
-          </div>
-        )}
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleRequestFunds()}
+                  disabled={!isConnected || faucetLoading || step2Complete}
+                  className={
+                    step2Complete
+                      ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
+                      : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+                  }
+                >
+                  <Coins className="w-4 h-4" />
+                  {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
+                </button>
+                <div className="text-xs text-muted-foreground">
+                  {faucetTx ? (
+                    <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
+                  ) : (
+                    <span>Balance: {balanceLabel}</span>
+                  )}
+                </div>
+              </div>
+              <FaucetAuthTokenInput />
+            </div>
+          )}
+        </div>
       </section>
 
       <section className={stepSectionClass(step3Ready)}>
@@ -358,69 +364,71 @@ export function FirstFile() {
           {dealId && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
 
-        <div className="hidden grid md:grid-cols-3 gap-3 text-sm">
-          <label className="block">
-            <div className="text-xs text-muted-foreground">Duration</div>
-            <select
-              value={durationPreset}
-              onChange={(e) => {
-                const preset = e.target.value
-                setDurationPreset(preset)
-                const presetSeconds = DURATION_PRESET_BY_SECONDS[preset]
-                if (typeof presetSeconds === 'number') {
-                  setDuration(String(presetSeconds))
-                }
-              }}
-              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
-            >
-              {DURATION_PRESETS.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <div className="text-xs text-muted-foreground">Duration (seconds)</div>
-            <input
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              readOnly={durationPreset !== 'custom'}
-              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <div className="text-xs text-muted-foreground">Initial escrow</div>
-            <input
-              value={initialEscrow}
-              onChange={(e) => setInitialEscrow(e.target.value)}
-              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <div className="text-xs text-muted-foreground">Max monthly spend</div>
-            <input
-              value={maxMonthlySpend}
-              onChange={(e) => setMaxMonthlySpend(e.target.value)}
-              className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
-        </div>
+        <div className={stepBodyClass}>
+          <div className="hidden grid md:grid-cols-3 gap-3 text-sm">
+            <label className="block">
+              <div className="text-xs text-muted-foreground">Duration</div>
+              <select
+                value={durationPreset}
+                onChange={(e) => {
+                  const preset = e.target.value
+                  setDurationPreset(preset)
+                  const presetSeconds = DURATION_PRESET_BY_SECONDS[preset]
+                  if (typeof presetSeconds === 'number') {
+                    setDuration(String(presetSeconds))
+                  }
+                }}
+                className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
+              >
+                {DURATION_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <div className="text-xs text-muted-foreground">Duration (seconds)</div>
+              <input
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                readOnly={durationPreset !== 'custom'}
+                className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs text-muted-foreground">Initial escrow</div>
+              <input
+                value={initialEscrow}
+                onChange={(e) => setInitialEscrow(e.target.value)}
+                className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs text-muted-foreground">Max monthly spend</div>
+              <input
+                value={maxMonthlySpend}
+                onChange={(e) => setMaxMonthlySpend(e.target.value)}
+                className="mt-1 w-full rounded-none border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void handleCreateDeal()}
-            disabled={!isConnected || isWrongNetwork || dealLoading || step3Complete}
-            className={
-              step3Complete
-                ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
-                : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
-            }
-          >
-            <HardDrive className="w-4 h-4" />
-            {dealLoading ? 'Creating…' : 'Create deal'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleCreateDeal()}
+              disabled={!isConnected || isWrongNetwork || dealLoading || step3Complete}
+              className={
+                step3Complete
+                  ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
+                  : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
+              }
+            >
+              <HardDrive className="w-4 h-4" />
+              {dealLoading ? 'Creating…' : 'Create deal'}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -437,7 +445,9 @@ export function FirstFile() {
           </div>
         </div>
 
-        <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
+        <div className={stepBodyClass}>
+          <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
+        </div>
       </section>
     </div>
   )

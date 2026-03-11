@@ -262,11 +262,11 @@ export const Layout = () => {
       </nav>
 
       {/* Main Content Spacer */}
-      <main className="pt-20">
+      <main className="pt-20 relative z-10">
         <Outlet />
       </main>
 
-      <footer className="py-12 border-t border-border bg-card mt-24 relative overflow-hidden">
+      <footer className="py-12 border-t border-border bg-card mt-24 relative z-10 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm relative z-10">
