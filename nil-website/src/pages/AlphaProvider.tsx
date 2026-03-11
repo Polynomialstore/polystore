@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Copy, Server, Shield, Globe, Terminal } from "lucide-react";
+import { Copy, Server, Shield, Globe, Terminal } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
 import { TrackCard } from "../components/marketing/TrackCard";
 import { PromptPanel } from "../components/marketing/PromptPanel";
+import { PrimaryCtaLink } from "../components/PrimaryCta";
 
 const providerCodexPrompt = `You are setting up this machine as a NilStore testnet Storage Provider.
 
@@ -67,13 +68,7 @@ export function AlphaProvider() {
           description="This is the operator path for the testnet. The recommended target is a remote provider host, ideally a home server behind Cloudflare Tunnel or a publicly reachable VPS."
           actions={
             <>
-              <Link
-                to="/sp-onboarding"
-                className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                Provider Onboarding
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <PrimaryCtaLink to="/sp-onboarding">Provider Onboarding</PrimaryCtaLink>
               <Link
                 to="/alpha/status"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
@@ -139,13 +134,9 @@ export function AlphaProvider() {
             </div>
             <h2 className="mt-3 text-2xl font-bold text-foreground">Next actions</h2>
             <div className="mt-5 space-y-3">
-              <Link
-                to="/sp-onboarding"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                <Terminal className="h-4 w-4" />
+              <PrimaryCtaLink to="/sp-onboarding" size="md" fullWidth leftIcon={<Terminal className="h-4 w-4" />} withArrow={false}>
                 Open Remote-First Onboarding
-              </Link>
+              </PrimaryCtaLink>
               <Link
                 to="/alpha/status"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-border bg-card px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"

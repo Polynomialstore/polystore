@@ -6,6 +6,7 @@ import { PromptPanel } from "../components/marketing/PromptPanel";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
+import { PrimaryCtaLink } from "../components/PrimaryCta";
 
 const storageCodexPrompt = `You are helping a NilStore testnet storage user complete the first successful storage flow.
 
@@ -65,13 +66,7 @@ export function AlphaStorage() {
           description="This is the storage-user path for the testnet. Start in the browser, connect a wallet, fund your account, and complete your first store and retrieve flow."
           actions={
             <>
-              <Link
-                to="/first-file"
-                className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                Start First File
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <PrimaryCtaLink to="/first-file">Start First File</PrimaryCtaLink>
               <DashboardCta className="inline-flex justify-center font-mono-data" label="Dashboard" to="/dashboard" />
             </>
           }
@@ -157,13 +152,7 @@ export function AlphaStorage() {
             </div>
 
             <div className="mt-6 flex flex-col gap-3">
-              <Link
-                to="/first-file"
-                className="inline-flex items-center justify-center gap-2 rounded-none border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                Start Guided Flow
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              <PrimaryCtaLink to="/first-file" size="md">Start Guided Flow</PrimaryCtaLink>
               <DashboardCta className="inline-flex justify-center font-mono-data" label="Dashboard" to="/dashboard" />
             </div>
           </div>

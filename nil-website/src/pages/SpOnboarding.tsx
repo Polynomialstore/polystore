@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
 import { DashboardCta } from "../components/DashboardCta";
+import { PrimaryCtaAnchor } from "../components/PrimaryCta";
 
 type Step = {
   id: string;
@@ -156,13 +157,9 @@ export function SpOnboarding() {
             The recommended testnet setup is a dedicated provider host with a stable public endpoint. Most operators use a home server behind Cloudflare Tunnel or a small VPS with direct HTTPS.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
-            <a
-              href="#setup"
-              className="inline-flex items-center gap-2 rounded-none border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-            >
-              <Rocket className="h-4 w-4" />
+            <PrimaryCtaAnchor href="#setup" size="md" leftIcon={<Rocket className="h-4 w-4" />}>
               Start Setup
-            </a>
+            </PrimaryCtaAnchor>
             <PrimaryLinkButton href={repoRootUrl}>
               <Terminal className="h-4 w-4" />
               Open Repo

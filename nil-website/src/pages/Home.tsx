@@ -1,7 +1,7 @@
-import { ArrowRight, Database, Server } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Database, Server } from "lucide-react"
 import { AlphaHero } from "../components/marketing/AlphaHero"
 import { TrackCard } from "../components/marketing/TrackCard"
+import { PrimaryCtaLink } from "../components/PrimaryCta"
 
 export const Home = () => {
   return (
@@ -40,13 +40,7 @@ export const Home = () => {
             title="Store Data"
             description="Connect a wallet, fund your account, create a deal, and upload data into NilStore's verifiable replicated storage network. Retrieve it back to test the full storage and retrieval flow end to end."
             action={
-              <Link
-                to="/alpha/storage"
-                className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                Store Data
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <PrimaryCtaLink to="/alpha/storage">Store Data</PrimaryCtaLink>
             }
           />
           <TrackCard
@@ -54,13 +48,7 @@ export const Home = () => {
             title="Provide Storage"
             description="Set up a provider host, expose a public endpoint, register on-chain, and verify health. This path is being optimized for local coding agents."
             action={
-              <Link
-                to="/alpha/provider"
-                className="inline-flex items-center justify-center gap-3 rounded-none border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
-              >
-                Provide Storage
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <PrimaryCtaLink to="/alpha/provider">Provide Storage</PrimaryCtaLink>
             }
           />
         </div>
