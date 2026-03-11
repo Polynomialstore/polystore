@@ -153,7 +153,7 @@ curl -sf https://sp.<domain>/health
 # Dashboard -> Deal -> Download via gateway
 # Expect gateway path + successful receipt pipeline`;
 
-const agentBrief = `You are setting up this machine as a NilStore alpha Storage Provider.
+const agentBrief = `You are setting up this machine as a NilStore testnet Storage Provider.
 
 Context:
 - The repo is already cloned locally.
@@ -243,11 +243,11 @@ export function SpOnboarding() {
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
             <Server className="h-4 w-4" />
-            Alpha Provider Onboarding
+            Testnet Provider Onboarding
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
-            The recommended alpha setup is a dedicated provider host with a stable public endpoint, either a home server behind Cloudflare Tunnel or a small VPS.
+            The recommended testnet setup is a dedicated provider host with a stable public endpoint, either a home server behind Cloudflare Tunnel or a small VPS.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <PrimaryLinkButton href={repoRootUrl}>
@@ -259,7 +259,7 @@ export function SpOnboarding() {
               className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <Rocket className="h-4 w-4" />
-              Alpha Provider Path
+              Testnet Provider Path
             </Link>
             <a
               href={devnetPlaybookUrl}
@@ -314,7 +314,7 @@ export function SpOnboarding() {
           <div className="mt-3 glass-panel industrial-border p-3 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground">Scope</div>
             <div className="mt-1">
-              This page now targets <span className="font-mono text-foreground">remote/headless alpha provider onboarding</span> first. Local demo remains available for development and smoke testing.
+              This page now targets <span className="font-mono text-foreground">remote/headless testnet provider onboarding</span> first. Local demo remains available for development and smoke testing.
             </div>
           </div>
 
@@ -397,7 +397,7 @@ export function SpOnboarding() {
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <div>
-                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. Use local demo only for development, not as the main onboarding path for alpha providers.
+                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. Use local demo only for development, not as the main onboarding path for testnet providers.
               </div>
             </div>
           </div>

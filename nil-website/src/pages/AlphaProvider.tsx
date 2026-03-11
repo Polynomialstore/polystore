@@ -4,7 +4,7 @@ import { AlphaHero } from "../components/marketing/AlphaHero";
 import { TrackCard } from "../components/marketing/TrackCard";
 import { PromptPanel } from "../components/marketing/PromptPanel";
 
-const providerCodexPrompt = `You are setting up this machine as a NilStore alpha Storage Provider.
+const providerCodexPrompt = `You are setting up this machine as a NilStore testnet Storage Provider.
 
 Context:
 - The repo is already cloned locally.
@@ -29,7 +29,7 @@ At the end, print:
 - service status
 - exact files changed`;
 
-const providerClaudePrompt = `Set up this machine as a NilStore alpha Storage Provider.
+const providerClaudePrompt = `Set up this machine as a NilStore testnet Storage Provider.
 
 Assumptions:
 - The repository is already cloned locally.
@@ -63,8 +63,8 @@ export function AlphaProvider() {
               <Server className="h-14 w-14 text-primary" />
             </div>
           }
-          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Run A Provider On Alpha</h1>}
-          description="This is the operator path for the alpha testnet. The recommended target is a remote provider host, ideally a home server behind Cloudflare Tunnel or a publicly reachable VPS."
+          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Run A Provider On Testnet</h1>}
+          description="This is the operator path for the testnet. The recommended target is a remote provider host, ideally a home server behind Cloudflare Tunnel or a publicly reachable VPS."
           actions={
             <>
               <Link
@@ -78,7 +78,7 @@ export function AlphaProvider() {
                 to="/alpha/status"
                 className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
-                View Alpha Status
+                View Testnet Status
               </Link>
             </>
           }
@@ -88,7 +88,7 @@ export function AlphaProvider() {
           <TrackCard
             icon={<Shield className="h-6 w-6 text-accent" />}
             title="Agent First"
-            description="The intended alpha operator flow assumes the provider has access to Codex or Claude Code locally and can let the agent configure and verify the machine."
+            description="The intended testnet operator flow assumes the provider has access to Codex or Claude Code locally and can let the agent configure and verify the machine."
           />
           <TrackCard
             icon={<Globe className="h-6 w-6 text-primary" />}
@@ -98,7 +98,7 @@ export function AlphaProvider() {
           <TrackCard
             icon={<Server className="h-6 w-6 text-primary" />}
             title="Ops Visibility"
-            description="Provider onboarding, status, and public endpoint visibility will be consolidated under the alpha provider path rather than hidden in generic devnet docs."
+            description="Provider onboarding, status, and public endpoint visibility will be consolidated under the testnet provider path rather than hidden in generic devnet docs."
           />
         </div>
 
@@ -107,7 +107,7 @@ export function AlphaProvider() {
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
               /alpha/provider/recommended
             </div>
-            <h2 className="mt-3 text-2xl font-bold text-foreground">Recommended alpha path</h2>
+            <h2 className="mt-3 text-2xl font-bold text-foreground">Recommended testnet path</h2>
             <div className="mt-4 space-y-3 text-sm leading-relaxed text-muted-foreground">
               <p>
                 Use a dedicated provider machine. Preferred order:
@@ -123,7 +123,7 @@ export function AlphaProvider() {
               <TrackCard
                 icon={<Globe className="h-6 w-6 text-accent" />}
                 title="Home Server + Tunnel"
-                description="Best fit for friends-and-family alpha. No public inbound port required; publish the provider over Cloudflare Tunnel HTTPS."
+                description="Best fit for friends-and-family testnet. No public inbound port required; publish the provider over Cloudflare Tunnel HTTPS."
               />
               <TrackCard
                 icon={<Server className="h-6 w-6 text-primary" />}
@@ -175,7 +175,7 @@ export function AlphaProvider() {
             prompt={providerCodexPrompt}
             copyLabel="Copy Codex Prompt"
             links={[
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md", label: "Alpha provider quickstart" },
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md", label: "Testnet provider quickstart" },
               { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/provider_codex.md", label: "Prompt in repo" },
             ]}
           />

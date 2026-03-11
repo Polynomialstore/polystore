@@ -36,7 +36,7 @@ export const TestnetDocs = () => {
           This guide covers wallet-first testnet participation: installing the release binaries, getting testnet funds, and running your first deal.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
-          For the alpha storage and provider launch paths, start with <a className="text-primary underline" href="/#/alpha/storage">Store Data</a> or <a className="text-primary underline" href="/#/alpha/provider">Become A Provider</a>. Use <a className="text-primary underline" href="/#/devnet">Provider Debug</a> for low-level provider diagnostics.
+          For the testnet storage and provider launch paths, start with <a className="text-primary underline" href="/#/alpha/storage">Store Data</a> or <a className="text-primary underline" href="/#/alpha/provider">Become A Provider</a>. Use <a className="text-primary underline" href="/#/devnet">Provider Debug</a> for low-level provider diagnostics.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           For the full provider onboarding companion (desktop + remote, downloads, health checks), see{" "}

@@ -126,8 +126,8 @@ export function AlphaStatus() {
               <Activity className="h-14 w-14 text-primary" />
             </div>
           }
-          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Alpha Network Status</h1>}
-          description="This is the shared operational view for storage users and provider operators. It consolidates chain reachability, provider visibility, and the public endpoints the alpha launch depends on."
+          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Testnet Status</h1>}
+          description="This is the shared operational view for storage users and provider operators. It consolidates chain reachability, provider visibility, and the public endpoints the testnet depends on."
           actions={
             <>
               <Link
@@ -165,7 +165,7 @@ export function AlphaStatus() {
           <TrackCard
             icon={<Globe className="h-6 w-6 text-primary" />}
             title="Public Surface"
-            description="The page keeps the alpha surface area explicit: RPC, LCD, EVM, faucet, website, and the currently visible provider endpoints."
+            description="The page keeps the testnet surface area explicit: RPC, LCD, EVM, faucet, website, and the currently visible provider endpoints."
           />
         </div>
 

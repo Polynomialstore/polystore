@@ -54,9 +54,9 @@ export const Layout = () => {
       type: "dropdown", 
       name: "Explore", 
       items: [
-        { name: "Store Data", path: "/alpha/storage", description: "Alpha user quickstart.", icon: <Database className="w-5 h-5" /> },
-        { name: "Become A Provider", path: "/alpha/provider", description: "Alpha provider onboarding.", icon: <Server className="w-5 h-5" /> },
-        { name: "Alpha Status", path: "/alpha/status", description: "Shared launch status surface.", icon: <Activity className="w-5 h-5" /> },
+        { name: "Store Data", path: "/alpha/storage", description: "Testnet user quickstart.", icon: <Database className="w-5 h-5" /> },
+        { name: "Become A Provider", path: "/alpha/provider", description: "Testnet provider onboarding.", icon: <Server className="w-5 h-5" /> },
+        { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
         { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
         { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },

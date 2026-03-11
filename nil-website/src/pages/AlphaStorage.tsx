@@ -7,7 +7,7 @@ import { ConnectWallet } from "../components/ConnectWallet";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
 
-const storageCodexPrompt = `You are helping a NilStore alpha storage user complete the first successful storage flow.
+const storageCodexPrompt = `You are helping a NilStore testnet storage user complete the first successful storage flow.
 
 Context:
 - The repo is already cloned locally.
@@ -29,7 +29,7 @@ At the end, print:
 - whether upload and retrieval succeeded
 - exact commands or files changed`;
 
-const storageClaudePrompt = `Help a NilStore alpha storage user complete the first successful store and retrieve cycle.
+const storageClaudePrompt = `Help a NilStore testnet storage user complete the first successful store and retrieve cycle.
 
 Assumptions:
 - The repository is already cloned locally.
@@ -38,7 +38,7 @@ Assumptions:
 
 Tasks:
 1. Confirm website and EVM RPC reachability.
-2. Confirm the wallet is on the expected NilStore alpha chain.
+2. Confirm the wallet is on the expected NilStore testnet chain.
 3. Help the user get test funds.
 4. Verify create deal, upload, and retrieve.
 5. If there is a failure, inspect the relevant checks and loop until the path is healthy.
@@ -61,8 +61,8 @@ export function AlphaStorage() {
               <Database className="h-14 w-14 text-primary" />
             </div>
           }
-          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Store Data On Alpha</h1>}
-          description="This is the storage-user path for the alpha testnet. Start in the browser, connect a wallet, fund your account, and complete your first store and retrieve flow."
+          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Store Data On Testnet</h1>}
+          description="This is the storage-user path for the testnet. Start in the browser, connect a wallet, fund your account, and complete your first store and retrieve flow."
           actions={
             <>
               <Link
@@ -83,7 +83,7 @@ export function AlphaStorage() {
             </div>
             <h2 className="mt-3 text-2xl font-bold text-foreground">Start in the browser</h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              The alpha storage experience should work without any local server. The intended happy path is connect wallet,
+              The testnet storage experience should work without any local server. The intended happy path is connect wallet,
               request funds, create a deal, upload a small file, then retrieve it back and confirm the bytes match.
             </p>
 
@@ -106,7 +106,7 @@ export function AlphaStorage() {
                 step="1"
                 icon={<Wallet className="h-5 w-5 text-accent" />}
                 title="Connect + switch network"
-                detail="Connect MetaMask and make sure it is pointed at the NilStore alpha RPC."
+                detail="Connect MetaMask and make sure it is pointed at the NilStore testnet RPC."
                 ctaLabel="Open Dashboard"
                 ctaTo="/dashboard"
               />
@@ -141,7 +141,7 @@ export function AlphaStorage() {
             </div>
             <h2 className="mt-3 text-2xl font-bold text-foreground">Success criteria</h2>
             <div className="mt-5 space-y-3">
-              <ChecklistRow text="Wallet connects and shows the expected NilStore alpha network." />
+              <ChecklistRow text="Wallet connects and shows the expected NilStore testnet network." />
               <ChecklistRow text="Faucet request succeeds, or the wallet is funded manually." />
               <ChecklistRow text="A deal is created successfully." />
               <ChecklistRow text="A small file uploads without provider/session errors." />
@@ -151,7 +151,7 @@ export function AlphaStorage() {
             <div className="mt-6 rounded-none border border-border bg-background/60 p-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Operator note</div>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                This page is the alpha user quickstart. A later PR in the stack will add a repo-local Codex and Claude Code
+                This page is the testnet user quickstart. A later PR in the stack will add a repo-local Codex and Claude Code
                 prompt for storage power users who want local gateway setup and local diagnostics.
               </p>
             </div>
@@ -177,7 +177,7 @@ export function AlphaStorage() {
             prompt={storageCodexPrompt}
             copyLabel="Copy Codex Prompt"
             links={[
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_STORAGE_USER_QUICKSTART.md", label: "Alpha storage quickstart" },
+              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_STORAGE_USER_QUICKSTART.md", label: "Testnet storage quickstart" },
               { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/storage_codex.md", label: "Prompt in repo" },
             ]}
           />

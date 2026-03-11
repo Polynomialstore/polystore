@@ -31,7 +31,7 @@ export const Home = () => {
               <span className="text-primary">STORE</span>
             </h1>
           }
-          description="NilStore alpha has two primary user paths: people who want to store data, and operators who want to run storage providers. Start from the path that matches your job."
+          description="NilStore testnet has two primary user paths: people who want to store data, and operators who want to run storage providers. Start from the path that matches your job."
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-2">
