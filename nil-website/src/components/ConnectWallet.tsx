@@ -39,7 +39,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
         }
 
         const currentAccount = account!
-        const accountLabel = currentAccount.displayName || currentAccount.address
+        const accountLabel = currentAccount.address || currentAccount.displayName
 
         return (
           <div className={`flex items-center gap-2 ${className}`}>
