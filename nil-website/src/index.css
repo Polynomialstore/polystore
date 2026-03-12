@@ -71,12 +71,6 @@
   body {
     @apply bg-background text-foreground;
     font-family: "Montserrat", sans-serif;
-    background-image: 
-      /* Static Subtle Base Grid - Solid 1px for consistency */
-      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 30px 30px, 30px 30px;
-    background-attachment: fixed;
   }
 
   .cyber-grid-layer {
@@ -103,14 +97,6 @@
       grid-breath 6s ease-in-out infinite;
   }
   
-  .dark body { 
-    background-image: 
-      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.05), transparent 85%),
-      linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
-    background-size: 100% 100%, 30px 30px, 30px 30px;
-  }
-
   .dark .cyber-grid-layer {
     background-image: 
       linear-gradient(to right, hsl(var(--primary) / 0.5) 1px, transparent 1px),
