@@ -203,7 +203,7 @@
 
   /* Active: primary text + underline. Background is driven by open/hover state. */
   .nav-topbtn--active {
-    @apply text-primary border-transparent underline underline-offset-4 decoration-primary/60;
+    @apply text-primary border-transparent underline underline-offset-4 decoration-primary/60 decoration-2;
   }
 
   /* Open: persistent hover background/border while dropdown is displayed. */
@@ -240,7 +240,7 @@
   }
 
   .nav-mega-title--active {
-    @apply text-primary underline underline-offset-4 decoration-primary/60;
+    @apply text-primary underline underline-offset-4 decoration-primary/60 decoration-2;
   }
 
   .nav-mega-desc {
