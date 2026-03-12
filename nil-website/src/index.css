@@ -31,7 +31,8 @@
     --border: 214 32% 88%; /* Frame borders only */
     --input: 214 32% 85%;
     --ring: 300 100% 75%;
-    --grid-color: hsl(var(--border) / 0.35); 
+    /* Light mode grid should follow the same hue family as dark mode (primary-driven). */
+    --grid-color: hsl(var(--primary) / 0.05);
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
   }
