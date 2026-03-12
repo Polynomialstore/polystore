@@ -218,6 +218,7 @@
   /* Underline only the text label, not the chevron/padding. */
   .nav-toplabel--active {
     @apply underline underline-offset-4 decoration-primary/60 decoration-2;
+    text-decoration-thickness: 2px;
   }
 
   .nav-topchev {
@@ -250,6 +251,7 @@
 
   .nav-mega-title--active {
     @apply text-primary underline underline-offset-4 decoration-primary/60 decoration-2;
+    text-decoration-thickness: 2px;
   }
 
   .nav-mega-desc {
