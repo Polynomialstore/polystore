@@ -1,10 +1,10 @@
 import { Database } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
 import { DashboardCta } from "../components/DashboardCta";
-import { PromptPanel } from "../components/marketing/PromptPanel";
+import { AgentPromptCard } from "../components/marketing/AgentPromptCard";
 import { PrimaryCtaLink } from "../components/PrimaryCta";
 
-const storageCodexPrompt = `You are helping a NilStore testnet storage user complete the first successful storage flow.
+const storageAgentPrompt = `You are helping a NilStore testnet storage user complete the first successful storage flow.
 
 Context:
 - The repo is already cloned locally.
@@ -25,27 +25,6 @@ At the end, print:
 - whether deal creation succeeded
 - whether upload and retrieval succeeded
 - exact commands or files changed`;
-
-const storageClaudePrompt = `Help a NilStore testnet storage user complete the first successful store and retrieve cycle.
-
-Assumptions:
-- The repository is already cloned locally.
-- Start with the browser-first flow and only use local gateway steps if needed.
-- Use docs/ALPHA_STORAGE_USER_QUICKSTART.md and docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md.
-
-Tasks:
-1. Confirm website and EVM RPC reachability.
-2. Confirm the wallet is on the expected NilStore testnet chain.
-3. Help the user get test funds.
-4. Verify create deal, upload, and retrieve.
-5. If there is a failure, inspect the relevant checks and loop until the path is healthy.
-
-Final output:
-- website URL
-- chain ID
-- wallet address
-- deal/upload/retrieve result
-- files changed`;
 
 export function AlphaStorage() {
   return (
@@ -68,28 +47,12 @@ export function AlphaStorage() {
           }
         />
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <PromptPanel
-            badge="/alpha/storage/codex"
-            title="Codex prompt"
-            description="For power users who want a local repo-driven setup, this prompt tells Codex to validate the browser path first, then use local gateway diagnostics only when needed."
-            prompt={storageCodexPrompt}
-            copyLabel="Copy Codex Prompt"
-            links={[
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_STORAGE_USER_QUICKSTART.md", label: "Testnet storage quickstart" },
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/storage_codex.md", label: "Prompt in repo" },
-            ]}
-          />
-          <PromptPanel
-            badge="/alpha/storage/claude"
-            title="Claude Code prompt"
-            description="This gives Claude Code the same storage-user job: check the website path, help with wallet and funding, then verify create, upload, and retrieve."
-            prompt={storageClaudePrompt}
-            copyLabel="Copy Claude Prompt"
-            links={[
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md", label: "Collaborator packet" },
-              { href: "https://github.com/Nil-Store/nil-store/blob/main/docs/onboarding-prompts/storage_claude_code.md", label: "Prompt in repo" },
-            ]}
+        <section className="mt-12">
+          <AgentPromptCard
+            badge="/alpha/storage/agent"
+            title="Onboard with a coding agent"
+            description="If you have Codex or Claude Code available locally, copy the bootstrap prompt and let the agent drive the full storage flow to a verified first upload and download."
+            prompt={storageAgentPrompt}
           />
         </section>
       </div>
