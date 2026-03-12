@@ -82,11 +82,11 @@
   .cyber-grid-layer {
     background-image: 
       /* Structural Box Fills: Homogenous 30px cells */
-      linear-gradient(to right, hsl(var(--border) / 0.16) 29px, transparent 29px),
-      linear-gradient(to bottom, hsl(var(--border) / 0.16) 29px, transparent 29px),
+      linear-gradient(to right, hsl(var(--primary) / 0.16) 29px, transparent 29px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.16) 29px, transparent 29px),
       /* Bold structural lines - Uniform 30px tiling */
-      linear-gradient(to right, hsl(var(--border) / 0.75) 2px, transparent 2px),
-      linear-gradient(to bottom, hsl(var(--border) / 0.75) 2px, transparent 2px);
+      linear-gradient(to right, hsl(var(--primary) / 0.75) 2px, transparent 2px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.75) 2px, transparent 2px);
     background-size: 30px 30px, 30px 30px, 30px 30px, 30px 30px;
     background-repeat: repeat;
     /* Decoupled "Boiling" Mask */
