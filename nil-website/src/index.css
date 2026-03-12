@@ -102,21 +102,11 @@
       boil-spot3 19s ease-in-out infinite alternate,
       grid-breath 6s ease-in-out infinite;
   }
+  .dark .cyber-grid-layer{
+    mask-composite: exclude;
+    }
   
-  .dark body { 
-    background-image: 
-      radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.05), transparent 85%),
-      linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
-    background-size: 100% 100%, 30px 30px, 30px 30px;
-  }
 
-  .dark .cyber-grid-layer {
-    background-image: 
-      linear-gradient(to right, hsl(var(--primary) / 0.5) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.5) 1px, transparent 1px);
-    background-size: 30px 30px, 30px 30px;
-  }
 
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
@@ -138,7 +128,7 @@
 
 @keyframes grid-breath {
   0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.3; }
 }
 
 @layer utilities {
