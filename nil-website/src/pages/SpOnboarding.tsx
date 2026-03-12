@@ -148,10 +148,6 @@ export function SpOnboarding() {
     <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
       <section className="glass-panel industrial-border p-8">
         <div className="relative space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
-            <Server className="h-4 w-4" />
-            Testnet Provider Onboarding
-          </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
           <p className="max-w-3xl text-muted-foreground">
             The recommended testnet setup is a dedicated provider host with a stable public endpoint. Most operators use a home server behind Cloudflare Tunnel or a small VPS with direct HTTPS.
