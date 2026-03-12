@@ -211,26 +211,6 @@
     @apply bg-primary/10 border-primary/30;
   }
 
-  .nav-toplabel {
-    @apply inline-block;
-  }
-
-  /* Underline only the text label, not the chevron/padding. */
-  .nav-toplabel--active {
-    @apply relative;
-  }
-
-  .nav-toplabel--active::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    /* Trim the trailing tracking space so the underline doesn't overhang. */
-    right: 0.2em;
-    bottom: -4px;
-    height: 2px;
-    background: currentColor;
-  }
-
   .nav-topchev {
     @apply w-3 h-3 transition-transform duration-200;
   }
@@ -261,17 +241,7 @@
   }
 
   .nav-mega-title--active {
-    @apply text-primary relative;
-  }
-
-  .nav-mega-title--active::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0.2em;
-    bottom: -3px;
-    height: 2px;
-    background: currentColor;
+    @apply text-primary;
   }
 
   .nav-mega-desc {

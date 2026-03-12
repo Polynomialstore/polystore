@@ -36,7 +36,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
           isOpen ? "nav-topbtn--open" : null,
         )}
       >
-        <span className={cn("nav-toplabel", isActive ? "nav-toplabel--active" : null)}>{label}</span>
+        {label}
         <ChevronDown
           className={cn(
             "nav-topchev",
