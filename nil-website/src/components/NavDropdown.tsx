@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ArrowUpRight } from "lucide-react";
+import { cn } from "../lib/utils";
 
 export interface NavItem {
   name: string;
@@ -29,20 +30,19 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       onMouseLeave={() => setIsOpen(false)}
     >
       <button 
-        className={`relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2 group ${
-          isActive ? "text-primary" : "text-foreground"
-        } ${
-          isOpen ? "bg-primary/10 border-primary/30" : "border-transparent hover:bg-primary/10 hover:border-primary/30"
-        }`}
+        className={cn(
+          "nav-topbtn",
+          isActive ? "nav-topbtn--active" : "nav-topbtn--inactive",
+          isOpen ? "nav-topbtn--open" : null,
+        )}
       >
         {label}
         <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${
+          className={cn(
+            "nav-topchev",
             // Default = "up" (rotated). Open/active = "down".
-            isOpen || isActive
-              ? "rotate-0 text-primary"
-              : "rotate-180 text-foreground"
-          }`}
+            isOpen || isActive ? "rotate-0 text-primary" : "rotate-180 text-foreground",
+          )}
         />
       </button>
 
@@ -78,17 +78,14 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   return (
                     <Wrapper
                       key={item.path}
-                      className={`group flex items-start gap-3 p-3 glass-panel industrial-border transition-[transform,background-color,border-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 ${
-                        active ? "border-primary/40" : ""
-                      }`}
+                      className={cn("group nav-mega-item", active ? "nav-mega-item--active" : null)}
                     >
                         {/* Icon Box */}
                         <div
-                          className={`mt-0.5 p-2 glass-panel industrial-border shrink-0 transition-[color,background-color,border-color] duration-200 ease-out ${
-                            active
-                              ? "text-primary bg-primary/10 border-primary/40 group-hover:bg-primary/20"
-                              : "text-muted-foreground bg-muted/40 group-hover:bg-primary/10 group-hover:border-primary/40"
-                          }`}
+                          className={cn(
+                            "nav-mega-icon",
+                            active ? "nav-mega-icon--active" : "nav-mega-icon--inactive",
+                          )}
                         >
                             {item.icon}
                         </div>
@@ -97,15 +94,13 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
                                 <span
-                                  className={`text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data truncate ${
-                                    active ? "text-primary" : "text-foreground"
-                                  }`}
+                                  className={cn("nav-mega-title", active ? "nav-mega-title--active" : null)}
                                 >
                                     {item.name}
                                 </span>
                                 {item.external && <ArrowUpRight className="w-3 h-3 text-muted-foreground" />}
                             </div>
-                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2">
+                            <p className="nav-mega-desc">
                                 {item.description}
                             </p>
                         </div>
