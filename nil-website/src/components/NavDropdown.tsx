@@ -100,7 +100,7 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                                 </span>
                                 {item.external && <ArrowUpRight className="w-3 h-3 text-muted-foreground" />}
                             </div>
-                            <p className="nav-mega-desc">
+                            <p className={cn("nav-mega-desc", active ? "nav-mega-desc--active" : null)}>
                                 {item.description}
                             </p>
                         </div>

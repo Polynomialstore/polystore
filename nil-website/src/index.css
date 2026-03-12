@@ -247,4 +247,8 @@
   .nav-mega-desc {
     @apply mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2;
   }
+
+  .nav-mega-desc--active {
+    @apply text-primary/70;
+  }
 }
