@@ -217,8 +217,18 @@
 
   /* Underline only the text label, not the chevron/padding. */
   .nav-toplabel--active {
-    @apply underline underline-offset-4 decoration-primary/60 decoration-2;
-    text-decoration-thickness: 2px;
+    @apply relative;
+  }
+
+  .nav-toplabel--active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    /* Trim the trailing tracking space so the underline doesn't overhang. */
+    right: 0.2em;
+    bottom: -7px;
+    height: 2px;
+    background: currentColor;
   }
 
   .nav-topchev {
@@ -250,8 +260,17 @@
   }
 
   .nav-mega-title--active {
-    @apply text-primary underline underline-offset-4 decoration-primary/60 decoration-2;
-    text-decoration-thickness: 2px;
+    @apply text-primary relative;
+  }
+
+  .nav-mega-title--active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0.2em;
+    bottom: -6px;
+    height: 2px;
+    background: currentColor;
   }
 
   .nav-mega-desc {
