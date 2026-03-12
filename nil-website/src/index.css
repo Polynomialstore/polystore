@@ -226,7 +226,7 @@
     left: 0;
     /* Trim the trailing tracking space so the underline doesn't overhang. */
     right: 0.2em;
-    bottom: -7px;
+    bottom: -4px;
     height: 2px;
     background: currentColor;
   }
@@ -256,7 +256,8 @@
   }
 
   .nav-mega-title {
-    @apply text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data truncate text-foreground;
+    /* Avoid `truncate` (overflow hidden) so the active underline pseudo-element isn't clipped. */
+    @apply text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data whitespace-nowrap text-foreground;
   }
 
   .nav-mega-title--active {
@@ -268,7 +269,7 @@
     position: absolute;
     left: 0;
     right: 0.2em;
-    bottom: -6px;
+    bottom: -3px;
     height: 2px;
     background: currentColor;
   }
