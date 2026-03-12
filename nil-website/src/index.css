@@ -203,12 +203,21 @@
 
   /* Active: primary text + underline. Background is driven by open/hover state. */
   .nav-topbtn--active {
-    @apply text-primary border-transparent underline underline-offset-4 decoration-primary/60 decoration-2;
+    @apply text-primary border-transparent;
   }
 
   /* Open: persistent hover background/border while dropdown is displayed. */
   .nav-topbtn--open {
     @apply bg-primary/10 border-primary/30;
+  }
+
+  .nav-toplabel {
+    @apply inline-block;
+  }
+
+  /* Underline only the text label, not the chevron/padding. */
+  .nav-toplabel--active {
+    @apply underline underline-offset-4 decoration-primary/60 decoration-2;
   }
 
   .nav-topchev {
