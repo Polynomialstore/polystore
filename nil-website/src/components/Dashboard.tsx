@@ -1176,9 +1176,6 @@ export function Dashboard() {
     )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
-  const dashboardSummary = targetDealId
-    ? `Managing deal #${targetDealId}. Upload files, inspect manifests and MDUs, and verify retrieval health from one workspace.`
-    : 'Allocate a deal, upload content, inspect manifests and MDUs, and verify retrieval health from one workspace.'
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-card">
@@ -1350,11 +1347,6 @@ export function Dashboard() {
         <div className="border-b border-border/20 p-6">
           <div className="nil-section-label leading-none">/DASHBOARD</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        </div>
-        <div className="p-6">
-          <div className="max-w-4xl text-sm leading-relaxed text-muted-foreground">
-            {dashboardSummary}
-          </div>
         </div>
         <div className="border-t border-border/10">
           <button
