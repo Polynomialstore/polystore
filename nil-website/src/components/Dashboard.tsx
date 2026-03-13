@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, HardDrive, Database, AlertTriangle } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, HardDrive, Database, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -20,6 +20,7 @@ import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
+import { useLocalGateway } from '../hooks/useLocalGateway'
 import { cn } from '../lib/utils'
 
 interface Provider {
@@ -103,9 +104,11 @@ export function Dashboard() {
   const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showSystemStatus, setShowSystemStatus] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
   const [compressUploads, setCompressUploads] = useState(true)
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
+  const localGateway = useLocalGateway(60_000)
   const { refetch: refetchEvm } = useBalance({
     address,
     chainId: appConfig.chainId,
@@ -1255,6 +1258,61 @@ export function Dashboard() {
 
   const onChainCid = String(targetDeal?.cid || '').trim()
   const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
+  const stakeBalance = bankBalances.stake || '0'
+  const hasNilBalance = (() => {
+    try {
+      return BigInt(stakeBalance) > 0n
+    } catch {
+      return false
+    }
+  })()
+  const readiness = (() => {
+    if (!isConnected || !address) {
+      return {
+        label: 'Connect wallet',
+        detail: 'Connect MetaMask to create deals, upload files, and retrieve data.',
+        className: 'border-border/30 bg-background/70 text-muted-foreground',
+      }
+    }
+    if (walletReconnectHint) {
+      return {
+        label: 'Reconnect wallet',
+        detail: 'Wallet permissions need to be refreshed before the dashboard can continue.',
+        className: 'border-primary/30 bg-primary/10 text-primary',
+      }
+    }
+    if (isWrongNetwork) {
+      return {
+        label: 'Wrong network',
+        detail: 'Switch to NilStore Testnet before creating deals or uploading content.',
+        className: 'border-destructive/30 bg-destructive/10 text-destructive',
+      }
+    }
+    if (!hasNilBalance) {
+      return {
+        label: 'Needs funds',
+        detail: 'Add NIL before creating a deal or committing storage content.',
+        className: 'border-primary/30 bg-primary/10 text-primary',
+      }
+    }
+    if (!appConfig.gatewayDisabled && localGateway.status === 'connected') {
+      return {
+        label: 'Ready for gateway mode',
+        detail: 'Wallet, network, and balance are ready. Local gateway is connected for desktop-assisted flows.',
+        className: 'border-accent/30 bg-accent/10 text-accent',
+      }
+    }
+    return {
+      label: 'Ready for browser mode',
+      detail: appConfig.gatewayDisabled
+        ? 'Wallet, network, and balance are ready for browser-first storage.'
+        : 'Wallet, network, and balance are ready. A local gateway is optional for this flow.',
+      className: 'border-accent/30 bg-accent/10 text-accent',
+    }
+  })()
+  const headerSummary = !isConnected || !address
+    ? 'Connect a wallet to get started on NilStore Testnet.'
+    : `${walletAddressShort} • NilStore Testnet • ${stakeBalance} NIL`
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-card">
@@ -1481,92 +1539,80 @@ export function Dashboard() {
           <div className="nil-section-label leading-none">/DASHBOARD</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
         </div>
-        <div className="relative flex flex-wrap items-center justify-between gap-6 p-6 lg:flex-nowrap border-b border-border/10">
-          <div className="flex flex-wrap items-center gap-8">
-            {/* Identity Row */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="nil-inset flex h-6 w-6 items-center justify-center text-muted-foreground/60">
-                  <Database className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none">NIL_PROTOCOL</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="font-mono-data text-[11px] text-foreground font-bold tracking-tight" data-testid="cosmos-identity">
-                      {nilAddress ? `${nilAddress.slice(0, 10)}…${nilAddress.slice(-4)}` : '—'}
-                    </div>
-                    <div className="text-[10px] text-accent font-mono-data font-bold bg-accent/10 px-1.5 py-0.5 border border-accent/20">
-                      {bankBalances.stake || '0'} NIL
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-8 w-[1px] bg-border/20" />
-
-              <div className="flex items-center gap-3">
-                <div className="nil-inset flex h-6 w-6 items-center justify-center text-muted-foreground/60">
-                  <Wallet className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none">EVM_IDENTITY</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="font-mono-data text-[11px] text-foreground font-bold tracking-tight" title={address || undefined}>
-                      {walletAddressShort}
-                    </div>
-                    <div className={`text-[10px] font-mono-data font-bold px-1.5 py-0.5 border ${
-                      accountPermissionMismatch || isWrongNetwork 
-                        ? 'text-destructive bg-destructive/10 border-destructive/20' 
-                        : 'text-muted-foreground bg-background/70 border-border/20'
-                    }`}>
-                      {accountPermissionMismatch ? 'PERMISSION_ERR' : isWrongNetwork ? 'WRONG_NETWORK' : `CHAIN_${activeChainId}`}
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <div className="grid gap-4 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
+            <div className="max-w-3xl text-xl font-semibold leading-tight text-foreground">
+              {headerSummary}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 ml-auto shrink-0">
-            {appConfig.faucetEnabled && (
-              <button
-                data-testid="faucet-request"
-                onClick={handleRequestFunds}
-                disabled={!address || faucetBusy}
-                className="inline-flex items-center gap-2 border border-primary bg-primary/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-all hover:bg-primary/10 disabled:opacity-50"
-              >
-                <Coins className="h-3.5 w-3.5" />
-                {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
-              </button>
-            )}
+          <div className="flex min-w-[260px] flex-col items-stretch gap-3 lg:items-end">
+            <div className={cn('inline-flex items-center gap-2 self-start border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data lg:self-end', readiness.className)}>
+              {readiness.label.startsWith('Ready') ? <CheckCircle2 className="h-3.5 w-3.5" /> : readiness.label === 'Wrong network' ? <AlertTriangle className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
+              {readiness.label}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+              {appConfig.faucetEnabled && (
+                <button
+                  data-testid="faucet-request"
+                  onClick={handleRequestFunds}
+                  disabled={!address || faucetBusy}
+                  className="inline-flex items-center gap-2 border border-primary bg-primary/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-all hover:bg-primary/10 disabled:opacity-50"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
+                </button>
+              )}
 
-            {walletReconnectHint ? (
-              <button
-                type="button"
-                onClick={() => void requestWalletReconnect()}
-                className="inline-flex items-center gap-2 border border-primary bg-primary/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                Reconnect
-              </button>
-            ) : isWrongNetwork ? (
-              <button
-                type="button"
-                onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-                className="inline-flex items-center gap-2 border border-destructive bg-destructive/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-destructive hover:bg-destructive/10"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Fix Network
-              </button>
-            ) : (
-               <div className="inline-flex items-center gap-2 px-3 py-2 border border-accent/30 bg-accent/5 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                System Ready
-              </div>
-            )}
+              {walletReconnectHint ? (
+                <button
+                  type="button"
+                  onClick={() => void requestWalletReconnect()}
+                  className="inline-flex items-center gap-2 border border-primary bg-primary/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Reconnect
+                </button>
+              ) : isWrongNetwork ? (
+                <button
+                  type="button"
+                  onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
+                  className="inline-flex items-center gap-2 border border-destructive bg-destructive/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-destructive hover:bg-destructive/10"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Fix Network
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshSummary()}
+                  className="nil-inset inline-flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:bg-secondary"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              )}
+            </div>
           </div>
         </div>
-        <StatusBar noBorder />
+        <div className="border-t border-border/10">
+          <button
+            type="button"
+            onClick={() => setShowSystemStatus((prev) => !prev)}
+            className="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-secondary/30"
+          >
+            <div className="nil-section-label text-foreground">System Status</div>
+            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+              {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
+              {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </div>
+          </button>
+          {showSystemStatus ? (
+            <div className="border-t border-border/10 px-6 pb-6">
+              <StatusBar noBorder />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
