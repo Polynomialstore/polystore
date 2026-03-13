@@ -198,6 +198,26 @@
     @apply text-sm text-muted-foreground;
   }
 
+  .nil-detail-label {
+    @apply nil-section-label text-muted-foreground;
+  }
+
+  .nil-detail-surface {
+    @apply nil-inset rounded-none p-4;
+  }
+
+  .nil-detail-metric {
+    @apply nil-inset rounded-none px-4 py-3;
+  }
+
+  .nil-detail-meta {
+    @apply font-mono-data text-[10px] text-muted-foreground;
+  }
+
+  .nil-list-row {
+    @apply transition-colors hover:bg-secondary/40;
+  }
+
   /* Navbar: semantic classes for top-level dropdown buttons and mega-menu items. */
   .nav-topbtn {
     @apply relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2;

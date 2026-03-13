@@ -581,13 +581,13 @@ function FileRow({
       data-file-path={file.path}
       data-cache-browser={browserCached ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-      className="relative flex items-center justify-between py-2 px-3 border border-border bg-background/60 hover:bg-background/80 transition-colors group"
+      className="nil-list-row relative flex items-center justify-between gap-3 border border-border bg-background/70 px-4 py-4 group"
     >
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-foreground" title={file.path}>
           {file.path}
         </div>
-        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground font-mono-data tracking-tight">
+        <div className="nil-detail-meta mt-1 flex items-center gap-2 tracking-tight">
           <span className="text-foreground/70">{formatBytes(file.size_bytes)}</span>
           <span className="text-border/60">|</span>
           <span>BROWSER: <span className={browserCached ? 'text-accent font-bold' : ''}>{browserCached ? 'YES' : '—'}</span></span>
@@ -1635,17 +1635,17 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   {/* Identity Section */}
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/CONTENT_HASH</div>
+                        <div className="nil-detail-label">/CONTENT_HASH</div>
                         <div
-                          className="font-mono-data break-all bg-secondary/30 border border-border/40 px-4 py-3 text-primary font-bold select-all"
+                          className="nil-detail-surface font-mono-data break-all text-primary font-bold select-all"
                           data-testid="deal-detail-cid"
                         >
                           {deal.cid || 'EMPTY_CONTAINER'}
                         </div>
                     </div>
                     <div className="space-y-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/OWNER_ID</div>
-                      <div className="font-mono-data text-[11px] bg-secondary/30 border border-border/40 px-4 py-3 text-foreground font-bold select-all">
+                      <div className="nil-detail-label">/OWNER_ID</div>
+                      <div className="nil-detail-surface font-mono-data text-[11px] text-foreground font-bold select-all">
                         {deal.owner}
                       </div>
                     </div>
@@ -1653,22 +1653,22 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
                   {/* Economics Section */}
                   <div className="space-y-3">
-                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/ECONOMICS</div>
+                    <div className="nil-detail-label">/ECONOMICS</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
-                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Escrow</span>
+                      <div className="nil-detail-metric">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Escrow</span>
                         <span className="text-foreground font-mono-data font-bold">{deal.escrow ? `${deal.escrow} NIL` : '—'}</span>
                       </div>
-                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
-                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Max Monthly</span>
+                      <div className="nil-detail-metric">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Max Monthly</span>
                         <span className="text-foreground font-mono-data font-bold">{deal.max_monthly_spend ? `${deal.max_monthly_spend} NIL` : '—'}</span>
                       </div>
-                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
-                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Redundancy</span>
+                      <div className="nil-detail-metric">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Redundancy</span>
                         <span className="text-accent font-bold uppercase">{isMode2 ? 'Mode 2 (RS)' : 'Mode 1'}</span>
                       </div>
-                      <div className="bg-secondary/20 px-4 py-3 border border-border/30">
-                        <span className="text-muted-foreground/60 block text-[9px] font-bold uppercase tracking-wider">Status</span>
+                      <div className="nil-detail-metric">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
                         <span className={`font-bold uppercase ${deal.cid ? 'text-accent' : 'text-muted-foreground'}`}>
                           {deal.cid ? 'Active' : 'Empty'}
                         </span>
@@ -1678,13 +1678,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
                   {/* Infrastructure / Providers Section */}
                   <div className="space-y-3">
-                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/INFRASTRUCTURE_NODES</div>
-                    <div className="bg-secondary/10 border border-border/20 divide-y divide-border/10">
+                    <div className="nil-detail-label">/INFRASTRUCTURE_NODES</div>
+                    <div className="nil-inset divide-y divide-border/30">
                         {deal.providers && deal.providers.length > 0 ? (
                           deal.providers.map((p: string, idx: number) => (
-                            <div key={p} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-secondary/20 transition-colors">
+                            <div key={p} className="nil-list-row p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex items-center gap-4">
-                                <div className="w-8 h-8 flex items-center justify-center border border-border/30 bg-background/40 text-muted-foreground/60">
+                                <div className="nil-inset flex h-8 w-8 items-center justify-center text-muted-foreground">
                                   <span className="text-[10px] font-black">{idx}</span>
                                 </div>
                                 <div className="space-y-1">
@@ -1703,7 +1703,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
                                 {isMode2 ? `SLOT_ALLOCATION_${idx}` : 'REPLICA_NODE'}
                               </div>
                             </div>
@@ -1719,7 +1719,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   {/* Technical Details Collapsible */}
                   <div className="pt-4 border-t border-border/10">
                     <details className="group">
-                      <summary className="cursor-pointer select-none flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 hover:text-primary transition-colors">
+                      <summary className="nil-detail-label cursor-pointer select-none flex items-center gap-3 hover:text-primary transition-colors">
                         <div className="w-4 h-4 border border-current flex items-center justify-center group-open:rotate-90 transition-transform">
                           <span className="leading-none">+</span>
                         </div>
@@ -1729,8 +1729,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                         <div className="grid sm:grid-cols-2 gap-6">
                           {/* Retrieval Policy */}
                           <div className="space-y-3">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/RETRIEVAL_POLICY</div>
-                            <div className="bg-secondary/20 p-4 border border-border/30 space-y-3">
+                            <div className="nil-detail-label text-[9px]">/RETRIEVAL_POLICY</div>
+                            <div className="nil-detail-surface space-y-3">
                                 <div className="text-[9px] text-muted-foreground uppercase font-black">Current Configuration</div>
                                 <div className="text-xs font-bold text-foreground flex items-center gap-2">
                                   <div className="h-1.5 w-1.5 bg-primary" />
@@ -1751,8 +1751,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           {/* Admin Override */}
                           {isDealOwner && (
                             <div className="space-y-3">
-                              <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/ADMIN_OVERRIDE</div>
-                              <div className="bg-secondary/20 p-4 border border-border/30 space-y-4">
+                              <div className="nil-detail-label text-[9px]">/ADMIN_OVERRIDE</div>
+                              <div className="nil-detail-surface space-y-4">
                                 <div className="grid gap-3">
                                   <select
                                     value={policyMode}
@@ -1780,21 +1780,21 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
                         {/* Advanced Metrics */}
                         <div className="space-y-3">
-                          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">/ADVANCED_TELEMETRY</div>
+                          <div className="nil-detail-label text-[9px]">/ADVANCED_TELEMETRY</div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                              <div className="bg-secondary/20 p-3 border border-border/20">
-                                <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Traffic</div>
+                              <div className="nil-detail-metric">
+                                <div className="text-[9px] text-muted-foreground uppercase font-bold">Traffic</div>
                                 <div className="font-mono-data text-[11px] text-foreground font-bold">
                                   {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
                                 </div>
                               </div>
-                              <div className="bg-secondary/20 p-3 border border-border/20">
-                                <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Slab Source</div>
+                              <div className="nil-detail-metric">
+                                <div className="text-[9px] text-muted-foreground uppercase font-bold">Slab Source</div>
                                 <div className="font-mono-data text-[11px] text-accent font-bold uppercase">{slabSource || '—'}</div>
                               </div>
                               {lastPlan && (
-                                <div className="bg-secondary/20 p-3 border border-border/20 col-span-2">
-                                  <div className="text-[9px] text-muted-foreground/40 uppercase font-bold">Last Retrieval Window</div>
+                                <div className="nil-detail-metric col-span-2">
+                                  <div className="text-[9px] text-muted-foreground uppercase font-bold">Last Retrieval Window</div>
                                   <div className="font-mono-data text-[10px] text-foreground mt-1 truncate">
                                     MDU #{formatBigint(lastPlan.globalStart / lastPlan.leafCount)}..#{formatBigint(lastPlan.globalEnd / lastPlan.leafCount)}
                                   </div>
@@ -1812,11 +1812,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/VFS/CONTENT</div>
-                      {files && <span className="text-[10px] px-2 py-0.5 bg-secondary text-muted-foreground font-mono-data">{files.length} ENTRIES</span>}
+                      <div className="nil-detail-label">/VFS/CONTENT</div>
+                      {files && <span className="nil-detail-meta border border-border bg-background/70 px-2 py-0.5">{files.length} ENTRIES</span>}
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-4 text-[9px] font-mono-data text-muted-foreground/60 uppercase tracking-widest">
+                    <div className="nil-detail-meta flex flex-wrap items-center gap-4 uppercase tracking-widest">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-[1px] bg-border/40" />
                         ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
@@ -1836,7 +1836,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   )}
 
                       {loadingFiles ? (
-                        <div className="text-xs text-muted-foreground">Loading file table…</div>
+                        <div className="nil-detail-surface text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
                         <div className="space-y-1.5" data-testid="deal-detail-file-list">
                           {files.map((f) => (
@@ -1874,13 +1874,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground italic">No files found for this manifest root.</div>
+                        <div className="nil-detail-surface text-xs text-muted-foreground italic">No files found for this manifest root.</div>
                       )}
                     </div>
                   )}
 
                   {activeTab === 'files' && !deal.cid && (
-                    <div className="sm:col-span-2 rounded-none border border-border bg-background/60 p-8 text-center">
+                    <div className="nil-detail-surface sm:col-span-2 p-8 text-center">
                       <div className="text-sm font-semibold text-foreground">No files yet</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         Upload a file inside this deal to store and retrieve.

@@ -1601,11 +1601,11 @@ export function Dashboard() {
           >
 
             {showCreateDeal && (
-              <div className="p-6 border-b border-border/40 bg-secondary/5 space-y-4">
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">/ALLOC/CREATE_DEAL</div>
+              <div className="space-y-4 border-b border-border/40 bg-card p-6">
+                <div className="nil-section-label">/ALLOC/CREATE_DEAL</div>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2">
-                    <label className="text-[10px] font-bold uppercase text-muted-foreground">Duration</label>
+                    <label className="nil-section-label text-foreground">Duration</label>
                     <select
                       value={durationPreset}
                       onChange={(e) => setDurationFromPreset(e.target.value)}
@@ -1621,7 +1621,7 @@ export function Dashboard() {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground">Escrow</label>
+                      <label className="nil-section-label text-foreground">Escrow</label>
                       <input
                         type="number"
                         value={initialEscrow}
@@ -1630,7 +1630,7 @@ export function Dashboard() {
                       />
                     </div>
                     <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground">Max Spend</label>
+                      <label className="nil-section-label text-foreground">Max Spend</label>
                       <input
                         type="number"
                         value={maxMonthlySpend}
@@ -1640,8 +1640,8 @@ export function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="p-3 border border-primary/20 bg-primary/5 text-[10px]">
-                    <span className="font-bold text-primary uppercase">Redundancy:</span>
+                  <div className="nil-inset p-3 text-[10px]">
+                    <span className="font-bold uppercase text-primary">Redundancy:</span>
                     <span className="ml-2 text-muted-foreground">Mode 2 (default RS {defaultRsLabel}).</span>
                   </div>
 
@@ -1816,12 +1816,12 @@ function DashboardListCard({
   children: ReactNode
 }) {
   return (
-    <div className="overflow-hidden glass-panel industrial-border">
-      <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="nil-section-label leading-none">{badge}</div>
+      <div className="overflow-hidden glass-panel industrial-border">
+        <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="nil-section-label leading-none">{badge}</div>
           {description ? (
-            <p className="mt-2 text-[10px] font-mono-data uppercase tracking-wider text-muted-foreground">{description}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
@@ -1848,7 +1848,7 @@ function DealRow({
     <button
       onClick={onClick}
       className={cn(
-        'group flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-secondary/40',
+        'nil-list-row group flex w-full items-center justify-between px-6 py-4 text-left',
         selected && 'bg-primary/5',
       )}
     >
@@ -1871,10 +1871,10 @@ function DealRow({
 
 function ActivityRow({ entry }: { entry: RecentFileEntry }) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-secondary/40">
+    <div className="nil-list-row flex items-center justify-between px-6 py-4">
       <div className="min-w-0">
-        <div className="truncate text-xs font-bold text-foreground">{entry.filePath}</div>
-        <div className="mt-1 font-mono-data text-[9px] uppercase text-muted-foreground">Deal #{entry.dealId}</div>
+        <div className="truncate text-sm font-bold text-foreground">{entry.filePath}</div>
+        <div className="mt-1 font-mono-data text-[10px] text-muted-foreground">Deal #{entry.dealId}</div>
       </div>
       <div
         className={cn(
