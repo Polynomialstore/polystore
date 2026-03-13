@@ -1232,20 +1232,25 @@ export function Dashboard() {
     }
   }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm])
 
-  if (!isConnected) return (
-      <div className="p-12 text-center">
-          <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
-          <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
-          <button
-          onClick={() => openConnectModal?.()}
-          data-testid="connect-wallet"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-none shadow transition-colors"
-        >
-          <Wallet className="w-4 h-4" />
-          Connect Wallet
-        </button>
+  if (!isConnected)
+    return (
+      <div className="px-4 pb-12 pt-24">
+        <div className="container mx-auto max-w-6xl">
+          <div className="glass-panel industrial-border p-12 text-center">
+            <h2 className="mb-2 text-xl font-semibold text-foreground">Connect Your Wallet</h2>
+            <p className="mb-4 text-muted-foreground">Access your storage deals and manage your files.</p>
+            <button
+              onClick={() => openConnectModal?.()}
+              data-testid="connect-wallet"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-none shadow transition-colors"
+            >
+              <Wallet className="w-4 h-4" />
+              Connect Wallet
+            </button>
+          </div>
+        </div>
       </div>
-  )
+    )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
   const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
@@ -1413,7 +1418,8 @@ export function Dashboard() {
   )
 
   return (
-    <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
+    <div className="px-4 pb-12 pt-24">
+      <div className="container mx-auto max-w-6xl space-y-6">
       {rpcMismatch && (
         <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-destructive/40">
           <div className="flex items-center gap-3">
@@ -1469,8 +1475,12 @@ export function Dashboard() {
       )}
 
       {/* TOP HEADER PANEL */}
-      <div className="glass-panel industrial-border shadow-sm overflow-hidden mb-6">
-        <div className="relative flex flex-wrap items-center justify-between gap-6 p-4 lg:flex-nowrap border-b border-border/10">
+      <div className="glass-panel industrial-border overflow-hidden">
+        <div className="border-b border-border/20 p-6">
+          <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">/DASHBOARD</div>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+        </div>
+        <div className="relative flex flex-wrap items-center justify-between gap-6 p-6 lg:flex-nowrap border-b border-border/10">
           <div className="flex flex-wrap items-center gap-8">
             {/* Identity Row */}
             <div className="flex items-center gap-6">
@@ -1558,11 +1568,11 @@ export function Dashboard() {
         <StatusBar noBorder />
       </div>
 
-      <div className="grid gap-10 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         {/* Sidebar: Registry + Recent Files */}
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
           {/* Registry Panel */}
-          <div className="overflow-hidden bg-card glass-panel industrial-border shadow-sm">
+          <div className="overflow-hidden glass-panel industrial-border">
             <div className="px-6 py-4 border-b border-border/60 bg-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">/REGISTRY/DEALS</div>
@@ -1692,7 +1702,7 @@ export function Dashboard() {
           </div>
 
           {/* Recent Files Panel */}
-          <div className="glass-panel industrial-border shadow-sm overflow-hidden">
+          <div className="glass-panel industrial-border overflow-hidden">
             <div className="px-6 py-3 border-b border-border/60 bg-card">
               <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">RECENT_FILES</div>
               <p className="text-[9px] text-muted-foreground mt-1 uppercase tracking-widest">Last 3 tracked events</p>
@@ -1722,7 +1732,7 @@ export function Dashboard() {
         <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
                 <div className="p-12 text-center opacity-40">
                   <Database className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-[10px] font-black uppercase tracking-[0.2em]">Ready for protocol initialization.</p>
@@ -1738,7 +1748,7 @@ export function Dashboard() {
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
-              <div className="glass-panel industrial-border p-0 overflow-hidden shadow-sm" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
                 <div className="flex items-center justify-between p-6 border-b border-border/60 bg-card">
                   <div className="flex items-center gap-4">
                     <div className="glass-panel industrial-border p-2.5 bg-background/40">
@@ -1760,7 +1770,7 @@ export function Dashboard() {
           {showAdvanced && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Advanced Retrieval Sessions Table */}
-              <div className="glass-panel industrial-border shadow-sm overflow-hidden">
+              <div className="glass-panel industrial-border overflow-hidden">
                 <div className="px-6 py-3 border-b border-border/60 bg-card text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">
                   /RETRIEVAL/SESSIONS --ACTIVE
                 </div>
@@ -1819,6 +1829,7 @@ export function Dashboard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
