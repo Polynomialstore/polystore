@@ -1476,7 +1476,7 @@ export function Dashboard() {
       )}
 
       {/* TOP HEADER PANEL */}
-      <div className="glass-panel industrial-border overflow-hidden">
+      <div className="glass-panel industrial-border">
         <div className="border-b border-border/20 p-6">
           <div className="nil-section-label leading-none">/DASHBOARD</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
