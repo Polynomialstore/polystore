@@ -1,5 +1,5 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { AlertTriangle, Wallet } from 'lucide-react'
+import { AlertTriangle, CircleUserRound, Wallet } from 'lucide-react'
 import { appConfig } from '../config'
 import { useNetwork } from '../hooks/useNetwork'
 
@@ -39,16 +39,21 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
         }
 
         const currentAccount = account!
-        const accountLabel = currentAccount.address || currentAccount.displayName
+        const rawLabel = currentAccount.address || currentAccount.displayName
+        const accountLabel =
+          rawLabel.length > 12 ? `${rawLabel.slice(0, 6)}...${rawLabel.slice(-4)}` : rawLabel
 
         return (
           <div className={`flex items-center gap-2 ${className}`}>
             <button
               onClick={openAccountModal}
-              className="inline-flex items-center gap-3 px-4 py-2 bg-secondary/40 border border-border/40"
+              className="inline-flex items-center gap-2 border border-border/40 bg-background/80 px-3 py-2 text-foreground transition-colors hover:bg-secondary/40"
               title={currentAccount.address}
             >
-              <span className="font-mono-data text-xs text-foreground">{accountLabel}</span>
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-accent/15 text-accent">
+                <CircleUserRound className="h-3.5 w-3.5" />
+              </span>
+              <span className="font-mono-data text-xs font-bold text-foreground">{accountLabel}</span>
             </button>
 
             {wrongNetwork && (

@@ -39,7 +39,9 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
     <div className={cn('flex items-center gap-2', className)}>
       <ConnectWallet />
 
-      {session.isConnected ? (
+      {session.isConnected &&
+      session.primarySessionState !== 'ready-browser' &&
+      session.primarySessionState !== 'ready-gateway' ? (
         <>
           <span
             className={cn(
@@ -48,9 +50,6 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
             )}
           >
             {SESSION_BADGE_LABELS[session.primarySessionState]}
-          </span>
-          <span className="hidden xl:inline-flex items-center border border-border/30 bg-background/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
-            {session.balanceLabel}
           </span>
         </>
       ) : null}
