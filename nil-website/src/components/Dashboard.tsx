@@ -1566,7 +1566,7 @@ export function Dashboard() {
             )}
           </div>
         </div>
-        <StatusBar noBorder />
+        <StatusBar />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
