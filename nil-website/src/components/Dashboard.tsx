@@ -1344,40 +1344,39 @@ export function Dashboard() {
       <div className="container mx-auto max-w-6xl space-y-6">
       {/* TOP HEADER PANEL */}
       <div className="glass-panel industrial-border">
-        <div className="border-b border-border/20 p-6">
-          <div className="nil-section-label leading-none">/DASHBOARD</div>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        </div>
-        <div className="border-t border-border/10">
+        <div className="flex items-end justify-between gap-6 border-b border-border/20 p-6">
+          <div>
+            <div className="nil-section-label leading-none">/DASHBOARD</div>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          </div>
           <button
             type="button"
             onClick={() => setShowSystemStatus((prev) => !prev)}
-            className="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-secondary/30"
+            className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-colors hover:text-foreground"
           >
-            <div className="nil-section-label text-foreground">System Status</div>
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
-              {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
-              {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </div>
+            {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
+            {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          {showSystemStatus ? (
-            <div className="border-t border-border/10 px-6 pb-6">
-              {rpcMismatch ? (
-                <div className="mt-6 nil-inset border-destructive/30 bg-destructive/10 p-4">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-destructive">
-                    rpc_mismatch
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-foreground">Critical Node Mismatch</div>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
-                    Restart the local stack or repair the RPC endpoint before using this workspace.
-                  </p>
+        </div>
+        {showSystemStatus ? (
+          <div className="border-t border-border/10 px-6 pb-6 pt-6">
+            {rpcMismatch ? (
+              <div className="nil-inset border-destructive/30 bg-destructive/10 p-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-destructive">
+                  rpc_mismatch
                 </div>
-              ) : null}
+                <div className="mt-2 text-sm font-semibold text-foreground">Critical Node Mismatch</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
+                  Restart the local stack or repair the RPC endpoint before using this workspace.
+                </p>
+              </div>
+            ) : null}
+            <div className={rpcMismatch ? 'mt-6' : ''}>
               <StatusBar noBorder />
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
