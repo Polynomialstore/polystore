@@ -54,7 +54,7 @@ function SystemLabel({ label, status, value }: { label: string; status: ServiceS
   )
 }
 
-export function StatusBar() {
+export function StatusBar({ noBorder }: { noBorder?: boolean }) {
   const chainId = useChainId()
   const { isConnected } = useAccount()
   const unlockState = useMetaMaskUnlockState({ enabled: isConnected, pollMs: 15_000 })
@@ -232,7 +232,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="relative glass-panel industrial-border px-3 py-2 shadow-sm">
+    <div className={noBorder ? "relative px-3 py-2 bg-background/50" : "relative glass-panel industrial-border px-3 py-2 shadow-sm"}>
       <div className="relative flex flex-wrap items-center gap-4 text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest font-bold">
         
         {/* SYSTEMS GROUP */}

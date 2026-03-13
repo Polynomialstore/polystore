@@ -1566,7 +1566,7 @@ export function Dashboard() {
             )}
           </div>
         </div>
-        <StatusBar />
+        <StatusBar noBorder />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -1703,7 +1703,7 @@ export function Dashboard() {
         <div ref={workspaceRef} className="min-w-0 order-2 lg:order-2 space-y-6">
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
-              <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0" data-testid="deal-detail">
                 <EmptyStateCard
                   icon={<Database className="w-12 h-12 text-muted-foreground" />}
                   title="Ready for protocol initialization."
@@ -1720,7 +1720,7 @@ export function Dashboard() {
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
             ) : (
-              <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
+              <div className="glass-panel industrial-border p-0" data-testid="deal-detail">
                 <div className="flex items-center justify-between p-6 border-b border-border/60 bg-card">
                   <div className="flex items-center gap-4">
                     <div className="nil-inset glass-panel industrial-border p-2.5">
@@ -1816,7 +1816,7 @@ function DashboardListCard({
   children: ReactNode
 }) {
   return (
-    <div className="overflow-hidden glass-panel industrial-border">
+    <div className="glass-panel industrial-border">
       <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="nil-section-label leading-none">{badge}</div>

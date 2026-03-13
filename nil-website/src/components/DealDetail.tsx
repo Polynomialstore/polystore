@@ -1565,7 +1565,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
   return (
     <div
-      className="glass-panel industrial-border cyber-grid p-0 overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]"
+      className="glass-panel industrial-border cyber-grid p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]"
       data-testid="deal-detail"
     >
       <div className="flex items-center justify-between p-5 border-b border-border/40 bg-background/40 backdrop-blur-md">
