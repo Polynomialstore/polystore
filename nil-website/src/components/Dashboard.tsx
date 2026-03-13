@@ -1816,17 +1816,17 @@ function DashboardListCard({
   children: ReactNode
 }) {
   return (
-      <div className="overflow-hidden glass-panel industrial-border">
-        <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="nil-section-label leading-none">{badge}</div>
+    <div className="overflow-hidden glass-panel industrial-border">
+      <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="nil-section-label leading-none">{badge}</div>
           {description ? (
             <p className="mt-2 text-sm text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>
-      {children}
+      <div className="bg-secondary/30">{children}</div>
     </div>
   )
 }
@@ -1848,30 +1848,30 @@ function DealRow({
     <button
       onClick={onClick}
       className={cn(
-        'nil-list-row group flex w-full items-center justify-between px-6 py-4 text-left',
-        selected && 'bg-primary/5',
+        'nil-list-row group flex w-full items-center justify-between border-b border-border/20 bg-background/50 px-6 py-4 text-left last:border-b-0',
+        selected && 'border-primary/30 bg-primary/10',
       )}
     >
       <div className="flex items-center gap-4">
-        <span className="font-mono-data text-xs font-black text-foreground">#{dealId}</span>
+        <span className="font-mono-data text-sm font-black text-foreground">#{dealId}</span>
         <span
           className={cn(
-            'border px-1.5 py-0.5 text-[9px] font-bold',
+            'border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
             isActive ? 'border-accent/20 bg-accent/5 text-accent' : 'border-border/20 bg-background/70 text-muted-foreground',
           )}
         >
           {isActive ? 'ACTIVE' : 'EMPTY'}
         </span>
-        <span className="font-mono-data text-[10px] text-muted-foreground">{sizeLabel}</span>
+        <span className="font-mono-data text-[11px] text-muted-foreground">{sizeLabel}</span>
       </div>
-      {selected ? <div className="h-1.5 w-1.5 bg-primary" /> : null}
+      {selected ? <div className="h-2 w-2 bg-primary" /> : null}
     </button>
   )
 }
 
 function ActivityRow({ entry }: { entry: RecentFileEntry }) {
   return (
-    <div className="nil-list-row flex items-center justify-between px-6 py-4">
+    <div className="nil-list-row flex items-center justify-between border-b border-border/20 bg-background/50 px-6 py-4 last:border-b-0">
       <div className="min-w-0">
         <div className="truncate text-sm font-bold text-foreground">{entry.filePath}</div>
         <div className="mt-1 font-mono-data text-[10px] text-muted-foreground">Deal #{entry.dealId}</div>

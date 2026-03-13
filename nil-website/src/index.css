@@ -206,6 +206,14 @@
     @apply nil-inset rounded-none p-4;
   }
 
+  .nil-tab-panel {
+    @apply rounded-none border border-border bg-secondary/50 p-3;
+  }
+
+  .nil-tab-inset {
+    @apply rounded-none border border-border bg-background/50 p-3;
+  }
+
   .nil-detail-metric {
     @apply nil-inset rounded-none px-4 py-3;
   }

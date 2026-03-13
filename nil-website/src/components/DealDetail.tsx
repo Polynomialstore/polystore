@@ -581,7 +581,7 @@ function FileRow({
       data-file-path={file.path}
       data-cache-browser={browserCached ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-      className="nil-list-row relative flex items-center justify-between gap-3 border border-border bg-background/70 px-4 py-4 group"
+      className="nil-list-row relative flex items-center justify-between gap-3 border border-border bg-background/50 px-4 py-4 group"
     >
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-foreground" title={file.path}>
@@ -1633,11 +1633,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
           {activeTab === 'info' && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {/* Identity Section */}
-                  <div className="grid sm:grid-cols-2 gap-6">
+                  <div className="nil-tab-panel grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
                         <div className="nil-detail-label">/CONTENT_HASH</div>
                         <div
-                          className="nil-detail-surface font-mono-data break-all text-primary font-bold select-all"
+                          className="nil-tab-inset font-mono-data break-all text-primary font-bold select-all"
                           data-testid="deal-detail-cid"
                         >
                           {deal.cid || 'EMPTY_CONTAINER'}
@@ -1645,14 +1645,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     </div>
                     <div className="space-y-2">
                       <div className="nil-detail-label">/OWNER_ID</div>
-                      <div className="nil-detail-surface font-mono-data text-[11px] text-foreground font-bold select-all">
+                      <div className="nil-tab-inset font-mono-data text-[11px] text-foreground font-bold select-all">
                         {deal.owner}
                       </div>
                     </div>
                   </div>
 
                   {/* Economics Section */}
-                  <div className="space-y-3">
+                  <div className="nil-tab-panel space-y-3">
                     <div className="nil-detail-label">/ECONOMICS</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div className="nil-detail-metric">
@@ -1677,7 +1677,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   </div>
 
                   {/* Infrastructure / Providers Section */}
-                  <div className="space-y-3">
+                  <div className="nil-tab-panel space-y-3">
                     <div className="nil-detail-label">/INFRASTRUCTURE_NODES</div>
                     <div className="nil-inset divide-y divide-border/30">
                         {deal.providers && deal.providers.length > 0 ? (
@@ -1717,7 +1717,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   </div>
 
                   {/* Technical Details Collapsible */}
-                  <div className="pt-4 border-t border-border/10">
+                  <div className="nil-tab-panel">
                     <details className="group">
                       <summary className="nil-detail-label cursor-pointer select-none flex items-center gap-3 hover:text-primary transition-colors">
                         <div className="w-4 h-4 border border-current flex items-center justify-center group-open:rotate-90 transition-transform">
@@ -1730,7 +1730,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           {/* Retrieval Policy */}
                           <div className="space-y-3">
                             <div className="nil-detail-label text-[9px]">/RETRIEVAL_POLICY</div>
-                            <div className="nil-detail-surface space-y-3">
+                            <div className="nil-tab-inset space-y-3">
                                 <div className="text-[9px] text-muted-foreground uppercase font-black">Current Configuration</div>
                                 <div className="text-xs font-bold text-foreground flex items-center gap-2">
                                   <div className="h-1.5 w-1.5 bg-primary" />
@@ -1752,7 +1752,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           {isDealOwner && (
                             <div className="space-y-3">
                               <div className="nil-detail-label text-[9px]">/ADMIN_OVERRIDE</div>
-                              <div className="nil-detail-surface space-y-4">
+                              <div className="nil-tab-inset space-y-4">
                                 <div className="grid gap-3">
                                   <select
                                     value={policyMode}
@@ -1810,35 +1810,54 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
           {activeTab === 'files' && deal.cid && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="nil-detail-label">/VFS/CONTENT</div>
-                      {files && <span className="nil-detail-meta border border-border bg-background/70 px-2 py-0.5">{files.length} ENTRIES</span>}
-                    </div>
-                    
-                    <div className="nil-detail-meta flex flex-wrap items-center gap-4 uppercase tracking-widest">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-[1px] bg-border/40" />
-                        ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
+                  <div className="nil-tab-panel space-y-3">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="nil-detail-label">/VFS/CONTENT</div>
+                        {files && <span className="nil-detail-meta border border-border bg-background/50 px-2 py-0.5">{files.length} ENTRIES</span>}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-[1px] bg-border/40" />
-                        CACHE: <span className="text-foreground font-bold">{displayCacheSource || '—'}</span>
+                      
+                      <div className="nil-detail-meta flex flex-wrap items-center gap-4 uppercase tracking-widest">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-[1px] bg-border/40" />
+                          ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-[1px] bg-border/40" />
+                          CACHE: <span className="text-foreground font-bold">{displayCacheSource || '—'}</span>
+                        </div>
                       </div>
                     </div>
+
+                    {files ? (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="nil-tab-inset">
+                          <div className="nil-detail-meta uppercase">Files</div>
+                          <div className="mt-1 text-lg font-mono-data text-foreground">{files.length}</div>
+                        </div>
+                        <div className="nil-tab-inset">
+                          <div className="nil-detail-meta uppercase">Route</div>
+                          <div className="mt-1 text-sm font-bold text-foreground">{lastRouteLabel || '—'}</div>
+                        </div>
+                        <div className="nil-tab-inset">
+                          <div className="nil-detail-meta uppercase">Cache</div>
+                          <div className="mt-1 text-sm font-bold text-foreground">{displayCacheSource || '—'}</div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   {fileActionError && (
-                    <div className="p-3 border border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
+                    <div className="nil-tab-panel border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
                       <XCircle className="w-3 h-3" />
                       DOWNLOAD_FAILURE: {fileActionError}
                     </div>
                   )}
 
                       {loadingFiles ? (
-                        <div className="nil-detail-surface text-xs text-muted-foreground">Loading file table…</div>
+                        <div className="nil-tab-panel text-xs text-muted-foreground">Loading file table…</div>
                       ) : files && files.length > 0 ? (
-                        <div className="space-y-1.5" data-testid="deal-detail-file-list">
+                        <div className="nil-tab-panel space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => (
                             <FileRow
                               key={`${f.path}:${f.start_offset}`}
@@ -1874,13 +1893,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           ))}
                         </div>
                       ) : (
-                        <div className="nil-detail-surface text-xs text-muted-foreground italic">No files found for this manifest root.</div>
+                        <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found for this manifest root.</div>
                       )}
                     </div>
                   )}
 
                   {activeTab === 'files' && !deal.cid && (
-                    <div className="nil-detail-surface sm:col-span-2 p-8 text-center">
+                    <div className="nil-tab-panel sm:col-span-2 p-8 text-center">
                       <div className="text-sm font-semibold text-foreground">No files yet</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         Upload a file inside this deal to store and retrieve.
