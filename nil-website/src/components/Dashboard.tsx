@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp, CircleUserRound, Coins } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -88,6 +88,7 @@ export function Dashboard() {
     address,
     isConnected,
     nilAddress,
+    walletAddressShort,
     hasFunds,
     isWrongNetwork,
     walletChainId,
@@ -1158,16 +1159,57 @@ export function Dashboard() {
     }
   }, [faucetTxStatus, faucetTx, nilAddress])
 
+  const accountSummaryPill = (
+    <div className="inline-flex items-center gap-2 border border-border/40 bg-background/80 px-3 py-2 text-foreground">
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-accent/15 text-accent">
+        <CircleUserRound className="h-3.5 w-3.5" />
+      </span>
+      <span className="font-mono-data text-xs font-bold text-foreground">{walletAddressShort}</span>
+    </div>
+  )
+
   if (!isConnected)
     return (
       <div className="px-4 pb-12 pt-24">
         <div className="container mx-auto max-w-6xl">
           <div className="glass-panel industrial-border p-12 text-center">
             <div className="nil-section-label">/DASHBOARD</div>
-            <h2 className="mt-2 text-xl font-semibold text-foreground">Connect in the nav to manage deals</h2>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Connect MetaMask to open the dashboard</h2>
             <p className="mt-3 text-muted-foreground">
-              The global session controls now live in the navigation bar. Connect your wallet there, then return here to allocate deals, upload files, and inspect manifests.
+              Connect your wallet to allocate deals, upload files, inspect manifests, and verify retrieval health.
             </p>
+            <button
+              type="button"
+              onClick={() => openConnectModal?.()}
+              className="cta-shadow mt-6 inline-flex items-center justify-center gap-3 border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+            >
+              Connect Wallet
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+
+  if (!hasFunds)
+    return (
+      <div className="px-4 pb-12 pt-24">
+        <div className="container mx-auto max-w-6xl">
+          <div className="glass-panel industrial-border p-12 text-center">
+            <div className="nil-section-label">/DASHBOARD</div>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Fund your wallet to continue</h2>
+            <div className="mt-6 flex justify-center">{accountSummaryPill}</div>
+            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
+              Your wallet is connected, but it needs testnet NIL before you can allocate deals or upload data.
+            </p>
+            <button
+              type="button"
+              onClick={() => void session.requestFunds()}
+              disabled={!address || session.faucetBusy || !session.faucetEnabled}
+              className="cta-shadow mt-6 inline-flex items-center justify-center gap-3 border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {session.faucetBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+              {session.faucetBusy ? 'Funding' : 'Fund Wallet'}
+            </button>
           </div>
         </div>
       </div>
@@ -1347,14 +1389,17 @@ export function Dashboard() {
             <div className="nil-section-label leading-none">/DASHBOARD</div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSystemStatus((prev) => !prev)}
-            className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
-            {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          <div className="flex items-center gap-4">
+            {accountSummaryPill}
+            <button
+              type="button"
+              onClick={() => setShowSystemStatus((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
+              {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
         {showSystemStatus ? (
           <div className="border-t border-border/10 px-6 pb-6 pt-6">
@@ -1503,7 +1548,7 @@ export function Dashboard() {
               <div className="glass-panel industrial-border p-0" data-testid="deal-detail">
                 <EmptyStateCard
                   icon={<Database className="w-12 h-12 text-muted-foreground" />}
-                  title="Ready for protocol initialization."
+                  title="Ready for Deal Creation"
                   className="p-12 opacity-40"
                 />
               </div>
