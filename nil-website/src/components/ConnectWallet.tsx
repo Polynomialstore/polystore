@@ -49,7 +49,6 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
               title={currentAccount.address}
             >
               <span className="font-mono-data text-xs text-foreground">{accountLabel}</span>
-              <span className="text-xs text-muted-foreground">{currentAccount.displayBalance ?? '—'}</span>
             </button>
 
             {wrongNetwork && (
