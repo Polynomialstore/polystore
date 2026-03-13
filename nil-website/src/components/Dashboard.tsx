@@ -1,6 +1,6 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, HardDrive, Database, AlertTriangle } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
@@ -20,6 +20,7 @@ import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
+import { cn } from '../lib/utils'
 
 interface Provider {
   address: string
@@ -1572,23 +1573,18 @@ export function Dashboard() {
         {/* Sidebar: Registry + Recent Files */}
         <div className="min-w-0 order-1 lg:order-1 space-y-6">
           {/* Registry Panel */}
-          <div className="overflow-hidden glass-panel industrial-border">
-            <div className="px-6 py-4 border-b border-border/60 bg-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">/REGISTRY/DEALS</div>
-                <p className="text-[10px] font-mono-data text-muted-foreground mt-2 uppercase tracking-wider">
-                  Select container to manage files.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
+          <DashboardListCard
+            badge="/REGISTRY/DEALS"
+            description="Select container to manage files."
+            actions={
+              <>
                 <button
                   type="button"
                   onClick={() => setShowCreateDeal(!showCreateDeal)}
-                  className={`inline-flex items-center justify-center border border-primary px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors ${
-                    showCreateDeal
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-transparent text-primary hover:bg-primary/5'
-                  }`}
+                  className={cn(
+                    'inline-flex items-center justify-center border border-primary px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors',
+                    showCreateDeal ? 'bg-primary/10 text-primary' : 'bg-transparent text-primary hover:bg-primary/5',
+                  )}
                 >
                   + New Deal
                 </button>
@@ -1600,8 +1596,9 @@ export function Dashboard() {
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 </button>
-              </div>
-            </div>
+              </>
+            }
+          >
 
             {showCreateDeal && (
               <div className="p-6 border-b border-border/40 bg-secondary/5 space-y-4">
@@ -1665,67 +1662,41 @@ export function Dashboard() {
                 <p className="text-sm text-muted-foreground uppercase tracking-widest font-black">Syncing...</p>
               </div>
             ) : (
-              <div className="divide-y divide-border/10">
+              <div className="divide-y divide-border/30">
                 {ownedDeals.length === 0 ? (
-                  <div className="px-6 py-8 text-center text-[10px] text-muted-foreground italic uppercase tracking-widest opacity-40">
-                    No deals detected.
-                  </div>
+                  <EmptyStateCard title="No deals detected." compact />
                 ) : (
                   ownedDeals.map((deal) => {
                     const isSelected = String(deal.id) === String(targetDealId || '')
                     const sizeNum = Number(deal.size)
                     const sizeLabel = formatBytes(sizeNum > 0 ? sizeNum : 0)
                     return (
-                      <button
+                      <DealRow
                         key={deal.id}
+                        dealId={String(deal.id)}
+                        isActive={Boolean(deal.cid)}
+                        sizeLabel={sizeLabel}
+                        selected={isSelected}
                         onClick={() => setTargetDealId(String(deal.id))}
-                        className={`w-full px-6 py-4 text-left transition-colors flex items-center justify-between group ${
-                          isSelected ? 'bg-primary/5' : 'hover:bg-secondary/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="font-mono-data text-xs font-black text-foreground">#{deal.id}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${
-                            deal.cid ? 'text-accent border-accent/20 bg-accent/5' : 'text-muted-foreground border-border/20 bg-background/40'
-                          }`}>
-                            {deal.cid ? 'ACTIVE' : 'EMPTY'}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-mono-data">{sizeLabel}</span>
-                        </div>
-                        {isSelected && <div className="h-1.5 w-1.5 bg-primary" />}
-                      </button>
+                      />
                     )
                   })
                 )}
               </div>
             )}
-          </div>
+          </DashboardListCard>
 
           {/* Recent Files Panel */}
-          <div className="glass-panel industrial-border overflow-hidden">
-            <div className="px-6 py-3 border-b border-border/60 bg-card">
-              <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">RECENT_FILES</div>
-              <p className="text-[9px] text-muted-foreground mt-1 uppercase tracking-widest">Last 3 tracked events</p>
-            </div>
-            <div className="divide-y divide-border/10">
+          <DashboardListCard badge="RECENT_FILES" description="Last 3 tracked events">
+            <div className="divide-y divide-border/30">
               {recentActivity.slice(0, 3).map((act, i) => (
-                <div key={`${act.dealId}-${act.filePath}-${i}`} className="px-6 py-3 flex items-center justify-between group hover:bg-secondary/20 transition-colors">
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-bold text-foreground">{act.filePath}</div>
-                    <div className="text-[9px] text-muted-foreground font-mono-data mt-1 uppercase">Deal #{act.dealId}</div>
-                  </div>
-                  <div className={`h-1.5 w-1.5 ${
-                    act.status === 'success' ? 'bg-accent' : act.status === 'failed' ? 'bg-destructive' : 'bg-primary animate-pulse'
-                  }`} />
-                </div>
+                <ActivityRow key={`${act.dealId}-${act.filePath}-${i}`} entry={act} />
               ))}
               {recentActivity.length === 0 && (
-                <div className="px-6 py-8 text-center text-[10px] text-muted-foreground italic uppercase tracking-widest opacity-40">
-                  No recent activity.
-                </div>
+                <EmptyStateCard title="No recent activity." compact />
               )}
             </div>
-          </div>
+          </DashboardListCard>
         </div>
 
         {/* Workspace: Deal Detail + Advanced */}
@@ -1733,10 +1704,11 @@ export function Dashboard() {
           <div ref={dealDetailRef} className="min-w-0">
             {ownedDeals.length === 0 ? (
               <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
-                <div className="p-12 text-center opacity-40">
-                  <Database className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Ready for protocol initialization.</p>
-                </div>
+                <EmptyStateCard
+                  icon={<Database className="w-12 h-12 text-muted-foreground" />}
+                  title="Ready for protocol initialization."
+                  className="p-12 opacity-40"
+                />
               </div>
             ) : targetDeal ? (
               <DealDetail
@@ -1760,9 +1732,7 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <div className="p-12 text-center opacity-40">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Awaiting synchronization.</p>
-                </div>
+                <EmptyStateCard title="Awaiting synchronization." className="p-12 opacity-40" />
               </div>
             )}
           </div>
@@ -1830,6 +1800,118 @@ export function Dashboard() {
         </div>
       )}
       </div>
+    </div>
+  )
+}
+
+function DashboardListCard({
+  badge,
+  description,
+  actions,
+  children,
+}: {
+  badge: string
+  description?: string
+  actions?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="overflow-hidden glass-panel industrial-border">
+      <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">{badge}</div>
+          {description ? (
+            <p className="mt-2 text-[10px] font-mono-data uppercase tracking-wider text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function DealRow({
+  dealId,
+  isActive,
+  sizeLabel,
+  selected,
+  onClick,
+}: {
+  dealId: string
+  isActive: boolean
+  sizeLabel: string
+  selected?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'group flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-secondary/40',
+        selected && 'bg-primary/5',
+      )}
+    >
+      <div className="flex items-center gap-4">
+        <span className="font-mono-data text-xs font-black text-foreground">#{dealId}</span>
+        <span
+          className={cn(
+            'border px-1.5 py-0.5 text-[9px] font-bold',
+            isActive ? 'border-accent/20 bg-accent/5 text-accent' : 'border-border/20 bg-background/40 text-muted-foreground',
+          )}
+        >
+          {isActive ? 'ACTIVE' : 'EMPTY'}
+        </span>
+        <span className="font-mono-data text-[10px] text-muted-foreground">{sizeLabel}</span>
+      </div>
+      {selected ? <div className="h-1.5 w-1.5 bg-primary" /> : null}
+    </button>
+  )
+}
+
+function ActivityRow({ entry }: { entry: RecentFileEntry }) {
+  return (
+    <div className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-secondary/40">
+      <div className="min-w-0">
+        <div className="truncate text-xs font-bold text-foreground">{entry.filePath}</div>
+        <div className="mt-1 font-mono-data text-[9px] uppercase text-muted-foreground">Deal #{entry.dealId}</div>
+      </div>
+      <div
+        className={cn(
+          'h-1.5 w-1.5',
+          entry.status === 'success' && 'bg-accent',
+          entry.status === 'failed' && 'bg-destructive',
+          entry.status === 'pending' && 'animate-pulse bg-primary',
+        )}
+      />
+    </div>
+  )
+}
+
+function EmptyStateCard({
+  icon,
+  title,
+  description,
+  compact = false,
+  className,
+}: {
+  icon?: ReactNode
+  title: string
+  description?: string
+  compact?: boolean
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'text-center',
+        compact ? 'px-6 py-8 text-[10px] italic uppercase tracking-widest text-muted-foreground opacity-40' : 'space-y-4',
+        className,
+      )}
+    >
+      {icon ? <div className="mx-auto mb-4 flex justify-center">{icon}</div> : null}
+      <p className={cn(compact ? '' : 'text-[10px] font-black uppercase tracking-[0.2em]')}>{title}</p>
+      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
     </div>
   )
 }
