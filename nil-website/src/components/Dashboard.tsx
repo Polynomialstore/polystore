@@ -1144,9 +1144,7 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
-  const recentActivity = recentFiles
-
-  // Content downloads are tracked via Recent Files and Deal Explorer download actions.
+  // Content downloads are tracked via Deal Explorer download actions.
 
   useEffect(() => {
     if (!appConfig.faucetEnabled) return
@@ -1496,17 +1494,6 @@ export function Dashboard() {
             )}
           </DashboardListCard>
 
-          {/* Recent Files Panel */}
-          <DashboardListCard badge="RECENT_FILES" description="Last 3 tracked events">
-            <div className="divide-y divide-border/30">
-              {recentActivity.slice(0, 3).map((act, i) => (
-                <ActivityRow key={`${act.dealId}-${act.filePath}-${i}`} entry={act} />
-              ))}
-              {recentActivity.length === 0 && (
-                <EmptyStateCard title="No recent activity." compact />
-              )}
-            </div>
-          </DashboardListCard>
         </div>
 
         {/* Workspace: Deal Detail + Advanced */}
@@ -1676,25 +1663,6 @@ function DealRow({
       </div>
       {selected ? <div className="h-2 w-2 bg-primary" /> : null}
     </button>
-  )
-}
-
-function ActivityRow({ entry }: { entry: RecentFileEntry }) {
-  return (
-    <div className="nil-list-row flex items-center justify-between border-b border-border/20 bg-background/50 px-6 py-4 last:border-b-0">
-      <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-foreground">{entry.filePath}</div>
-        <div className="mt-1 font-mono-data text-[10px] text-muted-foreground">Deal #{entry.dealId}</div>
-      </div>
-      <div
-        className={cn(
-          'h-1.5 w-1.5',
-          entry.status === 'success' && 'bg-accent',
-          entry.status === 'failed' && 'bg-destructive',
-          entry.status === 'pending' && 'animate-pulse bg-primary',
-        )}
-      />
-    </div>
   )
 }
 
