@@ -140,7 +140,7 @@
 
   .dark .glass-panel {
     @apply border-t border-l border-white/5;
-    background-color: hsl(var(--card) / 0.8);
+    background-color: hsl(var(--card));
   }
 
   .glass-panel.industrial-border {
