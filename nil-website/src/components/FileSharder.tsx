@@ -2572,7 +2572,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   </div>
                 </div>
                 <label className="cta-shadow inline-flex w-full cursor-pointer items-center justify-center border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] sm:w-auto">
-                  LOAD_OBJECT
+                  Upload
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
               </div>
