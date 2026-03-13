@@ -207,11 +207,16 @@
   }
 
   .nil-tab-panel {
-    @apply rounded-none border border-border bg-secondary/50 p-3;
+    @apply rounded-none border border-border bg-background/80 p-3;
   }
 
   .nil-tab-inset {
-    @apply rounded-none border border-border bg-background/50 p-3;
+    @apply rounded-none border border-border bg-background/80 p-3;
+  }
+
+  .dark .nil-tab-panel,
+  .dark .nil-tab-inset {
+    @apply border-primary/20 bg-[hsl(var(--background)_/_0.9)];
   }
 
   .nil-detail-metric {
