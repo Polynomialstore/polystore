@@ -14,6 +14,7 @@ interface SmoothEntity {
 }
 
 const INACTIVITY_TIMEOUT_MS = 15000;
+const TARGET_FRAME_INTERVAL_MS = 1000 / 24;
 
 export const LivingGrid: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -124,7 +125,13 @@ export const LivingGrid: React.FC = () => {
 
     const animate = (time: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = time;
-      const dt = (time - lastTimeRef.current) / 16.66;
+      const elapsed = time - lastTimeRef.current;
+      if (elapsed < TARGET_FRAME_INTERVAL_MS) {
+        animationFrameId = requestAnimationFrame(animate);
+        return;
+      }
+
+      const dt = elapsed / 16.66;
       lastTimeRef.current = time;
 
       const { width, height } = canvas;
