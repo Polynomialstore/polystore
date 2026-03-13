@@ -22,18 +22,28 @@ export const LivingGrid: React.FC = () => {
   const lastTimeRef = useRef(0);
   const idCounterRef = useRef(0);
   const lastMouseSpawnAtRef = useRef(0);
+  const primaryColorRef = useRef('hsl(190 100% 50%)');
+  const primaryShadowColorRef = useRef('hsl(190 100% 50%)');
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { desynchronized: true });
     if (!context) return;
 
     let animationFrameId = 0;
     let inactivityTimeoutId = 0;
     let isAnimating = false;
     const gridSize = 30;
+    const entityBoundsMargin = 300;
+
+    const updateThemeCache = () => {
+      const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+      const resolvedPrimary = primary ? `hsl(${primary})` : 'hsl(190 100% 50%)';
+      primaryColorRef.current = resolvedPrimary;
+      primaryShadowColorRef.current = resolvedPrimary;
+    };
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -41,9 +51,6 @@ export const LivingGrid: React.FC = () => {
     };
 
     const spawnEntity = (x: number, y: number) => {
-      const color = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
-      const hslColor = `hsl(${color})`;
-
       entitiesRef.current.push({
         id: idCounterRef.current++,
         x,
@@ -52,7 +59,7 @@ export const LivingGrid: React.FC = () => {
         thetaDrift: (Math.random() - 0.5) * 0.02,
         speed: 1.2 + Math.random() * 1.8,
         life: 1,
-        color: hslColor,
+        color: primaryColorRef.current,
         radius: 100 + Math.random() * 80,
         wavePhase: Math.random() * Math.PI * 2
       });
@@ -60,37 +67,26 @@ export const LivingGrid: React.FC = () => {
 
     const drawConduit = (
       ctx: CanvasRenderingContext2D,
-      x1: number,
-      y1: number,
-      x2: number,
-      y2: number,
+      path: Path2D,
       gradient: CanvasGradient,
       alpha: number
     ) => {
       if (alpha < 0.01) return;
 
-      const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
-
-      ctx.beginPath();
       ctx.lineWidth = 20;
       ctx.strokeStyle = gradient;
       ctx.globalAlpha = alpha * 0.12;
       ctx.lineCap = 'butt';
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
+      ctx.stroke(path);
 
-      ctx.beginPath();
       ctx.lineWidth = 2;
       ctx.globalAlpha = alpha * 0.85;
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
+      ctx.stroke(path);
 
       ctx.shadowBlur = 4;
-      ctx.shadowColor = `hsl(${primaryColor})`;
+      ctx.shadowColor = primaryShadowColorRef.current;
       ctx.globalAlpha = alpha * 0.4;
-      ctx.stroke();
+      ctx.stroke(path);
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     };
@@ -131,7 +127,8 @@ export const LivingGrid: React.FC = () => {
       const dt = (time - lastTimeRef.current) / 16.66;
       lastTimeRef.current = time;
 
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      const { width, height } = canvas;
+      context.clearRect(0, 0, width, height);
       const entities = entitiesRef.current;
 
       for (let index = entities.length - 1; index >= 0; index -= 1) {
@@ -144,12 +141,16 @@ export const LivingGrid: React.FC = () => {
 
         if (
           entity.life <= 0 ||
-          entity.x < -300 ||
-          entity.x > canvas.width + 300 ||
-          entity.y < -300 ||
-          entity.y > canvas.height + 300
+          entity.x < -entityBoundsMargin ||
+          entity.x > width + entityBoundsMargin ||
+          entity.y < -entityBoundsMargin ||
+          entity.y > height + entityBoundsMargin
         ) {
-          entities.splice(index, 1);
+          const lastIndex = entities.length - 1;
+          if (index !== lastIndex) {
+            entities[index] = entities[lastIndex];
+          }
+          entities.pop();
           continue;
         }
 
@@ -170,12 +171,15 @@ export const LivingGrid: React.FC = () => {
           const gradient = context.createLinearGradient(gx, yStart, gx, yEnd);
           const relativeCenter = (entity.y - yStart) / Math.max(1, yEnd - yStart);
           const gradientWidth = (entity.radius * horizontalIntensity) / Math.max(1, yEnd - yStart);
+          const conduitPath = new Path2D();
+          conduitPath.moveTo(gx, yStart);
+          conduitPath.lineTo(gx, yEnd);
 
           gradient.addColorStop(Math.max(0, relativeCenter - gradientWidth), 'transparent');
           gradient.addColorStop(Math.max(0, Math.min(1, relativeCenter)), entity.color);
           gradient.addColorStop(Math.min(1, relativeCenter + gradientWidth), 'transparent');
 
-          drawConduit(context, gx, yStart, gx, yEnd, gradient, globalOpacity * horizontalIntensity);
+          drawConduit(context, conduitPath, gradient, globalOpacity * horizontalIntensity);
         }
 
         for (let gy = minY; gy <= maxY; gy += gridSize) {
@@ -188,17 +192,20 @@ export const LivingGrid: React.FC = () => {
           const gradient = context.createLinearGradient(xStart, gy, xEnd, gy);
           const relativeCenter = (entity.x - xStart) / Math.max(1, xEnd - xStart);
           const gradientWidth = (entity.radius * verticalIntensity) / Math.max(1, xEnd - xStart);
+          const conduitPath = new Path2D();
+          conduitPath.moveTo(xStart, gy);
+          conduitPath.lineTo(xEnd, gy);
 
           gradient.addColorStop(Math.max(0, relativeCenter - gradientWidth), 'transparent');
           gradient.addColorStop(Math.max(0, Math.min(1, relativeCenter)), entity.color);
           gradient.addColorStop(Math.min(1, relativeCenter + gradientWidth), 'transparent');
 
-          drawConduit(context, xStart, gy, xEnd, gy, gradient, globalOpacity * verticalIntensity);
+          drawConduit(context, conduitPath, gradient, globalOpacity * verticalIntensity);
         }
       }
 
       if (Math.random() < 0.015) {
-        spawnEntity(Math.random() * canvas.width, Math.random() * canvas.height);
+        spawnEntity(Math.random() * width, Math.random() * height);
       }
 
       animationFrameId = requestAnimationFrame(animate);
@@ -235,11 +242,16 @@ export const LivingGrid: React.FC = () => {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        updateThemeCache();
         registerActivity();
         return;
       }
       stopAnimation();
     };
+
+    const themeObserver = new MutationObserver(() => {
+      updateThemeCache();
+    });
 
     window.addEventListener('resize', resize);
     window.addEventListener('mousemove', handleMouseMove);
@@ -250,6 +262,11 @@ export const LivingGrid: React.FC = () => {
     window.addEventListener('focus', handleGenericActivity);
     window.addEventListener('blur', stopAnimation);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+    updateThemeCache();
     resize();
     registerActivity();
 
@@ -263,6 +280,7 @@ export const LivingGrid: React.FC = () => {
       window.removeEventListener('focus', handleGenericActivity);
       window.removeEventListener('blur', stopAnimation);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      themeObserver.disconnect();
       if (inactivityTimeoutId) window.clearTimeout(inactivityTimeoutId);
       stopAnimation();
     };
