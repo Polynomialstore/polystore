@@ -1264,7 +1264,7 @@ export function Dashboard() {
               type="button"
               onClick={() => setActiveTab((tab) => (tab === 'content' ? 'mdu' : 'content'))}
               data-testid="tab-content"
-              className="inline-flex items-center gap-2 rounded-none border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="nil-inset inline-flex items-center gap-2 rounded-none px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Database className="h-3.5 w-3.5 text-muted-foreground" />
               {activeTab === 'content' ? 'Back to Upload' : 'Mode 1 (advanced)'}
@@ -1276,10 +1276,10 @@ export function Dashboard() {
         !showAdvanced ? (
           <div
             ref={contentRef}
-            className="glass-panel industrial-border px-4 py-3 text-[11px] font-mono-data text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            className="nil-inset glass-panel industrial-border flex flex-col gap-3 px-4 py-3 text-[11px] font-mono-data text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
-              <div className="text-xs font-bold uppercase tracking-widest font-mono-data text-muted-foreground dark:text-foreground/90">/gateway/tools</div>
+              <div className="nil-section-label text-xs tracking-widest dark:text-foreground/90">/gateway/tools</div>
               <div className="mt-1 font-semibold text-foreground">Advanced tools are hidden</div>
               <div className="mt-1 text-[11px] font-mono-data text-muted-foreground">Enable Advanced to access gateway sharding (Mode 1).</div>
             </div>
@@ -1297,7 +1297,7 @@ export function Dashboard() {
               Legacy gateway sharding (Mode 1). For Mode 2, use the Upload tab.
             </p>
             <div className="grid grid-cols-1 gap-3 text-sm">
-              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground">
+              <div className="nil-inset glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground">
                 Target deal:{' '}
                 <span className="font-mono-data text-foreground">{targetDealId ? `#${targetDealId}` : '—'}</span>
                 {!targetDealId ? <span className="ml-2">Select a deal above to continue.</span> : null}
@@ -1314,7 +1314,7 @@ export function Dashboard() {
                 </div>
               )}
               {isTargetDealMode2 && (
-                <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-primary ring-1 ring-primary/25">
+                <div className="nil-inset glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-primary ring-1 ring-primary/25">
                   This is a Mode 2 deal. Use the Upload tab (Mode 2).
                 </div>
               )}
@@ -1324,7 +1324,7 @@ export function Dashboard() {
                 </div>
               )}
               <label className="space-y-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground">Select file</span>
+                <span className="nil-section-label">Select file</span>
                 <input
                   type="file"
                   onChange={handleFileChange}
@@ -1343,7 +1343,7 @@ export function Dashboard() {
                 Compress before upload (NilCE, recommended)
               </label>
               {stagedUpload && (
-                <div className="glass-panel industrial-border px-3 py-2 text-[11px] text-muted-foreground space-y-1 font-mono-data">
+                <div className="nil-inset glass-panel industrial-border space-y-1 px-3 py-2 text-[11px] font-mono-data text-muted-foreground">
                   <div>
                     Staged: <span className="text-foreground">{stagedUpload.filename}</span>
                   </div>
@@ -1406,7 +1406,7 @@ export function Dashboard() {
           ) : (
             <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
           ) : (
-            <div className="rounded-none border border-dashed border-border bg-background/60 p-10 text-center">
+            <div className="nil-inset rounded-none border-dashed p-10 text-center">
               <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 Choose a deal from the left to upload, list, and download files.
@@ -1478,7 +1478,7 @@ export function Dashboard() {
       {/* TOP HEADER PANEL */}
       <div className="glass-panel industrial-border overflow-hidden">
         <div className="border-b border-border/20 p-6">
-          <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">/DASHBOARD</div>
+          <div className="nil-section-label leading-none">/DASHBOARD</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
         </div>
         <div className="relative flex flex-wrap items-center justify-between gap-6 p-6 lg:flex-nowrap border-b border-border/10">
@@ -1486,7 +1486,7 @@ export function Dashboard() {
             {/* Identity Row */}
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-6 h-6 border border-border/30 bg-background/40 text-muted-foreground/60">
+                <div className="nil-inset flex h-6 w-6 items-center justify-center text-muted-foreground/60">
                   <Database className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex flex-col">
@@ -1505,7 +1505,7 @@ export function Dashboard() {
               <div className="h-8 w-[1px] bg-border/20" />
 
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-6 h-6 border border-border/30 bg-background/40 text-muted-foreground/60">
+                <div className="nil-inset flex h-6 w-6 items-center justify-center text-muted-foreground/60">
                   <Wallet className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex flex-col">
@@ -1517,7 +1517,7 @@ export function Dashboard() {
                     <div className={`text-[10px] font-mono-data font-bold px-1.5 py-0.5 border ${
                       accountPermissionMismatch || isWrongNetwork 
                         ? 'text-destructive bg-destructive/10 border-destructive/20' 
-                        : 'text-muted-foreground bg-background/40 border-border/20'
+                        : 'text-muted-foreground bg-background/70 border-border/20'
                     }`}>
                       {accountPermissionMismatch ? 'PERMISSION_ERR' : isWrongNetwork ? 'WRONG_NETWORK' : `CHAIN_${activeChainId}`}
                     </div>
@@ -1592,7 +1592,7 @@ export function Dashboard() {
                   type="button"
                   onClick={() => void handleRefreshSummary()}
                   title="Refresh deals"
-                  className="inline-flex items-center justify-center border border-border bg-background/60 p-2 text-muted-foreground hover:bg-secondary"
+                  className="nil-inset inline-flex items-center justify-center p-2 text-muted-foreground hover:bg-secondary"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 </button>
@@ -1723,7 +1723,7 @@ export function Dashboard() {
               <div className="glass-panel industrial-border p-0 overflow-hidden" data-testid="deal-detail">
                 <div className="flex items-center justify-between p-6 border-b border-border/60 bg-card">
                   <div className="flex items-center gap-4">
-                    <div className="glass-panel industrial-border p-2.5 bg-background/40">
+                    <div className="nil-inset glass-panel industrial-border p-2.5">
                       <HardDrive className="w-6 h-6 text-primary" />
                     </div>
                     <div>
@@ -1773,7 +1773,7 @@ export function Dashboard() {
                               </td>
                               <td className="px-4 py-3 text-right font-mono-data">{String(s['deal_id'])}</td>
                               <td className="px-4 py-3">
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 border border-border/40 bg-background/40 uppercase">
+                                <span className="border border-border/40 bg-background/70 px-1.5 py-0.5 text-[9px] font-bold uppercase">
                                   {status}
                                 </span>
                               </td>
@@ -1819,7 +1819,7 @@ function DashboardListCard({
     <div className="overflow-hidden glass-panel industrial-border">
       <div className="flex flex-col gap-3 border-b border-border/60 bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 leading-none">{badge}</div>
+          <div className="nil-section-label leading-none">{badge}</div>
           {description ? (
             <p className="mt-2 text-[10px] font-mono-data uppercase tracking-wider text-muted-foreground">{description}</p>
           ) : null}
@@ -1857,7 +1857,7 @@ function DealRow({
         <span
           className={cn(
             'border px-1.5 py-0.5 text-[9px] font-bold',
-            isActive ? 'border-accent/20 bg-accent/5 text-accent' : 'border-border/20 bg-background/40 text-muted-foreground',
+            isActive ? 'border-accent/20 bg-accent/5 text-accent' : 'border-border/20 bg-background/70 text-muted-foreground',
           )}
         >
           {isActive ? 'ACTIVE' : 'EMPTY'}
