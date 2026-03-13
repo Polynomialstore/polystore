@@ -187,8 +187,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected, address } = useAccount();
   const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
-  const gatewayGuiReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
-  
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
 
   const [shards, setShards] = useState<ShardItem[]>([]);
@@ -2499,6 +2497,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     readyToUpload,
     shardProgress.phase,
   ])
+  const sharderSummary = useMemo(() => {
+    if (isMode2 && gatewayMode2Enabled) {
+      return gatewayReachable ? 'Using local gateway' : 'Processing in browser'
+    }
+    if (wasmStatus === 'initializing') return 'Preparing browser processing'
+    if (wasmStatus === 'error') return 'Browser processing unavailable'
+    return 'Processing in browser'
+  }, [gatewayMode2Enabled, gatewayReachable, isMode2, wasmStatus])
+  const sharderSummaryToneClass =
+    wasmStatus === 'error'
+      ? 'text-destructive'
+      : gatewayReachable && isMode2 && gatewayMode2Enabled
+        ? 'text-accent'
+        : 'text-muted-foreground'
 
   useEffect(() => {
     const node = logContainerRef.current;
@@ -2553,58 +2565,36 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     <Cpu className="h-6 w-6 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <div className="nil-section-label text-foreground">/dev/shm_sharder_v1</div>
-                    <div className="mt-2 text-[10px] text-muted-foreground font-mono-data">
-                      {isMode2 && gatewayMode2Enabled ? (
-                        gatewayReachable ? (
-                          <span className="text-accent font-bold">[GW_LOCAL_OPTIMIZED] HYBRID_INGEST_READY</span>
-                        ) : (
-                          <span className="text-primary font-bold">[BROWSER_FALLBACK] WASM_KZG_SHARDING_READY</span>
-                        )
-                      ) : wasmStatus === 'initializing' ? (
-                        <span className="animate-pulse">BOOTING_WASM_KZG_CONTEXT...</span>
-                      ) : wasmStatus === 'error' ? (
-                        <span className="text-destructive font-bold">ERROR: WASM_INIT_FAILED</span>
+                    <div className="text-lg font-bold text-foreground">Upload file</div>
+                    <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      Choose a file to add to this deal. Progress appears below.
+                    </div>
+                    <div className={`mt-3 text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
+                      {wasmStatus === 'initializing' ? (
+                        <span className="animate-pulse">{sharderSummary}</span>
                       ) : (
-                        <span>WASM_READY :: MODE1_BROWSER_SHARDING</span>
+                        sharderSummary
                       )}
                     </div>
+                    <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                      <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
+                        {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={compressUploads}
+                        disabled={processing || activeUploading}
+                        onChange={(e) => setCompressUploads(e.target.checked)}
+                      />
+                      <span>Compress before upload</span>
+                    </label>
                   </div>
                 </div>
                 <label className="cta-shadow inline-flex w-full cursor-pointer items-center justify-center border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] sm:w-auto">
-                  Upload
+                  Upload file
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
-              </div>
-              <div className="relative z-10 mt-6 grid gap-3 sm:grid-cols-3">
-                <label className="nil-tab-inset flex items-center gap-2 cursor-pointer group/chk text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest">
-                  <div className={`w-4 h-4 border flex items-center justify-center transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
-                    {compressUploads && <div className="w-1.5 h-1.5 bg-primary-foreground" />}
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={compressUploads}
-                    disabled={processing || activeUploading}
-                    onChange={(e) => setCompressUploads(e.target.checked)}
-                  />
-                  <span>NilCE_ZSTD_COMPRESSION</span>
-                </label>
-                {!appConfig.gatewayDisabled && !gatewayReachable ? (
-                  <a
-                    href={gatewayGuiReleaseUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-primary hover:underline"
-                  >
-                    GET_DESKTOP_GATEWAY
-                  </a>
-                ) : (
-                  <div className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-muted-foreground opacity-70">SYSTEM_READY</div>
-                )}
-                <div className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-muted-foreground">
-                  {isMode2 && gatewayMode2Enabled ? 'HYBRID_INGEST' : 'BROWSER_SHARDING'}
-                </div>
               </div>
             </div>
           )}
