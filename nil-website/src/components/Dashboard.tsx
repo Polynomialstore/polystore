@@ -1,9 +1,6 @@
-import { useAccount, useBalance, useChainId } from 'wagmi'
-import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, HardDrive, Database, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
-import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
 import { useUpload } from '../hooks/useUpload'
@@ -19,8 +16,7 @@ import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
-import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
-import { useLocalGateway } from '../hooks/useLocalGateway'
+import { useSessionStatus } from '../hooks/useSessionStatus'
 import { cn } from '../lib/utils'
 
 interface Provider {
@@ -82,42 +78,38 @@ const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
 )
 
 export function Dashboard() {
-  const { address, isConnected } = useAccount()
-  const chainId = useChainId()
   const { openConnectModal } = useConnectModal()
-  const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
   const { switchNetwork } = useNetwork()
+  const session = useSessionStatus()
   const {
+    address,
+    isConnected,
+    nilAddress,
+    hasFunds,
+    isWrongNetwork,
     walletChainId,
-    isWrongNetwork: walletIsWrongNetwork,
     genesisMismatch,
     accountPermissionMismatch,
-    refresh: refreshWalletNetwork,
-  } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
+    refreshWalletNetwork,
+    faucetTx,
+    faucetTxStatus,
+  } = session
   const [deals, setDeals] = useState<Deal[]>([])
   const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
-  const [nilAddress, setNilAddress] = useState('')
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showSystemStatus, setShowSystemStatus] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
   const [compressUploads, setCompressUploads] = useState(true)
-  const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
-  const localGateway = useLocalGateway(60_000)
-  const { refetch: refetchEvm } = useBalance({
-    address,
-    chainId: appConfig.chainId,
-  })
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
-  const activeChainId = walletChainId ?? chainId
-  const isWrongNetwork = isConnected && walletIsWrongNetwork
+  const activeChainId = walletChainId
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
   const [rpcHeight, setRpcHeight] = useState<number | null>(null)
@@ -191,8 +183,6 @@ export function Dashboard() {
   }, [])
 
   const rpcMismatch = rpcChainId !== null && rpcChainId !== appConfig.chainId
-  const faucetBusy = faucetLoading || faucetTxStatus === 'pending'
-
   const handleSwitchNetwork = useCallback(async (options?: { forceAdd?: boolean }) => {
     try {
       await switchNetwork({ forceAdd: options?.forceAdd })
@@ -212,7 +202,7 @@ export function Dashboard() {
 
   const handleRefreshSummary = async () => {
     if (!nilAddress) return
-    await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders(), refetchEvm?.()])
+    await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders()])
   }
 
 
@@ -233,7 +223,6 @@ export function Dashboard() {
 
   const [, setStatusMsg] = useState<string | null>(null)
   const [, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
-  const [walletReconnectHint, setWalletReconnectHint] = useState(false)
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
   const toastTimerRef = useRef<number | null>(null)
@@ -253,9 +242,6 @@ export function Dashboard() {
     const walletError = classifyWalletError(error, fallback)
     setStatusTone('error')
     setStatusMsg(walletError.message)
-    if (walletError.reconnectSuggested) {
-      setWalletReconnectHint(true)
-    }
   }, [])
 
   const requestWalletReconnect = useCallback(async () => {
@@ -275,21 +261,10 @@ export function Dashboard() {
       }
       setStatusTone('neutral')
       setStatusMsg('Wallet access request sent. Approve in your wallet, then retry.')
-      setWalletReconnectHint(false)
     } catch (error) {
       handleWalletError(error, 'Wallet reconnection failed')
     }
   }, [handleWalletError, openConnectModal])
-
-  useEffect(() => {
-    if (accountPermissionMismatch) {
-      setWalletReconnectHint(true)
-      return
-    }
-    if (isConnected && address) {
-      setWalletReconnectHint(false)
-    }
-  }, [accountPermissionMismatch, address, isConnected])
 
   useEffect(() => {
     if (!accountPermissionMismatch) return
@@ -566,20 +541,18 @@ export function Dashboard() {
   }, [targetDealId])
 
   useEffect(() => {
-    if (address) {
+    if (address && nilAddress) {
       optimisticCidOverridesRef.current = {}
-      const cosmosAddress = ethToNil(address)
-      setNilAddress(cosmosAddress)
-      fetchDeals(cosmosAddress)
-      fetchBalances(cosmosAddress)
+      fetchDeals(nilAddress)
+      fetchBalances(nilAddress)
       fetchProviders()
     } else {
-        optimisticCidOverridesRef.current = {}
-        setDeals([])
-        setAllDeals([])
-        setProviders([])
+      optimisticCidOverridesRef.current = {}
+      setDeals([])
+      setAllDeals([])
+      setProviders([])
     }
-  }, [address])
+  }, [address, nilAddress])
 
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
@@ -633,7 +606,6 @@ export function Dashboard() {
         atom: getAmt('aatom'),
         stake: getAmt('stake'),
       }
-      setBankBalances(next)
       return next
     } catch (e) {
       console.error('fetchBalances failed', e)
@@ -883,38 +855,8 @@ export function Dashboard() {
     }
   }
 
-  const handleRequestFunds = async () => {
-      if (!appConfig.faucetEnabled) {
-        setStatusTone('error')
-        setStatusMsg('Faucet is disabled in this build. Fund your wallet externally to continue.')
-        return
-      }
-      try {
-          const resp = await requestFunds(address)
-          if (nilAddress) {
-            setStatusMsg('Faucet requested. Waiting for balance...')
-            await waitForStakeBalance(nilAddress)
-          }
-          refetchEvm?.()
-          setStatusTone('neutral')
-          if (resp?.tx_hash) {
-            setStatusMsg(`Faucet tx ${resp.tx_hash} pending...`)
-          } else {
-            setStatusMsg('Faucet requested. Awaiting inclusion...')
-          }
-      } catch (e) {
-          setStatusTone('error')
-          const details = e instanceof Error ? e.message : String(e)
-          if (/rate limit/i.test(details)) {
-            setStatusMsg('Faucet is rate-limited. A previous request may already be processing; check balance before retrying.')
-          } else {
-            setStatusMsg(`Faucet request failed: ${details || 'Unknown error'}`)
-          }
-      }
-  }
-
   const handleCreateDeal = async (evmCreator: string) => {
-    if (!bankBalances.stake && !bankBalances.atom) {
+    if (!hasFunds) {
       setStatusTone('error')
       setStatusMsg(
         appConfig.faucetEnabled
@@ -1001,7 +943,7 @@ export function Dashboard() {
   }
 
   const handleCreateDealClick = async () => {
-    if (!bankBalances.stake && !bankBalances.atom) {
+    if (!hasFunds) {
       setStatusTone('error')
       setStatusMsg(
         appConfig.faucetEnabled
@@ -1139,23 +1081,6 @@ export function Dashboard() {
     }
   }
 
-  async function waitForStakeBalance(owner: string) {
-    const maxAttempts = 60
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const balances = await fetchBalances(owner)
-      const stake = balances?.stake
-      if (stake) {
-        try {
-          if (BigInt(stake) > 0n) return true
-        } catch {
-          return true
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    }
-    return false
-  }
-
   const handleMduCommitSuccess = (
     dealId: string,
     manifestRoot: string,
@@ -1229,90 +1154,31 @@ export function Dashboard() {
       setStatusTone('success')
       setStatusMsg(`Faucet tx ${faucetTx} confirmed.`)
       if (nilAddress) fetchBalances(nilAddress)
-      refetchEvm?.()
     } else if (faucetTxStatus === 'failed' && faucetTx) {
       setStatusTone('error')
       setStatusMsg(`Faucet tx ${faucetTx} failed.`)
     }
-  }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm])
+  }, [faucetTxStatus, faucetTx, nilAddress])
 
   if (!isConnected)
     return (
       <div className="px-4 pb-12 pt-24">
         <div className="container mx-auto max-w-6xl">
           <div className="glass-panel industrial-border p-12 text-center">
-            <h2 className="mb-2 text-xl font-semibold text-foreground">Connect Your Wallet</h2>
-            <p className="mb-4 text-muted-foreground">Access your storage deals and manage your files.</p>
-            <button
-              onClick={() => openConnectModal?.()}
-              data-testid="connect-wallet"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-none shadow transition-colors"
-            >
-              <Wallet className="w-4 h-4" />
-              Connect Wallet
-            </button>
+            <div className="nil-section-label">/DASHBOARD</div>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Connect in the nav to manage deals</h2>
+            <p className="mt-3 text-muted-foreground">
+              The global session controls now live in the navigation bar. Connect your wallet there, then return here to allocate deals, upload files, and inspect manifests.
+            </p>
           </div>
         </div>
       </div>
     )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
-  const walletAddressShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'
-  const stakeBalance = bankBalances.stake || '0'
-  const hasNilBalance = (() => {
-    try {
-      return BigInt(stakeBalance) > 0n
-    } catch {
-      return false
-    }
-  })()
-  const readiness = (() => {
-    if (!isConnected || !address) {
-      return {
-        label: 'Connect wallet',
-        detail: 'Connect MetaMask to create deals, upload files, and retrieve data.',
-        className: 'border-border/30 bg-background/70 text-muted-foreground',
-      }
-    }
-    if (walletReconnectHint) {
-      return {
-        label: 'Reconnect wallet',
-        detail: 'Wallet permissions need to be refreshed before the dashboard can continue.',
-        className: 'border-primary/30 bg-primary/10 text-primary',
-      }
-    }
-    if (isWrongNetwork) {
-      return {
-        label: 'Wrong network',
-        detail: 'Switch to NilStore Testnet before creating deals or uploading content.',
-        className: 'border-destructive/30 bg-destructive/10 text-destructive',
-      }
-    }
-    if (!hasNilBalance) {
-      return {
-        label: 'Needs funds',
-        detail: 'Add NIL before creating a deal or committing storage content.',
-        className: 'border-primary/30 bg-primary/10 text-primary',
-      }
-    }
-    if (!appConfig.gatewayDisabled && localGateway.status === 'connected') {
-      return {
-        label: 'Ready for gateway mode',
-        detail: 'Wallet, network, and balance are ready. Local gateway is connected for desktop-assisted flows.',
-        className: 'border-accent/30 bg-accent/10 text-accent',
-      }
-    }
-    return {
-      label: 'Ready for browser mode',
-      detail: appConfig.gatewayDisabled
-        ? 'Wallet, network, and balance are ready for browser-first storage.'
-        : 'Wallet, network, and balance are ready. A local gateway is optional for this flow.',
-      className: 'border-accent/30 bg-accent/10 text-accent',
-    }
-  })()
-  const headerSummary = !isConnected || !address
-    ? 'Connect a wallet to get started on NilStore Testnet.'
-    : `${walletAddressShort} • NilStore Testnet • ${stakeBalance} NIL`
+  const dashboardSummary = targetDealId
+    ? `Managing deal #${targetDealId}. Upload files, inspect manifests and MDUs, and verify retrieval health from one workspace.`
+    : 'Allocate a deal, upload content, inspect manifests and MDUs, and verify retrieval health from one workspace.'
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-card">
@@ -1479,120 +1345,15 @@ export function Dashboard() {
   return (
     <div className="px-4 pb-12 pt-24">
       <div className="container mx-auto max-w-6xl space-y-6">
-      {rpcMismatch && (
-        <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-destructive/40">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-destructive/10 border border-destructive/30">
-              <RefreshCw className="w-5 h-5 text-destructive" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-destructive">
-                rpc_mismatch
-              </div>
-              <h3 className="mt-1 text-sm font-bold text-foreground">Critical Node Mismatch</h3>
-              <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
-                Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
-                <br/>Please restart your local stack or check your <code>run_local_stack.sh</code> configuration.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isWrongNetwork && (
-        <div className="relative overflow-hidden glass-panel industrial-border p-4 flex items-center justify-between ring-1 ring-primary/30">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 border border-primary/30">
-              <RefreshCw className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">
-                wallet_network
-              </div>
-              <h3 className="mt-1 text-sm font-bold text-foreground">Wrong Network</h3>
-              <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
-                {genesisMismatch ? (
-                  <>
-                    Connected to Chain ID <strong>{activeChainId}</strong>, but this is a different network than the NilStore RPC.
-                    We will reconfigure MetaMask to use the NilStore Devnet endpoint.
-                  </>
-                ) : (
-                  <>
-                    Connected to Chain ID <strong>{activeChainId}</strong>. App requires <strong>{appConfig.chainId}</strong> (NilStore Devnet).
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-            className="px-4 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
-          >
-            {genesisMismatch ? 'Repair MetaMask Network' : 'Switch Network'}
-          </button>
-        </div>
-      )}
-
       {/* TOP HEADER PANEL */}
       <div className="glass-panel industrial-border">
         <div className="border-b border-border/20 p-6">
           <div className="nil-section-label leading-none">/DASHBOARD</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
         </div>
-        <div className="grid gap-4 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
-            <div className="max-w-3xl text-xl font-semibold leading-tight text-foreground">
-              {headerSummary}
-            </div>
-          </div>
-
-          <div className="flex min-w-[260px] flex-col items-stretch gap-3 lg:items-end">
-            <div className={cn('inline-flex items-center gap-2 self-start border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data lg:self-end', readiness.className)}>
-              {readiness.label.startsWith('Ready') ? <CheckCircle2 className="h-3.5 w-3.5" /> : readiness.label === 'Wrong network' ? <AlertTriangle className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
-              {readiness.label}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-              {appConfig.faucetEnabled && (
-                <button
-                  data-testid="faucet-request"
-                  onClick={handleRequestFunds}
-                  disabled={!address || faucetBusy}
-                  className="inline-flex items-center gap-2 border border-primary bg-primary/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-all hover:bg-primary/10 disabled:opacity-50"
-                >
-                  <Coins className="h-3.5 w-3.5" />
-                  {faucetLoading ? 'Requesting…' : faucetTxStatus === 'pending' ? 'Pending…' : 'Get NIL'}
-                </button>
-              )}
-
-              {walletReconnectHint ? (
-                <button
-                  type="button"
-                  onClick={() => void requestWalletReconnect()}
-                  className="inline-flex items-center gap-2 border border-primary bg-primary/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary hover:bg-primary/15"
-                >
-                  <Wallet className="h-3.5 w-3.5" />
-                  Reconnect
-                </button>
-              ) : isWrongNetwork ? (
-                <button
-                  type="button"
-                  onClick={() => void handleSwitchNetwork({ forceAdd: genesisMismatch })}
-                  className="inline-flex items-center gap-2 border border-destructive bg-destructive/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-destructive hover:bg-destructive/10"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Fix Network
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleRefreshSummary()}
-                  className="nil-inset inline-flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:bg-secondary"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              )}
-            </div>
+        <div className="p-6">
+          <div className="max-w-4xl text-sm leading-relaxed text-muted-foreground">
+            {dashboardSummary}
           </div>
         </div>
         <div className="border-t border-border/10">
@@ -1609,6 +1370,18 @@ export function Dashboard() {
           </button>
           {showSystemStatus ? (
             <div className="border-t border-border/10 px-6 pb-6">
+              {rpcMismatch ? (
+                <div className="mt-6 nil-inset border-destructive/30 bg-destructive/10 p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-destructive">
+                    rpc_mismatch
+                  </div>
+                  <div className="mt-2 text-sm font-semibold text-foreground">Critical Node Mismatch</div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Your local RPC node is running on Chain ID <strong>{rpcChainId}</strong>, but the app expects <strong>{appConfig.chainId}</strong>.
+                    Restart the local stack or repair the RPC endpoint before using this workspace.
+                  </p>
+                </div>
+              ) : null}
               <StatusBar noBorder />
             </div>
           ) : null}

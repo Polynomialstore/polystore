@@ -1,20 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useAccount, useBalance, useChainId } from 'wagmi'
-import { formatUnits, numberToHex } from 'viem'
-import { AlertCircle, CheckCircle2, Coins, HardDrive, Rocket } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { numberToHex } from 'viem'
+import { AlertCircle, CheckCircle2, HardDrive, Rocket } from 'lucide-react'
 
 import { appConfig } from '../config'
-import { ConnectWallet } from '../components/ConnectWallet'
 import { DashboardCta } from '../components/DashboardCta'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { lcdFetchDeals } from '../api/lcdClient'
 import { useNetwork } from '../hooks/useNetwork'
-import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
-import { ethToNil } from '../lib/address'
 import { buildServiceHint } from '../lib/serviceHint'
 import { classifyWalletError } from '../lib/walletErrors'
-import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
+import { useSessionStatus } from '../hooks/useSessionStatus'
 
 const DURATION_PRESETS = [
   { value: '1d', label: '1 day', seconds: 24 * 60 * 60 },
@@ -32,18 +28,24 @@ const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
 )
 
 export function FirstFile() {
-  const { address, isConnected } = useAccount()
-  const chainId = useChainId()
   const { switchNetwork } = useNetwork()
-  const { requestFunds, loading: faucetLoading, lastTx: faucetTx, txStatus: faucetTxStatus } = useFaucet()
   const { submitDeal, loading: dealLoading } = useCreateDeal()
+  const session = useSessionStatus()
   const {
+    address,
+    isConnected,
+    nilAddress,
+    hasFunds,
+    balanceLabel,
+    isWrongNetwork,
     walletChainId,
-    isWrongNetwork: walletIsWrongNetwork,
     genesisMismatch,
     accountPermissionMismatch,
-    refresh: refreshWalletNetwork,
-  } = useWalletNetworkGuard({ enabled: isConnected, pollMs: 15_000 })
+    refreshWalletNetwork,
+    faucetEnabled,
+    faucetTx,
+    faucetTxStatus,
+  } = session
 
   const [duration, setDuration] = useState('31536000')
   const [durationPreset, setDurationPreset] = useState('1y')
@@ -56,65 +58,12 @@ export function FirstFile() {
   const [notice, setNotice] = useState<string | null>(null)
   const autoSwitchKeyRef = useRef<string | null>(null)
 
-  const activeChainId = walletChainId ?? chainId
-  const isWrongNetwork = isConnected && walletIsWrongNetwork
-  const nilAddress = useMemo(() => {
-    if (!address) return ''
-    return address.startsWith('0x') ? ethToNil(address) : address
-  }, [address])
+  const activeChainId = walletChainId
 
   useEffect(() => {
     setDealId(null)
     setHasExistingDeal(false)
   }, [address])
-
-  const { data: balance, refetch: refetchBalance } = useBalance({
-    address,
-    chainId: appConfig.chainId,
-    query: { enabled: Boolean(address) },
-  })
-
-  const hasBalance = useMemo(() => {
-    try {
-      return Boolean(balance?.value && BigInt(balance.value) > 0n)
-    } catch {
-      return Boolean(balance?.value)
-    }
-  }, [balance?.value])
-
-  const balanceLabel = useMemo(() => {
-    if (!balance) return '—'
-    const formatted = formatUnits(balance.value, balance.decimals)
-    const [whole, frac] = formatted.split('.')
-    const trimmed = frac ? `${whole}.${frac.slice(0, 4)}` : whole
-    return `${trimmed} ${balance.symbol || 'NIL'}`
-  }, [balance])
-
-  useEffect(() => {
-    // After faucet confirms, wagmi balance can lag; poll briefly so the UI unlocks without a refresh.
-    if (hasBalance) return
-    if (faucetTxStatus !== 'pending' && faucetTxStatus !== 'confirmed') return
-
-    let canceled = false
-    let ticks = 0
-    const tick = async () => {
-      if (canceled) return
-      ticks += 1
-      try {
-        await refetchBalance()
-      } catch {
-        // best-effort
-      }
-      if (canceled) return
-      if (ticks >= 12) return // ~18s
-      setTimeout(() => void tick(), 1500)
-    }
-    void tick()
-
-    return () => {
-      canceled = true
-    }
-  }, [faucetTxStatus, hasBalance, refetchBalance])
 
   useEffect(() => {
     if (!nilAddress) return
@@ -143,8 +92,7 @@ export function FirstFile() {
   }, [dealId, nilAddress])
 
   const step2Ready = isConnected && !isWrongNetwork
-  const funded = hasBalance || faucetTxStatus === 'confirmed'
-  const step2Complete = funded
+  const funded = hasFunds || faucetTxStatus === 'confirmed'
   const step3Ready = step2Ready && (funded || hasExistingDeal)
   const step3Complete = Boolean(dealId)
   const step4Ready = step3Ready && Boolean(dealId)
@@ -188,16 +136,6 @@ export function FirstFile() {
     refreshWalletNetwork,
     switchNetwork,
   ])
-
-  const handleRequestFunds = async () => {
-    setError(null)
-    setNotice(null)
-    try {
-      await requestFunds(address)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Faucet request failed')
-    }
-  }
 
   const handleCreateDeal = async () => {
     setError(null)
@@ -287,16 +225,15 @@ export function FirstFile() {
           {isConnected && !isWrongNetwork && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
         <div className={stepBodyClass}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <ConnectWallet />
-            {isWrongNetwork && (
-              <button
-                type="button"
-                onClick={() => void switchNetwork({ forceAdd: genesisMismatch })}
-                className="inline-flex items-center justify-center rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors"
-              >
-                {genesisMismatch ? 'Repair MetaMask network' : `Switch to ${numberToHex(appConfig.chainId)}`}
-              </button>
+          <div className="nil-inset p-4 text-sm text-muted-foreground">
+            {!isConnected ? (
+              <span>Use the nav wallet control to connect MetaMask and approve access for the active account.</span>
+            ) : isWrongNetwork ? (
+              <span>
+                Use the nav session controls to {genesisMismatch ? 'repair the NilStore network entry' : `switch to ${numberToHex(appConfig.chainId)}`}.
+              </span>
+            ) : (
+              <span>Wallet is connected on NilStore Testnet. Continue once the nav shows the session as ready.</span>
             )}
           </div>
         </div>
@@ -313,38 +250,27 @@ export function FirstFile() {
               <div className="text-xs text-muted-foreground">Gas is required for on-chain transactions.</div>
             </div>
           </div>
-          {hasBalance && <CheckCircle2 className="w-5 h-5 text-accent" />}
+          {funded && <CheckCircle2 className="w-5 h-5 text-accent" />}
         </div>
         <div className={stepBodyClass}>
-          {!appConfig.faucetEnabled ? (
+          {!faucetEnabled ? (
             <div className="text-sm text-muted-foreground">
               Faucet is disabled in this build. Fund your wallet externally, then continue.
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleRequestFunds()}
-                  disabled={!isConnected || faucetLoading || step2Complete}
-                  className={
-                    step2Complete
-                      ? "inline-flex items-center gap-2 rounded-none border border-border bg-muted/60 px-4 py-2 text-sm font-semibold text-muted-foreground cursor-not-allowed"
-                      : "inline-flex items-center gap-2 rounded-none bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-60"
-                  }
-                >
-                  <Coins className="w-4 h-4" />
-                  {faucetLoading ? 'Requesting…' : 'Request faucet funds'}
-                </button>
-                <div className="text-xs text-muted-foreground">
-                  {faucetTx ? (
-                    <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
-                  ) : (
-                    <span>Balance: {balanceLabel}</span>
-                  )}
-                </div>
+              <div className="nil-inset p-4 text-sm text-muted-foreground">
+                {funded ? (
+                  <span>Wallet funded. Current balance: {balanceLabel}.</span>
+                ) : !isConnected ? (
+                  <span>Connect your wallet in the nav first, then use the nav faucet control to request funds.</span>
+                ) : faucetTx ? (
+                  <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
+                ) : (
+                  <span>Use the nav faucet control to request testnet NIL for this wallet.</span>
+                )}
               </div>
-              <FaucetAuthTokenInput />
+              {!funded ? <FaucetAuthTokenInput /> : null}
             </div>
           )}
         </div>

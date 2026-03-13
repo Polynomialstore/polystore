@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { LivingGrid } from "./LivingGrid";
 import { DashboardCta } from "./DashboardCta";
+import { NavSessionStatus } from "./NavSessionStatus";
+import { SessionStatusProvider } from "../hooks/useSessionStatus";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -93,6 +95,7 @@ export const Layout = () => {
   };
 
   return (
+    <SessionStatusProvider>
     <div className="min-h-screen flex flex-col font-sans antialiased text-foreground transition-colors duration-300 selection:bg-primary/30 relative">
       
       {/* --- THE LIVING DIGITAL GRID --- */}
@@ -169,6 +172,8 @@ export const Layout = () => {
                 <Github className="w-5 h-5" />
               </a>
 
+              <NavSessionStatus className="hidden xl:flex" />
+
               <ModeToggle />
 
               <DashboardCta className="hidden sm:flex" label="Dashboard" to="/dashboard" />
@@ -195,6 +200,9 @@ export const Layout = () => {
               className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background border-t border-border pb-24"
             >
               <div className="flex flex-col p-6 space-y-6">
+                <div className="flex flex-col gap-3">
+                  <NavSessionStatus />
+                </div>
                 
                 {/* Mobile CTA */}
                 <Link 
@@ -294,5 +302,6 @@ export const Layout = () => {
         </div>
       </footer>
     </div>
+    </SessionStatusProvider>
   );
 };
