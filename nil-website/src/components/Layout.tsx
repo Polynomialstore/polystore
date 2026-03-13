@@ -101,7 +101,7 @@ export const Layout = () => {
       {/* --- THE LIVING DIGITAL GRID --- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         {/* Base Breathing Grid */}
-        <div className="absolute inset-0 opacity-20 dark:opacity-40 animate-grid-breath cyber-grid-layer" />
+        <div className="absolute inset-0 opacity-20 dark:opacity-40 cyber-grid-layer" />
         
         {/* Reactive Canvas-based Data Packets */}
         <LivingGrid />

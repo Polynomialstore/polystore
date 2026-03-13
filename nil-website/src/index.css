@@ -1,10 +1,3 @@
-@property --boil-x1 { syntax: '<percentage>'; inherits: false; initial-value: 10%; }
-@property --boil-y1 { syntax: '<percentage>'; inherits: false; initial-value: 20%; }
-@property --boil-x2 { syntax: '<percentage>'; inherits: false; initial-value: 90%; }
-@property --boil-y2 { syntax: '<percentage>'; inherits: false; initial-value: 80%; }
-@property --boil-x3 { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
-@property --boil-y3 { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -80,6 +73,7 @@
   }
 
   .cyber-grid-layer {
+    position: relative;
     background-image: 
       /* Structural Box Fills: Homogenous 30px cells */
       linear-gradient(to right, hsl(var(--primary) / 0.16) 29px, transparent 29px),
@@ -91,44 +85,73 @@
     background-repeat: repeat;
     /* Decoupled "Boiling" Mask */
     -webkit-mask-image: 
-      radial-gradient(circle at var(--boil-x1) var(--boil-y1), black, transparent 55%),
-      radial-gradient(circle at var(--boil-x2) var(--boil-y2), black, transparent 55%),
-      radial-gradient(circle at var(--boil-x3) var(--boil-y3), black, transparent 65%);
+      radial-gradient(circle at 10% 20%, black, transparent 55%),
+      radial-gradient(circle at 90% 80%, black, transparent 55%),
+      radial-gradient(circle at 50% 50%, black, transparent 65%);
     -webkit-mask-composite: source-over;
     mask-composite: add;
-    animation: 
-      boil-spot1 13s ease-in-out infinite alternate,
-      boil-spot2 17s ease-in-out infinite alternate,
-      boil-spot3 19s ease-in-out infinite alternate,
-      grid-breath 6s ease-in-out infinite;
   }
   .dark .cyber-grid-layer{
     mask-composite: exclude;
     }
-  
+
+  .cyber-grid-layer::before,
+  .cyber-grid-layer::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    will-change: transform, opacity;
+  }
+
+  .cyber-grid-layer::before {
+    top: 12%;
+    left: 18%;
+    width: 20rem;
+    height: 20rem;
+    background:
+      radial-gradient(circle, hsl(var(--primary) / 0.22) 0%, hsl(var(--primary) / 0.08) 32%, transparent 72%);
+    opacity: 0.18;
+    transform: translate3d(0, 0, 0);
+    animation: ambient-drift-a 16s ease-in-out infinite alternate;
+  }
+
+  .cyber-grid-layer::after {
+    right: 12%;
+    bottom: 16%;
+    width: 16rem;
+    height: 16rem;
+    background:
+      radial-gradient(circle, hsl(var(--accent) / 0.18) 0%, hsl(var(--accent) / 0.06) 30%, transparent 70%);
+    opacity: 0.12;
+    transform: translate3d(0, 0, 0);
+    animation: ambient-drift-b 19s ease-in-out infinite alternate;
+  }
 
 
   .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
 }
 
-@keyframes boil-spot1 {
-  0% { --boil-x1: 10%; --boil-y1: 20%; }
-  100% { --boil-x1: 80%; --boil-y1: 40%; }
+@keyframes ambient-drift-a {
+  0% {
+    opacity: 0.12;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0.22;
+    transform: translate3d(24px, 14px, 0);
+  }
 }
 
-@keyframes boil-spot2 {
-  0% { --boil-x2: 90%; --boil-y2: 80%; }
-  100% { --boil-x2: 20%; --boil-y2: 30%; }
-}
-
-@keyframes boil-spot3 {
-  0% { --boil-x3: 40%; --boil-y3: 40%; }
-  100% { --boil-x3: 60%; --boil-y3: 60%; }
-}
-
-@keyframes grid-breath {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.3; }
+@keyframes ambient-drift-b {
+  0% {
+    opacity: 0.08;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0.16;
+    transform: translate3d(-18px, -12px, 0);
+  }
 }
 
 @layer utilities {

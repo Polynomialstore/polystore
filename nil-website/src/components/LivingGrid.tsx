@@ -271,7 +271,7 @@ export const LivingGrid: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class', 'style']
+      attributeFilter: ['class']
     });
     updateThemeCache();
     resize();
