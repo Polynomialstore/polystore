@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp, CircleUserRound, Coins } from 'lucide-react'
+import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp, Coins } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -88,7 +88,6 @@ export function Dashboard() {
     address,
     isConnected,
     nilAddress,
-    walletAddressShort,
     hasFunds,
     isWrongNetwork,
     walletChainId,
@@ -1159,15 +1158,6 @@ export function Dashboard() {
     }
   }, [faucetTxStatus, faucetTx, nilAddress])
 
-  const accountSummaryPill = (
-    <div className="inline-flex items-center gap-2 border border-border/40 bg-background/80 px-3 py-2 text-foreground">
-      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-accent/15 text-accent">
-        <CircleUserRound className="h-3.5 w-3.5" />
-      </span>
-      <span className="font-mono-data text-xs font-bold text-foreground">{walletAddressShort}</span>
-    </div>
-  )
-
   if (!isConnected)
     return (
       <div className="px-4 pb-12 pt-24">
@@ -1197,7 +1187,6 @@ export function Dashboard() {
           <div className="glass-panel industrial-border p-12 text-center">
             <div className="nil-section-label">/DASHBOARD</div>
             <h2 className="mt-2 text-xl font-semibold text-foreground">Fund your wallet to continue</h2>
-            <div className="mt-6 flex justify-center">{accountSummaryPill}</div>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
               Your wallet is connected, but it needs testnet NIL before you can allocate deals or upload data.
             </p>
@@ -1389,17 +1378,14 @@ export function Dashboard() {
             <div className="nil-section-label leading-none">/DASHBOARD</div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
           </div>
-          <div className="flex items-center gap-4">
-            {accountSummaryPill}
-            <button
-              type="button"
-              onClick={() => setShowSystemStatus((prev) => !prev)}
-              className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
-              {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowSystemStatus((prev) => !prev)}
+            className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {showSystemStatus ? 'Hide diagnostics' : 'Show diagnostics'}
+            {showSystemStatus ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
         </div>
         {showSystemStatus ? (
           <div className="border-t border-border/10 px-6 pb-6 pt-6">
