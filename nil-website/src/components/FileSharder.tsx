@@ -2549,20 +2549,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               className={`
-                glass-panel industrial-border border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group
+                nil-tab-panel p-6 transition-colors duration-200
                 ${isDragging
-                  ? 'border-primary bg-primary/10 scale-[1.005]'
-                  : 'border-border/60 hover:border-primary/40 bg-card'
+                  ? 'border-primary/50 bg-primary/10'
+                  : 'hover:border-primary/30 hover:bg-secondary/40'
                 }
               `}
             >
-               {/* Grid highlight only */}
-               <div className="absolute inset-0 opacity-10 pointer-events-none cyber-grid" />
-
-              <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="nil-tab-inset shrink-0 flex h-12 w-12 items-center justify-center border-primary/40 bg-primary/10">
-                    <Cpu className="h-6 w-6 text-primary" />
+                  <div className="nil-inset shrink-0 flex h-12 w-12 items-center justify-center">
+                    <Cpu className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0">
                     <div className="text-lg font-bold text-foreground">Upload file</div>
@@ -2576,7 +2573,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         sharderSummary
                       )}
                     </div>
-                    <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                    <label className="mt-4 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
                       <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
                         {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
                       </div>
