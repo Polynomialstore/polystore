@@ -161,7 +161,8 @@ export const Layout = () => {
 
           {/* 3. RIGHT: Actions (Console CTA) */}
           <div className="flex items-center gap-3 sm:gap-4">
-              
+              <NavSessionStatus className="hidden xl:flex" />
+
               {/* Desktop GitHub */}
               <a 
                 href="https://github.com/Nil-Store/nil-store" 
@@ -171,8 +172,6 @@ export const Layout = () => {
               >
                 <Github className="w-5 h-5" />
               </a>
-
-              <NavSessionStatus className="hidden xl:flex" />
 
               <ModeToggle />
 
