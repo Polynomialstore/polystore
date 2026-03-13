@@ -2511,9 +2511,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       {!isConnected ? (
         <button
           onClick={() => openConnectModal?.()}
-          className="w-full rounded-none border border-dashed border-border bg-background/60 px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
+          className="glass-panel industrial-border w-full border-2 border-dashed border-border bg-card px-6 py-10 text-center transition-all hover:border-primary/50 hover:bg-secondary/40"
         >
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-border/60 bg-secondary/60">
+            <div className="nil-tab-inset mx-auto mb-4 flex h-12 w-12 items-center justify-center">
               <Wallet className="h-6 w-6 text-foreground" />
             </div>
           <div className="text-sm font-semibold text-foreground">Connect wallet to upload</div>
@@ -2523,7 +2523,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         <>
           {/* Dropzone */}
           {!stripeParamsLoaded ? (
-            <div className="rounded-none border border-border bg-card p-8 text-center">
+            <div className="glass-panel industrial-border p-8 text-center">
               <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-none border-2 border-border border-t-primary" />
               <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
               <div className="mt-1 text-xs text-muted-foreground">
@@ -2537,10 +2537,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               className={`
-                border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group industrial-border
+                glass-panel industrial-border border-2 border-dashed rounded-none p-8 transition-all duration-300 relative overflow-hidden group
                 ${isDragging
                   ? 'border-primary bg-primary/10 scale-[1.005]'
-                  : 'border-border/60 hover:border-primary/40 bg-card/40'
+                  : 'border-border/60 hover:border-primary/40 bg-card'
                 }
               `}
             >
@@ -2549,12 +2549,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
               <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="shrink-0 flex h-12 w-12 items-center justify-center rounded-none bg-primary/10 border border-primary/40">
+                  <div className="nil-tab-inset shrink-0 flex h-12 w-12 items-center justify-center border-primary/40 bg-primary/10">
                     <Cpu className="h-6 w-6 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-bold text-foreground uppercase tracking-[0.2em]">/dev/shm_sharder_v1</div>
-                    <div className="mt-1 text-[10px] text-muted-foreground font-mono-data">
+                    <div className="nil-section-label text-foreground">/dev/shm_sharder_v1</div>
+                    <div className="mt-2 text-[10px] text-muted-foreground font-mono-data">
                       {isMode2 && gatewayMode2Enabled ? (
                         gatewayReachable ? (
                           <span className="text-accent font-bold">[GW_LOCAL_OPTIMIZED] HYBRID_INGEST_READY</span>
@@ -2571,13 +2571,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     </div>
                   </div>
                 </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:w-auto">
+                <label className="cta-shadow inline-flex w-full cursor-pointer items-center justify-center border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] sm:w-auto">
                   LOAD_OBJECT
                   <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
               </div>
-              <div className="relative z-10 mt-6 flex flex-wrap items-center gap-4 text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest">
-                <label className="flex items-center gap-2 cursor-pointer group/chk">
+              <div className="relative z-10 mt-6 grid gap-3 sm:grid-cols-3">
+                <label className="nil-tab-inset flex items-center gap-2 cursor-pointer group/chk text-[10px] font-mono-data text-muted-foreground uppercase tracking-widest">
                   <div className={`w-4 h-4 border flex items-center justify-center transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
                     {compressUploads && <div className="w-1.5 h-1.5 bg-primary-foreground" />}
                   </div>
@@ -2590,19 +2590,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   />
                   <span>NilCE_ZSTD_COMPRESSION</span>
                 </label>
-                <div className="h-3 w-[1px] bg-border/40" />
                 {!appConfig.gatewayDisabled && !gatewayReachable ? (
                   <a
                     href={gatewayGuiReleaseUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-primary hover:underline"
+                    className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-primary hover:underline"
                   >
                     GET_DESKTOP_GATEWAY
                   </a>
                 ) : (
-                  <span className="opacity-40">SYSTEM_READY</span>
+                  <div className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-muted-foreground opacity-70">SYSTEM_READY</div>
                 )}
+                <div className="nil-tab-inset text-[10px] font-mono-data uppercase tracking-widest text-muted-foreground">
+                  {isMode2 && gatewayMode2Enabled ? 'HYBRID_INGEST' : 'BROWSER_SHARDING'}
+                </div>
               </div>
             </div>
           )}
@@ -2618,12 +2620,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div className="absolute inset-0 pointer-events-none opacity-10 bg-primary/5" />
           ) : null}
 
-          <p className="relative text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground mb-2">
+          <p className="relative nil-section-label mb-2">
             /proc/sharder
           </p>
           <div className="relative space-y-2">
             {hasError ? (
-              <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
+              <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
                 {commitError ? `Commit failed: ${commitError.message}` : null}
                 {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
@@ -2670,22 +2672,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
-                  <div className="glass-panel industrial-border px-2 py-2">
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
+                  <div className="nil-tab-inset px-2 py-2">
                     <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
                     <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
                   </div>
-                  <div className="glass-panel industrial-border px-2 py-2">
+                  <div className="nil-tab-inset px-2 py-2">
                     <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
                     <div className="mt-1 text-foreground font-mono-data">
                       {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
                     </div>
                   </div>
-                  <div className="glass-panel industrial-border px-2 py-2">
+                  <div className="nil-tab-inset px-2 py-2">
                     <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
                     <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
                   </div>
-                  <div className="glass-panel industrial-border px-2 py-2">
+                  <div className="nil-tab-inset px-2 py-2">
                     <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
                     <div className="mt-1 text-foreground font-mono-data">
                       {shardProgress.currentOpStartedAtMs
@@ -2702,27 +2704,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     Under the hood
                   </summary>
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="nil-tab-inset px-2 py-2">
                       <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
                       <div className="mt-1 text-foreground font-mono-data">{formatBytes(shardProgress.fileBytesTotal)}</div>
                     </div>
-                    <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="nil-tab-inset px-2 py-2">
                       <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
                       <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
                       </div>
                     </div>
-                    <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="nil-tab-inset px-2 py-2">
                       <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
                       <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.blobsDone}/{shardProgress.blobsTotal}
                       </div>
                     </div>
-                    <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="nil-tab-inset px-2 py-2">
                       <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
                       <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
                     </div>
-                    <div className="glass-panel industrial-border px-2 py-2">
+                    <div className="nil-tab-inset px-2 py-2">
                       <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
                       <div className="mt-1 text-foreground font-mono-data">
                         {shardProgress.currentMduKind
@@ -2743,13 +2745,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {readyToUpload && !processing && !activeUploading ? (
-              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
                 Expansion complete. Ready to upload to Storage Providers.
               </div>
             ) : null}
 
             {readyToCommit && !processing && !activeUploading ? (
-              <div className="glass-panel industrial-border px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
                 Upload complete. Commit the manifest root to update your deal on-chain and make the file visible in the Deal Explorer.
               </div>
             ) : null}
@@ -2788,7 +2790,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   }}
                   disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
                   data-testid="mdu-commit"
-                  className="inline-flex items-center justify-center bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
+                  className="cta-shadow inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
                 >
                   {isCommitPending
                     ? 'Check Wallet...'
@@ -2808,7 +2810,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ) : null}
 
             {logs.length > 0 ? (
-              <div className="mt-2 p-3 glass-panel industrial-border text-[10px] font-mono-data text-muted-foreground">
+              <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
                 <p className="mb-2 text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
                 <div ref={logContainerRef} className="space-y-1 max-h-32 overflow-y-auto">
                   {logs.map((log, i) => (
@@ -2832,7 +2834,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               }}
               disabled={activeUploading || processing || isUploadComplete}
               data-testid="mdu-upload"
-              className={`mt-4 inline-flex items-center justify-center px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[4px_4px_0px_0px_rgba(0,0,0,0.10)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)] transition-all disabled:opacity-50 ${isUploadComplete ? 'bg-accent/20 text-accent cursor-not-allowed ring-1 ring-accent/30' : 'bg-primary hover:bg-primary/90 text-primary-foreground'}`}
+              className={`cta-shadow mt-4 inline-flex items-center justify-center border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-50 ${isUploadComplete ? 'cursor-not-allowed border-accent/30 bg-accent/20 text-accent ring-1 ring-accent/30' : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'}`}
             >
               {activeUploading
                 ? 'Uploading...'
@@ -2844,7 +2846,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </button>
 
             {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
-              <div className="mt-2 p-3 glass-panel industrial-border text-[10px] font-mono-data text-muted-foreground">
+              <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
                 <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
                   <div className="space-y-1 max-h-24 overflow-y-auto">
                     {uploadProgress.map((p, i) => (
@@ -2860,14 +2862,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             )}
 
             {isMode2 && mode2UploadError && (
-              <div className="text-[11px] font-mono-data text-destructive">
+              <div className="nil-tab-panel text-[11px] font-mono-data text-destructive border-destructive/30 bg-destructive/5">
                 Mode 2 upload failed: {mode2UploadError}
               </div>
             )}
 
             {mirrorStatus !== 'idle' && (
               <div
-                className={`text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+                className={`nil-tab-panel text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive border-destructive/30 bg-destructive/5' : 'text-muted-foreground'}`}
               >
                 Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
                 {mirrorError ? ` (${mirrorError})` : ''}
