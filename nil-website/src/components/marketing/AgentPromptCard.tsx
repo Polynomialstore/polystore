@@ -63,9 +63,9 @@ export function AgentPromptCard({
     <div className={`glass-panel industrial-border p-6 ${className}`.trim()}>
       <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">{badge}</div>
 
-      <div className="mt-3 min-w-0">
+      <div className="mt-6 min-w-0">
         <h3 className="text-2xl font-bold text-foreground">{title}</h3>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
           <button
