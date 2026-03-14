@@ -4,6 +4,13 @@
 
 @layer base {
   :root {
+    --brand-cyan: 190 100% 50%;
+    --brand-cyan-foreground: 190 100% 10%;
+    --brand-magenta: 300 100% 75%;
+    --brand-magenta-foreground: 300 100% 10%;
+    --brand-green: 142 70% 35%;
+    --brand-green-foreground: 144.1 61.4% 10.5%;
+
     /* --- Light Mode: Ultra-Clean Tactical Blueprint --- */
     --background: 0 0% 100%; /* Pure White Floor */
     --foreground: 222 47% 11%; 
@@ -12,21 +19,20 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 300 100% 75%; /* Slightly Neon Pale Fuschia */
-    --primary-foreground: 300 100% 10%;
+    --primary: var(--brand-cyan);
+    --primary-foreground: var(--brand-cyan-foreground);
 
     --secondary: 210 40% 94%;
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 94%;
     --muted-foreground: 215 16% 47%;
-    --accent: 142 70% 35%; 
-    --accent-foreground: 144.1 61.4% 10.5%;
+    --accent: var(--brand-green);
+    --accent-foreground: var(--brand-green-foreground);
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 214 32% 88%; /* Frame borders only */
     --input: 214 32% 85%;
-    --ring: 300 100% 75%;
-    /* Light mode grid should follow the same hue family as dark mode (primary-driven). */
+    --ring: var(--primary);
     --grid-color: hsl(var(--primary) / 0.05);
     --industrial-bracket-opacity: 0.95;
     --radius: 0rem;
@@ -42,23 +48,23 @@
     --popover-foreground: 180 20% 98%;
     
     /* Neon Palette */
-    --primary: 190 100% 50%; /* Cyber Cyan */
-    --primary-foreground: 190 100% 10%;
+    --primary: var(--brand-magenta);
+    --primary-foreground: var(--brand-magenta-foreground);
 
     --secondary: 240 10% 12%; 
     --secondary-foreground: 180 10% 90%;
     --muted: 240 10% 12%;
     --muted-foreground: 240 5% 60%;
-    --accent: 300 100% 60%; /* Neon Magenta */
-    --accent-foreground: 300 100% 10%;
+    --accent: var(--brand-cyan);
+    --accent-foreground: var(--brand-cyan-foreground);
     --destructive: 0 100% 60%; /* Flare Red */
     --destructive-foreground: 0 0% 98%;
     
     --border: 240 6% 15%;
     --input: 240 6% 12%;
-    --ring: 190 100% 50%;
+    --ring: var(--primary);
     
-    --grid-color: hsl(190 100% 50% / 0.04); 
+    --grid-color: hsl(var(--primary) / 0.04); 
     --industrial-bracket-opacity: 1;
   }
 
