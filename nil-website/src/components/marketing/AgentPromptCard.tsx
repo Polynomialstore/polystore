@@ -15,6 +15,7 @@ export function AgentPromptCard({
   prompt,
   copyLabel = "Copy Agent Prompt",
   links = [],
+  className = "",
 }: {
   badge: string;
   title: string;
@@ -22,6 +23,7 @@ export function AgentPromptCard({
   prompt: string;
   copyLabel?: string;
   links?: PromptLink[];
+  className?: string;
 }) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -58,7 +60,7 @@ export function AgentPromptCard({
   const promptLabel = "Agent prompt";
 
   return (
-    <div className="glass-panel industrial-border p-6">
+    <div className={`glass-panel industrial-border p-6 ${className}`.trim()}>
       <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">{badge}</div>
 
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

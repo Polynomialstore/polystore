@@ -47,6 +47,7 @@ export function AlphaStorage() {
 
         <section className="mt-12">
           <AgentPromptCard
+            className="mx-auto max-w-4xl"
             badge="/alpha/storage/agent"
             title="Alternatively: Onboard with a coding agent"
             description="If you have Codex or Claude Code available locally, copy the bootstrap prompt and let the agent drive the full storage flow to a verified first upload and download."
