@@ -25,7 +25,7 @@
     --secondary: 210 40% 94%;
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 94%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 16% 42%;
     --accent: var(--brand-magenta);
     --accent-foreground: var(--brand-magenta-foreground);
     --success: var(--brand-green);
@@ -56,7 +56,7 @@
     --secondary: 240 10% 12%; 
     --secondary-foreground: 180 10% 90%;
     --muted: 240 10% 12%;
-    --muted-foreground: 240 5% 60%;
+    --muted-foreground: 240 5% 68%;
     --accent: var(--brand-cyan);
     --accent-foreground: var(--brand-cyan-foreground);
     --success: var(--brand-green);
