@@ -27,8 +27,8 @@ export const Home = () => {
           }
           title={
             <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl md:text-7xl">
-              <span className="text-foreground">NIL</span>
-              <span className="text-primary">STORE</span>
+              <span className="text-foreground">Nil</span>
+              <span className="text-primary">Store</span>
             </h1>
           }
           description="NilStore testnet has two primary user paths: people who want to store data, and operators who want to run storage providers. Start from the path that matches your job."

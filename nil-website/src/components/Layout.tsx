@@ -135,8 +135,8 @@ export const Layout = () => {
               </div>
               <div className="hidden sm:flex items-center leading-none">
                 <div className="text-[1.9rem] font-extrabold tracking-tight">
-                  <span className="text-foreground">NIL</span>
-                  <span className="text-primary">STORE</span>
+                  <span className="text-foreground">Nil</span>
+                  <span className="text-primary">Store</span>
                 </div>
               </div>
             </Link>
