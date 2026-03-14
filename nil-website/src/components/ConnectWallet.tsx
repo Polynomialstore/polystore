@@ -80,13 +80,13 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
             <button
               type="button"
               onClick={() => setAccountMenuOpen((open) => !open)}
-              className="inline-flex items-center gap-2 border border-border/40 bg-background/80 px-3 py-2 text-foreground transition-colors hover:bg-secondary/40"
+              className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-3 py-2 text-primary transition-colors hover:bg-primary/15"
               title={currentAccount.address}
             >
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-accent/15 text-accent">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <CircleUserRound className="h-3.5 w-3.5" />
               </span>
-              <span className="font-mono-data text-xs font-bold text-foreground">{accountLabel}</span>
+              <span className="font-mono-data text-xs font-bold text-primary">{accountLabel}</span>
             </button>
 
             {accountMenuOpen && (
@@ -114,7 +114,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
                   <button
                     type="button"
                     onClick={() => void handleCopyAddress()}
-                    className="inline-flex items-center justify-center gap-2 border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/40"
+                    className="inline-flex items-center justify-center gap-2 border border-primary/20 bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                   >
                     <Copy className="h-4 w-4" />
                     {copied ? 'Copied' : 'Copy'}
@@ -125,7 +125,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
                       setAccountMenuOpen(false)
                       disconnect()
                     }}
-                    className="inline-flex items-center justify-center gap-2 border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/40"
+                    className="inline-flex items-center justify-center gap-2 border border-primary/20 bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                   >
                     <LogOut className="h-4 w-4" />
                     Disconnect
