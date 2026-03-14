@@ -39,7 +39,7 @@ export const GatewayStatusWidget: React.FC<GatewayStatusWidgetProps> = ({ pollIn
   } else switch (status) {
     case 'connected':
       icon = <Wifi className="w-4 h-4" />;
-      colorClass = 'text-accent';
+      colorClass = 'text-success';
       text = 'Connected';
       tooltip = `Local Gateway connected at ${url}${
         details?.mode ? ` (mode=${details.mode})` : ''

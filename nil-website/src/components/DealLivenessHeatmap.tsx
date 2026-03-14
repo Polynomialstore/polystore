@@ -107,8 +107,8 @@ export function DealLivenessHeatmap({ proofs }: Props) {
                                   </div>
 
                                   <div className="mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-                                    <span className={`h-1.5 w-1.5 rounded-none ${d.valid ? 'bg-accent pulse-status' : 'bg-destructive'}`} />
-                                    <span className={d.valid ? 'text-accent' : 'text-destructive'}>
+                                    <span className={`h-1.5 w-1.5 rounded-none ${d.valid ? 'bg-success pulse-status' : 'bg-destructive'}`} />
+                                    <span className={d.valid ? 'text-success' : 'text-destructive'}>
                                       {d.valid ? 'VALID' : 'INVALID'}
                                     </span>
                                   </div>

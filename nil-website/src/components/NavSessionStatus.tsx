@@ -9,8 +9,8 @@ const SESSION_BADGE_STYLES: Record<string, string> = {
   'needs-reconnect': 'border-primary/30 bg-primary/10 text-primary',
   'wrong-network': 'border-destructive/30 bg-destructive/10 text-destructive',
   'needs-funds': 'border-primary/30 bg-primary/10 text-primary',
-  'ready-browser': 'border-accent/30 bg-accent/10 text-accent',
-  'ready-gateway': 'border-accent/30 bg-accent/10 text-accent',
+  'ready-browser': 'border-success/30 bg-success/10 text-success',
+  'ready-gateway': 'border-success/30 bg-success/10 text-success',
 }
 
 const SESSION_BADGE_LABELS: Record<string, string> = {
@@ -62,7 +62,7 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
           className={cn(
             'inline-flex items-center gap-2 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors disabled:opacity-60',
             session.faucetTxStatus === 'confirmed'
-              ? 'border-accent/30 bg-accent/10 text-accent'
+              ? 'border-success/30 bg-success/10 text-success'
               : session.faucetTxStatus === 'failed'
                 ? 'border-destructive/30 bg-destructive/10 text-destructive'
                 : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15',

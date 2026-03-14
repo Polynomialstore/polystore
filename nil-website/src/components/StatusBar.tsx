@@ -43,7 +43,7 @@ async function copyText(text: string) {
 
 function SystemLabel({ label, status, value }: { label: string; status: ServiceStatus; value?: string }) {
   const Icon = status === 'ok' ? CheckCircle2 : status === 'warn' ? AlertTriangle : XCircle
-  const colorClass = status === 'ok' ? 'text-accent' : status === 'warn' ? 'text-primary' : 'text-destructive'
+  const colorClass = status === 'ok' ? 'text-success' : status === 'warn' ? 'text-primary' : 'text-destructive'
   
   return (
     <div className="flex items-center gap-1.5 px-1.5">
@@ -269,7 +269,7 @@ export function StatusBar({ noBorder }: { noBorder?: boolean }) {
           {!appConfig.gatewayDisabled && (
             <div className="flex items-center gap-2 border-l border-border/20 pl-4">
               <span className="text-muted-foreground/40">LCL_GW</span>
-              <span className={localGateway.status === 'connected' ? 'text-accent' : 'text-primary font-bold'}>
+              <span className={localGateway.status === 'connected' ? 'text-success' : 'text-primary font-bold'}>
                 {localGateway.status === 'connected' ? 'OK' : 'MISSING'}
               </span>
               <a
@@ -306,7 +306,7 @@ export function StatusBar({ noBorder }: { noBorder?: boolean }) {
             onClick={() => void handleCopyDiagnostics()}
             className={`flex items-center gap-1.5 border px-2 py-1 transition-colors ${
               copyState === 'copied'
-                ? 'border-accent/40 bg-accent/10 text-accent'
+                ? 'border-success/40 bg-success/10 text-success'
                 : copyState === 'error'
                   ? 'border-destructive/40 bg-destructive/10 text-destructive'
                   : 'border-border/30 bg-background/40 text-foreground hover:bg-secondary'

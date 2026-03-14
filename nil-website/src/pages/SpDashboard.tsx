@@ -169,7 +169,7 @@ export function SpDashboard() {
                 className="mt-2 w-full bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
               />
               {myProvider ? (
-                <div className="mt-2 text-xs text-accent">Registered on-chain</div>
+                <div className="mt-2 text-xs text-success">Registered on-chain</div>
               ) : myProviderAddress.trim() ? (
                 <div className="mt-2 text-xs text-destructive">Not found in provider list (yet)</div>
               ) : (
@@ -206,7 +206,7 @@ export function SpDashboard() {
               </div>
               {probe.status !== 'idle' && probe.base === myProviderBase.trim().replace(/\/$/, '') ? (
                 probe.status === 'ok' ? (
-                  <div className="mt-2 text-xs text-accent font-mono-data">OK ({probe.ms}ms)</div>
+                  <div className="mt-2 text-xs text-success font-mono-data">OK ({probe.ms}ms)</div>
                 ) : probe.status === 'error' ? (
                   <div className="mt-2 text-xs text-destructive">{probe.error}</div>
                 ) : null
@@ -214,7 +214,7 @@ export function SpDashboard() {
             </div>
           </div>
           {copyStatus ? (
-            <div className="mt-3 border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent">
+            <div className="mt-3 border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
               {copyStatus}
             </div>
           ) : null}
@@ -296,7 +296,7 @@ export function SpDashboard() {
                           <div className="font-mono-data text-xs text-foreground break-all">{p.address}</div>
                           <div className="mt-1 text-xs text-muted-foreground">
                             {local ? (
-                              <span className="border border-accent/40 bg-accent/10 px-2 py-0.5 text-accent">
+                              <span className="border border-success/40 bg-success/10 px-2 py-0.5 text-success">
                                 local
                               </span>
                             ) : (
@@ -332,7 +332,7 @@ export function SpDashboard() {
                                 Probe /health
                               </button>
                               {activeProbe && probe.status === 'ok' ? (
-                                <div className="text-xs text-accent font-mono-data">
+                                <div className="text-xs text-success font-mono-data">
                                   OK ({probe.ms}ms)
                                 </div>
                               ) : null}

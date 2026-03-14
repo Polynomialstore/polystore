@@ -2509,7 +2509,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     wasmStatus === 'error'
       ? 'text-destructive'
       : gatewayReachable && isMode2 && gatewayMode2Enabled
-        ? 'text-accent'
+        ? 'text-success'
         : 'text-muted-foreground'
 
   useEffect(() => {
@@ -2821,7 +2821,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               }}
               disabled={activeUploading || processing || isUploadComplete}
               data-testid="mdu-upload"
-              className={`cta-shadow mt-4 inline-flex items-center justify-center border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-50 ${isUploadComplete ? 'cursor-not-allowed border-accent/30 bg-accent/20 text-accent ring-1 ring-accent/30' : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'}`}
+              className={`cta-shadow mt-4 inline-flex items-center justify-center border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-50 ${isUploadComplete ? 'cursor-not-allowed border-success/30 bg-success/20 text-success ring-1 ring-success/30' : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'}`}
             >
               {activeUploading
                 ? 'Uploading...'
@@ -2839,7 +2839,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     {uploadProgress.map((p, i) => (
                       <div key={i} className="flex justify-between items-center">
                       <span>{p.label}:</span>
-                      <span className={`font-bold ${p.status === 'complete' ? 'text-accent' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
+                      <span className={`font-bold ${p.status === 'complete' ? 'text-success' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
                         {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
                       </span>
                     </div>
@@ -2897,19 +2897,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 shard.status === 'expanded' ? 'COMPLETE' : shard.status === 'processing' ? 'PROCESSING' : 'EMPTY'
               const stateClass =
                 shard.status === 'expanded'
-                  ? 'text-accent'
+                  ? 'text-success'
                   : shard.status === 'processing'
                     ? 'text-primary'
                     : 'text-muted-foreground'
               const cellClass =
                 shard.status === 'expanded'
-                  ? 'bg-accent'
+                  ? 'bg-success'
                   : shard.status === 'processing'
                     ? 'bg-primary/20 animate-pulse'
                     : 'bg-background/50'
               const ringClass =
                 shard.status === 'expanded'
-                  ? 'ring-1 ring-accent/30'
+                  ? 'ring-1 ring-success/30'
                   : shard.status === 'processing'
                     ? 'ring-1 ring-primary/30'
                     : 'ring-1 ring-border/30'

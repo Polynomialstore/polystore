@@ -26,8 +26,10 @@
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 94%;
     --muted-foreground: 215 16% 47%;
-    --accent: var(--brand-green);
-    --accent-foreground: var(--brand-green-foreground);
+    --accent: var(--brand-magenta);
+    --accent-foreground: var(--brand-magenta-foreground);
+    --success: var(--brand-green);
+    --success-foreground: var(--brand-green-foreground);
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 214 32% 88%; /* Frame borders only */
@@ -57,6 +59,8 @@
     --muted-foreground: 240 5% 60%;
     --accent: var(--brand-cyan);
     --accent-foreground: var(--brand-cyan-foreground);
+    --success: var(--brand-green);
+    --success-foreground: var(--brand-green-foreground);
     --destructive: 0 100% 60%; /* Flare Red */
     --destructive-foreground: 0 0% 98%;
     

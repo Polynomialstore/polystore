@@ -41,7 +41,7 @@ The design language of NilStore is **Cyber-Industrial**. It is the intersection 
 ### 4. Technical Detail (The HUD)
 *   **L-Brackets:** Corners are anchored by 1px "L-brackets" rather than solid dots. In Light Mode, these utilize **Neon Pale Fuschia** to provide high-visibility framing for opaque modules. These are HUD "targeters" that cradle the data.
 *   **Scanning Elements:** Use a slow, broad "Technical Wash" (20s cycle) across the background grid to indicate that the protocol is alive and actively processing data.
-*   **Safety Accents:** Use **Neon Pale Fuschia** (Primary) for actions and **Signal Green** (Accent) for success. These colors must have high luminance to pop against the neutral base.
+*   **Safety Accents:** Use the active **Primary** lane for actions, a secondary **Accent** lane for alternate emphasis, and **Signal Green** (`success`) for healthy/valid/success states. These colors must have high luminance to pop against the neutral base.
 
 ---
 

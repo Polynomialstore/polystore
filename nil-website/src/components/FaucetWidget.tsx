@@ -64,7 +64,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
             disabled={loading || status === 'success'}
             className={`inline-flex items-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-70 disabled:cursor-not-allowed border ${
                 status === 'success' 
-                ? 'bg-accent/10 text-accent border-accent/40 dark:shadow-[0_0_24px_hsl(var(--accent)_/_0.18)]' 
+                ? 'bg-success/10 text-success border-success/40 dark:shadow-[0_0_24px_hsl(var(--success)_/_0.18)]' 
                 : status === 'error'
                 ? 'bg-destructive/10 text-destructive border-destructive/40 dark:shadow-[0_0_24px_hsl(var(--destructive)_/_0.16)]'
                 : 'bg-primary/10 text-primary hover:bg-primary/20 border-primary/30 dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.16)]'

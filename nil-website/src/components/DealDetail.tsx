@@ -590,9 +590,9 @@ function FileRow({
         <div className="nil-detail-meta mt-1 flex items-center gap-2 tracking-tight">
           <span className="text-foreground/70">{formatBytes(file.size_bytes)}</span>
           <span className="text-border/60">|</span>
-          <span>BROWSER: <span className={browserCached ? 'text-accent font-bold' : ''}>{browserCached ? 'YES' : '—'}</span></span>
+          <span>BROWSER: <span className={browserCached ? 'text-success font-bold' : ''}>{browserCached ? 'YES' : '—'}</span></span>
           <span className="text-border/60">|</span>
-          <span>GATEWAY: <span className={gatewayCached ? 'text-accent font-bold' : ''}>{gatewayCached ? 'YES' : '—'}</span></span>
+          <span>GATEWAY: <span className={gatewayCached ? 'text-success font-bold' : ''}>{gatewayCached ? 'YES' : '—'}</span></span>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -1580,7 +1580,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   <span
                     className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
                       hasCommittedContent
-                        ? 'border-accent/40 bg-accent/10 text-accent'
+                        ? 'border-success/40 bg-success/10 text-success'
                         : 'border-border bg-secondary/60 text-muted-foreground'
                     }`}
                   >
@@ -1669,7 +1669,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                       </div>
                       <div className="nil-detail-metric">
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
-                        <span className={`font-bold uppercase ${deal.cid ? 'text-accent' : 'text-muted-foreground'}`}>
+                        <span className={`font-bold uppercase ${deal.cid ? 'text-success' : 'text-muted-foreground'}`}>
                           {deal.cid ? 'Active' : 'Empty'}
                         </span>
                       </div>
@@ -1692,7 +1692,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                                     {shortAddr(p)}
                                     {providersByAddr[p]?.status && (
                                       <span className={`text-[9px] px-1.5 py-0.5 border ${
-                                        providersByAddr[p].status === 'ok' ? 'text-accent border-accent/30 bg-accent/5' : 'text-primary border-primary/30 bg-primary/5'
+                                        providersByAddr[p].status === 'ok' ? 'text-success border-success/30 bg-success/5' : 'text-primary border-primary/30 bg-primary/5'
                                       }`}>
                                         {providersByAddr[p].status?.toUpperCase()}
                                       </span>
@@ -2275,7 +2275,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Retrievals</div>
-                              <div className="text-lg font-mono-data text-accent">
+                              <div className="text-lg font-mono-data text-success">
                                   {heat.successful_retrievals_total || '0'}
                               </div>
                           </div>

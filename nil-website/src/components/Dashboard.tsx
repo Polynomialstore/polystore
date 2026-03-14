@@ -1320,7 +1320,7 @@ export function Dashboard() {
             <div className="flex items-center justify-between pt-2">
               <div className="text-xs text-muted-foreground">
                 {updateTx && (
-                  <div className="text-accent flex items-center gap-2 font-mono-data text-[10px] uppercase tracking-[0.2em]">
+                  <div className="text-success flex items-center gap-2 font-mono-data text-[10px] uppercase tracking-[0.2em]">
                     <CheckCircle2 className="w-3 h-3" /> Commit Tx: {updateTx.slice(0, 10)}...
                   </div>
                 )}
@@ -1621,7 +1621,7 @@ export function Dashboard() {
 
       {downloadToast && (
         <div className="fixed bottom-8 right-8 z-50">
-          <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-accent border-accent/40 bg-accent/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
+          <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-success border-success/40 bg-success/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
             <CheckCircle2 className="h-4 w-4" />
             {downloadToast}
           </div>
@@ -1685,7 +1685,7 @@ function DealRow({
         <span
           className={cn(
             'border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-            isActive ? 'border-accent/20 bg-accent/5 text-accent' : 'border-border/20 bg-background/70 text-muted-foreground',
+            isActive ? 'border-success/20 bg-success/5 text-success' : 'border-border/20 bg-background/70 text-muted-foreground',
           )}
         >
           {isActive ? 'ACTIVE' : 'EMPTY'}
