@@ -133,19 +133,11 @@ export const Layout = () => {
                   alt="NilStore Logo"
                 />
               </div>
-              <div className="hidden sm:flex flex-col leading-none">
-                <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
-                  /nilstore/ops
-                </div>
-                <div className="mt-1 text-sm font-extrabold tracking-tight">
+              <div className="hidden sm:flex items-center leading-none">
+                <div className="text-[1.9rem] font-extrabold tracking-tight">
                   <span className="text-foreground">NIL</span>
                   <span className="text-primary">STORE</span>
                 </div>
-                {shortCommit ? (
-                  <div className="mt-1 font-mono-data text-[10px] text-muted-foreground">
-                    BUILD {shortCommit}
-                  </div>
-                ) : null}
               </div>
             </Link>
           </div>
