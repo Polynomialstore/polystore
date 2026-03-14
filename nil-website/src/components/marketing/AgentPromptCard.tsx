@@ -68,21 +68,13 @@ export function AgentPromptCard({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <PrimaryCtaButton
-            size="sm"
-            withArrow={false}
-            leftIcon={<ExternalLink className="h-4 w-4" />}
-            onClick={() => setPreviewOpen(true)}
-          >
-            Preview Prompt
-          </PrimaryCtaButton>
           <button
             type="button"
-            onClick={copyPrompt}
-            className="inline-flex items-center justify-center gap-2 rounded-none border border-border bg-background px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
+            onClick={() => setPreviewOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-none border border-accent bg-accent px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent-foreground cta-shadow transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
           >
-            <Copy className="h-4 w-4" />
-            {copyLabel}
+            <ExternalLink className="h-4 w-4" />
+            Preview Prompt
           </button>
         </div>
       </div>

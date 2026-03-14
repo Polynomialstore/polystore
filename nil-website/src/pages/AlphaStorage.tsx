@@ -1,6 +1,5 @@
 import { Database } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
-import { DashboardCta } from "../components/DashboardCta";
 import { AgentPromptCard } from "../components/marketing/AgentPromptCard";
 import { PrimaryCtaLink } from "../components/PrimaryCta";
 
@@ -42,7 +41,6 @@ export function AlphaStorage() {
           actions={
             <>
               <PrimaryCtaLink to="/first-file">Start First File</PrimaryCtaLink>
-              <DashboardCta className="inline-flex justify-center font-mono-data" label="Dashboard" to="/dashboard" />
             </>
           }
         />
@@ -50,7 +48,7 @@ export function AlphaStorage() {
         <section className="mt-12">
           <AgentPromptCard
             badge="/alpha/storage/agent"
-            title="Onboard with a coding agent"
+            title="Alternatively: Onboard with a coding agent"
             description="If you have Codex or Claude Code available locally, copy the bootstrap prompt and let the agent drive the full storage flow to a verified first upload and download."
             prompt={storageAgentPrompt}
           />
