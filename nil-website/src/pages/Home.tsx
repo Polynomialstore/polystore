@@ -50,7 +50,7 @@ export const Home = () => {
             action={
               <PrimaryCtaLink
                 to="/alpha/provider"
-                className="border-accent bg-accent text-accent-foreground"
+                className="!border-accent !bg-accent !text-accent-foreground"
               >
                 Provide Storage
               </PrimaryCtaLink>
