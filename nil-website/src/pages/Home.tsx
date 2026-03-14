@@ -36,7 +36,7 @@ export const Home = () => {
 
         <div className="mt-12 grid gap-6 md:grid-cols-2">
           <TrackCard
-            icon={<Database className="w-6 h-6 text-accent" />}
+            icon={<Database className="w-6 h-6 text-primary" />}
             title="Store Data"
             description="Connect a wallet, fund your account, create a deal, and upload data into NilStore's verifiable replicated storage network. Retrieve it back to test the full storage and retrieval flow end to end."
             action={
@@ -44,11 +44,16 @@ export const Home = () => {
             }
           />
           <TrackCard
-            icon={<Server className="w-6 h-6 text-primary" />}
+            icon={<Server className="w-6 h-6 text-accent" />}
             title="Provide Storage"
             description="Set up a provider host, expose a public endpoint, register on-chain, and verify health. This path is being optimized for local coding agents."
             action={
-              <PrimaryCtaLink to="/alpha/provider">Provide Storage</PrimaryCtaLink>
+              <PrimaryCtaLink
+                to="/alpha/provider"
+                className="border-accent bg-accent text-accent-foreground"
+              >
+                Provide Storage
+              </PrimaryCtaLink>
             }
           />
         </div>
