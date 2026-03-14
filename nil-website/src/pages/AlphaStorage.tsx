@@ -40,7 +40,7 @@ export function AlphaStorage() {
           description="This is the storage-user path for the testnet. Start in the browser, connect a wallet, fund your account, and complete your first store and retrieve flow."
           actions={
             <>
-              <PrimaryCtaLink to="/first-file">Start First File</PrimaryCtaLink>
+              <PrimaryCtaLink to="/first-file">Store First File</PrimaryCtaLink>
             </>
           }
         />
