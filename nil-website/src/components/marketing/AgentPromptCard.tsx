@@ -79,21 +79,23 @@ export function AgentPromptCard({
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        {links.map((link) => (
-          <a
-            key={link.href}
-            href={link.href}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary transition-colors hover:text-foreground"
-          >
-            {link.label}
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        ))}
-        {copyStatus ? <span className="text-xs font-semibold text-accent">{copyStatus}</span> : null}
-      </div>
+      {links.length > 0 || copyStatus ? (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          {links.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary transition-colors hover:text-foreground"
+            >
+              {link.label}
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ))}
+          {copyStatus ? <span className="text-xs font-semibold text-accent">{copyStatus}</span> : null}
+        </div>
+      ) : null}
 
       {previewOpen ? (
         portalReady
