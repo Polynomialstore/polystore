@@ -17,6 +17,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@nil-store/cybergrid-theme": "git+ssh://git@github.com/Nil-Store/cybergrid-theme.git#235067c469828cf2419191fffa1fe79b0519198e",
     "@chainsafe/libp2p-noise": "^17.0.0",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@fontsource/montserrat": "^5.2.6",

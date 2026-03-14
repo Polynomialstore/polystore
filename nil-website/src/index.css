@@ -3,271 +3,57 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --brand-cyan: 190 100% 50%;
-    --brand-cyan-foreground: 190 100% 10%;
-    --brand-magenta: 300 100% 75%;
-    --brand-magenta-foreground: 300 100% 10%;
-    --brand-green: 142 70% 35%;
-    --brand-green-foreground: 144.1 61.4% 10.5%;
-
-    /* --- Light Mode: Ultra-Clean Tactical Blueprint --- */
-    --background: 0 0% 100%; /* Pure White Floor */
-    --foreground: 222 47% 11%; 
-    --card: 0 0% 100%; /* Pure White Slabs */
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-
-    --primary: var(--brand-cyan);
-    --primary-foreground: var(--brand-cyan-foreground);
-
-    --secondary: 210 40% 94%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 94%;
-    --muted-foreground: 215 16% 42%;
-    --accent: var(--brand-magenta);
-    --accent-foreground: var(--brand-magenta-foreground);
-    --success: var(--brand-green);
-    --success-foreground: var(--brand-green-foreground);
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 88%; /* Frame borders only */
-    --input: 214 32% 85%;
-    --ring: var(--primary);
-    --grid-color: hsl(var(--primary) / 0.05);
-    --industrial-bracket-opacity: 0.95;
-    --radius: 0rem;
+  * {
+    @apply border-border;
   }
- 
-  .dark {
-    /* --- Dark Mode: Blade Runner / City at Night --- */
-    --background: 240 15% 4%; 
-    --foreground: 180 20% 90%;
-    --card: 240 10% 6%; 
-    --card-foreground: 180 20% 98%;
-    --popover: 240 10% 8%;
-    --popover-foreground: 180 20% 98%;
-    
-    /* Neon Palette */
-    --primary: var(--brand-magenta);
-    --primary-foreground: var(--brand-magenta-foreground);
-
-    --secondary: 240 10% 12%; 
-    --secondary-foreground: 180 10% 90%;
-    --muted: 240 10% 12%;
-    --muted-foreground: 240 5% 68%;
-    --accent: var(--brand-cyan);
-    --accent-foreground: var(--brand-cyan-foreground);
-    --success: var(--brand-green);
-    --success-foreground: var(--brand-green-foreground);
-    --destructive: 0 100% 60%; /* Flare Red */
-    --destructive-foreground: 0 0% 98%;
-    
-    --border: 240 6% 15%;
-    --input: 240 6% 12%;
-    --ring: var(--primary);
-    
-    --grid-color: hsl(var(--primary) / 0.04); 
-    --industrial-bracket-opacity: 1;
-  }
-
-  * { @apply border-border; }
-
-  body {
-    @apply bg-background text-foreground;
-    font-family: "Montserrat", sans-serif;
-    background-image: 
-      /* Static Subtle Base Grid - Solid 1px for consistency */
-      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-    background-size: 30px 30px, 30px 30px;
-    background-attachment: fixed;
-  }
-
-  .cyber-grid-layer {
-    background-image: 
-      /* Structural Box Fills: Homogenous 30px cells */
-      linear-gradient(to right, hsl(var(--primary) / 0.16) 29px, transparent 29px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.16) 29px, transparent 29px),
-      /* Bold structural lines - Uniform 30px tiling */
-      linear-gradient(to right, hsl(var(--primary) / 0.75) 2px, transparent 2px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.75) 2px, transparent 2px);
-    background-size: 30px 30px, 30px 30px, 30px 30px, 30px 30px;
-    background-repeat: repeat;
-    /* Decoupled "Boiling" Mask */
-    mask-composite: add;
-    animation: 
-      grid-breath 6s ease-in-out infinite;
-  }
-  
-
-
-  .font-mono-data { font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
-}
-
-@keyframes grid-breath {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.3; }
 }
 
 @layer utilities {
-  .glass-panel {
-    @apply relative transition-all duration-300 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.03)];
-    background-color: hsl(var(--card) / 0.95);
-    backdrop-filter: blur(8px);
-  }
-
-  .dark .glass-panel {
-    @apply border-t border-l border-white/5;
-    background-color: hsl(var(--card));
-  }
-
-  .glass-panel.industrial-border {
-    @apply ring-1 ring-primary/20;
-  }
-
-  .glass-panel.industrial-border-accent {
-    @apply ring-1 ring-accent/20;
-  }
-
-  .industrial-border { @apply relative border border-border; }
-  .industrial-border::before, .industrial-border::after {
-    content: "";
-    @apply absolute pointer-events-none z-[20] w-6 h-6 transition-all duration-500;
-  }
-  .industrial-border::before {
-    top: -1px; left: -1px;
-    border-top: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-left: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-  }
-  .industrial-border::after {
-    bottom: -1px; right: -1px;
-    border-bottom: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-    border-right: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity));
-  }
-
-  .dark .industrial-border::before, .dark .industrial-border::after {
-    filter: drop-shadow(0 0 4px hsl(var(--primary) / 0.6));
-  }
-  .industrial-border-accent::before {
-    border-top-color: hsl(var(--accent) / var(--industrial-bracket-opacity));
-    border-left-color: hsl(var(--accent) / var(--industrial-bracket-opacity));
-  }
-  .industrial-border-accent::after {
-    border-bottom-color: hsl(var(--accent) / var(--industrial-bracket-opacity));
-    border-right-color: hsl(var(--accent) / var(--industrial-bracket-opacity));
-  }
-  
   .pulse-status {
     @apply animate-pulse;
     box-shadow: 0 0 8px currentColor;
   }
 
-  /* Shared CTA shadow token (used by primary CTAs and dashboard CTA). */
-  .cta-shadow {
-    @apply shadow-[4px_4px_0px_0px_rgba(0,0,0,0.12)];
-  }
-
-  /* Brand alias for shared shadow token. */
-  .nil-shadow {
-    @apply cta-shadow;
-  }
-
-  .nil-inset {
-    @apply border border-border bg-background/70;
-  }
-
-  .nil-section-label {
-    @apply text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground;
-  }
-
-  .nil-section-title {
-    @apply text-2xl font-bold text-foreground;
-  }
-
-  .nil-body-copy {
-    @apply text-sm text-muted-foreground;
-  }
-
   .nil-detail-label {
-    @apply nil-section-label text-muted-foreground;
+    color: hsl(var(--muted-foreground));
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
   }
 
   .nil-detail-surface {
-    @apply nil-inset rounded-none p-4;
-  }
-
-  .nil-tab-panel {
-    @apply rounded-none border border-border bg-background/80 p-3;
-  }
-
-  .nil-tab-inset {
-    @apply rounded-none border border-border bg-background/80 p-3;
-  }
-
-  .dark .nil-tab-panel,
-  .dark .nil-tab-inset {
-    @apply border-primary/20 bg-[hsl(var(--background)_/_0.9)];
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background) / 0.7);
+    padding: 1rem;
   }
 
   .nil-detail-metric {
-    @apply nil-inset rounded-none px-4 py-3;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background) / 0.7);
+    padding: 0.75rem 1rem;
   }
 
   .nil-detail-meta {
-    @apply font-mono-data text-[10px] text-muted-foreground;
+    color: hsl(var(--muted-foreground));
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
   }
 
-  .nil-list-row {
-    @apply transition-colors hover:bg-secondary/40;
-  }
-
-  .recessed-input {
-    @apply w-full border border-border bg-background text-foreground rounded-none transition-colors;
-    @apply placeholder:text-muted-foreground/70;
-    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
-  }
-
-  .recessed-input:hover {
-    @apply border-primary/30;
-  }
-
-  .recessed-input:focus {
-    @apply outline-none border-primary/40 ring-1 ring-primary/25;
-  }
-
-  .dark .recessed-input {
-    @apply border-primary/25 bg-[hsl(var(--background)_/_0.92)] text-card-foreground;
-    box-shadow:
-      inset 0 1px 0 hsl(var(--foreground) / 0.03),
-      0 0 0 1px hsl(var(--primary) / 0.06);
-  }
-
-  .dark .recessed-input:hover {
-    @apply border-primary/40 bg-[hsl(var(--background)_/_0.96)];
-  }
-
-  .dark .recessed-input::placeholder {
-    color: hsl(var(--muted-foreground) / 0.9);
-  }
-
-  /* Navbar: semantic classes for top-level dropdown buttons and mega-menu items. */
   .nav-topbtn {
-    @apply relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2;
+    @apply relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2;
+    font-family: "JetBrains Mono", monospace;
   }
 
-  /* Inactive: dark label text; hover adds badge-like tint. */
   .nav-topbtn--inactive {
     @apply text-foreground border-transparent hover:bg-primary/10 hover:border-primary/30;
   }
 
-  /* Active: primary text + underline. Background is driven by open/hover state. */
   .nav-topbtn--active {
     @apply text-primary border-transparent;
   }
 
-  /* Open: persistent hover background/border while dropdown is displayed. */
   .nav-topbtn--open {
     @apply bg-primary/10 border-primary/30;
   }
@@ -277,7 +63,14 @@
   }
 
   .nav-mega-item {
-    @apply flex items-start gap-3 p-3 glass-panel industrial-border transition-[background-color,border-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary/10;
+    @apply flex items-start gap-3 p-3 transition-[background-color,border-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary/10;
+    position: relative;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card) / 0.95);
+    backdrop-filter: blur(8px);
+    box-shadow:
+      4px 4px 0 0 rgba(0, 0, 0, 0.03),
+      0 0 0 1px hsl(var(--primary) / 0.2);
   }
 
   .nav-mega-item--active {
@@ -285,7 +78,14 @@
   }
 
   .nav-mega-icon {
-    @apply mt-0.5 p-2 glass-panel industrial-border shrink-0 transition-[color,background-color,border-color] duration-200 ease-out;
+    @apply mt-0.5 p-2 shrink-0 transition-[color,background-color,border-color] duration-200 ease-out;
+    position: relative;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card) / 0.95);
+    backdrop-filter: blur(8px);
+    box-shadow:
+      4px 4px 0 0 rgba(0, 0, 0, 0.03),
+      0 0 0 1px hsl(var(--primary) / 0.2);
   }
 
   .nav-mega-icon--inactive {
@@ -297,8 +97,8 @@
   }
 
   .nav-mega-title {
-    /* Avoid `truncate` (overflow hidden) so the active underline pseudo-element isn't clipped. */
-    @apply text-[11px] font-bold uppercase tracking-[0.2em] font-mono-data whitespace-nowrap text-foreground;
+    @apply text-[11px] font-bold uppercase tracking-[0.2em] whitespace-nowrap text-foreground;
+    font-family: "JetBrains Mono", monospace;
   }
 
   .nav-mega-title--active {
@@ -306,6 +106,7 @@
   }
 
   .nav-mega-desc {
-    @apply mt-1 text-[10px] text-muted-foreground leading-tight font-mono-data line-clamp-2;
+    @apply mt-1 text-[10px] text-muted-foreground leading-tight line-clamp-2;
+    font-family: "JetBrains Mono", monospace;
   }
 }
