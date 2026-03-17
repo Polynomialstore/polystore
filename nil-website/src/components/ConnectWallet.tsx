@@ -80,6 +80,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
             <button
               type="button"
               onClick={() => setAccountMenuOpen((open) => !open)}
+              data-testid="wallet-address"
               className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-3 py-2 text-primary transition-colors hover:bg-primary/15"
               title={currentAccount.address}
             >
@@ -87,6 +88,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
                 <CircleUserRound className="h-3.5 w-3.5" />
               </span>
               <span className="font-mono-data text-xs font-bold text-primary">{accountLabel}</span>
+              <span className="sr-only" data-testid="wallet-address-full">{currentAccount.address}</span>
             </button>
 
             {accountMenuOpen && (

@@ -61,6 +61,7 @@ export function FaucetWidget({ className = "" }: { className?: string }) {
     <div className="flex items-center gap-3">
         <button 
             onClick={handleRequest}
+            data-testid="faucet-request"
             disabled={loading || status === 'success'}
             className={`inline-flex items-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-70 disabled:cursor-not-allowed border ${
                 status === 'success' 

@@ -24,6 +24,7 @@ const SESSION_BADGE_LABELS: Record<string, string> = {
 
 export function NavSessionStatus({ className = '' }: { className?: string }) {
   const session = useSessionStatus()
+  const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
   const shouldShowFaucet =
     session.faucetEnabled &&
@@ -38,6 +39,12 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
       <ConnectWallet />
+      {session.isConnected ? (
+        <div className="sr-only" aria-hidden="true">
+          <span data-testid="cosmos-identity">{session.nilAddress}</span>
+          <span data-testid="cosmos-stake-balance">{stakeBalanceLabel}</span>
+        </div>
+      ) : null}
 
       {session.isConnected &&
       session.primarySessionState !== 'ready-browser' &&
@@ -58,6 +65,7 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
         <button
           type="button"
           onClick={() => void session.requestFunds()}
+          data-testid="faucet-request"
           disabled={!session.address || session.faucetBusy}
           className={cn(
             'inline-flex items-center gap-2 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors disabled:opacity-60',
