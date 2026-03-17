@@ -211,9 +211,9 @@ export function Dashboard() {
   const [durationPreset, setDurationPreset] = useState('1y')
   const [initialEscrow, setInitialEscrow] = useState('1000000')
   const [maxMonthlySpend, setMaxMonthlySpend] = useState('5000000')
-  const [placementProfile] = useState<'auto' | 'custom'>('auto')
-  const [rsK] = useState(String(appConfig.defaultRsK))
-  const [rsM] = useState(String(appConfig.defaultRsM))
+  const [placementProfile, setPlacementProfile] = useState<'auto' | 'custom'>('auto')
+  const [rsK, setRsK] = useState(String(appConfig.defaultRsK))
+  const [rsM, setRsM] = useState(String(appConfig.defaultRsM))
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
@@ -478,6 +478,13 @@ export function Dashboard() {
     if (!newestDeal?.id) return
     setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
+
+  useEffect(() => {
+    if (!nilAddress) return
+    if (ownedDeals.length === 0) {
+      setShowCreateDeal(true)
+    }
+  }, [nilAddress, ownedDeals.length])
   const mode2Config = useMemo(() => {
     if (placementProfile !== 'custom') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
@@ -1440,9 +1447,23 @@ export function Dashboard() {
           >
 
             {showCreateDeal && (
-              <div className="space-y-4 border-b border-border/40 bg-card p-6">
+              <div ref={allocRef} className="space-y-4 border-b border-border/40 bg-card p-6">
                 <div className="nil-section-label">/ALLOC/CREATE_DEAL</div>
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-mono-data text-muted-foreground">
+                      Create a container, then upload content into it.
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="workspace-advanced-toggle"
+                      onClick={() => setShowAdvanced((value) => !value)}
+                      className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary transition-colors hover:bg-primary/15"
+                    >
+                      {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
+                    </button>
+                  </div>
+
                   <div className="flex flex-col gap-2">
                     <label className="nil-section-label text-foreground">Duration</label>
                     <select
@@ -1484,9 +1505,53 @@ export function Dashboard() {
                     <span className="ml-2 text-muted-foreground">Mode 2 (default RS {defaultRsLabel}).</span>
                   </div>
 
+                  {showAdvanced ? (
+                    <div className="space-y-4 border border-border/40 bg-background/40 p-4">
+                      <div className="nil-section-label">/ALLOC/ADVANCED</div>
+                      <div className="flex flex-col gap-2">
+                        <label className="nil-section-label text-foreground">Placement Profile</label>
+                        <select
+                          value={placementProfile}
+                          onChange={(e) => setPlacementProfile(e.target.value as 'auto' | 'custom')}
+                          data-testid="alloc-placement-profile"
+                          className="recessed-input px-3 py-2 text-xs"
+                        >
+                          <option value="auto">Automatic</option>
+                          <option value="custom">Custom RS</option>
+                        </select>
+                      </div>
+
+                      {placementProfile === 'custom' ? (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex flex-col gap-2">
+                            <label className="nil-section-label text-foreground">RS K</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={rsK}
+                              onChange={(e) => setRsK(e.target.value)}
+                              className="recessed-input px-3 py-2 text-xs"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <label className="nil-section-label text-foreground">RS M</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={rsM}
+                              onChange={(e) => setRsM(e.target.value)}
+                              className="recessed-input px-3 py-2 text-xs"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <button
                     onClick={handleCreateDealClick}
                     disabled={dealLoading || !initialEscrow}
+                    data-testid="alloc-submit"
                     className="w-full bg-primary py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {dealLoading ? 'Allocating...' : 'Create Deal Container'}
