@@ -1740,6 +1740,7 @@ function DealRow({
   return (
     <button
       onClick={onClick}
+      data-testid={`deal-row-${dealId}`}
       className={cn(
         'nil-list-row group flex w-full items-center justify-between border-b border-border/20 bg-background/50 px-6 py-4 text-left last:border-b-0',
         selected && 'border-primary/30 bg-primary/10',
