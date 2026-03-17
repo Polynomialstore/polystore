@@ -26,15 +26,7 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
   const session = useSessionStatus()
   const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
-  const shouldShowFaucet =
-    session.faucetEnabled &&
-    session.isConnected &&
-    (
-      session.primarySessionState === 'needs-funds' ||
-      session.faucetBusy ||
-      session.faucetTxStatus === 'confirmed' ||
-      session.faucetTxStatus === 'failed'
-    )
+  const shouldShowFaucet = session.faucetEnabled && session.isConnected
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
@@ -83,7 +75,9 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
               ? 'Funded'
               : session.faucetTxStatus === 'failed'
                 ? 'Retry Faucet'
-                : 'Get NIL'}
+                : session.primarySessionState === 'needs-funds'
+                  ? 'Get NIL'
+                  : 'Top Up NIL'}
         </button>
       ) : null}
     </div>
