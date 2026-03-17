@@ -27,7 +27,7 @@
     "@libp2p/mplex": "^12.0.10",
     "@libp2p/websockets": "^10.1.2",
     "@multiformats/multiaddr": "^13.0.1",
-    "@nil-store/cybergrid-theme": "git+https://github.com/Nil-Store/cybergrid-theme.git#8e03616a295e106d2e815fdf7d79bc4ad3096d9a",
+    "@nil-store/cybergrid-theme": "file:vendor/cybergrid-theme",
     "@noble/hashes": "^2.0.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@rainbow-me/rainbowkit": "^2.2.10",
