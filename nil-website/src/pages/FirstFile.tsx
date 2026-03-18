@@ -194,7 +194,7 @@ export function FirstFile() {
       </div>
 
       {error && (
-        <div className="rounded-none border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive flex items-start gap-3">
+        <div className="rounded-none border border-destructive/40 bg-card p-4 text-sm text-destructive flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5" />
           <div className="min-w-0">
             <div className="font-semibold">Action required</div>
