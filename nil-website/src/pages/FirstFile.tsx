@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { numberToHex } from 'viem'
-import { AlertCircle, CheckCircle2, HardDrive, Rocket } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Coins, HardDrive, RefreshCw, Rocket } from 'lucide-react'
 
 import { appConfig } from '../config'
 import { DashboardCta } from '../components/DashboardCta'
@@ -43,8 +43,10 @@ export function FirstFile() {
     accountPermissionMismatch,
     refreshWalletNetwork,
     faucetEnabled,
+    faucetBusy,
     faucetTx,
     faucetTxStatus,
+    requestFunds,
   } = session
 
   const [duration, setDuration] = useState('31536000')
@@ -267,9 +269,20 @@ export function FirstFile() {
                 ) : faucetTx ? (
                   <span className="font-mono">Faucet tx: {faucetTx.slice(0, 10)}… ({faucetTxStatus})</span>
                 ) : (
-                  <span>Use the nav faucet control to request testnet NIL for this wallet.</span>
+                  <span>Request testnet NIL for this wallet, then continue once the balance updates.</span>
                 )}
               </div>
+              {!funded && isConnected ? (
+                <button
+                  type="button"
+                  onClick={() => void requestFunds()}
+                  disabled={!address || faucetBusy}
+                  className="cta-shadow inline-flex items-center justify-center gap-3 border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {faucetBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+                  {faucetBusy ? 'Funding' : 'Fund Wallet'}
+                </button>
+              ) : null}
               {!funded ? <FaucetAuthTokenInput /> : null}
             </div>
           )}
