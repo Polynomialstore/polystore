@@ -1054,23 +1054,28 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
   }, [deal.id, files])
 
-  function downloadBytesAsFile(bytes: Uint8Array, filePath: string) {
-    const safe = new Uint8Array(bytes.byteLength)
-    safe.set(bytes)
-    const url = window.URL.createObjectURL(new Blob([safe.buffer], { type: 'application/octet-stream' }))
+  function triggerBrowserDownload(url: string, filePath: string) {
     const a = document.createElement('a')
     a.href = url
     a.download = filePath.split('/').pop() || 'download'
+    a.style.display = 'none'
+    document.body.appendChild(a)
     a.click()
+    a.remove()
+  }
+
+  function downloadBytesAsFile(bytes: Uint8Array, filePath: string) {
+    const safe = new Uint8Array(bytes.byteLength)
+    safe.set(bytes)
+    const blob = new Blob([safe], { type: 'application/octet-stream' })
+    const url = window.URL.createObjectURL(blob)
+    triggerBrowserDownload(url, filePath)
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
 
   function downloadBlobAsFile(blob: Blob, filePath: string) {
     const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filePath.split('/').pop() || 'download'
-    a.click()
+    triggerBrowserDownload(url, filePath)
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
 
