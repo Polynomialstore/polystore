@@ -51,41 +51,40 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   // Navigation Hierarchy (Rich Data)
-  const navStructure: { type: "link" | "dropdown", name: "Explore" | "Learn" | "Community", path?: string, items?: NavItem[] }[] = [
+  const navStructure: { type: "link" | "dropdown", name: "Store Data" | "Proivde Storage" | "Testnet Info", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
-      name: "Explore", 
+      name: "Store Data", 
       items: [
-        { name: "Store Data", path: "/alpha/storage", description: "Testnet user quickstart.", icon: <Database className="w-5 h-5" /> },
-        { name: "Become A Provider", path: "/alpha/provider", description: "Testnet provider onboarding.", icon: <Server className="w-5 h-5" /> },
-        { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
-        { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
-        { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
-        { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
-        { name: "Performance", path: "/performance", description: "Latency racing benchmarks.", icon: <Zap className="w-5 h-5" /> },
-        { name: "Economy", path: "/economy", description: "Supply and inflation simulation.", icon: <Coins className="w-5 h-5" /> },
+        { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Server className="w-5 h-5" /> },
+        { name: "Dashboard", path: "/dashboard", description: "Provider ops console.", icon: <Rocket className="w-5 h-5" /> },
+        //{ name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
+        //{ name: "Performance", path: "/performance", description: "Latency racing benchmarks.", icon: <Zap className="w-5 h-5" /> },
+        //{ name: "Economy", path: "/economy", description: "Supply and inflation simulation.", icon: <Coins className="w-5 h-5" /> },
       ] 
     },
     { 
       type: "dropdown", 
-      name: "Learn", 
+      name: "Proivde Storage", 
       items: [
-        { name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
-        { name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
-        { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Rocket className="w-5 h-5" /> },
+        { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
+        //{ name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
+        //{ name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
         { name: "Provider Runbook", path: "/sp-onboarding", description: "Remote-first provider runbook with legacy local demo path.", icon: <Server className="w-5 h-5" /> },
-        { name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
-        { name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
+        //{ name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
+        //{ name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
         { name: "Provider Debug", path: "/devnet", description: "Live provider list and low-level join diagnostics.", icon: <Terminal className="w-5 h-5" /> },
-        { name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
+        //{ name: "FAQ", path: "/faq", description: "Common questions answered.", icon: <HelpCircle className="w-5 h-5" /> },
       ] 
     },
     { 
         type: "dropdown", 
-        name: "Community", 
+        name: "Testnet Info", 
         items: [
-          { name: "Governance", path: "/governance", description: "DAO proposals and voting.", icon: <Vote className="w-5 h-5" /> },
-          { name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
+        { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
+        { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
+          //{ name: "Governance", path: "/governance", description: "DAO proposals and voting.", icon: <Vote className="w-5 h-5" /> },
+          //{ name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
         ] 
       },
   ];
