@@ -251,6 +251,20 @@ function queueCachedDownloadPersist(
   })
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function FileRow({
   file,
   deal,
@@ -535,15 +549,26 @@ function FileRow({
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
     try {
       const chainCid = String(deal.cid || '').trim()
-      const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
+      const cacheFreshness = await withTimeout(
+        reconcileLocalMduCache(dealId, chainCid),
+        15_000,
+        'local slab reconciliation',
+      )
       if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
 
-      const bytes = await readNilfsFileFromOpfs({
-        dealId,
-        file,
-        allFiles,
-        rangeStart: safeStart,
-        rangeLen: safeLen,
+      const bytes = await withTimeout(
+        readNilfsFileFromOpfs({
+          dealId,
+          file,
+          allFiles,
+          rangeStart: safeStart,
+          rangeLen: safeLen,
+        }),
+        20_000,
+        'local slab read',
+      ).catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        throw new Error(`local slab not available (${msg})`)
       })
       downloadBytesAsFile(bytes, file.path)
       queueCachedDownloadPersist(dealId, chainCid, file.path, bytes, () => {
