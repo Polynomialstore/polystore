@@ -835,13 +835,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [routeOverride, setRouteOverride] = useState<string>('')
   const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
-  const [, setCacheFreshnessOverride] = useState<string>('')
+  const [cacheFreshnessOverride, setCacheFreshnessOverride] = useState<string>('')
   const lastRouteLabel = useMemo(() => {
     if (routeOverride) return routeOverride
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
   }, [lastTrace, routeOverride])
   const displayCacheSource = cacheSourceOverride || progress.cacheSource || ''
+  const displayCacheFreshness = cacheFreshnessOverride || progress.cacheFreshness || ''
 
   const markDownloadPath = useCallback(
     (route: string, mode: string, cacheSource: string, freshness: string) => {
@@ -1881,15 +1882,19 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           <span className="w-2 h-[1px] bg-border/40" />
                           ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" data-testid="transport-cache-source">
                           <span className="w-2 h-[1px] bg-border/40" />
                           CACHE: <span className="text-foreground font-bold">{displayCacheSource || '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-2" data-testid="transport-cache-freshness">
+                          <span className="w-2 h-[1px] bg-border/40" />
+                          FRESHNESS: <span className="text-foreground font-bold">{displayCacheFreshness || '—'}</span>
                         </div>
                       </div>
                     </div>
 
                     {files ? (
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                         <div className="nil-tab-inset">
                           <div className="nil-detail-meta uppercase">Files</div>
                           <div className="mt-1 text-lg font-mono-data text-foreground">{files.length}</div>
@@ -1901,6 +1906,10 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                         <div className="nil-tab-inset">
                           <div className="nil-detail-meta uppercase">Cache</div>
                           <div className="mt-1 text-sm font-bold text-foreground">{displayCacheSource || '—'}</div>
+                        </div>
+                        <div className="nil-tab-inset">
+                          <div className="nil-detail-meta uppercase">Freshness</div>
+                          <div className="mt-1 text-sm font-bold text-foreground">{displayCacheFreshness || '—'}</div>
                         </div>
                       </div>
                     ) : null}
