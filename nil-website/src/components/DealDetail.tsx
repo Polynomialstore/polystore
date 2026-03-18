@@ -1877,7 +1877,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                       </div>
                       
                       <div className="nil-detail-meta flex flex-wrap items-center gap-4 uppercase tracking-widest">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" data-testid="transport-route">
                           <span className="w-2 h-[1px] bg-border/40" />
                           ROUTE: <span className="text-foreground font-bold">{lastRouteLabel || '—'}</span>
                         </div>
