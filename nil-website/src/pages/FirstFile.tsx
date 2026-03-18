@@ -305,7 +305,7 @@ export function FirstFile() {
             </div>
             <div>
               <div className="font-semibold text-foreground">Allocate a deal</div>
-              <div className="text-xs text-muted-foreground">Creates a thin-provisioned container on-chain.</div>
+              <div className="text-xs text-muted-foreground">Create a storage deal on chain.</div>
             </div>
           </div>
           {dealId && <CheckCircle2 className="w-5 h-5 text-accent" />}
