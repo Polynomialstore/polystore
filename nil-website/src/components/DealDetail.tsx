@@ -599,10 +599,59 @@ function FileRow({
         <button
           onClick={handleAutoDownload}
           disabled={isAnyDownloading || isBusy || !deal.cid}
+          data-testid="deal-detail-download"
+          data-file-path={file.path}
           className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-none transition-colors disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
         >
           {isBusy ? 'BUSY' : 'Download'}
         </button>
+        <div className="hidden xl:flex items-center gap-1">
+          <button
+            onClick={handleGatewayCacheDownload}
+            disabled={isAnyDownloading || isBusy || !deal.cid}
+            data-testid="deal-detail-download-gateway"
+            data-file-path={file.path}
+            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+          >
+            Gateway
+          </button>
+          <button
+            onClick={handleOnchainRetrieval}
+            disabled={isAnyDownloading || isBusy || !deal.cid}
+            data-testid="deal-detail-download-sp"
+            data-file-path={file.path}
+            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+          >
+            Provider
+          </button>
+          <button
+            onClick={handleAssembleMdus}
+            disabled={isAnyDownloading || isBusy || !deal.cid}
+            data-testid="deal-detail-download-browser-slab"
+            data-file-path={file.path}
+            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+          >
+            Browser MDU
+          </button>
+          <button
+            onClick={handleBrowserCacheDownload}
+            disabled={isAnyDownloading || isBusy || !browserCached}
+            data-testid="deal-detail-download-browser-cache"
+            data-file-path={file.path}
+            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+          >
+            Browser Cache
+          </button>
+          <button
+            onClick={handlePurgeCache}
+            disabled={isAnyDownloading || isBusy || !browserCached}
+            data-testid="deal-detail-clear-browser-cache"
+            data-file-path={file.path}
+            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+          >
+            Clear
+          </button>
+        </div>
         <button
           onClick={onToggleMenu}
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
@@ -677,6 +726,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const redundancyLabel = isMode2 && serviceHint.rsK && serviceHint.rsM
     ? `Mode 2 RS(${serviceHint.rsK},${serviceHint.rsM})`
     : 'Mode 2 (Auto)'
+  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || String(deal.cid || ''))
   const stripeLayout = useMemo(() => {
     const k = serviceHint.rsK ?? 8
     const m = serviceHint.rsM ?? 4
@@ -1592,6 +1642,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     {redundancyLabel}
                   </span>
                 </div>
+                {displayManifestRoot ? (
+                  <div
+                    className="mt-2 font-mono-data text-[10px] text-primary break-all"
+                    data-testid={`deal-manifest-${deal.id}`}
+                    title={displayManifestRoot}
+                  >
+                    {displayManifestRoot}
+                  </div>
+                ) : null}
             </div>
         </div>
       </div>
