@@ -89,10 +89,6 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
   return trimmed
 }
 
-function isGatewaySessionRequiredError(message: string): boolean {
-  return /missing X-Nil-Session-Id/i.test(String(message || ''))
-}
-
 function isGatewayOutdatedDownloadError(message: string): boolean {
   const text = String(message || '')
   if (/Range header is required/i.test(text) && /unsigned fetches must be chunked/i.test(text)) return true
@@ -281,74 +277,68 @@ function FileRow({
         action: 'download',
         status: 'pending',
       })
-      if (gatewayCached) {
-        try {
-          const gatewayBlob = await downloadViaGatewayCache({
-            manifestRoot: manifestHex,
-            dealId,
-            owner: String(deal.owner || nilAddress || ''),
-            filePath: file.path,
-            rangeStart: safeStart,
-            rangeLen: safeLen,
-            fileSizeBytes: file.size_bytes,
-            fileStartOffset: file.start_offset,
-            mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-            blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-          })
-          const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-          await writeCachedFile(dealId, file.path, bytes)
-          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-          downloadBlobAsFile(gatewayBlob, file.path)
-          onFileActivity?.({
-            dealId,
-            filePath: file.path,
-            sizeBytes: file.size_bytes,
-            manifestRoot: manifestHex,
-            action: 'download',
-            status: 'success',
-          })
-          return
-        } catch (gatewayErr) {
-          const fallbackReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)
-          if (isGatewaySessionRequiredError(fallbackReason)) {
-            console.info('Gateway fast-path requires on-chain session; falling back to on-chain retrieval', {
-              dealId,
-              filePath: file.path,
-            })
-          } else {
-            console.warn('Gateway cache fast-path failed, falling back to on-chain retrieval', {
-              dealId,
-              filePath: file.path,
-              error: fallbackReason,
-            })
-          }
-        }
-      }
       const autoRoutePreference =
         transportPreference === 'prefer_p2p'
           ? 'prefer_p2p'
           : transportPreference === 'prefer_direct_sp'
             ? 'prefer_direct_sp'
             : undefined
-      const result = await fetchFile({
-        dealId,
+      try {
+        const result = await fetchFile({
+          dealId,
+          manifestRoot: manifestHex,
+          owner: String(deal.owner || nilAddress || ''),
+          filePath: file.path,
+          routePreference: autoRoutePreference,
+          rangeStart: safeStart,
+          rangeLen: safeLen,
+          fileStartOffset: file.start_offset,
+          fileSizeBytes: file.size_bytes,
+          mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+          blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+          sponsoredAuth,
+        })
+        if (!result) throw new Error('download failed')
+        const bytes = new Uint8Array(await result.blob.arrayBuffer())
+        await writeCachedFile(dealId, file.path, bytes)
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+        downloadBlobAsFile(result.blob, file.path)
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'success',
+        })
+        return
+      } catch (fetchErr) {
+        if (!gatewayCached) throw fetchErr
+
+        const fallbackReason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+        console.warn('Auto download transport path failed, falling back to gateway cache download', {
+          dealId,
+          filePath: file.path,
+          error: fallbackReason,
+        })
+      }
+
+      const gatewayBlob = await downloadViaGatewayCache({
         manifestRoot: manifestHex,
+        dealId,
         owner: String(deal.owner || nilAddress || ''),
         filePath: file.path,
-        routePreference: autoRoutePreference,
         rangeStart: safeStart,
         rangeLen: safeLen,
-        fileStartOffset: file.start_offset,
         fileSizeBytes: file.size_bytes,
+        fileStartOffset: file.start_offset,
         mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
         blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-        sponsoredAuth,
       })
-      if (!result) throw new Error('download failed')
-      const bytes = new Uint8Array(await result.blob.arrayBuffer())
+      const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
       await writeCachedFile(dealId, file.path, bytes)
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      downloadBlobAsFile(result.blob, file.path)
+      downloadBlobAsFile(gatewayBlob, file.path)
       onFileActivity?.({
         dealId,
         filePath: file.path,
