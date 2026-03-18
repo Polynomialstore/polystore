@@ -387,7 +387,7 @@ export function FirstFile() {
             </div>
             <div>
               <div className="font-semibold text-foreground">Upload a file in the dashboard</div>
-              <div className="text-xs text-muted-foreground">Continue in the full dashboard upload surface.</div>
+              <div className="text-xs text-muted-foreground">Continue in the dashboard to upload your first file.</div>
             </div>
           </div>
         </div>
