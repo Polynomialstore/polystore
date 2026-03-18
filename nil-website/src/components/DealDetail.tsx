@@ -29,6 +29,7 @@ import {
   readManifestRoot,
   readSlabMetadata,
   writeCachedFile,
+  writeManifestRoot,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
@@ -223,6 +224,14 @@ interface FileRowProps {
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'heat') => void
 }
 
+async function persistCachedDownloadState(dealId: string, manifestRoot: string, filePath: string, bytes: Uint8Array): Promise<void> {
+  await writeCachedFile(dealId, filePath, bytes)
+  const normalizedManifestRoot = normalizeManifestRoot(manifestRoot)
+  if (normalizedManifestRoot) {
+    await writeManifestRoot(dealId, normalizedManifestRoot)
+  }
+}
+
 function FileRow({
   file,
   deal,
@@ -300,7 +309,7 @@ function FileRow({
         })
         if (!result) throw new Error('download failed')
         const bytes = new Uint8Array(await result.blob.arrayBuffer())
-        await writeCachedFile(dealId, file.path, bytes)
+        await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
         setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
         downloadBlobAsFile(result.blob, file.path)
         onFileActivity?.({
@@ -336,7 +345,7 @@ function FileRow({
         blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
       })
       const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      await writeCachedFile(dealId, file.path, bytes)
+      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(gatewayBlob, file.path)
       onFileActivity?.({
@@ -401,7 +410,7 @@ function FileRow({
       })
       if (!result) throw new Error('download failed')
       const bytes = new Uint8Array(await result.blob.arrayBuffer())
-      await writeCachedFile(dealId, file.path, bytes)
+      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(result.blob, file.path)
       onFileActivity?.({
@@ -463,7 +472,7 @@ function FileRow({
         blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
       })
       const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      await writeCachedFile(dealId, file.path, bytes)
+      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(gatewayBlob, file.path)
       onFileActivity?.({
@@ -513,7 +522,7 @@ function FileRow({
         rangeStart: safeStart,
         rangeLen: safeLen,
       })
-      await writeCachedFile(dealId, file.path, bytes)
+      await persistCachedDownloadState(dealId, chainCid, file.path, bytes)
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBytesAsFile(bytes, file.path)
       markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
@@ -1180,7 +1189,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   }, [gatewayDownloadBases, markDownloadPath, slab?.blob_size_bytes, slab?.mdu_size_bytes])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
-    const localManifestRoot = await readManifestRoot(String(dealId)).catch(() => null)
+    const normalizedDealId = String(dealId)
+    const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(normalizedDealId).catch(() => null))
+    const localMeta = await readSlabMetadata(normalizedDealId).catch(() => null)
+    const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
+    const localManifestRoot = persistedManifestRoot || metadataManifestRoot
     const freshness = evaluateCacheFreshness(localManifestRoot, chainManifestRoot)
     const base: LocalCacheFreshnessResult = {
       usable: freshness.status === 'fresh',
@@ -1192,12 +1205,14 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
     if (freshness.status === 'fresh') {
       try {
-        const localMeta = await readSlabMetadata(String(dealId))
         if (localMeta) {
-          await writeSlabMetadata(String(dealId), {
+          await writeSlabMetadata(normalizedDealId, {
             ...localMeta,
             last_validated_at: new Date().toISOString(),
           })
+        }
+        if (!persistedManifestRoot && metadataManifestRoot && metadataManifestRoot === freshness.localManifestRoot) {
+          await writeManifestRoot(normalizedDealId, metadataManifestRoot)
         }
       } catch (e) {
         console.warn('Failed to update local slab metadata freshness timestamp', { dealId, error: e })
@@ -1207,7 +1222,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
     if (freshness.status === 'stale') {
       try {
-        await deleteDealDirectory(String(dealId))
+        await deleteDealDirectory(normalizedDealId)
         setBrowserCachedByPath({})
         console.info('Cleared stale browser MDU cache', {
           dealId,
