@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { numberToHex } from 'viem'
 import { AlertCircle, CheckCircle2, Coins, HardDrive, RefreshCw, Rocket } from 'lucide-react'
 
@@ -28,6 +29,7 @@ const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
 )
 
 export function FirstFile() {
+  const { openConnectModal } = useConnectModal()
   const { switchNetwork } = useNetwork()
   const { submitDeal, loading: dealLoading } = useCreateDeal()
   const session = useSessionStatus()
@@ -229,7 +231,13 @@ export function FirstFile() {
         <div className={stepBodyClass}>
           <div className="nil-inset p-4 text-sm text-muted-foreground">
             {!isConnected ? (
-              <span>Use the nav wallet control to connect MetaMask and approve access for the active account.</span>
+              <button
+                type="button"
+                onClick={() => openConnectModal?.()}
+                className="cta-shadow inline-flex items-center justify-center gap-3 border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+              >
+                Connect Wallet
+              </button>
             ) : isWrongNetwork ? (
               <span>
                 Use the nav session controls to {genesisMismatch ? 'repair the NilStore network entry' : `switch to ${numberToHex(appConfig.chainId)}`}.
