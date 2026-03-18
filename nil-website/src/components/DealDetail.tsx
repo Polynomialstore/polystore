@@ -1908,7 +1908,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                   {fileActionError && (
                     <div className="nil-tab-panel border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
                       <XCircle className="w-3 h-3" />
-                      DOWNLOAD_FAILURE: {fileActionError}
+                      Download failed: {fileActionError}
                     </div>
                   )}
 
