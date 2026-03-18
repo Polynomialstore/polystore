@@ -232,6 +232,25 @@ async function persistCachedDownloadState(dealId: string, manifestRoot: string, 
   }
 }
 
+function queueCachedDownloadPersist(
+  dealId: string,
+  manifestRoot: string,
+  filePath: string,
+  bytes: Uint8Array,
+  onCached: () => void,
+): void {
+  const safeBytes = new Uint8Array(bytes.byteLength)
+  safeBytes.set(bytes)
+  onCached()
+  void persistCachedDownloadState(dealId, manifestRoot, filePath, safeBytes).catch((error) => {
+    console.warn('Failed to persist browser download cache', {
+      dealId,
+      filePath,
+      error,
+    })
+  })
+}
+
 function FileRow({
   file,
   deal,
@@ -309,9 +328,10 @@ function FileRow({
         })
         if (!result) throw new Error('download failed')
         const bytes = new Uint8Array(await result.blob.arrayBuffer())
-        await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
         downloadBlobAsFile(result.blob, file.path)
+        queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+        })
         onFileActivity?.({
           dealId,
           filePath: file.path,
@@ -345,9 +365,10 @@ function FileRow({
         blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
       })
       const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
-      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(gatewayBlob, file.path)
+      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      })
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -410,9 +431,10 @@ function FileRow({
       })
       if (!result) throw new Error('download failed')
       const bytes = new Uint8Array(await result.blob.arrayBuffer())
-      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
-      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(result.blob, file.path)
+      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      })
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -472,9 +494,10 @@ function FileRow({
         blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
       })
       const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      await persistCachedDownloadState(dealId, manifestHex, file.path, bytes)
-      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBlobAsFile(gatewayBlob, file.path)
+      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      })
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -522,9 +545,10 @@ function FileRow({
         rangeStart: safeStart,
         rangeLen: safeLen,
       })
-      await persistCachedDownloadState(dealId, chainCid, file.path, bytes)
-      setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       downloadBytesAsFile(bytes, file.path)
+      queueCachedDownloadPersist(dealId, chainCid, file.path, bytes, () => {
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      })
       markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
