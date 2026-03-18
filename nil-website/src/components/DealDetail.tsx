@@ -1204,19 +1204,21 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
 
     if (freshness.status === 'fresh') {
-      try {
-        if (localMeta) {
-          await writeSlabMetadata(normalizedDealId, {
-            ...localMeta,
-            last_validated_at: new Date().toISOString(),
-          })
+      void (async () => {
+        try {
+          if (localMeta) {
+            await writeSlabMetadata(normalizedDealId, {
+              ...localMeta,
+              last_validated_at: new Date().toISOString(),
+            })
+          }
+          if (!persistedManifestRoot && metadataManifestRoot && metadataManifestRoot === freshness.localManifestRoot) {
+            await writeManifestRoot(normalizedDealId, metadataManifestRoot)
+          }
+        } catch (e) {
+          console.warn('Failed to update local slab metadata freshness timestamp', { dealId, error: e })
         }
-        if (!persistedManifestRoot && metadataManifestRoot && metadataManifestRoot === freshness.localManifestRoot) {
-          await writeManifestRoot(normalizedDealId, metadataManifestRoot)
-        }
-      } catch (e) {
-        console.warn('Failed to update local slab metadata freshness timestamp', { dealId, error: e })
-      }
+      })()
       return base
     }
 
