@@ -726,7 +726,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const redundancyLabel = isMode2 && serviceHint.rsK && serviceHint.rsM
     ? `Mode 2 RS(${serviceHint.rsK},${serviceHint.rsM})`
     : 'Mode 2 (Auto)'
-  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || String(deal.cid || ''))
   const stripeLayout = useMemo(() => {
     const k = serviceHint.rsK ?? 8
     const m = serviceHint.rsM ?? 4
@@ -774,6 +773,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
+  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || String(deal.cid || ''))
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
