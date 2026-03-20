@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState, useEffect } from "react";
-import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu, HelpCircle, Vote, Terminal, Shield, Server, Database } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Rocket, Trophy, Activity, Terminal, Server, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LivingGrid } from "@nil-store/cybergrid-theme/react/living-grid";
 import { NavDropdown, NavItem } from "./NavDropdown";
