@@ -41,6 +41,7 @@ export VITE_E2E=1
 export E2E_LOCAL_STACK=1
 export VITE_ENABLE_FAUCET=1
 export PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
+export PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
@@ -70,7 +71,7 @@ wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_i
 wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
 wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
 wait_for_http "gateway router" "http://localhost:8080/health" "200" 60 1
-wait_for_http "provider #1" "http://localhost:8091/health" "200" 60 1
+wait_for_http "provider #1" "http://localhost:${PROVIDER_PORT_BASE}/health" "200" 60 1
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
 
 echo "==> Asserting tx relay is disabled..."

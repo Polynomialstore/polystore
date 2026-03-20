@@ -366,6 +366,7 @@ jobs:
   e2e-mode2-fast:
     name: E2E Mode2 Stripe (Fast 3 SPs)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [go-test, rust-test, frontend-build]
     env:
       PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
@@ -432,6 +433,7 @@ jobs:
 
       - name: Run Mode2 Stripe E2E (fast)
         env:
+          E2E_MODE2_FAST: '1'
           PLAYWRIGHT_SKIP_INSTALL: '1'
           PROVIDER_COUNT: '3'
           E2E_MODE2_GREP: 'mode2 deal|mode2 upload without gateway'

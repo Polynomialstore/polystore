@@ -5,6 +5,11 @@ import path from 'node:path'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
+const isMode2Fast = process.env.E2E_MODE2_FAST === '1'
+const mode2FastTestTimeoutMs = isMode2Fast ? 240_000 : 420_000
+const mode2FastPrimaryWaitMs = isMode2Fast ? 120_000 : 180_000
+const mode2FastUploadWaitMs = isMode2Fast ? 180_000 : 300_000
+const mode2FastMaybeDownloadMs = isMode2Fast ? 60_000 : 120_000
 
 async function waitForGatewayConnected(page: Page): Promise<void> {
   const widget = page.getByTestId('gateway-status-widget')
@@ -345,10 +350,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
   test.use({ acceptDownloads: true })
-  test.describe.configure({ retries: process.env.CI ? 1 : 0 })
+  test.describe.configure({ retries: process.env.CI && !isMode2Fast ? 1 : 0 })
 
   test('mode2 deal → shard → upload → commit → retrieve', async ({ page }) => {
-    test.setTimeout(420_000)
+    test.setTimeout(mode2FastTestTimeoutMs)
 
     const filePath = 'mode2-small.txt'
     const fileBytes = Buffer.alloc(256 * 1024, 'M') // spans multiple blobs (128 KiB each)
@@ -359,11 +364,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await ensureWalletConnected(page)
 
     await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: mode2FastPrimaryWaitMs })
 
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
-    await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: mode2FastPrimaryWaitMs })
     const dealTitle = (await workspaceTitle.textContent().catch(() => '')) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -373,7 +378,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await newDealRow.click()
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
-    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: mode2FastPrimaryWaitMs })
     await waitForGatewayConnected(page)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
@@ -385,9 +390,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, 300_000)
+    await completeUploadAndCommit(uploadBtn, commitBtn, mode2FastUploadWaitMs)
 
-    const fileRow = await waitForDealFileRow(page, dealId, filePath, 180_000)
+    const fileRow = await waitForDealFileRow(page, dealId, filePath, mode2FastPrimaryWaitMs)
 
     const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     const gatewayDownloadBtn = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
@@ -397,9 +402,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const clearBrowserCacheBtn = page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`)
     const routeEl = page.getByTestId('transport-route')
 
-    await expect(autoDownloadBtn).toBeEnabled({ timeout: 180_000 })
-    await expect(gatewayDownloadBtn).toBeEnabled({ timeout: 180_000 })
-    await expect(providerDownloadBtn).toBeEnabled({ timeout: 180_000 })
+    await expect(autoDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+    await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+    await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
     let blockGateway = false
     const maybeBlockGateway = async (route: import('@playwright/test').Route) => {
@@ -500,7 +505,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const autoProviderFetchBefore = fetchProviderCalls
     const autoGatewayPlanBefore = planGatewayCalls
     const autoProviderPlanBefore = planProviderCalls
-    const autoBytes = await readDownloadBytes(page, autoDownloadBtn)
+    const autoBytes = await readDownloadBytes(page, autoDownloadBtn, mode2FastMaybeDownloadMs)
     expect(autoBytes.equals(fileBytes)).toBe(true)
     await expect(page.getByTestId('transport-cache-source')).toContainText(/gateway_mdu_cache|network_fetch/i, { timeout: 60_000 })
     await expect(page.getByTestId('transport-cache-freshness')).toContainText(/fresh|unknown|stale/i, { timeout: 60_000 })
@@ -509,6 +514,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(planProviderCalls).toBe(autoProviderPlanBefore)
     assertUnsignedRangeInvariant('auto download')
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
+
+    if (isMode2Fast) {
+      return
+    }
 
     const cacheFetchGatewayBefore = fetchGatewayCalls
     const cacheFetchProviderBefore = fetchProviderCalls
@@ -605,7 +614,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   })
 
   test('mode2 upload without gateway still supports browser MDU download path', async ({ page }) => {
-    test.setTimeout(420_000)
+    test.setTimeout(mode2FastTestTimeoutMs)
 
     const filePath = 'mode2-no-gateway-upload.txt'
     const fileBytes = Buffer.alloc(192 * 1024, 'N')
@@ -616,11 +625,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await ensureWalletConnected(page)
 
     await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: mode2FastPrimaryWaitMs })
 
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
-    await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: mode2FastPrimaryWaitMs })
     const dealTitle = (await workspaceTitle.textContent().catch(() => '')) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -630,7 +639,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await newDealRow.click()
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
-    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+    await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: mode2FastPrimaryWaitMs })
 
     let blockGatewayUpload = true
     const unsignedMissingRangeRequests: string[] = []
@@ -667,33 +676,33 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
-    await waitForUploadControls(uploadBtn, commitBtn, 300_000)
+    await waitForUploadControls(uploadBtn, commitBtn, mode2FastUploadWaitMs)
     if ((await uploadBtn.count().catch(() => 0)) > 0) {
-      await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
+      await expect(uploadBtn).toBeEnabled({ timeout: mode2FastUploadWaitMs })
       await uploadBtn.click()
-      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
+      await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: mode2FastUploadWaitMs })
     }
     const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
     await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
-      timeout: 300_000,
+      timeout: mode2FastUploadWaitMs,
     })
-    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
+    await expect(commitBtn).toBeEnabled({ timeout: mode2FastUploadWaitMs })
     await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: mode2FastPrimaryWaitMs })
     blockGatewayUpload = false
 
     await newDealRow.first().scrollIntoViewIfNeeded().catch(() => undefined)
     await newDealRow.click({ force: true }).catch(() => undefined)
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
-    const fileRow = await waitForFileRowInAnyDeal(page, filePath, 300_000)
+    const fileRow = await waitForFileRowInAnyDeal(page, filePath, mode2FastUploadWaitMs)
     const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
     await expect(browserSlabBtn).toBeVisible({ timeout: 60_000 })
 
-    let slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, 120_000)
+    let slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, mode2FastMaybeDownloadMs)
     if (!slabBytes) {
-      await waitForDealFileRow(page, dealId, filePath, 120_000)
-      slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, 120_000)
+      await waitForDealFileRow(page, dealId, filePath, mode2FastPrimaryWaitMs)
+      slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, mode2FastMaybeDownloadMs)
     }
     if (!slabBytes) {
       const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
