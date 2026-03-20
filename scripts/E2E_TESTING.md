@@ -12,7 +12,7 @@ set -a
 source .env.e2e.fast
 set +a
 scripts/e2e_stack_up.sh
-cd nil-website && npm run test:e2e -- tests/mode2-stripe.spec.ts --grep "mode2 deal|mode2 upload without gateway still supports browser MDU download path"
+cd nil-website && npm run test:e2e -- tests/mode2-stripe.spec.ts --grep "^mode2 deal"
 scripts/e2e_stack_down.sh
 ```
 

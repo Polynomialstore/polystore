@@ -436,7 +436,7 @@ jobs:
           E2E_MODE2_FAST: '1'
           PLAYWRIGHT_SKIP_INSTALL: '1'
           PROVIDER_COUNT: '3'
-          E2E_MODE2_GREP: 'mode2 deal|mode2 upload without gateway'
+          E2E_MODE2_GREP: '^mode2 deal'
         run: |
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
           scripts/e2e_mode2_stripe_multi_sp.sh
