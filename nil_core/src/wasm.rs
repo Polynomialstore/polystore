@@ -1,9 +1,10 @@
-use crate::coding::{expand_mdu, expand_mdu_encoded};
+use crate::coding::{expand_mdu, expand_mdu_encoded, expand_payload_flat};
 use crate::kzg::KzgContext;
 use crate::builder::Mdu0Builder;
 use crate::layout::{FileRecordV1, pack_length_and_flags};
 use wasm_bindgen::prelude::*;
 use js_sys::Uint8Array;
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU};
 
 #[wasm_bindgen]
 pub struct NilWasm {
@@ -33,6 +34,49 @@ impl NilWasm {
     pub fn expand_mdu_rs(&self, mdu_bytes: &[u8], k: u32, m: u32) -> Result<JsValue, JsValue> {
         let res = expand_mdu_encoded(&self.kzg_ctx, mdu_bytes, k as usize, m as usize)
             .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn expand_payload_rs_flat(&self, payload_bytes: &[u8], k: u32, m: u32) -> Result<JsValue, JsValue> {
+        let data_shards = k as usize;
+        let parity_shards = m as usize;
+        if data_shards == 0 || parity_shards == 0 {
+            return Err(JsValue::from_str("RS parameters must be positive"));
+        }
+        if BLOBS_PER_MDU % data_shards != 0 {
+            return Err(JsValue::from_str("Invalid RS parameters"));
+        }
+
+        let rows = BLOBS_PER_MDU / data_shards;
+        let shard_count = data_shards + parity_shards;
+        let shard_len = rows * BLOB_SIZE;
+        let mut witness_flat = vec![0u8; shard_count * rows * 48];
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        expand_payload_flat(
+            &self.kzg_ctx,
+            payload_bytes,
+            data_shards,
+            parity_shards,
+            &mut witness_flat,
+            &mut shards_flat,
+        )
+        .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        #[derive(serde::Serialize)]
+        struct ExpandPayloadFlatResult {
+            witness_flat: Vec<u8>,
+            shards_flat: Vec<u8>,
+            shard_len: usize,
+        }
+
+        let res = ExpandPayloadFlatResult {
+            witness_flat,
+            shards_flat,
+            shard_len,
+        };
 
         serde_wasm_bindgen::to_value(&res)
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))

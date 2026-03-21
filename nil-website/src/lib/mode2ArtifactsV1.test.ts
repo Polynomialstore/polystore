@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename)
 
 type NilWasmLike = {
   expand_mdu_rs: (encodedUserMdu: Uint8Array, k: number, m: number) => unknown
+  expand_payload_rs_flat: (payloadBytes: Uint8Array, k: number, m: number) => unknown
   compute_mdu_root: (witnessFlat: Uint8Array) => unknown
 }
 
@@ -132,5 +133,28 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
   for (let slot = 0; slot < shardsList.length; slot++) {
     const name = `mdu_${slabIndex}_slot_${slot}.bin`
     assert.strictEqual(sha256Hex0x(shardsList[slot]), fx.artifact_sha256[name])
+  }
+
+  const payloadExpandedRaw = nilWasm.expand_payload_rs_flat(payload, fx.k, fx.m) as unknown
+  const payloadExpanded = typeof payloadExpandedRaw === 'string' ? JSON.parse(payloadExpandedRaw) : payloadExpandedRaw
+  const payloadWitnessRaw = (payloadExpanded as { witness_flat?: unknown }).witness_flat
+  const payloadShardsRaw = (payloadExpanded as { shards_flat?: unknown }).shards_flat
+  const payloadShardLen = Number((payloadExpanded as { shard_len?: unknown }).shard_len ?? 0)
+
+  assert.ok(payloadWitnessRaw)
+  assert.ok(payloadShardsRaw)
+  assert.ok(Number.isInteger(payloadShardLen) && payloadShardLen > 0)
+
+  const payloadWitnessFlat =
+    payloadWitnessRaw instanceof Uint8Array ? payloadWitnessRaw : new Uint8Array(payloadWitnessRaw as ArrayBufferLike)
+  const payloadShardsFlat =
+    payloadShardsRaw instanceof Uint8Array ? payloadShardsRaw : new Uint8Array(payloadShardsRaw as ArrayBufferLike)
+
+  assert.deepStrictEqual(payloadWitnessFlat, witnessFlat)
+  assert.strictEqual(payloadShardsFlat.byteLength, shardsList.length * payloadShardLen)
+  for (let slot = 0; slot < shardsList.length; slot += 1) {
+    const start = slot * payloadShardLen
+    const end = start + payloadShardLen
+    assert.deepStrictEqual(payloadShardsFlat.slice(start, end), shardsList[slot])
   }
 })
