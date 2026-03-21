@@ -2012,7 +2012,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             );
 
             let rawChunk: Uint8Array = new Uint8Array();
-            let encodedMdu: Uint8Array;
+            let encodedMdu: Uint8Array | null = null;
             let encodeMs = 0;
 
             if (isExisting) {
@@ -2022,21 +2022,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const start = newIndex * RawMduCapacity;
               const end = Math.min(start + RawMduCapacity, bytes.length);
               rawChunk = bytes.subarray(start, end) as Uint8Array;
-              const encodeStart = performance.now();
-              encodedMdu = encodeToMdu(rawChunk);
-              encodeMs = performance.now() - encodeStart;
             }
-
-            userMdus.push({ index: i, data: encodedMdu });
+            const expansionInputSource = isExisting ? encodedMdu : rawChunk;
+            if (!expansionInputSource) {
+              throw new Error(`missing expansion input for user MDU #${i}`)
+            }
             const copyStart = performance.now();
-            const chunkCopy = new Uint8Array(encodedMdu);
+            const chunkCopy = new Uint8Array(expansionInputSource);
             const copyMs = performance.now() - copyStart;
 
             if (useMode2) {
-              addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})...`);
+              addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})${isExisting ? '' : ' via payload-aware path'}...`);
               const wasmStart = performance.now();
-              const result = await workerClient.expandMduRs(chunkCopy, rsK, rsM);
+              const result = isExisting
+                ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
+                : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM);
               const wasmMs = performance.now() - wasmStart;
+
+              if (!encodedMdu) {
+                const encodeStart = performance.now();
+                encodedMdu = encodeToMdu(rawChunk);
+                encodeMs = performance.now() - encodeStart;
+              }
+              userMdus.push({ index: i, data: encodedMdu });
 
               const rootBytes = toU8(result.mdu_root);
               userRoots.push(rootBytes);
@@ -2051,6 +2059,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               console.log('[perf] user mdu (mode2)', {
                 i,
                 rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
+                expansionPath: isExisting ? 'encoded_mdu' : 'payload',
                 encodeMs,
                 copyMs,
                 wasmMs,
@@ -2079,6 +2088,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
               continue;
             }
+
+            if (!encodedMdu) {
+              const encodeStart = performance.now();
+              encodedMdu = encodeToMdu(rawChunk);
+              encodeMs = performance.now() - encodeStart;
+            }
+            if (!encodedMdu) {
+              throw new Error(`missing encoded user MDU bytes for user MDU #${i}`)
+            }
+            userMdus.push({ index: i, data: encodedMdu });
 
             addLog(`> Sharding User MDU #${i}...`);
             const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
