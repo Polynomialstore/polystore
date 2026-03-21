@@ -32,6 +32,8 @@ import {
   PLANNER_TRIVIAL_BLOB_WEIGHT,
   weightedWorkForMdu,
 } from '../lib/upload/planner';
+import { createUploadEngine } from '../lib/upload/engine';
+import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 
 interface ShardItem {
   id: number;
@@ -264,6 +266,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   // Use the direct commit hook
   const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
+  const uploadEngine = useMemo(
+    () =>
+      createUploadEngine({
+        transport: createSparseHttpTransportPort(),
+        chainCommitter: {
+          commitContent,
+        },
+      }),
+    [commitContent],
+  )
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -291,6 +303,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (!cancelled) {
           if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
             setStripeParams({ k: parsed.rsK, m: parsed.rsM })
+          } else if (parsed.mode === 'auto') {
+            setStripeParams({ k: appConfig.defaultRsK, m: appConfig.defaultRsM })
           } else {
             setStripeParams(null)
           }
@@ -448,81 +462,35 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const manifestRoot = currentManifestRoot
     const witnessCount = shardProgress.totalWitnessMdus
     const metadataMdus = collectedMdus.filter((mdu) => mdu.index <= witnessCount)
+    const metadataTargets = bases.map((base) => ({
+      baseUrl: base,
+      mduPath: '/sp/upload_mdu',
+      manifestPath: '/sp/upload_manifest',
+      shardPath: '/sp/upload_shard',
+      label: base,
+    }))
+    const shardTargets = metadataTargets
+    const shardSets = mode2Shards.map((mdu) => ({
+      index: 1 + witnessCount + mdu.index,
+      shards: mdu.shards,
+    }))
 
     setMode2Uploading(true)
     setMode2UploadError(null)
     setMode2UploadComplete(false)
 
     try {
-      for (const base of bases) {
-        for (const mdu of metadataMdus) {
-          const res = await postSparseArtifact({
-            url: `${base}/sp/upload_mdu`,
-            headers: {
-              'X-Nil-Deal-ID': dealId,
-              'X-Nil-Mdu-Index': String(mdu.index),
-              'X-Nil-Manifest-Root': manifestRoot,
-              'Content-Type': 'application/octet-stream',
-            },
-            artifact: {
-              kind: 'mdu',
-              index: mdu.index,
-              bytes: mdu.data,
-            },
-          })
-          if (!res.ok) {
-            const msg = await res.text().catch(() => '')
-            throw new Error(`metadata upload failed: ${res.status} ${msg}`)
-          }
-        }
-
-        const manRes = await postSparseArtifact({
-          url: `${base}/sp/upload_manifest`,
-          headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Manifest-Root': manifestRoot,
-            'Content-Type': 'application/octet-stream',
-          },
-          artifact: {
-            kind: 'manifest',
-            bytes: currentManifestBlob,
-          },
-        })
-        if (!manRes.ok) {
-          const msg = await manRes.text().catch(() => '')
-          throw new Error(`manifest upload failed: ${manRes.status} ${msg}`)
-        }
-      }
-
-      for (const mdu of mode2Shards) {
-        const slabIndex = 1 + witnessCount + mdu.index
-        for (let slot = 0; slot < bases.length; slot++) {
-          const base = bases[slot]
-          const shard = mdu.shards[slot]
-          if (!shard) {
-            throw new Error(`missing shard for slot ${slot}`)
-          }
-          const res = await postSparseArtifact({
-            url: `${base}/sp/upload_shard`,
-            headers: {
-              'X-Nil-Deal-ID': dealId,
-              'X-Nil-Mdu-Index': String(slabIndex),
-              'X-Nil-Slot': String(slot),
-              'X-Nil-Manifest-Root': manifestRoot,
-              'Content-Type': 'application/octet-stream',
-            },
-            artifact: {
-              kind: 'shard',
-              index: slabIndex,
-              slot,
-              bytes: shard,
-            },
-          })
-          if (!res.ok) {
-            const msg = await res.text().catch(() => '')
-            throw new Error(`shard upload failed: ${res.status} ${msg}`)
-          }
-        }
+      const result = await uploadEngine.uploadStriped({
+        dealId,
+        manifestRoot,
+        manifestBlob: currentManifestBlob,
+        metadataMdus,
+        shardSets,
+        metadataTargets,
+        shardTargets,
+      })
+      if (!result.ok) {
+        throw new Error(result.error || 'Mode 2 upload failed')
       }
 
       setMode2UploadComplete(true)
@@ -534,7 +502,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
       setMode2Uploading(false)
     }
-  }, [collectedMdus, currentManifestBlob, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams])
+  }, [collectedMdus, currentManifestBlob, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
 
   const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
     const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
@@ -2756,22 +2724,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               <div className="flex flex-col gap-2">
                 <button
                   onClick={async () => {
-                    const totalSize = isMode2
-                      ? shardProgress.fileBytesTotal
-                      : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
-
-                    const witnessMdus = Math.max(0, Number(shardProgress.totalWitnessMdus) || 0)
-                    const totalMdus = isMode2
-                      ? Math.max(0, 1 + witnessMdus + Math.max(0, Number(shardProgress.totalUserMdus) || 0))
-                      : Math.max(0, collectedMdus.length)
-
                     try {
-                      await commitContent({
+                      await uploadEngine.commitPreparedContent({
                         dealId,
                         manifestRoot: currentManifestRoot || '',
-                        fileSize: totalSize,
-                        totalMdus,
-                        witnessMdus,
+                        isMode2,
+                        fileBytesTotal: isMode2
+                          ? shardProgress.fileBytesTotal
+                          : collectedMdus.reduce((acc, m) => acc + m.data.length, 0),
+                        totalWitnessMdus: shardProgress.totalWitnessMdus,
+                        totalUserMdus: shardProgress.totalUserMdus,
+                        mdus: collectedMdus,
                       })
                     } catch (e: unknown) {
                       const msg = e instanceof Error ? e.message : String(e)

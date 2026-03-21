@@ -61,6 +61,16 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
+  await page.route('**/sp/upload_shard', async (route) => {
+    const headers = route.request().headers()
+    const body = route.request().postDataBuffer()
+    const fullSizeHeader = headers['x-nil-full-size']
+    if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
+      sparseUploadObserved = true
+    }
+    return route.fulfill({ status: 200, body: 'OK' })
+  })
+
   // Mock EVM RPC
   await page.route('**://localhost:8545/**', async (route) => {
     const req = route.request()
@@ -134,7 +144,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     })
   })
 
-  // Mock LCD Deals
+  // Mock LCD Deals / Providers
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     const url = route.request().url()
 
@@ -152,7 +162,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
       size: '0',
       escrow_balance: '1000000',
       end_block: '1000',
-      providers: ['nil1provider'],
+      providers: ['nil1providera', 'nil1providerb', 'nil1providerc'],
     }
 
     let pathname = url
@@ -172,6 +182,19 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     return route.fulfill({
       status: 200,
       body: JSON.stringify({ deals: [deal] }),
+    })
+  })
+
+  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+    return route.fulfill({
+      status: 200,
+      body: JSON.stringify({
+        providers: [
+          { address: 'nil1providera', endpoints: ['/ip4/127.0.0.1/tcp/8080/http'] },
+          { address: 'nil1providerb', endpoints: ['/ip4/127.0.0.1/tcp/8081/http'] },
+          { address: 'nil1providerc', endpoints: ['/ip4/127.0.0.1/tcp/8082/http'] },
+        ],
+      }),
     })
   })
 
@@ -289,7 +312,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Sharding complete.')
 
   // Check if "Upload to SP" button is enabled.
-  const uploadBtn = page.getByRole('button', { name: /Upload \d+ MDUs to SP/ })
+  const uploadBtn = page.getByRole('button', { name: /Upload Stripes \(Mode 2\)|Upload \d+ MDUs to SP/ })
   await expect(uploadBtn).toBeEnabled()
   
   console.log('Clicking Upload to SP...')
