@@ -162,6 +162,17 @@ test('OpfsAdapter: writeMdu and readMdu', async () => {
     assert.deepStrictEqual(readData, data, 'Read data should match written data');
 });
 
+test('OpfsAdapter: sparse MDU write zero-extends on read and hides sidecar files', async () => {
+    const dealId = 'test-deal-sparse-mdu';
+    await OpfsAdapter.writeMdu(dealId, 3, new Uint8Array([1, 2]), 4);
+
+    const readData = await OpfsAdapter.readMdu(dealId, 3);
+    assert.deepStrictEqual(readData, new Uint8Array([1, 2, 0, 0]));
+
+    const files = await OpfsAdapter.listDealFiles(dealId);
+    assert.deepStrictEqual(files, ['mdu_3.bin']);
+});
+
 test('OpfsAdapter: writeShard and readShard', async () => {
     const dealId = 'test-deal-write-read-shard';
     const mduIndex = 42;
@@ -182,6 +193,19 @@ test('OpfsAdapter: writeManifestBlob and readManifestBlob', async () => {
 
     const readBlob = await OpfsAdapter.readManifestBlob(dealId);
     assert.deepStrictEqual(readBlob, blob, 'Read manifest blob should match written manifest blob');
+});
+
+test('OpfsAdapter: sparse shard and manifest writes zero-extend on read', async () => {
+    const dealId = 'test-deal-sparse-shard-manifest';
+
+    await OpfsAdapter.writeShard(dealId, 9, 2, new Uint8Array([5]), 3);
+    await OpfsAdapter.writeManifestBlob(dealId, new Uint8Array([7, 8, 0, 0]));
+
+    const readShard = await OpfsAdapter.readShard(dealId, 9, 2);
+    const readManifest = await OpfsAdapter.readManifestBlob(dealId);
+
+    assert.deepStrictEqual(readShard, new Uint8Array([5, 0, 0]));
+    assert.deepStrictEqual(readManifest, new Uint8Array([7, 8, 0, 0]));
 });
 
 test('OpfsAdapter: write/read/delete slab metadata', async () => {
@@ -388,4 +412,35 @@ test('OpfsAdapter: atomic slab generation swap serves new generation and cleans 
     assert.ok(files.includes('mdu_0.bin'))
     assert.ok(files.includes('mdu_1.bin'))
     assert.ok(files.includes('manifest.bin'))
+})
+
+test('OpfsAdapter: atomic slab generation swap rehydrates sparse artifacts on read', async () => {
+    const dealId = 'test-deal-atomic-sparse-swap'
+    const root = '0x' + 'ee'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: root,
+        manifestBlob: new Uint8Array([1]),
+        manifestBlobFullSize: 4,
+        mdus: [
+            { index: 0, data: new Uint8Array([9]), fullSize: 3 },
+            { index: 1, data: new Uint8Array([8, 7]), fullSize: 4 },
+        ],
+        shards: [
+            { mduIndex: 1, slot: 0, data: new Uint8Array([6]), fullSize: 2 },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: root,
+            generationId: root.slice(2),
+        }),
+    })
+
+    assert.deepStrictEqual(await OpfsAdapter.readManifestBlob(dealId), new Uint8Array([1, 0, 0, 0]))
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([9, 0, 0]))
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 1), new Uint8Array([8, 7, 0, 0]))
+    assert.deepStrictEqual(await OpfsAdapter.readShard(dealId, 1, 0), new Uint8Array([6, 0]))
+    const files = await OpfsAdapter.listDealFiles(dealId)
+    assert.ok(files.includes('manifest.bin'))
+    assert.ok(!files.some((name) => name.endsWith('.meta.json')))
 })
