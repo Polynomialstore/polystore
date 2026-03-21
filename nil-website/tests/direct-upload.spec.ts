@@ -28,6 +28,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   let manifestUploadCalls = 0
   let dealCid = ''
+  let sparseUploadObserved = false
 
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
@@ -35,10 +36,15 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     const dealId = headers['x-nil-deal-id']
     const manifestRoot = headers['x-nil-manifest-root']
     const mduIndex = headers['x-nil-mdu-index']
+    const fullSizeHeader = headers['x-nil-full-size']
+    const body = route.request().postDataBuffer()
 
     if (!dealId || !manifestRoot || !mduIndex) {
         console.log(`[SP Upload Mock] Missing headers: Deal=${dealId}, Root=${manifestRoot}, Index=${mduIndex}`)
         return route.fulfill({ status: 400, body: 'Missing headers' })
+    }
+    if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
+      sparseUploadObserved = true
     }
     console.log(`[SP Upload Mock] Received MDU #${mduIndex} for Deal ${dealId} (Root: ${manifestRoot})`)
     return route.fulfill({ status: 200, body: 'OK' })
@@ -46,6 +52,12 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   await page.route('**/sp/upload_manifest', async (route) => {
     manifestUploadCalls += 1
+    const headers = route.request().headers()
+    const body = route.request().postDataBuffer()
+    const fullSizeHeader = headers['x-nil-full-size']
+    if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
+      sparseUploadObserved = true
+    }
     return route.fulfill({ status: 200, body: 'OK' })
   })
 
@@ -287,6 +299,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30000 })
   console.log('Upload complete.')
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
+  await expect.poll(() => sparseUploadObserved, { timeout: 30_000 }).toBe(true)
 
   // Check "Commit to Chain" button
   const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
@@ -305,7 +318,18 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   dealCid = (await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory()
     const dealDir = await root.getDirectoryHandle('deal-1', { create: false })
-    const fh = await dealDir.getFileHandle('manifest_root.txt', { create: false })
+    let storageDir = dealDir
+    try {
+      const activeHandle = await dealDir.getFileHandle('active_generation.txt', { create: false })
+      const activeText = (await (await activeHandle.getFile()).text()).trim()
+      if (activeText) {
+        const generationsDir = await dealDir.getDirectoryHandle('generations', { create: false })
+        storageDir = await generationsDir.getDirectoryHandle(activeText, { create: false })
+      }
+    } catch {
+      // Older layouts may still store files directly at the deal root.
+    }
+    const fh = await storageDir.getFileHandle('manifest_root.txt', { create: false })
     const file = await fh.getFile()
     return file.text()
   })).trim()

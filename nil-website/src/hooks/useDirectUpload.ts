@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { postSparseArtifact } from '../lib/upload/sparseTransport';
 
 interface DirectUploadOptions {
   dealId: string;
@@ -62,16 +63,19 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
       const url = `${providerBaseUrl}/sp/upload_mdu`;
 
       try {
-        const response = await fetch(url, {
-          method: 'POST',
+        const response = await postSparseArtifact({
+          url,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Mdu-Index': String(mdu.index),
             'X-Nil-Manifest-Root': manifestRoot,
-            'Content-Type': 'application/octet-stream', // Important for raw binary body
+            'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([mdu.data as any]),
+          artifact: {
+            kind: 'mdu',
+            index: mdu.index,
+            bytes: mdu.data,
+          },
         });
 
         if (!response.ok) {
@@ -108,15 +112,17 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
         }
 
         const url = `${providerBaseUrl}/sp/upload_manifest`
-        const response = await fetch(url, {
-          method: 'POST',
+        const response = await postSparseArtifact({
+          url,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([manifestBlob as any]),
+          artifact: {
+            kind: 'manifest',
+            bytes: manifestBlob,
+          },
         })
 
         if (!response.ok) {
