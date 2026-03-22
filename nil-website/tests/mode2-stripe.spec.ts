@@ -18,6 +18,18 @@ async function waitForGatewayConnected(page: Page): Promise<void> {
   await expect(widget.first()).toHaveAttribute('data-status', 'connected', { timeout: 60_000 })
 }
 
+async function ensureWalletFunded(page: Page, timeout: number): Promise<void> {
+  const stakeBalance = page.getByTestId('cosmos-stake-balance')
+  const current = ((await stakeBalance.textContent().catch(() => '')) || '').trim()
+  if (current && !/^(?:—|0 stake)$/.test(current)) return
+
+  const faucetButton = page.getByTestId('faucet-request')
+  if (await faucetButton.isVisible().catch(() => false)) {
+    await faucetButton.click()
+  }
+  await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout })
+}
+
 async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, timeout = 300_000): Promise<void> {
   await expect
     .poll(async () => {
@@ -355,16 +367,15 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   test('mode2 deal → shard → upload → commit → retrieve', async ({ page }) => {
     test.setTimeout(mode2FastTestTimeoutMs)
 
-    const filePath = 'mode2-small.txt'
-    const fileBytes = Buffer.alloc(256 * 1024, 'M') // spans multiple blobs (128 KiB each)
+    const filePath = 'mode2-small.bin'
+    const fileBytes = crypto.randomBytes(160 * 1024) // spans multiple blobs without compressing to a tiny payload
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
 
     await ensureWalletConnected(page)
 
-    await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: mode2FastPrimaryWaitMs })
+    await ensureWalletFunded(page, mode2FastPrimaryWaitMs)
 
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
@@ -383,7 +394,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: filePath,
-      mimeType: 'text/plain',
+      mimeType: 'application/octet-stream',
       buffer: fileBytes,
     })
 
@@ -397,12 +408,26 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     const gatewayDownloadBtn = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
     const providerDownloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
-    const browserCacheBtn = page.locator(`[data-testid="deal-detail-download-browser-cache"][data-file-path="${filePath}"]`)
     const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
-    const clearBrowserCacheBtn = page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`)
     const routeEl = page.getByTestId('transport-route')
 
     await expect(autoDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+
+    if (isMode2Fast) {
+      await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+      await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+      await expect(browserSlabBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+
+      const gatewayBytes = await readDownloadBytes(page, gatewayDownloadBtn, mode2FastMaybeDownloadMs)
+      expect(gatewayBytes.equals(fileBytes)).toBe(true)
+      await expect(routeEl).toBeVisible({ timeout: 60_000 })
+      await expect(fileRow).toBeVisible({ timeout: 60_000 })
+      return
+    }
+
+    const browserCacheBtn = page.locator(`[data-testid="deal-detail-download-browser-cache"][data-file-path="${filePath}"]`)
+    const clearBrowserCacheBtn = page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`)
+
     await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
     await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
@@ -515,10 +540,6 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     assertUnsignedRangeInvariant('auto download')
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
 
-    if (isMode2Fast) {
-      return
-    }
-
     const cacheFetchGatewayBefore = fetchGatewayCalls
     const cacheFetchProviderBefore = fetchProviderCalls
     const cachePlanGatewayBefore = planGatewayCalls
@@ -624,8 +645,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletConnected(page)
 
-    await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: mode2FastPrimaryWaitMs })
+    await ensureWalletFunded(page, mode2FastPrimaryWaitMs)
 
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
@@ -726,8 +746,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletConnected(page)
 
-    await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await ensureWalletFunded(page, 180_000)
 
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
@@ -771,8 +790,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletConnected(page)
 
-    await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await ensureWalletFunded(page, 180_000)
     console.log('[rehydrate-e2e] faucet funded')
 
     await page.getByTestId('alloc-submit').click()

@@ -1,11 +1,19 @@
 # NilStore E2E testing profiles
 
 This repo now supports two standard E2E profiles for browser + gateway flows.
+Deterministic upload, commit, and sparse transport assertions should prefer the
+Node integration lane (`cd nil-website && npm run test:integration`).
+Playwright is retained for browser-only smoke paths.
 
 ## Fast profile (PR/default)
 
 - Targets short feedback cycles and deterministic behavior.
 - Uses 3 local Storage Providers.
+- Retained browser-only checks:
+  - wallet connect / faucet / basic dashboard readiness
+  - Mode 2 worker bootstrap and file input wiring
+  - one gateway-backed Mode 2 upload/commit/download smoke
+  - one gateway-absent direct-SP download smoke
 
 ```bash
 set -a
@@ -38,4 +46,5 @@ scripts/e2e_stack_down.sh
 ## CI behavior
 
 - Push CI uses the fast Mode2 E2E profile.
+- Push CI also keeps the gateway-absent Playwright smoke for browser-only no-gateway behavior.
 - LibP2P relay Playwright is removed from push gating and available only in `NilStore E2E Heavy` via manual dispatch.

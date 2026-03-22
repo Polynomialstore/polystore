@@ -42,6 +42,14 @@ export E2E_LOCAL_STACK=1
 export VITE_ENABLE_FAUCET=1
 export PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 export PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
+export RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
+export P2P_ADDR="${P2P_ADDR:-tcp://0.0.0.0:26656}"
+export LCD_PORT="${LCD_PORT:-1317}"
+export EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
+export EVM_WS_PORT="${EVM_WS_PORT:-8546}"
+export FAUCET_PORT="${FAUCET_PORT:-8081}"
+export WEB_PORT="${WEB_PORT:-5173}"
+export E2E_BASE_URL="${E2E_BASE_URL:-http://localhost:${WEB_PORT}}"
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
@@ -67,12 +75,12 @@ if [ -z "${E2E_STACK_PROFILE:-}" ]; then
 fi
 "$STACK_UP_SCRIPT"
 
-wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
-wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
-wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
+wait_for_http "lcd" "http://localhost:${LCD_PORT}/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
+wait_for_http "nilchain lcd" "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/params" "200" 60 1
+wait_for_http "faucet" "http://localhost:${FAUCET_PORT}/faucet" "200,405" 60 1
 wait_for_http "gateway router" "http://localhost:8080/health" "200" 60 1
 wait_for_http "provider #1" "http://localhost:${PROVIDER_PORT_BASE}/health" "200" 60 1
-wait_for_http "web" "http://localhost:5173/" "200" 90 1
+wait_for_http "web" "http://localhost:${WEB_PORT}/" "200" 90 1
 
 echo "==> Asserting tx relay is disabled..."
 tx_relay_code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/gateway/create-deal-evm 2>/dev/null || true)"
