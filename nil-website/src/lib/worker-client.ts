@@ -132,6 +132,10 @@ export const workerClient = {
     return sendMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
   },
 
+  async expandPayloadRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
+    return sendMessageToWorker('expandPayloadRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
+  },
+
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
   async computeManifest(roots: Uint8Array): Promise<{ root: Uint8Array; blob: Uint8Array }> {
     return sendMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{ root: Uint8Array; blob: Uint8Array }>;

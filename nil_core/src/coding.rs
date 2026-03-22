@@ -441,4 +441,53 @@ mod tests {
             _ => panic!("expected InvalidRsParams, got {err:?}"),
         }
     }
+
+    #[test]
+    fn expand_payload_flat_matches_encoded_mdu_path() {
+        let setup_bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../demos/kzg/trusted_setup.txt"
+        ));
+        let cursor = std::io::Cursor::new(setup_bytes.as_slice());
+        let ctx = KzgContext::load_from_reader(std::io::BufReader::new(cursor)).unwrap();
+
+        let payload_len = 300_000usize;
+        let mut payload = vec![0u8; payload_len];
+        for (i, byte) in payload.iter_mut().enumerate() {
+            *byte = ((i * 17 + 11) % 251) as u8;
+        }
+
+        let encoded = encode_to_mdu(&payload);
+        let expanded = expand_mdu_encoded(&ctx, &encoded, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
+
+        let rows = BLOBS_PER_MDU / DATA_SHARDS_NUM;
+        let shard_count = DATA_SHARDS_NUM + PARITY_SHARDS_NUM;
+        let shard_len = rows * BLOB_SIZE;
+        let mut witness_flat = vec![0u8; shard_count * rows * 48];
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        expand_payload_flat(
+            &ctx,
+            &payload,
+            DATA_SHARDS_NUM,
+            PARITY_SHARDS_NUM,
+            &mut witness_flat,
+            &mut shards_flat,
+        )
+        .unwrap();
+
+        let expected_witness_flat: Vec<u8> = expanded
+            .witness
+            .iter()
+            .flat_map(|w| w.iter().copied())
+            .collect();
+        assert_eq!(witness_flat, expected_witness_flat);
+
+        let expected_shards_flat: Vec<u8> = expanded
+            .shards
+            .iter()
+            .flat_map(|shard| shard.iter().copied())
+            .collect();
+        assert_eq!(shards_flat, expected_shards_flat);
+    }
 }
