@@ -70,6 +70,9 @@ export function computeLeafCount(useMode2: boolean, rsK = 0, rsM = 0): number {
   if (safeK <= 0) {
     throw new Error('rsK must be positive when Mode 2 is enabled')
   }
+  if (PLANNER_BLOBS_PER_MDU % safeK !== 0) {
+    throw new Error(`rsK must divide ${PLANNER_BLOBS_PER_MDU} when Mode 2 is enabled`)
+  }
   return (safeK + safeM) * (PLANNER_BLOBS_PER_MDU / safeK)
 }
 

@@ -85,6 +85,7 @@ test('weightedWorkForMdu: treats trailing trivial blobs as discounted work', () 
 test('computeLeafCount: mode1 stays at 64 blobs and mode2 derives leaf count from RS params', () => {
   assert.equal(computeLeafCount(false), 64)
   assert.equal(computeLeafCount(true, 8, 4), 96)
+  assert.throws(() => computeLeafCount(true, 7, 4), /rsK must divide 64/)
 })
 
 test('buildUploadShardItems: orders meta, witness, then user mdus', () => {
