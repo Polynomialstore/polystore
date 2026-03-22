@@ -14,7 +14,7 @@ async function main() {
   const privKey = (process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY) as Hex | undefined
   if (!privKey) throw new Error('EVM_PRIVKEY env var required')
 
-  const rpcUrl = process.env.EVM_RPC || 'http://localhost:8545'
+  const rpcUrl = process.env.EVM_RPC || process.env.VITE_EVM_RPC || 'http://localhost:8545'
   const chainId = Number(process.env.EVM_CHAIN_ID || 31337)
   const precompile = (process.env.NILSTORE_PRECOMPILE ||
     process.env.VITE_NILSTORE_PRECOMPILE ||
@@ -97,4 +97,3 @@ main().catch((err) => {
   console.error(err)
   process.exit(1)
 })
-

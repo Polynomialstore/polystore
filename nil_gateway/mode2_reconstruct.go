@@ -250,7 +250,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		if usedFallbackProvider {
 			log.Printf("mode2 reconstruct fallback: deal=%d mdu=%d slot=%d used_non_assigned_provider=true", dealID, mduIndex, slot)
 		}
-		_ = os.WriteFile(localPath, shardBytes, 0o644)
+		_ = writeSparseArtifactFile(localPath, shardBytes, int64(len(shardBytes)), 0o644)
 		return nil
 	}
 
