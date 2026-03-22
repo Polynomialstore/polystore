@@ -24,6 +24,7 @@ import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
+import { postSparseArtifact } from '../lib/upload/sparseTransport';
 
 interface ShardItem {
   id: number;
@@ -448,16 +449,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     try {
       for (const base of bases) {
         for (const mdu of metadataMdus) {
-          const res = await fetch(`${base}/sp/upload_mdu`, {
-            method: 'POST',
+          const res = await postSparseArtifact({
+            url: `${base}/sp/upload_mdu`,
             headers: {
               'X-Nil-Deal-ID': dealId,
               'X-Nil-Mdu-Index': String(mdu.index),
               'X-Nil-Manifest-Root': manifestRoot,
               'Content-Type': 'application/octet-stream',
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            body: new Blob([mdu.data as any]),
+            artifact: {
+              kind: 'mdu',
+              index: mdu.index,
+              bytes: mdu.data,
+            },
           })
           if (!res.ok) {
             const msg = await res.text().catch(() => '')
@@ -465,15 +469,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         }
 
-        const manRes = await fetch(`${base}/sp/upload_manifest`, {
-          method: 'POST',
+        const manRes = await postSparseArtifact({
+          url: `${base}/sp/upload_manifest`,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([currentManifestBlob as any]),
+          artifact: {
+            kind: 'manifest',
+            bytes: currentManifestBlob,
+          },
         })
         if (!manRes.ok) {
           const msg = await manRes.text().catch(() => '')
@@ -489,8 +495,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (!shard) {
             throw new Error(`missing shard for slot ${slot}`)
           }
-          const res = await fetch(`${base}/sp/upload_shard`, {
-            method: 'POST',
+          const res = await postSparseArtifact({
+            url: `${base}/sp/upload_shard`,
             headers: {
               'X-Nil-Deal-ID': dealId,
               'X-Nil-Mdu-Index': String(slabIndex),
@@ -498,8 +504,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               'X-Nil-Manifest-Root': manifestRoot,
               'Content-Type': 'application/octet-stream',
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            body: new Blob([shard as any]),
+            artifact: {
+              kind: 'shard',
+              index: slabIndex,
+              slot,
+              bytes: shard,
+            },
           })
           if (!res.ok) {
             const msg = await res.text().catch(() => '')
@@ -636,16 +646,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (!data) {
           throw new Error(`missing local MDU: mdu_${idx}.bin`)
         }
-        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
-          method: 'POST',
+        const res = await postSparseArtifact({
+          url: `${gatewayBase}${mirrorMduPath}`,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Mdu-Index': String(idx),
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([data as any]),
+          artifact: {
+            kind: 'mdu',
+            index: idx,
+            bytes: data,
+          },
         })
         if (!res.ok) {
           const txt = await res.text().catch(() => '')
@@ -655,15 +668,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       const manifestBlob = await readManifestBlob(dealId)
       if (manifestBlob && manifestBlob.byteLength > 0) {
-        const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
-          method: 'POST',
+        const manifestRes = await postSparseArtifact({
+          url: `${gatewayBase}${mirrorManifestPath}`,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([manifestBlob as any]),
+          artifact: {
+            kind: 'manifest',
+            bytes: manifestBlob,
+          },
         })
         if (!manifestRes.ok) {
           const txt = await manifestRes.text().catch(() => '')
@@ -678,8 +693,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (!shard) {
           throw new Error(`missing local shard: mdu_${entry.mduIndex}_slot_${entry.slot}.bin`)
         }
-        const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
-          method: 'POST',
+        const res = await postSparseArtifact({
+          url: `${gatewayBase}${mirrorShardPath}`,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Mdu-Index': String(entry.mduIndex),
@@ -687,8 +702,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([shard as any]),
+          artifact: {
+            kind: 'shard',
+            index: entry.mduIndex,
+            slot: entry.slot,
+            bytes: shard,
+          },
         })
         if (!res.ok) {
           const txt = await res.text().catch(() => '')
@@ -906,16 +925,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         : collectedMdus
 
       for (const mdu of metadataMdus) {
-        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
-          method: 'POST',
+        const res = await postSparseArtifact({
+          url: `${gatewayBase}${mirrorMduPath}`,
           headers: {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Mdu-Index': String(mdu.index),
             'X-Nil-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([mdu.data as any]),
+          artifact: {
+            kind: 'mdu',
+            index: mdu.index,
+            bytes: mdu.data,
+          },
         })
         if (!res.ok) {
           const txt = await res.text().catch(() => '')
@@ -923,15 +945,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
-      const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
-        method: 'POST',
+      const manifestRes = await postSparseArtifact({
+        url: `${gatewayBase}${mirrorManifestPath}`,
         headers: {
           'X-Nil-Deal-ID': dealId,
           'X-Nil-Manifest-Root': manifestRoot,
           'Content-Type': 'application/octet-stream',
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        body: new Blob([currentManifestBlob as any]),
+        artifact: {
+          kind: 'manifest',
+          bytes: currentManifestBlob,
+        },
       })
       if (!manifestRes.ok) {
         const txt = await manifestRes.text().catch(() => '')
@@ -946,8 +970,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             if (!shard) {
               throw new Error(`missing shard for slot ${slot}`)
             }
-            const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
-              method: 'POST',
+            const res = await postSparseArtifact({
+              url: `${gatewayBase}${mirrorShardPath}`,
               headers: {
                 'X-Nil-Deal-ID': dealId,
                 'X-Nil-Mdu-Index': String(slabIndex),
@@ -955,8 +979,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 'X-Nil-Manifest-Root': manifestRoot,
                 'Content-Type': 'application/octet-stream',
               },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              body: new Blob([shard as any]),
+              artifact: {
+                kind: 'shard',
+                index: slabIndex,
+                slot,
+                bytes: shard,
+              },
             })
             if (!res.ok) {
               const txt = await res.text().catch(() => '')
