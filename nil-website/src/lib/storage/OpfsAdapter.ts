@@ -2,27 +2,32 @@
 
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
+import { expandSparseBytes, makeSparseArtifact, type SparseArtifactInput } from '../upload/sparseArtifacts'
 
 const SLAB_METADATA_FILE = 'slab_meta.json'
 const GENERATIONS_DIR = 'generations'
 const ACTIVE_GENERATION_POINTER_FILE = 'active_generation.txt'
 const GENERATION_COMPLETE_MARKER_FILE = '.generation_complete'
 const GENERATION_DIR_PREFIX = 'gen-'
+const ARTIFACT_META_SUFFIX = '.meta.json'
 
 export interface GenerationMduWrite {
     index: number
     data: Uint8Array
+    fullSize?: number
 }
 
 export interface GenerationShardWrite {
     mduIndex: number
     slot: number
     data: Uint8Array
+    fullSize?: number
 }
 
 export interface AtomicSlabGenerationWriteInput {
     manifestRoot: string
     manifestBlob?: Uint8Array | null
+    manifestBlobFullSize?: number
     mdus: GenerationMduWrite[]
     shards?: GenerationShardWrite[]
     metadata: SlabMetadata
@@ -223,6 +228,60 @@ async function readBlob(dealId: string, name: string): Promise<Uint8Array | null
 async function deleteDealFile(dealId: string, name: string): Promise<void> {
     const dir = await resolveActiveStorageDirectory(dealId, true)
     await removeEntryIfExists(dir, name)
+    await removeEntryIfExists(dir, artifactMetaFileName(name))
+}
+
+function artifactMetaFileName(name: string): string {
+    return `${name}${ARTIFACT_META_SUFFIX}`
+}
+
+function isArtifactMetaFileName(name: string): boolean {
+    return name.endsWith(ARTIFACT_META_SUFFIX)
+}
+
+async function writeArtifactToDirectory(
+    dir: FileSystemDirectoryHandle,
+    name: string,
+    artifact: SparseArtifactInput,
+): Promise<void> {
+    const sparseArtifact = makeSparseArtifact(artifact)
+    await writeBlobToDirectory(dir, name, sparseArtifact.bytes)
+    if (sparseArtifact.bytes.byteLength < sparseArtifact.fullSize) {
+        const meta = JSON.stringify({ full_size: sparseArtifact.fullSize })
+        await writeBlobToDirectory(dir, artifactMetaFileName(name), new TextEncoder().encode(meta))
+        return
+    }
+    await removeEntryIfExists(dir, artifactMetaFileName(name))
+}
+
+async function readArtifactMetaFullSize(dir: FileSystemDirectoryHandle, name: string): Promise<number | null> {
+    const bytes = await readBlobFromDirectory(dir, artifactMetaFileName(name))
+    if (!bytes) return null
+    const text = new TextDecoder().decode(bytes)
+    const parsed = JSON.parse(text) as { full_size?: unknown }
+    const fullSize = parsed.full_size
+    if (!Number.isInteger(fullSize) || Number(fullSize) < 0) {
+        throw new Error(`invalid sparse artifact metadata for ${name}`)
+    }
+    return Number(fullSize)
+}
+
+async function readArtifactFromDirectory(dir: FileSystemDirectoryHandle, name: string): Promise<Uint8Array | null> {
+    const bytes = await readBlobFromDirectory(dir, name)
+    if (!bytes) return null
+    const fullSize = await readArtifactMetaFullSize(dir, name)
+    if (fullSize == null) return bytes
+    return expandSparseBytes(bytes, fullSize)
+}
+
+async function writeArtifact(dealId: string, name: string, artifact: SparseArtifactInput): Promise<void> {
+    const dir = await resolveActiveStorageDirectory(dealId, true)
+    await writeArtifactToDirectory(dir, name, artifact)
+}
+
+async function readArtifact(dealId: string, name: string): Promise<Uint8Array | null> {
+    const dir = await resolveActiveStorageDirectory(dealId, true)
+    return readArtifactFromDirectory(dir, name)
 }
 
 /**
@@ -231,14 +290,25 @@ async function deleteDealFile(dealId: string, name: string): Promise<void> {
  * @param mduIndex The index of the MDU (e.g., 0 for MDU #0).
  * @param data The Uint8Array containing the MDU's binary data.
  */
-export async function writeMdu(dealId: string, mduIndex: number, data: Uint8Array): Promise<void> {
+export async function writeMdu(
+    dealId: string,
+    mduIndex: number,
+    data: Uint8Array,
+    fullSize?: number,
+): Promise<void> {
     const fileName = `mdu_${mduIndex}.bin`;
-    await writeBlob(dealId, fileName, data);
+    await writeArtifact(dealId, fileName, { kind: 'mdu', index: mduIndex, bytes: data, fullSize });
 }
 
-export async function writeShard(dealId: string, mduIndex: number, slot: number, data: Uint8Array): Promise<void> {
+export async function writeShard(
+    dealId: string,
+    mduIndex: number,
+    slot: number,
+    data: Uint8Array,
+    fullSize?: number,
+): Promise<void> {
     const fileName = `mdu_${mduIndex}_slot_${slot}.bin`;
-    await writeBlob(dealId, fileName, data);
+    await writeArtifact(dealId, fileName, { kind: 'shard', index: mduIndex, slot, bytes: data, fullSize });
 }
 
 /**
@@ -249,12 +319,12 @@ export async function writeShard(dealId: string, mduIndex: number, slot: number,
  */
 export async function readMdu(dealId: string, mduIndex: number): Promise<Uint8Array | null> {
     const fileName = `mdu_${mduIndex}.bin`;
-    return await readBlob(dealId, fileName);
+    return await readArtifact(dealId, fileName);
 }
 
 export async function readShard(dealId: string, mduIndex: number, slot: number): Promise<Uint8Array | null> {
     const fileName = `mdu_${mduIndex}_slot_${slot}.bin`;
-    return await readBlob(dealId, fileName);
+    return await readArtifact(dealId, fileName);
 }
 
 /**
@@ -268,6 +338,7 @@ export async function listDealFiles(dealId: string): Promise<string[]> {
     // @ts-expect-error - FileSystemDirectoryHandle is iterable
     for await (const entry of dealDir.values()) {
         if (entry.kind === 'file') {
+            if (isArtifactMetaFileName(entry.name)) continue
             fileNames.push(entry.name);
         }
     }
@@ -340,20 +411,34 @@ export async function writeSlabGenerationAtomically(
     try {
         await writeBlobToDirectory(generationDir, 'manifest_root.txt', new TextEncoder().encode(`${manifestRoot}\n`))
         if (input.manifestBlob && input.manifestBlob.byteLength > 0) {
-            await writeBlobToDirectory(generationDir, 'manifest.bin', input.manifestBlob)
+            await writeArtifactToDirectory(generationDir, 'manifest.bin', {
+                kind: 'manifest',
+                bytes: input.manifestBlob,
+                fullSize: input.manifestBlobFullSize,
+            })
         } else {
             throw new Error('manifest blob is required for atomic generation write')
         }
 
         for (const mdu of mdus) {
-            await writeBlobToDirectory(generationDir, `mdu_${Math.floor(mdu.index)}.bin`, mdu.data)
+            const index = Math.floor(mdu.index)
+            await writeArtifactToDirectory(generationDir, `mdu_${index}.bin`, {
+                kind: 'mdu',
+                index,
+                bytes: mdu.data,
+                fullSize: mdu.fullSize,
+            })
         }
         for (const shard of shards) {
-            await writeBlobToDirectory(
-                generationDir,
-                `mdu_${Math.floor(shard.mduIndex)}_slot_${Math.floor(shard.slot)}.bin`,
-                shard.data,
-            )
+            const mduIndex = Math.floor(shard.mduIndex)
+            const slot = Math.floor(shard.slot)
+            await writeArtifactToDirectory(generationDir, `mdu_${mduIndex}_slot_${slot}.bin`, {
+                kind: 'shard',
+                index: mduIndex,
+                slot,
+                bytes: shard.data,
+                fullSize: shard.fullSize,
+            })
         }
 
         metadata.generation_id = String(metadata.generation_id || generationIdFallback).trim() || generationIdFallback
@@ -381,12 +466,16 @@ export async function writeManifestRoot(dealId: string, manifestRoot: string): P
     await writeBlob(dealId, 'manifest_root.txt', new TextEncoder().encode(normalized));
 }
 
-export async function writeManifestBlob(dealId: string, manifestBlob: Uint8Array): Promise<void> {
-    await writeBlob(dealId, 'manifest.bin', manifestBlob);
+export async function writeManifestBlob(
+    dealId: string,
+    manifestBlob: Uint8Array,
+    fullSize?: number,
+): Promise<void> {
+    await writeArtifact(dealId, 'manifest.bin', { kind: 'manifest', bytes: manifestBlob, fullSize });
 }
 
 export async function readManifestBlob(dealId: string): Promise<Uint8Array | null> {
-    return await readBlob(dealId, 'manifest.bin');
+    return await readArtifact(dealId, 'manifest.bin');
 }
 
 export async function readManifestRoot(dealId: string): Promise<string | null> {
