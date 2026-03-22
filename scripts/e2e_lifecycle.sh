@@ -15,6 +15,7 @@ STACK_SCRIPT="$ROOT_DIR/scripts/run_local_stack.sh"
 LCD_BASE="${LCD_BASE:-http://localhost:1317}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
 FAUCET_BASE="${FAUCET_BASE:-http://localhost:8081}"
+RPC_BASE="${RPC_BASE:-http://127.0.0.1:${RPC_ADDR##*:}}"
 
 CHAIN_ID="${CHAIN_ID:-test-1}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
@@ -68,7 +69,7 @@ wait_for_http() {
 }
 
 latest_height() {
-  timeout 10s curl -sS "http://127.0.0.1:26657/status" \
+  timeout 10s curl -sS "$RPC_BASE/status" \
     | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))"
 }
 
@@ -512,7 +513,7 @@ for pat in (
   FETCH_EXTRA_QUERY=""
 fi
 
-HEIGHT=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
+HEIGHT=$(timeout 10s curl -sS "$RPC_BASE/status" | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
 SESSION_EXPIRES_AT=$((HEIGHT + 20))
 SESSION_NONCE=$(python3 -c "import time; print(time.time_ns())")
 
@@ -723,7 +724,7 @@ if count > 64:
 print(count)
 PY
 )
-HEIGHT_2=$(timeout 10s curl -sS http://127.0.0.1:26657/status | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
+HEIGHT_2=$(timeout 10s curl -sS "$RPC_BASE/status" | python3 -c "import sys, json; print(int(json.load(sys.stdin)['result']['sync_info']['latest_block_height']))")
 SESSION_EXPIRES_AT_1=$((HEIGHT_2 + 20))
 SESSION_NONCE_1=$(python3 -c "import time; print(time.time_ns())")
 SESSION_OPEN_JSON_1=$(

@@ -252,7 +252,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 							return err
 						}
 						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+						if err := writeSparseArtifactFile(filepath.Join(stagingDir, name), shards[slot], int64(len(shards[slot])), 0o644); err != nil {
 							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 							return err
 						}
@@ -338,7 +338,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		if err := builder.SetRoot(i, root); err != nil {
 			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
 		}
-		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
+		if err := writeSparseArtifactFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, int64(len(encoded)), 0o644); err != nil {
 			return nil, "", err
 		}
 		if job != nil {
@@ -361,7 +361,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, int64(len(mdu0Bytes)), 0o644); err != nil {
 		return nil, "", err
 	}
 	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
@@ -383,7 +383,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, int64(len(manifestBlob)), 0o644); err != nil {
 		return nil, "", err
 	}
 	dealIDForMeta := dealID
@@ -1014,7 +1014,7 @@ func mode2BuildArtifactsAppend(
 							return err
 						}
 						name := fmt.Sprintf("mdu_%d_slot_%d.bin", slabIndex, slot)
-						if err := os.WriteFile(filepath.Join(stagingDir, name), shards[slot], 0o644); err != nil {
+						if err := writeSparseArtifactFile(filepath.Join(stagingDir, name), shards[slot], int64(len(shards[slot])), 0o644); err != nil {
 							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 							return err
 						}
@@ -1103,7 +1103,7 @@ func mode2BuildArtifactsAppend(
 		if err := builder.SetRoot(i, root); err != nil {
 			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
 		}
-		if err := os.WriteFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, 0o644); err != nil {
+		if err := writeSparseArtifactFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, int64(len(encoded)), 0o644); err != nil {
 			return nil, "", err
 		}
 		if job != nil {
@@ -1127,7 +1127,7 @@ func mode2BuildArtifactsAppend(
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, int64(len(mdu0Bytes)), 0o644); err != nil {
 		return nil, "", err
 	}
 	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
@@ -1149,7 +1149,7 @@ func mode2BuildArtifactsAppend(
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
+	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "manifest.bin"), manifestBlob, int64(len(manifestBlob)), 0o644); err != nil {
 		return nil, "", err
 	}
 	dealIDForMeta := dealID
