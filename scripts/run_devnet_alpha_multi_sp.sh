@@ -26,7 +26,12 @@ CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
+P2P_ADDR="${P2P_ADDR:-tcp://0.0.0.0:26656}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
+EVM_WS_PORT="${EVM_WS_PORT:-8546}"
+LCD_PORT="${LCD_PORT:-1317}"
+FAUCET_PORT="${FAUCET_PORT:-8081}"
+WEB_PORT="${WEB_PORT:-5173}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
 NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
@@ -252,7 +257,7 @@ wait_for_provider_count() {
   for i in $(seq 1 "$attempts"); do
     local tmp code body
     tmp="$(mktemp)"
-    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:1317/nilchain/nilchain/v1/providers" 2>/dev/null || true)
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/providers" 2>/dev/null || true)
     body="$(cat "$tmp" 2>/dev/null || true)"
     rm -f "$tmp"
     if [ "$code" = "200" ] && python3 - "$body" "$want" >/dev/null 2>&1 <<'PY'
@@ -280,7 +285,7 @@ wait_for_provider_visible() {
   for i in $(seq 1 "$attempts"); do
     local tmp code body
     tmp="$(mktemp)"
-    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:1317/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)
     body="$(cat "$tmp" 2>/dev/null || true)"
     rm -f "$tmp"
     if [ "$code" = "200" ] && python3 - "$body" "$endpoint" >/dev/null 2>&1 <<'PY'
@@ -518,18 +523,49 @@ init_chain() {
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
   if [ "$NIL_BIND_ALL" = "1" ]; then
-    perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
-    perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+    perl -pi -e "s|^address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|address = \"0.0.0.0:$EVM_RPC_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^ws-address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|ws-address = \"0.0.0.0:$EVM_WS_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://(?:localhost|127\\\\.0\\\\.0\\\\.1):[0-9]+\"|address = \"tcp://0.0.0.0:$LCD_PORT\"|" "$APP_TOML"
   else
     # Safe-by-default (hub profile): keep LCD + JSON-RPC local-only and expose only via reverse proxy.
-    perl -pi -e 's|^address *= *"0\\.0\\.0\\.0:8545"|address = "127.0.0.1:8545"|' "$APP_TOML"
-    perl -pi -e 's|^ws-address *= *"0\\.0\\.0\\.0:8546"|ws-address = "127.0.0.1:8546"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://0\\.0\\.0\\.0:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+    perl -pi -e "s|^address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"127.0.0.1:$EVM_RPC_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^ws-address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|ws-address = \"127.0.0.1:$EVM_WS_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"tcp://127.0.0.1:$LCD_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://localhost:[0-9]+\"|address = \"tcp://127.0.0.1:$LCD_PORT\"|" "$APP_TOML"
   fi
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
   perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
+  python3 - "$APP_TOML" <<'PY' || true
+import os, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+txt = path.read_text()
+bind_all = os.environ.get("NIL_BIND_ALL", "0") == "1"
+evm_rpc_port = os.environ.get("EVM_RPC_PORT", "8545")
+evm_ws_port = os.environ.get("EVM_WS_PORT", "8546")
+lcd_port = os.environ.get("LCD_PORT", "1317")
+bind_host = "0.0.0.0" if bind_all else "127.0.0.1"
+replacements = [
+    ('enabled-unsafe-cors = false', 'enabled-unsafe-cors = true'),
+    ('evm-chain-id = 262144', f'evm-chain-id = {os.environ.get("EVM_CHAIN_ID", "31337")}'),
+]
+if bind_all:
+    replacements = [
+        ('address = "127.0.0.1:8545"', f'address = "0.0.0.0:{evm_rpc_port}"'),
+        ('ws-address = "127.0.0.1:8546"', f'ws-address = "0.0.0.0:{evm_ws_port}"'),
+        ('address = "tcp://localhost:1317"', f'address = "tcp://0.0.0.0:{lcd_port}"'),
+        ('address = "tcp://127.0.0.1:1317"', f'address = "tcp://0.0.0.0:{lcd_port}"'),
+    ] + replacements
+else:
+    replacements = [
+        ('address = "0.0.0.0:8545"', f'address = "127.0.0.1:{evm_rpc_port}"'),
+        ('ws-address = "0.0.0.0:8546"', f'ws-address = "127.0.0.1:{evm_ws_port}"'),
+        ('address = "tcp://0.0.0.0:1317"', f'address = "tcp://127.0.0.1:{lcd_port}"'),
+        ('address = "tcp://localhost:1317"', f'address = "tcp://127.0.0.1:{lcd_port}"'),
+    ] + replacements
+for src, dst in replacements:
+    txt = txt.replace(src, dst)
+path.write_text(txt)
+PY
 }
 
 start_chain() {
@@ -547,12 +583,23 @@ start_chain() {
     # service on a developer machine. gRPC is not required for browser/gateway e2e.
     grpc_flags+=(--grpc.enable=false --grpc-web.enable=false)
   fi
+  local json_rpc_addr="127.0.0.1:${EVM_RPC_PORT}"
+  local json_rpc_ws_addr="127.0.0.1:${EVM_WS_PORT}"
+  if [ "$NIL_BIND_ALL" = "1" ]; then
+    json_rpc_addr="0.0.0.0:${EVM_RPC_PORT}"
+    json_rpc_ws_addr="0.0.0.0:${EVM_WS_PORT}"
+  fi
   nohup "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
+    --p2p.laddr "$P2P_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
     --api.enable \
     "${grpc_flags[@]}" \
+    --json-rpc.enable=true \
+    --json-rpc.address "$json_rpc_addr" \
+    --json-rpc.ws-address "$json_rpc_ws_addr" \
+    --json-rpc.api eth,net,web3 \
     >"$LOG_DIR/nilchaind.log" 2>&1 &
   echo $! >"$PID_DIR/nilchaind.pid"
   sleep 1
@@ -568,7 +615,7 @@ start_faucet() {
   banner "Starting faucet service"
   (
     cd "$ROOT_DIR/nil_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="1000000000000000000aatom,100000000stake" NIL_GAS_PRICES="$GAS_PRICE" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="1000000000000000000aatom,100000000stake" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! >"$PID_DIR/faucet.pid"
@@ -589,7 +636,7 @@ register_provider() {
     --endpoint "$endpoint" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \
-    --node "tcp://127.0.0.1:26657" \
+    --node "$RPC_ADDR" \
     --yes \
     --home "$CHAIN_HOME" \
     --keyring-backend test \
@@ -637,6 +684,7 @@ start_provider() {
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
+      NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
       NIL_UPLOAD_DIR="$dir" \
       NIL_CLI_BIN="$NIL_CLI_BIN" \
       NIL_TRUSTED_SETUP="$TRUSTED_SETUP" \
@@ -662,6 +710,7 @@ start_router() {
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
+      NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
@@ -678,14 +727,15 @@ start_web() {
     cd "$ROOT_DIR/nil-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-1}" \
-    VITE_API_BASE="${VITE_API_BASE:-http://localhost:8081}" \
-    VITE_LCD_BASE="${VITE_LCD_BASE:-http://localhost:1317}" \
+    VITE_API_BASE="${VITE_API_BASE:-http://localhost:${FAUCET_PORT}}" \
+    VITE_LCD_BASE="${VITE_LCD_BASE:-http://localhost:${LCD_PORT}}" \
     VITE_EVM_RPC="${VITE_EVM_RPC:-http://localhost:$EVM_RPC_PORT}" \
+    VITE_SP_BASE="${VITE_SP_BASE:-http://localhost:${PROVIDER_PORT_BASE}}" \
     VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:8080}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
     VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
-    nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
+    nohup npm run dev -- --host 0.0.0.0 --port "$WEB_PORT" >"$LOG_DIR/website.log" 2>&1 &
     echo $! >"$PID_DIR/website.pid"
   )
   echo "website pid $(cat "$PID_DIR/website.pid"), logs: $LOG_DIR/website.log"
@@ -711,7 +761,7 @@ stop_all() {
   done
 
   # Best-effort kill by port in case go run spawned children.
-  local ports=(26657 26656 1317 "$EVM_RPC_PORT" 8080 8081 5173 "$P2P_PORT_BASE")
+  local ports=("${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 "$FAUCET_PORT" "$WEB_PORT" "$P2P_PORT_BASE")
   if [ "$PROVIDER_COUNT" -gt 0 ]; then
     for i in $(seq 1 "$PROVIDER_COUNT"); do
       ports+=("$((PROVIDER_PORT_BASE + i - 1))")
@@ -746,9 +796,9 @@ start_all() {
   start_chain
   start_faucet
 
-  wait_for_http "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
-  wait_for_http "nilchain lcd" "http://localhost:1317/nilchain/nilchain/v1/params" "200" 60 1
-  wait_for_http "faucet" "http://localhost:8081/faucet" "200,405" 60 1
+  wait_for_http "lcd" "http://localhost:${LCD_PORT}/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
+  wait_for_http "nilchain lcd" "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/params" "200" 60 1
+  wait_for_http "faucet" "http://localhost:${FAUCET_PORT}/faucet" "200,405" 60 1
 
   if [ "$PROVIDER_COUNT" -gt 0 ]; then
     banner "Registering providers"
@@ -778,12 +828,12 @@ start_all() {
   banner "Devnet Alpha multi-SP stack ready"
   echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
   cat <<EOF
-RPC:         http://localhost:26657
-REST/LCD:    http://localhost:1317
+RPC:         http://localhost:${RPC_ADDR##*:}
+REST/LCD:    http://localhost:${LCD_PORT}
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
-Faucet:      http://localhost:8081/faucet
+Faucet:      http://localhost:${FAUCET_PORT}/faucet
 Gateway:     http://localhost:8080/gateway/upload
-Web UI:      http://localhost:5173/#/dashboard
+Web UI:      http://localhost:${WEB_PORT}/#/dashboard
 Providers:   $PROVIDER_COUNT (ports starting at $PROVIDER_PORT_BASE)
 Home:        $CHAIN_HOME
 SP Auth:     $NIL_GATEWAY_SP_AUTH  (also saved in $LOG_DIR/sp_auth.txt)

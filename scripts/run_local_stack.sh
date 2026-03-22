@@ -21,6 +21,7 @@ EVM_WS_PORT="${EVM_WS_PORT:-8546}"
 LCD_PORT="${LCD_PORT:-1317}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 P2P_ADDR="${P2P_ADDR:-tcp://0.0.0.0:26656}"
+FAUCET_PORT="${FAUCET_PORT:-8081}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
 NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
@@ -346,14 +347,14 @@ auto_faucet_request() {
   local attempts=20
   local i
   for i in $(seq 1 "$attempts"); do
-    if timeout 10s curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/health 2>/dev/null | grep -q "^200$"; then
+    if timeout 10s curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:${FAUCET_PORT}/health" 2>/dev/null | grep -q "^200$"; then
       break
     fi
     sleep 0.5
   done
 
   echo "Auto faucet: requesting funds for $NIL_AUTO_FAUCET_EVM_ADDR -> $target_nil"
-  timeout 20s curl -sS -X POST http://127.0.0.1:8081/faucet \
+  timeout 20s curl -sS -X POST "http://127.0.0.1:${FAUCET_PORT}/faucet" \
     -H "Content-Type: application/json" \
     --data "$(printf '{"address":"%s"}' "$target_nil")" \
     >/dev/null 2>&1 || true
@@ -362,7 +363,7 @@ auto_faucet_request() {
 wait_for_ports_clear() {
   local rpc_port="${RPC_ADDR##*:}"
   local p2p_port="${P2P_ADDR##*:}"
-  local ports=("$rpc_port" "$p2p_port" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 8081 5173)
+  local ports=("$rpc_port" "$p2p_port" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 "$FAUCET_PORT" 5173)
   local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
@@ -899,7 +900,7 @@ start_faucet() {
   banner "Starting faucet service"
   (
     cd "$ROOT_DIR/nil_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! > "$PID_DIR/faucet.pid"
@@ -1110,6 +1111,10 @@ start_web() {
     cd "$ROOT_DIR/nil-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_BRIDGE_ADDRESS="${BRIDGE_ADDRESS:-${VITE_BRIDGE_ADDRESS:-}}" \
+    VITE_API_BASE="${VITE_API_BASE:-http://localhost:${FAUCET_PORT}}" \
+    VITE_LCD_BASE="${VITE_LCD_BASE:-http://localhost:${LCD_PORT}}" \
+    VITE_EVM_RPC="${VITE_EVM_RPC:-http://localhost:${EVM_RPC_PORT}}" \
+    VITE_SP_BASE="${VITE_SP_BASE:-http://localhost:8082}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
     VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-${NIL_START_FAUCET:-0}}" \
@@ -1249,7 +1254,7 @@ start_all() {
 RPC:         http://localhost:${RPC_ADDR##*:}
 REST/LCD:    http://localhost:$LCD_PORT
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
-Faucet:      http://localhost:8081/faucet
+Faucet:      http://localhost:${FAUCET_PORT}/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
 Web UI:      http://localhost:5173/#/dashboard
@@ -1291,7 +1296,7 @@ stop_all() {
     provider_count=1
   fi
 
-  for port in "${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 8081 5173; do
+  for port in "${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 "$FAUCET_PORT" 5173; do
     pids=$(listener_pids_for_port "$port")
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
