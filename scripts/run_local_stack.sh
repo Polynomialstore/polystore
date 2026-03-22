@@ -17,7 +17,10 @@ CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
+EVM_WS_PORT="${EVM_WS_PORT:-8546}"
+LCD_PORT="${LCD_PORT:-1317}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
+P2P_ADDR="${P2P_ADDR:-tcp://0.0.0.0:26656}"
 GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
 NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
@@ -357,7 +360,9 @@ auto_faucet_request() {
 }
 
 wait_for_ports_clear() {
-  local ports=(26657 26656 1317 8545 8080 8081 5173)
+  local rpc_port="${RPC_ADDR##*:}"
+  local p2p_port="${P2P_ADDR##*:}"
+  local ports=("$rpc_port" "$p2p_port" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 8081 5173)
   local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
@@ -475,8 +480,9 @@ register_demo_provider() {
     local rpc_ready=0
     local rpc_tries=30
     local rpc_try
+    local rpc_http="http://127.0.0.1:${RPC_ADDR##*:}"
     for rpc_try in $(seq 1 "$rpc_tries"); do
-      if curl -sSf --max-time 1 "http://127.0.0.1:26657/status" >/dev/null 2>&1; then
+      if curl -sSf --max-time 1 "$rpc_http/status" >/dev/null 2>&1; then
         rpc_ready=1
         break
       fi
@@ -533,6 +539,7 @@ register_demo_provider() {
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
+      --node "$RPC_ADDR" \
       --yes \
       --home "$CHAIN_HOME" \
       --keyring-backend test \
@@ -595,6 +602,7 @@ register_demo_provider() {
             --from "$key_name" \
             "${endpoint_args_child[@]}" \
             --chain-id "$CHAIN_ID" \
+            --node "$RPC_ADDR" \
             --yes \
             --home "$CHAIN_HOME" \
             --keyring-backend test \
@@ -605,7 +613,7 @@ register_demo_provider() {
 
     # Check if we have enough providers for Mode 2 placement.
     local count
-    count=$("$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    count=$("$NILCHAIND_BIN" query nilchain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
     if [ "$count" -ge "$provider_count" ]; then
       echo "Demo providers registered successfully ($count provider(s))."
       return 0
@@ -701,15 +709,15 @@ PY
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
   if [ "$NIL_BIND_ALL" = "1" ]; then
-    perl -pi -e 's|^address *= *"127\\.0\\.0\\.1:8545"|address = "0.0.0.0:8545"|' "$APP_TOML"
-    perl -pi -e 's|^ws-address *= *"127\\.0\\.0\\.1:8546"|ws-address = "0.0.0.0:8546"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://0.0.0.0:1317"|' "$APP_TOML"
+    perl -pi -e "s|^address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|address = \"0.0.0.0:$EVM_RPC_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^ws-address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|ws-address = \"0.0.0.0:$EVM_WS_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://(?:localhost|127\\\\.0\\\\.0\\\\.1):[0-9]+\"|address = \"tcp://0.0.0.0:$LCD_PORT\"|" "$APP_TOML"
   else
     # Safer local dev defaults: keep LCD + JSON-RPC local-only. Set NIL_BIND_ALL=1 to override.
-    perl -pi -e 's|^address *= *"0\\.0\\.0\\.0:8545"|address = "127.0.0.1:8545"|' "$APP_TOML"
-    perl -pi -e 's|^ws-address *= *"0\\.0\\.0\\.0:8546"|ws-address = "127.0.0.1:8546"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://0\\.0\\.0\\.0:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
-    perl -pi -e 's|^address *= *"tcp://localhost:1317"|address = "tcp://127.0.0.1:1317"|' "$APP_TOML"
+    perl -pi -e "s|^address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"127.0.0.1:$EVM_RPC_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^ws-address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|ws-address = \"127.0.0.1:$EVM_WS_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"tcp://127.0.0.1:$LCD_PORT\"|" "$APP_TOML"
+    perl -pi -e "s|^address *= *\"tcp://localhost:[0-9]+\"|address = \"tcp://127.0.0.1:$LCD_PORT\"|" "$APP_TOML"
   fi
   perl -pi -e 's/^enabled-unsafe-cors *= *false/enabled-unsafe-cors = true/' "$APP_TOML"
   perl -pi -e "s/^evm-chain-id *= *[0-9]+/evm-chain-id = $EVM_CHAIN_ID/" "$APP_TOML"
@@ -719,27 +727,44 @@ import os, sys, pathlib
 path = pathlib.Path(sys.argv[1])
 txt = path.read_text()
 bind_all = os.environ.get("NIL_BIND_ALL", "0") == "1"
+evm_rpc_port = os.environ.get("EVM_RPC_PORT", "8545")
+evm_ws_port = os.environ.get("EVM_WS_PORT", "8546")
+lcd_port = os.environ.get("LCD_PORT", "1317")
+bind_host = "0.0.0.0" if bind_all else "127.0.0.1"
 replacements = [
     ('enabled-unsafe-cors = false', 'enabled-unsafe-cors = true'),
-    ('evm-chain-id = 262144', 'evm-chain-id = 31337'),
+    ('evm-chain-id = 262144', f'evm-chain-id = {os.environ.get("EVM_CHAIN_ID", "31337")}'),
 ]
 if bind_all:
     replacements = [
-        ('address = "127.0.0.1:8545"', 'address = "0.0.0.0:8545"'),
-        ('ws-address = "127.0.0.1:8546"', 'ws-address = "0.0.0.0:8546"'),
-        ('address = "tcp://localhost:1317"', 'address = "tcp://0.0.0.0:1317"'),
-        ('address = "tcp://127.0.0.1:1317"', 'address = "tcp://0.0.0.0:1317"'),
+        ('address = "127.0.0.1:8545"', f'address = "0.0.0.0:{evm_rpc_port}"'),
+        ('ws-address = "127.0.0.1:8546"', f'ws-address = "0.0.0.0:{evm_ws_port}"'),
+        ('address = "tcp://localhost:1317"', f'address = "tcp://0.0.0.0:{lcd_port}"'),
+        ('address = "tcp://127.0.0.1:1317"', f'address = "tcp://0.0.0.0:{lcd_port}"'),
     ] + replacements
 else:
     replacements = [
-        ('address = "0.0.0.0:8545"', 'address = "127.0.0.1:8545"'),
-        ('ws-address = "0.0.0.0:8546"', 'ws-address = "127.0.0.1:8546"'),
-        ('address = "tcp://0.0.0.0:1317"', 'address = "tcp://127.0.0.1:1317"'),
-        ('address = "tcp://localhost:1317"', 'address = "tcp://127.0.0.1:1317"'),
+        ('address = "0.0.0.0:8545"', f'address = "127.0.0.1:{evm_rpc_port}"'),
+        ('ws-address = "0.0.0.0:8546"', f'ws-address = "127.0.0.1:{evm_ws_port}"'),
+        ('address = "tcp://0.0.0.0:1317"', f'address = "tcp://127.0.0.1:{lcd_port}"'),
+        ('address = "tcp://localhost:1317"', f'address = "tcp://127.0.0.1:{lcd_port}"'),
     ] + replacements
 for src, dst in replacements:
     txt = txt.replace(src, dst)
-path.write_text(txt)
+lines = txt.splitlines()
+section = ""
+for idx, line in enumerate(lines):
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        section = stripped
+        continue
+    if section == "[api]" and stripped.startswith("address ="):
+        lines[idx] = f'address = "tcp://{bind_host}:{lcd_port}"'
+    elif section == "[json-rpc]" and stripped.startswith("address ="):
+        lines[idx] = f'address = "{bind_host}:{evm_rpc_port}"'
+    elif section == "[json-rpc]" and stripped.startswith("ws-address ="):
+        lines[idx] = f'ws-address = "{bind_host}:{evm_ws_port}"'
+path.write_text("\n".join(lines) + "\n")
 PY
   if [ "$NIL_DISABLE_EVM_MEMPOOL" = "1" ]; then
     # JSON-RPC requires the ExperimentalEVMMempool. If we disable that for local
@@ -842,15 +867,16 @@ start_chain() {
     grpc_flags+=(--grpc.enable=false --grpc-web.enable=false)
   fi
   local json_rpc_addr="127.0.0.1:${EVM_RPC_PORT}"
-  local json_rpc_ws_addr="127.0.0.1:8546"
+  local json_rpc_ws_addr="127.0.0.1:${EVM_WS_PORT}"
   if [ "$NIL_BIND_ALL" = "1" ]; then
     json_rpc_addr="0.0.0.0:${EVM_RPC_PORT}"
-    json_rpc_ws_addr="0.0.0.0:8546"
+    json_rpc_ws_addr="0.0.0.0:${EVM_WS_PORT}"
   fi
   nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" \
     "$NILCHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
+    --p2p.laddr "$P2P_ADDR" \
     --minimum-gas-prices "$GAS_PRICE" \
     --api.enable \
     "${grpc_flags[@]}" \
@@ -873,7 +899,7 @@ start_faucet() {
   banner "Starting faucet service"
   (
     cd "$ROOT_DIR/nil_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! > "$PID_DIR/faucet.pid"
@@ -927,7 +953,7 @@ start_sp_gateway() {
     (
       cd "$ROOT_DIR/nil_gateway"
       # SP Mode (default). Each instance listens on its own port but can share the upload dir.
-      nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
+      nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_LCD_BASE="http://127.0.0.1:$LCD_PORT" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
         NIL_RUNTIME_PERSONA="provider-daemon" \
         NIL_SESSION_DB_PATH="$LOG_DIR/sessions_sp_${key_name}.db" \
         NIL_PROVIDER_KEY="$key_name" \
@@ -988,7 +1014,7 @@ start_user_gateway() {
     # user-gateway persona on :8080.
     # Default is standalone mode (local slab/cache + orchestration).
     # Set NIL_USER_GATEWAY_PROXY_MODE=1 for legacy proxy/router compatibility.
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
+    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_LCD_BASE="http://127.0.0.1:$LCD_PORT" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
       NIL_RUNTIME_PERSONA="user-gateway" \
       NIL_LISTEN_ADDR=":8080" \
       NIL_GATEWAY_ROUTER="$user_gateway_proxy_mode" NIL_GATEWAY_ROUTER_MODE="$user_gateway_proxy_mode" \
@@ -1037,12 +1063,12 @@ start_bridge() {
   # Avoid accidentally reusing a stale address from a previous chain reset.
   rm -f "$BRIDGE_ADDR_FILE"
 
-  banner "Waiting for EVM RPC (8545)..."
+  banner "Waiting for EVM RPC ($EVM_RPC_PORT)..."
   local attempts=30
   local i
   local ready=0
   for i in $(seq 1 "$attempts"); do
-    if timeout 10s curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8545 --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
+    if timeout 10s curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$EVM_RPC_PORT" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' -H "Content-Type: application/json" >/dev/null; then
       echo "EVM RPC is ready."
       ready=1
       break
@@ -1220,8 +1246,8 @@ start_all() {
   start_web
   banner "Stack ready"
   cat <<EOF
-RPC:         http://localhost:26657
-REST/LCD:    http://localhost:1317
+RPC:         http://localhost:${RPC_ADDR##*:}
+REST/LCD:    http://localhost:$LCD_PORT
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:8081/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
@@ -1265,7 +1291,7 @@ stop_all() {
     provider_count=1
   fi
 
-  for port in 26657 26656 1317 8545 8080 8081 5173; do
+  for port in "${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 8081 5173; do
     pids=$(listener_pids_for_port "$port")
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true

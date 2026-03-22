@@ -23,6 +23,7 @@ import (
 var (
 	chainID     = envDefault("NIL_CHAIN_ID", "test-1")
 	homeDir     = envDefault("NIL_HOME", "../.nilchain")
+	nodeAddr    = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
 	listenAddr  = envDefault("NIL_LISTEN_ADDR", "127.0.0.1:8081")
 	amount      = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
 	denom       = envDefault("NIL_DENOM", "stake")
@@ -143,6 +144,7 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	cmd := execNilchaind(ctx, "tx", "bank", "send",
 		"faucet", req.Address, amount,
 		"--chain-id", chainID,
+		"--node", nodeAddr,
 		"--yes",
 		"--keyring-backend", "test",
 		"--home", homeDir,
