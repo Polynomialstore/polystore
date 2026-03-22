@@ -41,12 +41,17 @@ export VITE_E2E=1
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
+WEB_PORT="${WEB_PORT:-5173}"
+GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
+E2E_BROWSER_SMOKE_SPECS=(
+  "tests/smoke.spec.ts"
+)
 
 echo "==> Starting local stack..."
 "$STACK_SCRIPT" start
 
-wait_for_http "web" "http://localhost:5173/"
-wait_for_http "gateway" "http://localhost:8080/health"
+wait_for_http "web" "http://localhost:${WEB_PORT}/"
+wait_for_http "gateway" "${GATEWAY_BASE}/health"
 
 echo "==> Running Playwright..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e)
+(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- "${E2E_BROWSER_SMOKE_SPECS[@]}")

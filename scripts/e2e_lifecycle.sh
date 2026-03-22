@@ -16,6 +16,7 @@ LCD_BASE="${LCD_BASE:-http://localhost:1317}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
 FAUCET_BASE="${FAUCET_BASE:-http://localhost:8081}"
 RPC_BASE="${RPC_BASE:-http://127.0.0.1:${RPC_ADDR##*:}}"
+EVM_RPC="${EVM_RPC:-http://localhost:${EVM_RPC_PORT:-8545}}"
 
 CHAIN_ID="${CHAIN_ID:-test-1}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
@@ -526,6 +527,7 @@ SESSION_OPEN_JSON=$(
   BLOB_COUNT="$SESSION_BLOB_COUNT" \
   NONCE="$SESSION_NONCE" \
   EXPIRES_AT="$SESSION_EXPIRES_AT" \
+  EVM_RPC="$EVM_RPC" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID=$(echo "$SESSION_OPEN_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
@@ -736,6 +738,7 @@ SESSION_OPEN_JSON_1=$(
   BLOB_COUNT="$SESSION_BLOB_COUNT_1" \
   NONCE="$SESSION_NONCE_1" \
   EXPIRES_AT="$SESSION_EXPIRES_AT_1" \
+  EVM_RPC="$EVM_RPC" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID_1=$(echo "$SESSION_OPEN_JSON_1" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
@@ -807,6 +810,7 @@ SESSION_OPEN_JSON_2=$(
   BLOB_COUNT="$SESSION_BLOB_COUNT_2" \
   NONCE="$SESSION_NONCE_2" \
   EXPIRES_AT="$SESSION_EXPIRES_AT_2" \
+  EVM_RPC="$EVM_RPC" \
   "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID_2=$(echo "$SESSION_OPEN_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
