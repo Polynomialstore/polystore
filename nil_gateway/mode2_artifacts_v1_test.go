@@ -139,3 +139,82 @@ func TestMode2BuildArtifacts_IdempotentWhenFinalDirExists(t *testing.T) {
 		t.Fatalf("manifest_root mismatch: first=%s second=%s", first.manifestRoot.Canonical, second.manifestRoot.Canonical)
 	}
 }
+
+func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t *testing.T) {
+	useTempUploadDir(t)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	fx := readMode2Fixture(t)
+	payload := decodeHex0x(t, fx.PayloadHex)
+
+	firstPath := filepath.Join(t.TempDir(), "first.bin")
+	if err := os.WriteFile(firstPath, payload, 0o644); err != nil {
+		t.Fatalf("write first payload: %v", err)
+	}
+	secondPayload := append(append([]byte(nil), payload...), []byte("append-second-file")...)
+	secondPath := filepath.Join(t.TempDir(), "second.bin")
+	if err := os.WriteFile(secondPath, secondPayload, 0o644); err != nil {
+		t.Fatalf("write second payload: %v", err)
+	}
+
+	const dealID = uint64(93)
+	serviceHint := "General:rs=8+4"
+
+	first, oldDir, err := mode2BuildArtifacts(t.Context(), firstPath, dealID, serviceHint, "first.bin", 0)
+	if err != nil {
+		t.Fatalf("mode2BuildArtifacts (first) failed: %v", err)
+	}
+	if err := writeActiveDealGeneration(dealID, first.manifestRoot); err != nil {
+		t.Fatalf("write active generation: %v", err)
+	}
+
+	second, newDir, err := mode2BuildArtifactsAppend(t.Context(), secondPath, dealID, serviceHint, first.manifestRoot.Canonical, "second.bin", 0)
+	if err != nil {
+		t.Fatalf("mode2BuildArtifactsAppend failed: %v", err)
+	}
+	if second.manifestRoot.Key == first.manifestRoot.Key {
+		t.Fatalf("append should produce a distinct manifest root")
+	}
+
+	if info, err := os.Stat(oldDir); err != nil || !info.IsDir() {
+		t.Fatalf("old active generation missing after provisional append build, stat err=%v", err)
+	}
+	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
+		t.Fatalf("new provisional generation missing after append build, stat err=%v", err)
+	}
+
+	active, err := readActiveDealGeneration(dealID)
+	if err != nil {
+		t.Fatalf("read active generation: %v", err)
+	}
+	if active.Key != first.manifestRoot.Key {
+		t.Fatalf("active generation changed before commit cleanup: got=%s want=%s", active.Key, first.manifestRoot.Key)
+	}
+
+	resolvedOld, err := resolveDealDirForDeal(dealID, first.manifestRoot, first.manifestRoot.Canonical)
+	if err != nil {
+		t.Fatalf("resolve old active generation failed: %v", err)
+	}
+	if resolvedOld != oldDir {
+		t.Fatalf("resolved old generation mismatch: got=%s want=%s", resolvedOld, oldDir)
+	}
+
+	cleanupStaleDealGenerations(dealID, second.manifestRoot)
+
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("expected old generation removed after commit cleanup, stat err=%v", err)
+	}
+	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
+		t.Fatalf("expected new generation to remain after commit cleanup, stat err=%v", err)
+	}
+
+	active, err = readActiveDealGeneration(dealID)
+	if err != nil {
+		t.Fatalf("read active generation after cleanup: %v", err)
+	}
+	if active.Key != second.manifestRoot.Key {
+		t.Fatalf("active generation mismatch after cleanup: got=%s want=%s", active.Key, second.manifestRoot.Key)
+	}
+}

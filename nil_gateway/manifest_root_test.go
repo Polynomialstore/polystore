@@ -197,3 +197,33 @@ func TestResolveDealDirForDealReconcilesPointerToRequestedGeneration(t *testing.
 		t.Fatalf("active pointer mismatch after reconcile: got=%s want=%s", active.Key, newRoot.Key)
 	}
 }
+
+func TestCleanupStaleDealGenerations_PromotesCommittedGenerationAndRemovesOld(t *testing.T) {
+	useTempUploadDir(t)
+	dealID := uint64(92)
+	oldRoot := mustTestManifestRoot(t, "cleanup-promote-old")
+	newRoot := mustTestManifestRoot(t, "cleanup-promote-new")
+
+	oldDir := writeTestDealGeneration(t, dealID, oldRoot, 2, false)
+	newDir := writeTestDealGeneration(t, dealID, newRoot, 2, false)
+
+	if err := writeActiveDealGeneration(dealID, oldRoot); err != nil {
+		t.Fatalf("write old pointer: %v", err)
+	}
+
+	cleanupStaleDealGenerations(dealID, newRoot)
+
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("expected old generation removed after cleanup, stat err=%v", err)
+	}
+	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
+		t.Fatalf("expected new generation to remain, stat err=%v", err)
+	}
+	active, err := readActiveDealGeneration(dealID)
+	if err != nil {
+		t.Fatalf("read pointer after cleanup: %v", err)
+	}
+	if active.Key != newRoot.Key {
+		t.Fatalf("active pointer mismatch after cleanup: got=%s want=%s", active.Key, newRoot.Key)
+	}
+}
