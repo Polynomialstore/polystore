@@ -293,6 +293,32 @@ function FileRow({
   allFiles,
   transportPreference,
 }: FileRowProps) {
+  const readFromLocalMduCache = async (dealId: string, chainCid: string): Promise<Uint8Array> => {
+    const cacheFreshness = await withTimeout(
+      reconcileLocalMduCache(dealId, chainCid),
+      15_000,
+      'local slab reconciliation',
+    )
+    if (!cacheFreshness.usable) {
+      throw new Error(`local slab not available (${cacheFreshness.reason})`)
+    }
+
+    return withTimeout(
+      readNilfsFileFromOpfs({
+        dealId,
+        file,
+        allFiles,
+        rangeStart: Math.max(0, Number(downloadRangeStart || 0) || 0),
+        rangeLen: Math.max(0, Number(downloadRangeLen || 0) || 0),
+      }),
+      20_000,
+      'local slab read',
+    ).catch((error: unknown) => {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`local slab not available (${msg})`)
+    })
+  }
+
   const handleAutoDownload = async () => {
     setFileActionError(null)
     setBusyFilePath(file.path)
@@ -302,15 +328,6 @@ function FileRow({
     try {
       if (!deal.cid) throw new Error('commit required (no on-chain CID)')
       const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
-      const cacheFreshness = await reconcileLocalMduCache(dealId, manifestHex)
-      if (cacheFreshness.usable) {
-        const cachedBytes = await readCachedFile(dealId, file.path)
-        if (cachedBytes) {
-          downloadBytesAsFile(cachedBytes, file.path)
-          markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-          return
-        }
-      }
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -319,6 +336,39 @@ function FileRow({
         action: 'download',
         status: 'pending',
       })
+
+      try {
+        const bytes = await readFromLocalMduCache(dealId, manifestHex)
+        downloadBytesAsFile(bytes, file.path)
+        queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+        })
+        markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'success',
+        })
+        return
+      } catch {
+        const cachedBytes = await readCachedFile(dealId, file.path)
+        if (cachedBytes) {
+          downloadBytesAsFile(cachedBytes, file.path)
+          markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
+          onFileActivity?.({
+            dealId,
+            filePath: file.path,
+            sizeBytes: file.size_bytes,
+            manifestRoot: manifestHex,
+            action: 'download',
+            status: 'success',
+          })
+          return
+        }
+      }
       const autoRoutePreference =
         transportPreference === 'prefer_p2p'
           ? 'prefer_p2p'
@@ -545,31 +595,9 @@ function FileRow({
     setFileActionError(null)
     setBusyFilePath(file.path)
     const dealId = String(deal.id)
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
     try {
       const chainCid = String(deal.cid || '').trim()
-      const cacheFreshness = await withTimeout(
-        reconcileLocalMduCache(dealId, chainCid),
-        15_000,
-        'local slab reconciliation',
-      )
-      if (!cacheFreshness.usable) throw new Error(`local slab not available (${cacheFreshness.reason})`)
-
-      const bytes = await withTimeout(
-        readNilfsFileFromOpfs({
-          dealId,
-          file,
-          allFiles,
-          rangeStart: safeStart,
-          rangeLen: safeLen,
-        }),
-        20_000,
-        'local slab read',
-      ).catch((error: unknown) => {
-        const msg = error instanceof Error ? error.message : String(error)
-        throw new Error(`local slab not available (${msg})`)
-      })
+      const bytes = await readFromLocalMduCache(dealId, chainCid)
       downloadBytesAsFile(bytes, file.path)
       queueCachedDownloadPersist(dealId, chainCid, file.path, bytes, () => {
         setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))

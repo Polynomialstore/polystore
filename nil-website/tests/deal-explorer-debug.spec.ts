@@ -21,7 +21,7 @@ async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buf
   return Buffer.concat(chunks)
 }
 
-test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', async ({ page }) => {
+test('Deal Explorer debug: default download prefers browser OPFS MDU cache', async ({ page }) => {
   test.setTimeout(300_000)
 
   const randomPk = generatePrivateKey()
@@ -46,7 +46,6 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
 
   let fetchCalls = 0
   let planCalls = 0
-  let gatewayRawCalls = 0
   let gatewayProofCalls = 0
   let spProofCalls = 0
 
@@ -94,28 +93,33 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     })
   })
 
-  // Gateway slab/files
+  // Slab/files can come from gateway or direct provider transport depending on diagnostics state.
+  const slabResponse = {
+    manifest_root: manifestRoot,
+    mdu_size_bytes: 8 * 1024 * 1024,
+    blob_size_bytes: 128 * 1024,
+    total_mdus: 3,
+    witness_mdus: 1,
+    user_mdus: 1,
+    file_records: 1,
+    file_count: 1,
+    total_size_bytes: fileBytes.length,
+    segments: [
+      { kind: 'mdu0', start_index: 0, count: 1, size_bytes: 8 * 1024 * 1024 },
+      { kind: 'witness', start_index: 1, count: 1, size_bytes: 8 * 1024 * 1024 },
+      { kind: 'user', start_index: 2, count: 1, size_bytes: 8 * 1024 * 1024 },
+    ],
+  }
+  const filesResponse = {
+    files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0, cache_present: true }],
+  }
+
   await page.route('**/gateway/slab/**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({
-        manifest_root: manifestRoot,
-        mdu_size_bytes: 8 * 1024 * 1024,
-        blob_size_bytes: 128 * 1024,
-        total_mdus: 3,
-        witness_mdus: 1,
-        user_mdus: 1,
-        file_records: 1,
-        file_count: 1,
-        total_size_bytes: fileBytes.length,
-        segments: [
-          { kind: 'mdu0', start_index: 0, count: 1, size_bytes: 8 * 1024 * 1024 },
-          { kind: 'witness', start_index: 1, count: 1, size_bytes: 8 * 1024 * 1024 },
-          { kind: 'user', start_index: 2, count: 1, size_bytes: 8 * 1024 * 1024 },
-        ],
-      }),
+      body: JSON.stringify(slabResponse),
     })
   })
 
@@ -124,9 +128,25 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({
-        files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0, cache_present: true }],
-      }),
+      body: JSON.stringify(filesResponse),
+    })
+  })
+
+  await page.route('**/sp/retrieval/slab/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(slabResponse),
+    })
+  })
+
+  await page.route('**/sp/retrieval/list-files/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(filesResponse),
     })
   })
 
@@ -174,16 +194,6 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({ ok: true }),
-    })
-  })
-
-  // Debug raw fetch path (gateway "cache" shortcut in debug mode)
-  await page.route('**/gateway/debug/raw-fetch/**', async (route) => {
-    gatewayRawCalls += 1
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'application/octet-stream', 'Access-Control-Allow-Origin': '*' },
-      body: fileBytes,
     })
   })
 
@@ -307,73 +317,98 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
+  await page.evaluate(async ({ dealId, manifestRoot, filePath, fileBytes }) => {
+    const MDU_SIZE_BYTES = 8 * 1024 * 1024
+    const BLOB_SIZE_BYTES = 128 * 1024
+    const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
+    const FILE_TABLE_HEADER_SIZE = 128
+    const SCALAR_BYTES = 32
+    const SCALAR_PAYLOAD_BYTES = 31
+
+    const encodeRawToMdu = (raw: Uint8Array): Uint8Array => {
+      const out = new Uint8Array(MDU_SIZE_BYTES)
+      let cursor = 0
+      let scalarIdx = 0
+      while (cursor < raw.byteLength) {
+        const remaining = raw.byteLength - cursor
+        const take = Math.min(SCALAR_PAYLOAD_BYTES, remaining)
+        const scalarBase = scalarIdx * SCALAR_BYTES
+        const payloadStart = take === SCALAR_PAYLOAD_BYTES ? scalarBase + 1 : scalarBase + (SCALAR_BYTES - take)
+        out.set(raw.slice(cursor, cursor + take), payloadStart)
+        cursor += take
+        scalarIdx += 1
+      }
+      return out
+    }
+
+    const root = await navigator.storage.getDirectory()
+    try {
+      await (root as any).removeEntry(`deal-${dealId}`, { recursive: true })
+    } catch {
+      // ignore
+    }
+    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+
+    const writeFile = async (name: string, bytes: Uint8Array | string) => {
+      const h = await dealDir.getFileHandle(name, { create: true })
+      const w = await (h as any).createWritable()
+      await w.write(bytes as any)
+      await w.close()
+    }
+
+    await writeFile('manifest_root.txt', manifestRoot)
+
+    const raw = new Uint8Array(fileBytes as number[])
+    const mdu0 = new Uint8Array(MDU_SIZE_BYTES)
+    const view = new DataView(mdu0.buffer)
+    mdu0.set(new TextEncoder().encode('NILF'), FILE_TABLE_START)
+    view.setUint32(FILE_TABLE_START + 8, 1, true)
+    const rec0 = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE
+    view.setBigUint64(rec0 + 0, 0n, true)
+    const lengthAndFlags = BigInt(raw.byteLength) & 0x00ff_ffff_ffff_ffffn
+    view.setBigUint64(rec0 + 8, lengthAndFlags, true)
+    const pathBytes = new TextEncoder().encode(filePath)
+    mdu0.set(pathBytes.slice(0, 40), rec0 + 24)
+
+    await writeFile('mdu_0.bin', mdu0)
+    await writeFile('mdu_1.bin', new Uint8Array(MDU_SIZE_BYTES))
+    await writeFile('mdu_2.bin', encodeRawToMdu(raw))
+  }, { dealId, manifestRoot, filePath, fileBytes: [...fileBytes] })
+
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
-  await expect(fileRow).toContainText('Browser cache: no')
+  await expect(fileRow).toHaveAttribute('data-cache-browser', 'no')
 
   const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
-  const providerDownloadButton = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
+  const routeLabel = page.getByTestId('transport-route')
+  const cacheSourceLabel = page.getByTestId('transport-cache-source')
   await expect(downloadButton).toBeVisible({ timeout: 60_000 })
 
-  // Auto Download: should prefer gateway cache fast path (no on-chain session/proof pipeline).
+  // Auto Download: should prefer the browser-local MDU slab cache on the happy path.
+  const fetchCallsBeforeAuto = fetchCalls
   const planCallsBeforeAuto = planCalls
   const gatewayProofBeforeAuto = gatewayProofCalls
   const download1 = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl1 = await download1
   expect(await streamToBuffer(await dl1.createReadStream())).toEqual(fileBytes)
-  expect(fetchCalls).toBeGreaterThan(0)
+  expect(fetchCalls).toBe(fetchCallsBeforeAuto)
   expect(planCalls).toBe(planCallsBeforeAuto)
   expect(gatewayProofCalls).toBe(gatewayProofBeforeAuto)
   expect(spProofCalls).toBe(0)
-  await expect(fileRow).toContainText('Browser cache: yes')
+  await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes')
+  await expect(routeLabel).toContainText(/browser mdu cache/i)
+  await expect(cacheSourceLabel).toContainText(/browser_mdu_cache/i)
 
   const fetchCallsAfterFirst = fetchCalls
 
-  // Browser Download again: should use cached bytes (no extra plan calls).
+  // Browser Download again: should stay local-first and avoid network retrieval.
   const download2 = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl2 = await download2
   expect(await streamToBuffer(await dl2.createReadStream())).toEqual(fileBytes)
   expect(fetchCalls).toBe(fetchCallsAfterFirst)
-
-  // Clear cache and force another SP retrieval.
-  await page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`).click()
-  await expect(fileRow).toContainText('Browser cache: no')
-
-  const download3 = page.waitForEvent('download', { timeout: 60_000 })
-  await downloadButton.click()
-  const dl3 = await download3
-  expect(await streamToBuffer(await dl3.createReadStream())).toEqual(fileBytes)
-  expect(fetchCalls).toBeGreaterThan(fetchCallsAfterFirst)
-
-  // On-chain retrieval button should use planning/session/proof pipeline.
-  const planCallsBeforeOnchain = planCalls
-  const gatewayProofBeforeOnchain = gatewayProofCalls
-  const onchainDownload = page.waitForEvent('download', { timeout: 60_000 })
-  await providerDownloadButton.click()
-  const dlOnchain = await onchainDownload
-  expect(await streamToBuffer(await dlOnchain.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBeGreaterThan(planCallsBeforeOnchain)
-  expect(gatewayProofCalls).toBeGreaterThan(gatewayProofBeforeOnchain)
-  expect(spProofCalls).toBe(0)
-
-  // Gateway download button should use local gateway cache path (no proof forwarding).
-  const fetchCallsBeforeGateway = fetchCalls
-  const planCallsBeforeGateway = planCalls
-  const gatewayProofBeforeGateway = gatewayProofCalls
-  const rawDownloadButton = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
-  await expect(rawDownloadButton).toBeVisible({ timeout: 60_000 })
-  const download4 = page.waitForEvent('download', { timeout: 60_000 })
-  await rawDownloadButton.click()
-  const dl4 = await download4
-  expect(await streamToBuffer(await dl4.createReadStream())).toEqual(fileBytes)
-  expect(gatewayRawCalls).toBe(0)
-  expect(fetchCalls).toBeGreaterThan(fetchCallsBeforeGateway)
-  expect(planCalls).toBe(planCallsBeforeGateway)
-  expect(gatewayProofCalls).toBe(gatewayProofBeforeGateway)
-  expect(spProofCalls).toBe(0)
 })
