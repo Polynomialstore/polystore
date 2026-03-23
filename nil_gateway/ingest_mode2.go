@@ -1211,6 +1211,7 @@ func mode2UploadArtifactsToProviders(
 	ctx context.Context,
 	dealID uint64,
 	manifestRoot ManifestRoot,
+	previousManifestRoot string,
 	hint string,
 	finalDir string,
 	witnessCount uint64,
@@ -1396,15 +1397,16 @@ func mode2UploadArtifactsToProviders(
 	sparseUploads := mode2SparseUploadEnabled()
 
 	type uploadTask struct {
-		url          string
-		path         string
-		sizeBytes    int64
-		sendBytes    int64
-		maxBytes     int64
-		dealID       string
-		manifestRoot string
-		mduIndex     string
-		slot         string
+		url                  string
+		path                 string
+		sizeBytes            int64
+		sendBytes            int64
+		maxBytes             int64
+		dealID               string
+		manifestRoot         string
+		previousManifestRoot string
+		mduIndex             string
+		slot                 string
 	}
 
 	isRetryableUploadErr := func(err error) bool {
@@ -1524,6 +1526,9 @@ func mode2UploadArtifactsToProviders(
 			}
 			if task.manifestRoot != "" {
 				req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
+			}
+			if strings.TrimSpace(task.previousManifestRoot) != "" {
+				req.Header.Set(nilUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
 			}
 
 			resp, err := client.Do(req)
@@ -1650,14 +1655,15 @@ func mode2UploadArtifactsToProviders(
 				continue
 			}
 			tasks = append(tasks, uploadTask{
-				url:          base + "/sp/upload_mdu",
-				path:         artifactPath,
-				sizeBytes:    sizes.full,
-				sendBytes:    sizes.send,
-				maxBytes:     10 << 20,
-				dealID:       dealIDStr,
-				manifestRoot: manifestRootCanonical,
-				mduIndex:     mduIndexStr,
+				url:                  base + "/sp/upload_mdu",
+				path:                 artifactPath,
+				sizeBytes:            sizes.full,
+				sendBytes:            sizes.send,
+				maxBytes:             10 << 20,
+				dealID:               dealIDStr,
+				manifestRoot:         manifestRootCanonical,
+				previousManifestRoot: previousManifestRoot,
+				mduIndex:             mduIndexStr,
 			})
 		}
 	}
@@ -1673,13 +1679,14 @@ func mode2UploadArtifactsToProviders(
 			continue
 		}
 		tasks = append(tasks, uploadTask{
-			url:          base + "/sp/upload_manifest",
-			path:         manifestPath,
-			sizeBytes:    manifestSizes.full,
-			sendBytes:    manifestSizes.send,
-			maxBytes:     512 << 10,
-			dealID:       dealIDStr,
-			manifestRoot: manifestRootCanonical,
+			url:                  base + "/sp/upload_manifest",
+			path:                 manifestPath,
+			sizeBytes:            manifestSizes.full,
+			sendBytes:            manifestSizes.send,
+			maxBytes:             512 << 10,
+			dealID:               dealIDStr,
+			manifestRoot:         manifestRootCanonical,
+			previousManifestRoot: previousManifestRoot,
 		})
 	}
 
@@ -1700,15 +1707,16 @@ func mode2UploadArtifactsToProviders(
 				return err
 			}
 			tasks = append(tasks, uploadTask{
-				url:          base + "/sp/upload_shard",
-				path:         artifactPath,
-				sizeBytes:    sizes.full,
-				sendBytes:    sizes.send,
-				maxBytes:     10 << 20,
-				dealID:       dealIDStr,
-				manifestRoot: manifestRootCanonical,
-				mduIndex:     slabIndexStr,
-				slot:         slotStr,
+				url:                  base + "/sp/upload_shard",
+				path:                 artifactPath,
+				sizeBytes:            sizes.full,
+				sendBytes:            sizes.send,
+				maxBytes:             10 << 20,
+				dealID:               dealIDStr,
+				manifestRoot:         manifestRootCanonical,
+				previousManifestRoot: previousManifestRoot,
+				mduIndex:             slabIndexStr,
+				slot:                 slotStr,
 			})
 		}
 	}
@@ -1821,7 +1829,7 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 	if err != nil {
 		return nil, fmt.Errorf("mode2 new-deal build failed: %w", err)
 	}
-	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
+	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, "", hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
 		return nil, fmt.Errorf("mode2 new-deal upload failed: %w", err)
 	}
 	return res, nil
@@ -1832,7 +1840,7 @@ func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, deal
 	if err != nil {
 		return nil, fmt.Errorf("mode2 append build failed: %w", err)
 	}
-	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
+	if err := mode2UploadArtifactsToProviders(ctx, dealID, res.manifestRoot, existingManifestRoot, hint, finalDir, res.witnessMdus, res.userMdus); err != nil {
 		return nil, fmt.Errorf("mode2 append upload failed: %w", err)
 	}
 	return res, nil

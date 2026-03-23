@@ -43,6 +43,8 @@ The owner signs an update intent containing both values. The chain only accepts 
 ### 3. Staged generations at providers/gateways
 * Uploaded bytes for `new_manifest_root` SHOULD be staged provisionally until the chain swap succeeds.
 * The currently committed generation `previous_manifest_root` MUST remain available while `new_manifest_root` is provisional.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A stale or failed chain swap MUST NOT delete or replace the current generation.
 
 ## Browser OPFS Guidance
@@ -65,7 +67,7 @@ Current devnet reference policy:
 * the active committed generation is never subject to this provisional TTL
 * the gateway exposes the effective retention window as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `nilfs_generation_provisional_retention_ttl_seconds`
 * `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
-* the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, and `nilfs_cas_preflight_conflicts_evm`
+* the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, `nilfs_cas_preflight_conflicts_evm`, and `nilfs_cas_preflight_conflicts_upload`
 
 ## Implementation Notes
 Current implementation anchors signed CAS at:

@@ -1855,7 +1855,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(req.PreviousManifestRoot) {
-		recordNilfsCASPreflightConflict(false)
+		recordNilfsCASPreflightConflict(nilfsCASPreflightConflictLegacy)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
@@ -2198,7 +2198,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(rawPreviousManifestRoot) {
-		recordNilfsCASPreflightConflict(true)
+		recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
@@ -4659,7 +4659,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 
 const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
 
-const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Full-Size, X-Nil-Gateway-Auth, X-Nil-Deputy"
+const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Previous-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Full-Size, X-Nil-Gateway-Auth, X-Nil-Deputy"
 
 const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS"
 
@@ -6292,6 +6292,14 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
+	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+		statusCode := http.StatusConflict
+		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
+			statusCode = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), statusCode)
+		return
+	}
 	declaredFullSize := int64(0)
 	hasDeclaredFullSize := false
 	if fullSizeHeader != "" {
@@ -6450,6 +6458,14 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 
 	if clientManifestRoot == "" {
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
+		return
+	}
+	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+		statusCode := http.StatusConflict
+		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
+			statusCode = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), statusCode)
 		return
 	}
 	declaredFullSize := int64(0)
@@ -6683,6 +6699,14 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
+		return
+	}
+	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+		statusCode := http.StatusConflict
+		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
+			statusCode = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), statusCode)
 		return
 	}
 

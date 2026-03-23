@@ -405,6 +405,7 @@ The gateway keeps newly uploaded NilFS generations in a provisional state until 
 - Default devnet retention: `24h`
 - Override with: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL`
 - Disable age-based provisional GC: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0`
+- Browser/gateway/provider artifact uploads may send `X-Nil-Previous-Manifest-Root` to reject stale append bases before large upload bodies are consumed
 
 Inspect the effective policy and current generation inventory with:
 

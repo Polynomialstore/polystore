@@ -281,6 +281,8 @@ func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 
 func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	useTempUploadDir(t)
+	resetNilfsCASStatusCountersForTest()
+	resetNilfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-mdu-sparse")
 	dealID := uint64(1)
@@ -302,6 +304,7 @@ func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	req.Header.Set("X-Nil-Deal-ID", "1")
 	req.Header.Set("X-Nil-Mdu-Index", "0")
 	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(nilUploadPreviousManifestRootHeader, "")
 	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(types.MDU_SIZE))
 	req.Header.Set("Content-Type", "application/octet-stream")
 
@@ -326,8 +329,50 @@ func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	}
 }
 
+func TestSpUploadMdu_RejectsStalePreviousManifestRoot(t *testing.T) {
+	useTempUploadDir(t)
+	resetNilfsCASStatusCountersForTest()
+	resetNilfsUploadRootPreflightCacheForTest()
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-mdu-stale")
+	currentRoot := mustTestManifestRoot(t, "sp-upload-mdu-current")
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		1: {Owner: "nil1owner", CID: currentRoot.Canonical},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_mdu", bytes.NewReader(bytes.Repeat([]byte{0xAB}, 128)))
+	req.Header.Set("X-Nil-Deal-ID", "1")
+	req.Header.Set("X-Nil-Mdu-Index", "0")
+	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(nilUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-mdu-stale-prev").Canonical)
+	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(types.MDU_SIZE))
+
+	w := httptest.NewRecorder()
+	http.HandlerFunc(SpUploadMdu).ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
+		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
+	}
+	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_upload"]; got != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got %q", got)
+	}
+}
+
 func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	useTempUploadDir(t)
+	resetNilfsCASStatusCountersForTest()
+	resetNilfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-shard-sparse")
 	dealID := uint64(1)
@@ -351,6 +396,7 @@ func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	req.Header.Set("X-Nil-Mdu-Index", "2")
 	req.Header.Set("X-Nil-Slot", "1")
 	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(nilUploadPreviousManifestRootHeader, "")
 	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(fullSize))
 	req.Header.Set("Content-Type", "application/octet-stream")
 
@@ -372,6 +418,47 @@ func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	}
 	if !bytes.Equal(got[:len(body)], body) {
 		t.Fatalf("stored shard prefix mismatch")
+	}
+}
+
+func TestSpUploadShard_RejectsStalePreviousManifestRoot(t *testing.T) {
+	useTempUploadDir(t)
+	resetNilfsCASStatusCountersForTest()
+	resetNilfsUploadRootPreflightCacheForTest()
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-shard-stale")
+	currentRoot := mustTestManifestRoot(t, "sp-upload-shard-current")
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		1: {Owner: "nil1owner", CID: currentRoot.Canonical},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_shard", bytes.NewReader(bytes.Repeat([]byte{0xCD}, 128)))
+	req.Header.Set("X-Nil-Deal-ID", "1")
+	req.Header.Set("X-Nil-Mdu-Index", "2")
+	req.Header.Set("X-Nil-Slot", "1")
+	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(nilUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-shard-stale-prev").Canonical)
+	req.Header.Set("X-Nil-Full-Size", "4096")
+
+	w := httptest.NewRecorder()
+	http.HandlerFunc(SpUploadShard).ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
+		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
+	}
+	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_upload"]; got != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got %q", got)
 	}
 }
 

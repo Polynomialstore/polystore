@@ -5,6 +5,7 @@ import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 interface DirectUploadOptions {
   dealId: string;
   manifestRoot: string; // The canonical 0x-prefixed hex string
+  previousManifestRoot?: string;
   manifestBlob?: Uint8Array | null; // 128 KiB manifest blob (manifest.bin)
   manifestBlobFullSize?: number;
   providerBaseUrl: string; // Base URL of the Storage Provider (e.g., http://localhost:8080)
@@ -27,7 +28,7 @@ interface DirectUploadResult {
 }
 
 export function useDirectUpload(options: DirectUploadOptions): DirectUploadResult {
-  const { dealId, manifestRoot, manifestBlob, manifestBlobFullSize, providerBaseUrl } = options;
+  const { dealId, manifestRoot, previousManifestRoot, manifestBlob, manifestBlobFullSize, providerBaseUrl } = options;
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const uploadEngine = useMemo(
@@ -59,6 +60,7 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
       const result = await uploadEngine.uploadDirect({
         dealId,
         manifestRoot,
+        previousManifestRoot,
         manifestBlob,
         manifestBlobFullSize,
         mdus,
@@ -74,7 +76,7 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
     } finally {
       setIsUploading(false);
     }
-  }, [dealId, handleProgress, manifestBlob, manifestBlobFullSize, manifestRoot, providerBaseUrl, uploadEngine]);
+  }, [dealId, handleProgress, manifestBlob, manifestBlobFullSize, manifestRoot, previousManifestRoot, providerBaseUrl, uploadEngine]);
 
   return { uploadProgress, isUploading, uploadMdus, reset };
 }

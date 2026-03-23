@@ -29,6 +29,7 @@ test('upload engine: direct upload reports progress and stops on manifest errors
   const result = await engine.uploadDirect({
     dealId: '7',
     manifestRoot: '0xabc',
+    previousManifestRoot: '0xprev',
     manifestBlob: new Uint8Array([9, 0, 0]),
     manifestBlobFullSize: 128 * 1024,
     mdus: [{ index: 0, data: new Uint8Array([1, 2, 3]), fullSize: 8 * 1024 * 1024 }],
@@ -51,6 +52,8 @@ test('upload engine: direct upload reports progress and stops on manifest errors
   )
   assert.equal(transport.calls[0].artifact.fullSize, 8 * 1024 * 1024)
   assert.equal(transport.calls[1].artifact.fullSize, 128 * 1024)
+  assert.equal(transport.calls[0].previousManifestRoot, '0xprev')
+  assert.equal(transport.calls[1].previousManifestRoot, '0xprev')
   const lastSnapshot = snapshots.length > 0 ? snapshots[snapshots.length - 1] : []
   assert.match(lastSnapshot.join(',') || '', /mdu:complete,manifest:error/)
 })
@@ -62,6 +65,7 @@ test('upload engine: striped upload sequences metadata per target before shard u
   const result = await engine.uploadStriped({
     dealId: '9',
     manifestRoot: '0xdef',
+    previousManifestRoot: '0xbase',
     manifestBlob: new Uint8Array([5, 4, 3]),
     manifestBlobFullSize: 128 * 1024,
     metadataMdus: [
@@ -122,6 +126,8 @@ test('upload engine: striped upload sequences metadata per target before shard u
   assert.equal(transport.calls[0].artifact.fullSize, 8 * 1024 * 1024)
   assert.equal(transport.calls[2].artifact.fullSize, 128 * 1024)
   assert.equal(transport.calls[6].artifact.fullSize, 1024)
+  assert.equal(transport.calls[0].previousManifestRoot, '0xbase')
+  assert.equal(transport.calls[6].previousManifestRoot, '0xbase')
 })
 
 test('upload engine: direct upload overlaps artifact requests with bounded concurrency', async () => {

@@ -12,11 +12,20 @@ function targetUrl(target: UploadTarget, artifact: SparseArtifactInput): string 
   return `${base}${target.shardPath}`
 }
 
-function buildHeaders(dealId: string, manifestRoot: string, artifact: SparseArtifactInput): Record<string, string> {
+function buildHeaders(
+  dealId: string,
+  manifestRoot: string,
+  previousManifestRoot: string | undefined,
+  artifact: SparseArtifactInput,
+): Record<string, string> {
   const headers: Record<string, string> = {
     'X-Nil-Deal-ID': dealId,
     'X-Nil-Manifest-Root': manifestRoot,
     'Content-Type': 'application/octet-stream',
+  }
+  const normalizedPreviousManifestRoot = String(previousManifestRoot || '').trim()
+  if (normalizedPreviousManifestRoot !== '') {
+    headers['X-Nil-Previous-Manifest-Root'] = normalizedPreviousManifestRoot
   }
   if (artifact.kind === 'mdu' || artifact.kind === 'shard') {
     headers['X-Nil-Mdu-Index'] = String(artifact.index)
@@ -32,7 +41,7 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
     async sendArtifact(request) {
       const response = await postSparseArtifact({
         url: targetUrl(request.target, request.artifact),
-        headers: buildHeaders(request.dealId, request.manifestRoot, request.artifact),
+        headers: buildHeaders(request.dealId, request.manifestRoot, request.previousManifestRoot, request.artifact),
         artifact: request.artifact,
       })
 

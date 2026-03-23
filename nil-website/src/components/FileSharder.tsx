@@ -309,6 +309,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
     dealId, 
     manifestRoot: currentManifestRoot || "",
+    previousManifestRoot: baseManifestRoot || "",
     manifestBlob: currentManifestBlob,
     manifestBlobFullSize: currentManifestBlobFullSize ?? undefined,
     providerBaseUrl: slotBases[0] || appConfig.spBase,
@@ -577,6 +578,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const result = await uploadEngine.uploadStriped({
         dealId,
         manifestRoot,
+        previousManifestRoot: baseManifestRoot || '',
         manifestBlob: currentManifestBlob,
         manifestBlobFullSize: currentManifestBlobFullSize ?? undefined,
         metadataMdus,
@@ -597,7 +599,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
       setMode2Uploading(false)
     }
-  }, [collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
+  }, [baseManifestRoot, collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
 
   const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
     const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
@@ -1133,6 +1135,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             'X-Nil-Deal-ID': dealId,
             'X-Nil-Mdu-Index': String(mdu.index),
             'X-Nil-Manifest-Root': manifestRoot,
+            'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
             'Content-Type': 'application/octet-stream',
           },
           artifact: {
@@ -1151,10 +1154,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const manifestRes = await postSparseArtifact({
         url: `${gatewayBase}${mirrorManifestPath}`,
         headers: {
-          'X-Nil-Deal-ID': dealId,
-          'X-Nil-Manifest-Root': manifestRoot,
-          'Content-Type': 'application/octet-stream',
-        },
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Manifest-Root': manifestRoot,
+            'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
+            'Content-Type': 'application/octet-stream',
+          },
         artifact: {
           kind: 'manifest',
           bytes: currentManifestBlob,
@@ -1181,6 +1185,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 'X-Nil-Mdu-Index': String(slabIndex),
                 'X-Nil-Slot': String(slot),
                 'X-Nil-Manifest-Root': manifestRoot,
+                'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
                 'Content-Type': 'application/octet-stream',
               },
               artifact: {
@@ -1217,6 +1222,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   }, [
     addLog,
+    baseManifestRoot,
     collectedMdus,
     currentManifestBlob,
     currentManifestBlobFullSize,

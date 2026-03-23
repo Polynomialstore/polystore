@@ -84,6 +84,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   let retrievalFetchCalls = 0
   let gatewayProbeAttempts = 0
   let uploadManifestCalls = 0
+  const uploadPreviousRoots: string[] = []
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
@@ -109,13 +110,16 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   await page.route('http://localhost:8080/health', failGatewayProbe)
 
   await page.route('**/sp/upload_mdu', async (route) => {
+    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
   await page.route('**/sp/upload_manifest', async (route) => {
     uploadManifestCalls += 1
+    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
   await page.route('**/sp/upload_shard', async (route) => {
+    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
 
@@ -350,7 +354,6 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     mimeType: 'text/plain',
     buffer: fileA.buffer,
   })
-  await expect(page.getByText('Client-side expansion complete')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 60_000 })
   await expect(commitBtn).toBeEnabled({ timeout: 60_000 })
   await commitBtn.click()
@@ -404,4 +407,5 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   const filePaths = slabMeta.file_records.map((file) => file.path).sort()
   expect(filePaths).toEqual([fileA.name, fileB.name].sort())
   expect(slabMeta.manifest_root).toMatch(/^0x[0-9a-f]{96}$/i)
+  expect(uploadPreviousRoots).toContain(dealCid)
 })

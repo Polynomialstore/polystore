@@ -38,6 +38,7 @@ export interface UploadProgressStep {
 export interface UploadTransportRequest {
   dealId: string
   manifestRoot: string
+  previousManifestRoot?: string
   target: UploadTarget
   artifact: SparseArtifactInput
 }
@@ -83,6 +84,7 @@ export interface UploadEngineResult {
 export interface DirectUploadInput {
   dealId: string
   manifestRoot: string
+  previousManifestRoot?: string
   manifestBlob?: Uint8Array | null
   manifestBlobFullSize?: number
   mdus: PreparedMdu[]
@@ -93,6 +95,7 @@ export interface DirectUploadInput {
 export interface StripedUploadInput {
   dealId: string
   manifestRoot: string
+  previousManifestRoot?: string
   manifestBlob?: Uint8Array | null
   manifestBlobFullSize?: number
   metadataMdus: PreparedMdu[]
@@ -317,6 +320,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
+            previousManifestRoot: input.previousManifestRoot,
             target: input.target,
             artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
           },
@@ -326,6 +330,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
+            previousManifestRoot: input.previousManifestRoot,
             target: input.target,
             artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
           },
@@ -353,6 +358,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
             request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
+              previousManifestRoot: input.previousManifestRoot,
               target,
               artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
             },
@@ -363,6 +369,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
+            previousManifestRoot: input.previousManifestRoot,
             target,
             artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
           },
@@ -402,6 +409,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
             request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
+              previousManifestRoot: input.previousManifestRoot,
               target,
               artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize } as const,
             },

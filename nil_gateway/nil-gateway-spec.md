@@ -88,6 +88,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
+    *   **CAS preflight header:** artifact uploads may include `X-Nil-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
     *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
     *   **Observability:** `/status` reports the effective TTL and generation counters via `nilfs_generation_*` fields, plus stale CAS preflight counters via `nilfs_cas_preflight_conflicts_*`.

@@ -439,9 +439,10 @@ func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
 
 func TestGatewayStatusIncludesNilfsCASConflictSnapshot(t *testing.T) {
 	resetNilfsCASStatusCountersForTest()
-	recordNilfsCASPreflightConflict(false)
-	recordNilfsCASPreflightConflict(true)
-	recordNilfsCASPreflightConflict(true)
+	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictLegacy)
+	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
+	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
+	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
 
 	oldLCDBase := lcdBase
 	oldProviderBase := providerBase
@@ -464,13 +465,16 @@ func TestGatewayStatusIncludesNilfsCASConflictSnapshot(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
 		t.Fatalf("decode status response: %v", err)
 	}
-	if status.Extra["nilfs_cas_preflight_conflicts_total"] != "3" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_total=3, got=%q", status.Extra["nilfs_cas_preflight_conflicts_total"])
+	if status.Extra["nilfs_cas_preflight_conflicts_total"] != "4" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_total=4, got=%q", status.Extra["nilfs_cas_preflight_conflicts_total"])
 	}
 	if status.Extra["nilfs_cas_preflight_conflicts_legacy"] != "1" {
 		t.Fatalf("expected nilfs_cas_preflight_conflicts_legacy=1, got=%q", status.Extra["nilfs_cas_preflight_conflicts_legacy"])
 	}
 	if status.Extra["nilfs_cas_preflight_conflicts_evm"] != "2" {
 		t.Fatalf("expected nilfs_cas_preflight_conflicts_evm=2, got=%q", status.Extra["nilfs_cas_preflight_conflicts_evm"])
+	}
+	if status.Extra["nilfs_cas_preflight_conflicts_upload"] != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got=%q", status.Extra["nilfs_cas_preflight_conflicts_upload"])
 	}
 }

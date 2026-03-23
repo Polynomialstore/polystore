@@ -366,6 +366,8 @@ For browser clients:
 Providers and gateways SHOULD treat incoming NilFS writes as **provisional generations** until the signed chain swap succeeds:
 * New bytes for `new_manifest_root` MAY be uploaded before the chain update is finalized.
 * The previously committed generation `previous_manifest_root` MUST remain readable while the new generation is provisional.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A failed or stale chain swap MUST NOT cause the live generation to be discarded.
 
 The system therefore distinguishes:
@@ -379,7 +381,7 @@ Devnet gateway policy:
 * The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
 * The reference gateway exposes this as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `nilfs_generation_provisional_retention_ttl_seconds`.
 * Setting `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
-* The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, and `nilfs_cas_preflight_conflicts_evm` so operators can observe concurrent-writer / churn pressure.
+* The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, `nilfs_cas_preflight_conflicts_evm`, and `nilfs_cas_preflight_conflicts_upload` so operators can observe concurrent-writer / churn pressure across relay and artifact-ingest paths.
 
 ## Appendix A: Core Cryptographic Primitives
 
