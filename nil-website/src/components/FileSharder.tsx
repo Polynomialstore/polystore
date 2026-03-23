@@ -42,6 +42,7 @@ import {
 } from '../lib/upload/planner';
 import { createUploadEngine } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
+import { bootstrapAppendBaseFromNetwork as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 
 interface ShardItem {
   id: number;
@@ -779,87 +780,58 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
     const remoteFiles = await providerListFiles(providerBase, manifestRoot, { dealId, owner })
-    const files = [...remoteFiles]
-      .filter((file) => Number.isFinite(Number(file.start_offset)) && Number(file.start_offset) >= 0)
-      .sort((a, b) => {
-        const startDiff = Number(a.start_offset) - Number(b.start_offset)
-        if (startDiff !== 0) return startDiff
-        return String(a.path).localeCompare(String(b.path))
-      })
-    if (!files.length) {
+    if (!remoteFiles.length) {
+      addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
+      return null
+    }
+    const commitmentsPerMdu = (stripeParams.k + stripeParams.m) * (64 / stripeParams.k)
+    const bootstrapped = await buildBootstrappedAppendBase({
+      rawMduCapacity: RAW_MDU_CAPACITY,
+      commitmentsPerMdu,
+      listFiles: async () => remoteFiles,
+      fetchFileBytes: async (file) => {
+        const sizeBytes = Number(file.size_bytes || 0)
+        addLog(`> Bootstrap fetch: ${file.path} (${formatBytes(sizeBytes)})...`)
+        const result = await fetchFile({
+          dealId,
+          manifestRoot,
+          owner,
+          filePath: file.path,
+          serviceBase: providerBase,
+          rangeStart: 0,
+          rangeLen: 0,
+          fileStartOffset: Number(file.start_offset || 0),
+          fileSizeBytes: sizeBytes,
+          mduSizeBytes: MDU_SIZE_BYTES,
+          blobSizeBytes: 128 * 1024,
+          decodeNilce: false,
+          routePreference: 'prefer_direct_sp',
+        })
+        if (!result) {
+          throw new Error(`bootstrap retrieval returned no data for ${file.path}`)
+        }
+        try {
+          return new Uint8Array(await result.blob.arrayBuffer())
+        } finally {
+          URL.revokeObjectURL(result.url)
+        }
+      },
+      initMdu0Builder: (userCount, leafCount) => workerClient.initMdu0Builder(userCount, leafCount),
+      appendFileToMdu0: (filePath, sizeBytes, startOffset, flags) =>
+        workerClient.appendFileToMdu0(filePath, sizeBytes, startOffset, flags),
+      getMdu0Bytes: () => workerClient.getMdu0Bytes(),
+      encodeToMdu,
+    })
+    if (!bootstrapped) {
       addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
       return null
     }
 
-    let maxEnd = 0
-    for (const file of files) {
-      const start = Number(file.start_offset || 0)
-      const size = Number(file.size_bytes || 0)
-      if (!Number.isFinite(start) || !Number.isFinite(size) || size <= 0) continue
-      maxEnd = Math.max(maxEnd, start + size)
-    }
-    const userCount = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
-    if (userCount <= 0) {
-      throw new Error('committed slab has no user MDUs to bootstrap')
-    }
-
-    const commitmentsPerMdu = (stripeParams.k + stripeParams.m) * (64 / stripeParams.k)
-    await workerClient.initMdu0Builder(userCount, commitmentsPerMdu)
-    const rawUserMdus = Array.from({ length: userCount }, () => new Uint8Array(RAW_MDU_CAPACITY))
-
-    for (const file of files) {
-      const startOffset = Number(file.start_offset || 0)
-      const sizeBytes = Number(file.size_bytes || 0)
-      addLog(`> Bootstrap fetch: ${file.path} (${formatBytes(sizeBytes)})...`)
-      const result = await fetchFile({
-        dealId,
-        manifestRoot,
-        owner,
-        filePath: file.path,
-        serviceBase: providerBase,
-        rangeStart: 0,
-        rangeLen: 0,
-        fileStartOffset: startOffset,
-        fileSizeBytes: sizeBytes,
-        mduSizeBytes: MDU_SIZE_BYTES,
-        blobSizeBytes: 128 * 1024,
-        decodeNilce: false,
-        routePreference: 'prefer_direct_sp',
-      })
-      if (!result) {
-        throw new Error(`bootstrap retrieval returned no data for ${file.path}`)
-      }
-      try {
-        const fileBytes = new Uint8Array(await result.blob.arrayBuffer())
-        if (fileBytes.byteLength !== sizeBytes) {
-          throw new Error(`bootstrap retrieval size mismatch for ${file.path}: got ${fileBytes.byteLength}, want ${sizeBytes}`)
-        }
-        let remaining = fileBytes.byteLength
-        let fileOffset = 0
-        let cursor = startOffset
-        while (remaining > 0) {
-          const userMduIdx = Math.floor(cursor / RAW_MDU_CAPACITY)
-          const offsetInMdu = cursor % RAW_MDU_CAPACITY
-          const take = Math.min(remaining, RAW_MDU_CAPACITY - offsetInMdu)
-          rawUserMdus[userMduIdx].set(fileBytes.subarray(fileOffset, fileOffset + take), offsetInMdu)
-          fileOffset += take
-          cursor += take
-          remaining -= take
-        }
-        await workerClient.appendFileToMdu0(file.path, sizeBytes, startOffset, Number(file.flags || 0))
-      } finally {
-        URL.revokeObjectURL(result.url)
-      }
-    }
-
-    const baseMdu0Bytes = await workerClient.getMdu0Bytes()
-    const existingUserMdus = rawUserMdus.map((rawMdu, index) => ({ index, data: encodeToMdu(rawMdu) }))
-
     try {
       await deleteDealDirectory(dealId)
       await writeManifestRoot(dealId, manifestRoot)
-      await writeMdu(dealId, 0, baseMdu0Bytes)
-      for (const userMdu of existingUserMdus) {
+      await writeMdu(dealId, 0, bootstrapped.baseMdu0Bytes)
+      for (const userMdu of bootstrapped.existingUserMdus) {
         await writeMdu(dealId, 1 + userMdu.index, userMdu.data)
       }
       await writeSlabMetadata(dealId, {
@@ -873,28 +845,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         created_at: new Date().toISOString(),
         last_validated_at: new Date().toISOString(),
         witness_mdus: 0,
-        user_mdus: userCount,
-        total_mdus: 1 + userCount,
-        file_records: files.map((file) => ({
+        user_mdus: bootstrapped.existingUserCount,
+        total_mdus: 1 + bootstrapped.existingUserCount,
+        file_records: bootstrapped.files.map((file) => ({
           path: file.path,
           start_offset: Number(file.start_offset || 0),
           size_bytes: Number(file.size_bytes || 0),
           flags: Number(file.flags || 0),
         })),
       })
-      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${files.length} files, ${userCount} user MDUs).`)
+      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${bootstrapped.files.length} files, ${bootstrapped.existingUserCount} user MDUs).`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
     }
-
-    return {
-      baseMdu0Bytes,
-      existingUserMdus,
-      existingUserCount: userCount,
-      existingMaxEnd: maxEnd,
-      appendStartOffset: userCount * RAW_MDU_CAPACITY,
-    }
+    return bootstrapped
   }, [addLog, baseManifestRoot, dealId, dealOwner, fetchFile, slotBases, stripeParams]);
 
   useEffect(() => {
