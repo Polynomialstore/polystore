@@ -65,6 +65,7 @@ Current devnet reference policy:
 * the active committed generation is never subject to this provisional TTL
 * the gateway exposes the effective retention window as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `nilfs_generation_provisional_retention_ttl_seconds`
 * `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
+* the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, and `nilfs_cas_preflight_conflicts_evm`
 
 ## Implementation Notes
 Current implementation anchors signed CAS at:

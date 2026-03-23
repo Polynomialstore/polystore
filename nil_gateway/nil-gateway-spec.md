@@ -90,7 +90,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
     *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
-    *   **Observability:** `/status` reports the effective TTL and generation counters via `nilfs_generation_*` fields.
+    *   **Observability:** `/status` reports the effective TTL and generation counters via `nilfs_generation_*` fields, plus stale CAS preflight counters via `nilfs_cas_preflight_conflicts_*`.
 
 #### Health & Status
 *   **`GET /health`**

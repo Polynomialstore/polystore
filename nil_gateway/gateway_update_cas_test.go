@@ -11,6 +11,7 @@ import (
 )
 
 func TestGatewayUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T) {
+	resetNilfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -53,9 +54,13 @@ func TestGatewayUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T)
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
+	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_legacy"]; got != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_legacy=1, got %q", got)
+	}
 }
 
 func TestGatewayUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *testing.T) {
+	resetNilfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -102,6 +107,9 @@ func TestGatewayUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *tes
 	}
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
+	}
+	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_evm"]; got != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_evm=1, got %q", got)
 	}
 }
 
@@ -326,6 +334,7 @@ func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t
 }
 
 func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
+	resetNilfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -425,5 +434,43 @@ func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
 	}
 	if callCount != 1 {
 		t.Fatalf("expected stale request not to relay, got %d relay calls", callCount)
+	}
+}
+
+func TestGatewayStatusIncludesNilfsCASConflictSnapshot(t *testing.T) {
+	resetNilfsCASStatusCountersForTest()
+	recordNilfsCASPreflightConflict(false)
+	recordNilfsCASPreflightConflict(true)
+	recordNilfsCASPreflightConflict(true)
+
+	oldLCDBase := lcdBase
+	oldProviderBase := providerBase
+	lcdBase = ""
+	providerBase = ""
+	t.Cleanup(func() {
+		lcdBase = oldLCDBase
+		providerBase = oldProviderBase
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/status", nil)
+	w := httptest.NewRecorder()
+
+	GatewayStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got=%d want=%d", w.Code, http.StatusOK)
+	}
+	var status gatewayStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+	if status.Extra["nilfs_cas_preflight_conflicts_total"] != "3" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_total=3, got=%q", status.Extra["nilfs_cas_preflight_conflicts_total"])
+	}
+	if status.Extra["nilfs_cas_preflight_conflicts_legacy"] != "1" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_legacy=1, got=%q", status.Extra["nilfs_cas_preflight_conflicts_legacy"])
+	}
+	if status.Extra["nilfs_cas_preflight_conflicts_evm"] != "2" {
+		t.Fatalf("expected nilfs_cas_preflight_conflicts_evm=2, got=%q", status.Extra["nilfs_cas_preflight_conflicts_evm"])
 	}
 }

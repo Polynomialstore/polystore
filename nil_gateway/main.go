@@ -1855,6 +1855,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(req.PreviousManifestRoot) {
+		recordNilfsCASPreflightConflict(false)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
@@ -2197,6 +2198,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(rawPreviousManifestRoot) {
+		recordNilfsCASPreflightConflict(true)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}

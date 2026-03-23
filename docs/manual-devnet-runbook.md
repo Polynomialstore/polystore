@@ -410,4 +410,7 @@ Inspect the effective policy and current generation inventory with:
 
 ```bash
 curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_generation_")))'
+
+# Observe stale CAS / concurrent-writer pressure at the gateway preflight layer.
+curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_cas_preflight_conflicts_")))'
 ```

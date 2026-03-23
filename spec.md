@@ -379,6 +379,7 @@ Devnet gateway policy:
 * The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
 * The reference gateway exposes this as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `nilfs_generation_provisional_retention_ttl_seconds`.
 * Setting `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
+* The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, and `nilfs_cas_preflight_conflicts_evm` so operators can observe concurrent-writer / churn pressure.
 
 ## Appendix A: Core Cryptographic Primitives
 

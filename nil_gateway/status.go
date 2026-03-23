@@ -109,6 +109,9 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 	for k, v := range dealGenerationStatusSnapshotForStatus() {
 		status.Extra[k] = v
 	}
+	for k, v := range nilfsCASStatusSnapshotForStatus() {
+		status.Extra[k] = v
+	}
 	p2pAddrs := getP2PAnnounceAddrs()
 	if len(p2pAddrs) == 0 {
 		p2pAddrs = parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
