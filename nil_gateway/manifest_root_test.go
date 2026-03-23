@@ -219,6 +219,13 @@ func TestCleanupStaleDealGenerations_PromotesCommittedGenerationAndRemovesOld(t 
 	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
 		t.Fatalf("expected new generation to remain, stat err=%v", err)
 	}
+	meta, err := readSlabMetadataFile(newDir)
+	if err != nil {
+		t.Fatalf("read promoted slab metadata: %v", err)
+	}
+	if meta.GenerationState != slabGenerationStateActive {
+		t.Fatalf("expected promoted generation state active, got=%q", meta.GenerationState)
+	}
 	active, err := readActiveDealGeneration(dealID)
 	if err != nil {
 		t.Fatalf("read pointer after cleanup: %v", err)

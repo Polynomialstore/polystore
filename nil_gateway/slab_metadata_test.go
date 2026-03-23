@@ -13,13 +13,17 @@ func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {
 	dealDir := t.TempDir()
 	dealID := uint64(42)
 	validatedAt := time.Now().UTC().Round(time.Second)
+	manifestRoot := mustTestManifestRoot(t, "slab-metadata-roundtrip")
+	previousManifestRoot := mustTestManifestRoot(t, "slab-metadata-previous")
 
 	meta := &slabMetadataDocument{
-		SchemaVersion: slabMetadataSchemaVersion,
-		GenerationID:  "abc123",
-		DealID:        &dealID,
-		ManifestRoot:  "0x" + stringsRepeat("a", 96),
-		Owner:         "nil1owner",
+		SchemaVersion:        slabMetadataSchemaVersion,
+		GenerationID:         "abc123",
+		GenerationState:      slabGenerationStateProvisional,
+		DealID:               &dealID,
+		ManifestRoot:         manifestRoot.Canonical,
+		PreviousManifestRoot: previousManifestRoot.Canonical,
+		Owner:                "nil1owner",
 		Redundancy: &slabMetadataRedundancy{
 			K: 8,
 			M: 4,
@@ -54,11 +58,17 @@ func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {
 	if decoded.GenerationID != meta.GenerationID {
 		t.Fatalf("unexpected generation_id: %q", decoded.GenerationID)
 	}
+	if decoded.GenerationState != meta.GenerationState {
+		t.Fatalf("unexpected generation_state: %q", decoded.GenerationState)
+	}
 	if decoded.DealID == nil || *decoded.DealID != dealID {
 		t.Fatalf("unexpected deal_id: %v", decoded.DealID)
 	}
 	if decoded.ManifestRoot != meta.ManifestRoot {
 		t.Fatalf("unexpected manifest_root: %q", decoded.ManifestRoot)
+	}
+	if decoded.PreviousManifestRoot != meta.PreviousManifestRoot {
+		t.Fatalf("unexpected previous_manifest_root: %q", decoded.PreviousManifestRoot)
 	}
 	if decoded.Source != meta.Source {
 		t.Fatalf("unexpected source: %q", decoded.Source)

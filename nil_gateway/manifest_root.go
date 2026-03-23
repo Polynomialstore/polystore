@@ -334,6 +334,18 @@ func isManifestRootDirName(name string) bool {
 	return err == nil
 }
 
+func markDealGenerationActive(dealDir string) {
+	meta, err := loadSlabMetadataWithFallback(dealDir)
+	if err != nil {
+		log.Printf("Gateway cache cleanup: failed to load slab metadata for active promotion dir=%s err=%v", dealDir, err)
+		return
+	}
+	meta.GenerationState = slabGenerationStateActive
+	if err := writeSlabMetadataFile(dealDir, meta); err != nil {
+		log.Printf("Gateway cache cleanup: failed to persist active slab metadata dir=%s err=%v", dealDir, err)
+	}
+}
+
 func cleanupStaleDealGenerations(dealID uint64, keepRoot ManifestRoot) {
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
 	entries, err := os.ReadDir(baseDealDir)
@@ -393,4 +405,5 @@ func cleanupStaleDealGenerations(dealID uint64, keepRoot ManifestRoot) {
 	if err := writeActiveDealGeneration(dealID, keepRoot); err != nil {
 		log.Printf("Gateway cache cleanup: failed to persist active generation pointer deal_id=%d manifest_root=%s err=%v", dealID, keepRoot.Key, err)
 	}
+	markDealGenerationActive(dealScopedDir(dealID, keepRoot))
 }

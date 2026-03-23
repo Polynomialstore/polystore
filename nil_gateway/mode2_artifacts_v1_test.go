@@ -184,6 +184,16 @@ func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t
 	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
 		t.Fatalf("new provisional generation missing after append build, stat err=%v", err)
 	}
+	newMeta, err := readSlabMetadataFile(newDir)
+	if err != nil {
+		t.Fatalf("read new provisional slab metadata: %v", err)
+	}
+	if newMeta.GenerationState != slabGenerationStateProvisional {
+		t.Fatalf("expected provisional generation state, got=%q", newMeta.GenerationState)
+	}
+	if newMeta.PreviousManifestRoot != first.manifestRoot.Canonical {
+		t.Fatalf("expected previous_manifest_root=%s got=%s", first.manifestRoot.Canonical, newMeta.PreviousManifestRoot)
+	}
 
 	active, err := readActiveDealGeneration(dealID)
 	if err != nil {
@@ -208,6 +218,13 @@ func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t
 	}
 	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
 		t.Fatalf("expected new generation to remain after commit cleanup, stat err=%v", err)
+	}
+	promotedMeta, err := readSlabMetadataFile(newDir)
+	if err != nil {
+		t.Fatalf("read promoted slab metadata: %v", err)
+	}
+	if promotedMeta.GenerationState != slabGenerationStateActive {
+		t.Fatalf("expected promoted generation state active, got=%q", promotedMeta.GenerationState)
 	}
 
 	active, err = readActiveDealGeneration(dealID)

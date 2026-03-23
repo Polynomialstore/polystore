@@ -388,10 +388,11 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	dealIDForMeta := dealID
 	meta, err := buildSlabMetadataFromBuilder(builder, slabMetadataBuildOptions{
-		GenerationID: parsedRoot.Key,
-		DealID:       &dealIDForMeta,
-		ManifestRoot: parsedRoot.Canonical,
-		Source:       "gateway_mode2_new",
+		GenerationID:    parsedRoot.Key,
+		GenerationState: slabGenerationStateActive,
+		DealID:          &dealIDForMeta,
+		ManifestRoot:    parsedRoot.Canonical,
+		Source:          "gateway_mode2_new",
 		Redundancy: &slabMetadataRedundancy{
 			K: stripe.k,
 			M: stripe.m,
@@ -1153,10 +1154,12 @@ func mode2BuildArtifactsAppend(
 	}
 	dealIDForMeta := dealID
 	meta, err := buildSlabMetadataFromBuilder(builder, slabMetadataBuildOptions{
-		GenerationID: parsedRoot.Key,
-		DealID:       &dealIDForMeta,
-		ManifestRoot: parsedRoot.Canonical,
-		Source:       "gateway_mode2_append",
+		GenerationID:         parsedRoot.Key,
+		GenerationState:      slabGenerationStateProvisional,
+		DealID:               &dealIDForMeta,
+		ManifestRoot:         parsedRoot.Canonical,
+		PreviousManifestRoot: parsedExisting.Canonical,
+		Source:               "gateway_mode2_append",
 		Redundancy: &slabMetadataRedundancy{
 			K: stripe.k,
 			M: stripe.m,

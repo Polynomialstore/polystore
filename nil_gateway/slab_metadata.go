@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	slabMetadataSchemaVersion = 1
-	slabMetadataFileName      = "slab_meta.json"
+	slabMetadataSchemaVersion      = 1
+	slabMetadataFileName           = "slab_meta.json"
+	slabGenerationStateActive      = "active"
+	slabGenerationStateProvisional = "provisional"
 )
 
 type slabMetadataRedundancy struct {
@@ -34,34 +36,38 @@ type slabMetadataFileRecord struct {
 }
 
 type slabMetadataDocument struct {
-	SchemaVersion   int                      `json:"schema_version"`
-	GenerationID    string                   `json:"generation_id"`
-	DealID          *uint64                  `json:"deal_id,omitempty"`
-	ManifestRoot    string                   `json:"manifest_root"`
-	Owner           string                   `json:"owner,omitempty"`
-	Redundancy      *slabMetadataRedundancy  `json:"redundancy,omitempty"`
-	Source          string                   `json:"source"`
-	CreatedAt       string                   `json:"created_at"`
-	LastValidatedAt *string                  `json:"last_validated_at"`
-	WitnessMdus     uint64                   `json:"witness_mdus"`
-	UserMdus        uint64                   `json:"user_mdus"`
-	TotalMdus       uint64                   `json:"total_mdus"`
-	FileRecords     []slabMetadataFileRecord `json:"file_records"`
+	SchemaVersion        int                      `json:"schema_version"`
+	GenerationID         string                   `json:"generation_id"`
+	GenerationState      string                   `json:"generation_state,omitempty"`
+	DealID               *uint64                  `json:"deal_id,omitempty"`
+	ManifestRoot         string                   `json:"manifest_root"`
+	PreviousManifestRoot string                   `json:"previous_manifest_root,omitempty"`
+	Owner                string                   `json:"owner,omitempty"`
+	Redundancy           *slabMetadataRedundancy  `json:"redundancy,omitempty"`
+	Source               string                   `json:"source"`
+	CreatedAt            string                   `json:"created_at"`
+	LastValidatedAt      *string                  `json:"last_validated_at"`
+	WitnessMdus          uint64                   `json:"witness_mdus"`
+	UserMdus             uint64                   `json:"user_mdus"`
+	TotalMdus            uint64                   `json:"total_mdus"`
+	FileRecords          []slabMetadataFileRecord `json:"file_records"`
 }
 
 type slabMetadataBuildOptions struct {
-	GenerationID    string
-	DealID          *uint64
-	ManifestRoot    string
-	Owner           string
-	Redundancy      *slabMetadataRedundancy
-	Source          string
-	CreatedAt       time.Time
-	LastValidatedAt *time.Time
-	WitnessMdus     *uint64
-	UserMdus        *uint64
-	TotalMdus       *uint64
-	FileRecords     []slabMetadataFileRecord
+	GenerationID         string
+	GenerationState      string
+	DealID               *uint64
+	ManifestRoot         string
+	PreviousManifestRoot string
+	Owner                string
+	Redundancy           *slabMetadataRedundancy
+	Source               string
+	CreatedAt            time.Time
+	LastValidatedAt      *time.Time
+	WitnessMdus          *uint64
+	UserMdus             *uint64
+	TotalMdus            *uint64
+	FileRecords          []slabMetadataFileRecord
 }
 
 func slabMetadataPathForDealDir(dealDir string) string {
@@ -193,8 +199,20 @@ func validateSlabMetadataDocument(meta *slabMetadataDocument) error {
 	if strings.TrimSpace(meta.GenerationID) == "" {
 		return errors.New("slab metadata generation_id is required")
 	}
+	state := strings.TrimSpace(meta.GenerationState)
+	if state == "" {
+		state = slabGenerationStateActive
+	}
+	if state != slabGenerationStateActive && state != slabGenerationStateProvisional {
+		return fmt.Errorf("invalid slab metadata generation_state=%q", meta.GenerationState)
+	}
 	if strings.TrimSpace(meta.ManifestRoot) == "" {
 		return errors.New("slab metadata manifest_root is required")
+	}
+	if previous := strings.TrimSpace(meta.PreviousManifestRoot); previous != "" {
+		if _, err := parseManifestRoot(previous); err != nil {
+			return fmt.Errorf("invalid slab metadata previous_manifest_root: %w", err)
+		}
 	}
 	if strings.TrimSpace(meta.Source) == "" {
 		return errors.New("slab metadata source is required")
@@ -258,19 +276,21 @@ func newSlabMetadataDocument(opts slabMetadataBuildOptions) (*slabMetadataDocume
 		source = "unknown"
 	}
 	meta := &slabMetadataDocument{
-		SchemaVersion:   slabMetadataSchemaVersion,
-		GenerationID:    strings.TrimSpace(opts.GenerationID),
-		DealID:          opts.DealID,
-		ManifestRoot:    manifestRoot,
-		Owner:           strings.TrimSpace(opts.Owner),
-		Redundancy:      opts.Redundancy,
-		Source:          source,
-		CreatedAt:       createdAt.Format(time.RFC3339Nano),
-		LastValidatedAt: lastValidatedAt,
-		WitnessMdus:     witnessMdus,
-		UserMdus:        userMdus,
-		TotalMdus:       totalMdus,
-		FileRecords:     records,
+		SchemaVersion:        slabMetadataSchemaVersion,
+		GenerationID:         strings.TrimSpace(opts.GenerationID),
+		GenerationState:      strings.TrimSpace(opts.GenerationState),
+		DealID:               opts.DealID,
+		ManifestRoot:         manifestRoot,
+		PreviousManifestRoot: strings.TrimSpace(opts.PreviousManifestRoot),
+		Owner:                strings.TrimSpace(opts.Owner),
+		Redundancy:           opts.Redundancy,
+		Source:               source,
+		CreatedAt:            createdAt.Format(time.RFC3339Nano),
+		LastValidatedAt:      lastValidatedAt,
+		WitnessMdus:          witnessMdus,
+		UserMdus:             userMdus,
+		TotalMdus:            totalMdus,
+		FileRecords:          records,
 	}
 	if err := validateSlabMetadataDocument(meta); err != nil {
 		return nil, err
@@ -298,7 +318,9 @@ func readSlabMetadataFile(dealDir string) (*slabMetadataDocument, error) {
 		return nil, err
 	}
 	meta.GenerationID = strings.TrimSpace(meta.GenerationID)
+	meta.GenerationState = strings.TrimSpace(meta.GenerationState)
 	meta.ManifestRoot = strings.TrimSpace(meta.ManifestRoot)
+	meta.PreviousManifestRoot = strings.TrimSpace(meta.PreviousManifestRoot)
 	meta.Owner = strings.TrimSpace(meta.Owner)
 	meta.Source = strings.TrimSpace(meta.Source)
 	meta.CreatedAt = strings.TrimSpace(meta.CreatedAt)
@@ -337,7 +359,9 @@ func writeSlabMetadataFile(dealDir string, meta *slabMetadataDocument) error {
 		copyMeta.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	copyMeta.GenerationID = strings.TrimSpace(copyMeta.GenerationID)
+	copyMeta.GenerationState = strings.TrimSpace(copyMeta.GenerationState)
 	copyMeta.ManifestRoot = strings.TrimSpace(copyMeta.ManifestRoot)
+	copyMeta.PreviousManifestRoot = strings.TrimSpace(copyMeta.PreviousManifestRoot)
 	copyMeta.Owner = strings.TrimSpace(copyMeta.Owner)
 	copyMeta.Source = strings.TrimSpace(copyMeta.Source)
 	copyMeta.CreatedAt = strings.TrimSpace(copyMeta.CreatedAt)
