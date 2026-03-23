@@ -292,3 +292,75 @@ func TestUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stale previous_manifest_root")
 }
+
+func TestUpdateDealContent_CompareAndSwapRace(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte(string(rune('A' + i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_cas_race______")
+	user, _ := f.addressCodec.BytesToString(userBz)
+
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(1000000),
+		MaxMonthlySpend:     math.NewInt(1000000),
+	})
+	require.NoError(t, err)
+
+	firstRoot := makeManifestRootHex(0x31)
+	secondRoot := makeManifestRootHex(0x32)
+	staleThirdRoot := makeManifestRootHex(0x33)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:              user,
+		DealId:               resDeal.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  firstRoot,
+		Size_:                100,
+		TotalMdus:            3,
+		WitnessMdus:          1,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:              user,
+		DealId:               resDeal.DealId,
+		PreviousManifestRoot: firstRoot,
+		Cid:                  secondRoot,
+		Size_:                120,
+		TotalMdus:            4,
+		WitnessMdus:          1,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:              user,
+		DealId:               resDeal.DealId,
+		PreviousManifestRoot: firstRoot,
+		Cid:                  staleThirdRoot,
+		Size_:                140,
+		TotalMdus:            5,
+		WitnessMdus:          1,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stale previous_manifest_root")
+
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	expectedRoot, _ := hex.DecodeString(strings.TrimPrefix(secondRoot, "0x"))
+	require.Equal(t, expectedRoot, deal.ManifestRoot)
+}

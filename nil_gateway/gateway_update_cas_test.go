@@ -160,6 +160,88 @@ func TestGatewayUpdateDealContent_ForwardsPreviousManifestRootToCLI(t *testing.T
 	}
 }
 
+func TestGatewayUpdateDealContent_CompareAndSwapRace(t *testing.T) {
+	oldRelay := txRelayEnabled
+	txRelayEnabled = true
+	t.Cleanup(func() { txRelayEnabled = oldRelay })
+
+	useTempUploadDir(t)
+	currentRoot := mustTestManifestRoot(t, "gateway-cas-race-current")
+	nextRoot := mustTestManifestRoot(t, "gateway-cas-race-next")
+	staleRoot := mustTestManifestRoot(t, "gateway-cas-race-stale-next")
+
+	activeRoot := currentRoot.Canonical
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"owner":         "nil1owner",
+				"manifest_root": activeRoot,
+				"end_block":     999999,
+			},
+		})
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	callCount := 0
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		callCount += 1
+		return []byte(`{"txhash":"0xabc","code":0,"raw_log":""}`), nil
+	})
+
+	firstBody := `{
+		"creator":"nil1owner",
+		"deal_id":905,
+		"previous_manifest_root":"` + currentRoot.Canonical + `",
+		"cid":"` + nextRoot.Canonical + `",
+		"size_bytes":123,
+		"total_mdus":3,
+		"witness_mdus":1
+	}`
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/gateway/update-deal-content", strings.NewReader(firstBody))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstW := httptest.NewRecorder()
+	GatewayUpdateDealContent(firstW, firstReq)
+
+	if firstW.Code != http.StatusOK {
+		t.Fatalf("expected first request 200, got %d body=%s", firstW.Code, firstW.Body.String())
+	}
+	if callCount != 1 {
+		t.Fatalf("expected first request to relay once, got %d", callCount)
+	}
+
+	activeRoot = nextRoot.Canonical
+
+	staleBody := `{
+		"creator":"nil1owner",
+		"deal_id":905,
+		"previous_manifest_root":"` + currentRoot.Canonical + `",
+		"cid":"` + staleRoot.Canonical + `",
+		"size_bytes":124,
+		"total_mdus":4,
+		"witness_mdus":1
+	}`
+
+	staleReq := httptest.NewRequest(http.MethodPost, "/gateway/update-deal-content", strings.NewReader(staleBody))
+	staleReq.Header.Set("Content-Type", "application/json")
+	staleW := httptest.NewRecorder()
+	GatewayUpdateDealContent(staleW, staleReq)
+
+	if staleW.Code != http.StatusConflict {
+		t.Fatalf("expected stale request 409, got %d body=%s", staleW.Code, staleW.Body.String())
+	}
+	if !strings.Contains(staleW.Body.String(), "stale previous_manifest_root") {
+		t.Fatalf("expected stale previous_manifest_root error, got %q", staleW.Body.String())
+	}
+	if callCount != 1 {
+		t.Fatalf("expected stale request not to relay, got %d relay calls", callCount)
+	}
+}
+
 func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t *testing.T) {
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
@@ -240,5 +322,108 @@ func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t
 	}
 	if payloadPreviousRoot != currentRoot.Canonical {
 		t.Fatalf("expected previous_manifest_root %q, got %#v", currentRoot.Canonical, payloadPreviousRoot)
+	}
+}
+
+func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
+	oldRelay := txRelayEnabled
+	txRelayEnabled = true
+	t.Cleanup(func() { txRelayEnabled = oldRelay })
+
+	useTempUploadDir(t)
+	currentRoot := mustTestManifestRoot(t, "gateway-cas-evm-race-current")
+	nextRoot := mustTestManifestRoot(t, "gateway-cas-evm-race-next")
+	staleRoot := mustTestManifestRoot(t, "gateway-cas-evm-race-stale")
+
+	activeRoot := currentRoot.Canonical
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/cosmos/tx/v1beta1/txs/") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"tx_response": map[string]any{
+					"txhash": "0xabc",
+					"code":   0,
+					"logs":   []any{},
+					"events": []any{},
+				},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"owner":         testDealOwner(t),
+				"manifest_root": activeRoot,
+				"end_block":     999999,
+			},
+		})
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	callCount := 0
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		callCount += 1
+		return []byte(`{"txhash":"0xabc","code":0,"raw_log":""}`), nil
+	})
+
+	firstBody := `{
+		"intent":{
+			"creator_evm":"0x1111222233334444555566667777888899990000",
+			"deal_id":906,
+			"previous_manifest_root":"` + currentRoot.Canonical + `",
+			"cid":"` + nextRoot.Canonical + `",
+			"size_bytes":123,
+			"total_mdus":3,
+			"witness_mdus":1,
+			"nonce":1,
+			"chain_id":"test-1"
+		},
+		"evm_signature":"0xdeadbeef"
+	}`
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/gateway/update-deal-content-evm", strings.NewReader(firstBody))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstW := httptest.NewRecorder()
+	GatewayUpdateDealContentFromEvm(firstW, firstReq)
+
+	if firstW.Code != http.StatusOK {
+		t.Fatalf("expected first request 200, got %d body=%s", firstW.Code, firstW.Body.String())
+	}
+	if callCount != 1 {
+		t.Fatalf("expected first request to relay once, got %d", callCount)
+	}
+
+	activeRoot = nextRoot.Canonical
+
+	staleBody := `{
+		"intent":{
+			"creator_evm":"0x1111222233334444555566667777888899990000",
+			"deal_id":906,
+			"previous_manifest_root":"` + currentRoot.Canonical + `",
+			"cid":"` + staleRoot.Canonical + `",
+			"size_bytes":124,
+			"total_mdus":4,
+			"witness_mdus":1,
+			"nonce":2,
+			"chain_id":"test-1"
+		},
+		"evm_signature":"0xdeadbeef"
+	}`
+
+	staleReq := httptest.NewRequest(http.MethodPost, "/gateway/update-deal-content-evm", strings.NewReader(staleBody))
+	staleReq.Header.Set("Content-Type", "application/json")
+	staleW := httptest.NewRecorder()
+	GatewayUpdateDealContentFromEvm(staleW, staleReq)
+
+	if staleW.Code != http.StatusConflict {
+		t.Fatalf("expected stale request 409, got %d body=%s", staleW.Code, staleW.Body.String())
+	}
+	if !strings.Contains(staleW.Body.String(), "stale previous_manifest_root") {
+		t.Fatalf("expected stale previous_manifest_root error, got %q", staleW.Body.String())
+	}
+	if callCount != 1 {
+		t.Fatalf("expected stale request not to relay, got %d relay calls", callCount)
 	}
 }

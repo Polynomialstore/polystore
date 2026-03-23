@@ -1849,7 +1849,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "total_mdus must be > 1 + witness_mdus", http.StatusBadRequest)
 		return
 	}
-	meta, err := fetchDealMeta(req.DealID)
+	meta, err := fetchDealMetaFresh(req.DealID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to validate deal state: %v", err), http.StatusBadGateway)
 		return
@@ -2191,7 +2191,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "deal_id must be a valid integer", http.StatusBadRequest)
 		return
 	}
-	meta, err := fetchDealMeta(dealID)
+	meta, err := fetchDealMetaFresh(dealID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to validate deal state: %v", err), http.StatusBadGateway)
 		return
@@ -5327,6 +5327,13 @@ func fetchDealMeta(dealID uint64) (dealMeta, error) {
 		expiresAt: now.Add(ttl),
 	})
 	return meta, nil
+}
+
+// fetchDealMetaFresh bypasses the short-lived memoization layer. Update/commit
+// paths that enforce compare-and-swap semantics must use fresh chain state so
+// two back-to-back writers cannot both pass a stale-root check inside the TTL.
+func fetchDealMetaFresh(dealID uint64) (dealMeta, error) {
+	return fetchDealMetaUncached(dealID)
 }
 
 // creatorHasSomeBalance checks whether a given bech32 address has any non-zero

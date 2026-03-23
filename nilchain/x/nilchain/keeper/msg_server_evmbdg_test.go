@@ -486,6 +486,116 @@ func TestUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *testing.T)
 	require.Contains(t, err.Error(), "stale previous_manifest_root")
 }
 
+func TestUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte("evm_raceprov______" + string(rune('A'+i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	privKey, err := gethCrypto.GenerateKey()
+	require.NoError(t, err)
+	evmAddr := gethCrypto.PubkeyToAddress(privKey.PublicKey)
+
+	chainID := sdk.UnwrapSDKContext(f.ctx).ChainID()
+	senderBz := []byte("relayer_race______")
+	sender, _ := f.addressCodec.BytesToString(senderBz)
+
+	createIntent := &types.EvmCreateDealIntent{
+		CreatorEvm:      evmAddr.Hex(),
+		DurationBlocks:  100,
+		ServiceHint:     "General",
+		InitialEscrow:   math.NewInt(1000000),
+		MaxMonthlySpend: math.NewInt(500000),
+		Nonce:           1,
+		ChainId:         chainID,
+	}
+	createSig := signCreateIntentEIP712(t, createIntent, privKey)
+
+	createRes, err := msgServer.CreateDealFromEvm(f.ctx, &types.MsgCreateDealFromEvm{
+		Sender:       sender,
+		Intent:       createIntent,
+		EvmSignature: createSig,
+	})
+	require.NoError(t, err)
+
+	firstRoot := makeManifestRootHex(0x51)
+	secondRoot := makeManifestRootHex(0x52)
+	staleThirdRoot := makeManifestRootHex(0x53)
+
+	firstIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  firstRoot,
+		SizeBytes:            100,
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                2,
+		ChainId:              chainID,
+	}
+	firstSig := signUpdateIntentEIP712(t, firstIntent, privKey)
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       firstIntent,
+		EvmSignature: firstSig,
+	})
+	require.NoError(t, err)
+
+	secondIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: firstRoot,
+		Cid:                  secondRoot,
+		SizeBytes:            120,
+		TotalMdus:            4,
+		WitnessMdus:          1,
+		Nonce:                3,
+		ChainId:              chainID,
+	}
+	secondSig := signUpdateIntentEIP712(t, secondIntent, privKey)
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       secondIntent,
+		EvmSignature: secondSig,
+	})
+	require.NoError(t, err)
+
+	staleIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: firstRoot,
+		Cid:                  staleThirdRoot,
+		SizeBytes:            140,
+		TotalMdus:            5,
+		WitnessMdus:          1,
+		Nonce:                4,
+		ChainId:              chainID,
+	}
+	staleSig := signUpdateIntentEIP712(t, staleIntent, privKey)
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       staleIntent,
+		EvmSignature: staleSig,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stale previous_manifest_root")
+
+	deal, err := f.keeper.Deals.Get(f.ctx, createRes.DealId)
+	require.NoError(t, err)
+	expectedRoot, _ := hex.DecodeString(strings.TrimPrefix(secondRoot, "0x"))
+	require.Equal(t, expectedRoot, deal.ManifestRoot)
+}
+
 func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
