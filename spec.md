@@ -374,6 +374,10 @@ The system therefore distinguishes:
 
 Abandoned provisional generations are a storage-churn / griefing surface and MUST be covered by explicit cleanup, accounting, and governance policy.
 
+Devnet gateway policy:
+* user-gateway/provider-daemon implementations MAY retain provisional generations for a bounded TTL before GC.
+* The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
+
 ## Appendix A: Core Cryptographic Primitives
 
 ### A.3 File Manifest & Crypto Policy (Normative)

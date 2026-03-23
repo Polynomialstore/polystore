@@ -170,6 +170,52 @@ func TestCleanupInterruptedDealGenerationsRemovesStagingAndStaleLocks(t *testing
 	}
 }
 
+func TestCleanupInterruptedDealGenerations_KeepsRecentProvisionalGeneration(t *testing.T) {
+	useTempUploadDir(t)
+	dealID := uint64(78)
+	root := mustTestManifestRoot(t, "recent-provisional")
+	dealDir := writeTestDealGeneration(t, dealID, root, 2, false)
+
+	meta, err := readSlabMetadataFile(dealDir)
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	meta.GenerationState = slabGenerationStateProvisional
+	meta.CreatedAt = time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339Nano)
+	if err := writeSlabMetadataFile(dealDir, meta); err != nil {
+		t.Fatalf("rewrite metadata: %v", err)
+	}
+
+	cleanupInterruptedDealGenerations(dealID)
+
+	if info, err := os.Stat(dealDir); err != nil || !info.IsDir() {
+		t.Fatalf("expected recent provisional generation retained, stat err=%v", err)
+	}
+}
+
+func TestCleanupInterruptedDealGenerations_RemovesExpiredProvisionalGeneration(t *testing.T) {
+	useTempUploadDir(t)
+	dealID := uint64(79)
+	root := mustTestManifestRoot(t, "expired-provisional")
+	dealDir := writeTestDealGeneration(t, dealID, root, 2, false)
+
+	meta, err := readSlabMetadataFile(dealDir)
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	meta.GenerationState = slabGenerationStateProvisional
+	meta.CreatedAt = time.Now().Add(-(provisionalGenerationRetentionTTL + 2*time.Hour)).UTC().Format(time.RFC3339Nano)
+	if err := writeSlabMetadataFile(dealDir, meta); err != nil {
+		t.Fatalf("rewrite metadata: %v", err)
+	}
+
+	cleanupInterruptedDealGenerations(dealID)
+
+	if _, err := os.Stat(dealDir); !os.IsNotExist(err) {
+		t.Fatalf("expected expired provisional generation removed, stat err=%v", err)
+	}
+}
+
 func TestResolveDealDirForDealReconcilesPointerToRequestedGeneration(t *testing.T) {
 	useTempUploadDir(t)
 	dealID := uint64(91)

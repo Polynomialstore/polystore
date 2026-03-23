@@ -60,6 +60,10 @@ Future policy needs:
 * metrics for provisional bytes and stale-write frequency
 * pricing or rate limits for excessive churn
 
+Current devnet reference policy:
+* complete provisional generations older than 24 hours may be garbage-collected during gateway/provider startup or recovery cleanup
+* the active committed generation is never subject to this provisional TTL
+
 ## Implementation Notes
 Current implementation anchors signed CAS at:
 * chain `MsgUpdateDealContent*`

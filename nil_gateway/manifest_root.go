@@ -20,6 +20,8 @@ var (
 	ErrDealGenerationNotReady = errors.New("deal generation not ready")
 )
 
+const provisionalGenerationRetentionTTL = 24 * time.Hour
+
 type ManifestRoot struct {
 	Bytes     [48]byte
 	Canonical string // 0x + lowercase hex (96 chars)
@@ -249,6 +251,38 @@ func cleanupInterruptedDealGenerations(dealID uint64) {
 			if rmErr := os.RemoveAll(fullPath); rmErr != nil && !os.IsNotExist(rmErr) {
 				log.Printf("Gateway cache recovery: failed to remove incomplete generation deal_id=%d generation=%s err=%v", dealID, name, rmErr)
 			}
+			continue
+		}
+		meta, metaErr := loadSlabMetadataWithFallback(fullPath)
+		if metaErr != nil {
+			log.Printf("Gateway cache recovery: failed to load generation metadata deal_id=%d generation=%s err=%v", dealID, name, metaErr)
+			continue
+		}
+		if strings.TrimSpace(meta.GenerationState) != slabGenerationStateProvisional {
+			continue
+		}
+		createdAt, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(meta.CreatedAt))
+		if parseErr != nil {
+			log.Printf("Gateway cache recovery: invalid provisional generation timestamp deal_id=%d generation=%s created_at=%q err=%v", dealID, name, meta.CreatedAt, parseErr)
+			continue
+		}
+		if time.Since(createdAt) <= provisionalGenerationRetentionTTL {
+			continue
+		}
+		if err := os.RemoveAll(fullPath); err != nil && !os.IsNotExist(err) {
+			log.Printf(
+				"Gateway cache recovery: failed to remove expired provisional generation deal_id=%d generation=%s err=%v",
+				dealID,
+				name,
+				err,
+			)
+		} else {
+			log.Printf(
+				"Gateway cache recovery: removed expired provisional generation deal_id=%d generation=%s age=%s",
+				dealID,
+				name,
+				time.Since(createdAt).Round(time.Second),
+			)
 		}
 	}
 }

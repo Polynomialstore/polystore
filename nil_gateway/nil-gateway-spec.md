@@ -88,6 +88,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
+    *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
 
 #### Health & Status
 *   **`GET /health`**
