@@ -10,6 +10,7 @@ import { classifyWalletError } from '../lib/walletErrors'
 export interface UpdateDealContentInput {
   creator: string
   dealId: number
+  previousManifestRoot: string
   cid: string
   sizeBytes: number
   totalMdus: number
@@ -28,6 +29,9 @@ export function useUpdateDealContent() {
     try {
       if (!walletClient) throw new Error('Wallet not connected')
       const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
+      const previousManifestRoot = (
+        String(input.previousManifestRoot || '').trim() || '0x'
+      ) as Hex
       const manifestRoot = String(input.cid || '').trim() as Hex
       const totalMdus = Number(input.totalMdus)
       const witnessMdus = Number(input.witnessMdus)
@@ -37,7 +41,14 @@ export function useUpdateDealContent() {
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
-        args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes), BigInt(totalMdus), BigInt(witnessMdus)],
+        args: [
+          BigInt(input.dealId),
+          previousManifestRoot,
+          manifestRoot,
+          BigInt(input.sizeBytes),
+          BigInt(totalMdus),
+          BigInt(witnessMdus),
+        ],
       })
 
       const txHash = await walletClient.sendTransaction({

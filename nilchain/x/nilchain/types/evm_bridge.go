@@ -22,7 +22,8 @@ const (
 // (MetaMask) and the on-chain keeper must use this exact encoding.
 //
 // The format is:
-//   "NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_seconds>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
+//
+//	"NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_seconds>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
 //
 // All numeric values are encoded in base-10. creator_evm is lowercased and
 // normalised to a 0x-prefixed hexadecimal address.
@@ -58,7 +59,8 @@ func BuildEvmCreateDealMessage(intent *EvmCreateDealIntent) (string, error) {
 // an EvmUpdateContentIntent.
 //
 // The format is:
-//   "NILSTORE_EVM_UPDATE_CONTENT|<creator_evm>|<deal_id>|<cid>|<size_bytes>|<nonce>|<chain_id>"
+//
+//	"NILSTORE_EVM_UPDATE_CONTENT|<creator_evm>|<deal_id>|<previous_manifest_root>|<cid>|<size_bytes>|<nonce>|<chain_id>"
 func BuildEvmUpdateContentMessage(intent *EvmUpdateContentIntent) (string, error) {
 	if intent == nil {
 		return "", fmt.Errorf("intent is nil")
@@ -78,6 +80,7 @@ func BuildEvmUpdateContentMessage(intent *EvmUpdateContentIntent) (string, error
 		EvmUpdateContentDomainSeparator,
 		creator,
 		dealIdStr,
+		strings.TrimSpace(intent.PreviousManifestRoot),
 		strings.TrimSpace(intent.Cid),
 		sizeStr,
 		nonceStr,

@@ -42,6 +42,7 @@ describe("eip712 builders", () => {
       {
         creator: "0x1111222233334444555566667777888899990000",
         deal_id: 5n,
+        previous_manifest_root: "",
         cid: "0xabc123",
         size: 1048576n,
         total_mdus: 9n,
@@ -55,6 +56,7 @@ describe("eip712 builders", () => {
     expect(typed.types.UpdateContent.map((field) => field.name)).toEqual([
       "creator",
       "deal_id",
+      "previous_manifest_root",
       "cid",
       "size",
       "total_mdus",
@@ -64,6 +66,7 @@ describe("eip712 builders", () => {
     expect(typed.message).toEqual({
       creator: "0x1111222233334444555566667777888899990000",
       deal_id: "5",
+      previous_manifest_root: "",
       cid: "0xabc123",
       size: "1048576",
       total_mdus: "9",

@@ -32,6 +32,7 @@ export const UpdateContentTypes = {
   UpdateContent: [
     { name: 'creator', type: 'address' },
     { name: 'deal_id', type: 'uint64' },
+    { name: 'previous_manifest_root', type: 'string' },
     { name: 'cid', type: 'string' },
     { name: 'size', type: 'uint64' },
     { name: 'total_mdus', type: 'uint64' },
@@ -52,6 +53,7 @@ export interface CreateDealIntent {
 export interface UpdateContentIntent {
   creator_evm: string
   deal_id: number
+  previous_manifest_root: string
   cid: string
   size_bytes: number
   total_mdus: number
@@ -93,6 +95,7 @@ export function buildUpdateContentTypedData(intent: UpdateContentIntent, chainId
     message: {
       creator: intent.creator_evm,
       deal_id: Number(intent.deal_id),
+      previous_manifest_root: intent.previous_manifest_root,
       cid: intent.cid,
       size: Number(intent.size_bytes),
       total_mdus: Number(intent.total_mdus),

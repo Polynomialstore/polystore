@@ -164,14 +164,15 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 
 	// 2. Update Deal Content
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm:  evmAddr.Hex(),
-		DealId:      createRes.DealId,
-		Cid:         makeManifestRootHex(0xab), // 48-byte hex
-		SizeBytes:   1024 * 1024 * 100,         // 100 MB
-		TotalMdus:   3,
-		WitnessMdus: 1,
-		Nonce:       2,
-		ChainId:     chainID,
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  makeManifestRootHex(0xab), // 48-byte hex
+		SizeBytes:            1024 * 1024 * 100,         // 100 MB
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                2,
+		ChainId:              chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
@@ -245,14 +246,15 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 
 	// 2. Bob tries to update Alice's deal
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm:  bobEvmAddr.Hex(),
-		DealId:      createRes.DealId,
-		Cid:         makeManifestRootHex(0xbb),
-		SizeBytes:   100,
-		TotalMdus:   3,
-		WitnessMdus: 1,
-		Nonce:       1,
-		ChainId:     chainID,
+		CreatorEvm:           bobEvmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  makeManifestRootHex(0xbb),
+		SizeBytes:            100,
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                1,
+		ChainId:              chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, bobPrivKey)
 
@@ -310,14 +312,15 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 
 	// 2. Commit 5 GiB content; dynamic sizing should allow this.
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm:  evmAddr.Hex(),
-		DealId:      createRes.DealId,
-		Cid:         makeManifestRootHex(0xcc),
-		SizeBytes:   5 * 1024 * 1024 * 1024, // 5 GiB
-		TotalMdus:   3,
-		WitnessMdus: 1,
-		Nonce:       2,
-		ChainId:     chainID,
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  makeManifestRootHex(0xcc),
+		SizeBytes:            5 * 1024 * 1024 * 1024, // 5 GiB
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                2,
+		ChainId:              chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
@@ -377,14 +380,15 @@ func TestUpdateDealContentFromEvm_RejectsOverMaxDealBytes(t *testing.T) {
 	require.NoError(t, err)
 
 	updateIntent := &types.EvmUpdateContentIntent{
-		CreatorEvm:  evmAddr.Hex(),
-		DealId:      createRes.DealId,
-		Cid:         makeManifestRootHex(0xdd),
-		SizeBytes:   types.MAX_DEAL_BYTES + 1,
-		TotalMdus:   3,
-		WitnessMdus: 1,
-		Nonce:       2,
-		ChainId:     chainID,
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  makeManifestRootHex(0xdd),
+		SizeBytes:            types.MAX_DEAL_BYTES + 1,
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                2,
+		ChainId:              chainID,
 	}
 	updateSig := signUpdateIntentEIP712(t, updateIntent, privKey)
 
@@ -395,6 +399,91 @@ func TestUpdateDealContentFromEvm_RejectsOverMaxDealBytes(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "MAX_DEAL_BYTES")
+}
+
+func TestUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte("evm_staleprov_____" + string(rune('A'+i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	privKey, err := gethCrypto.GenerateKey()
+	require.NoError(t, err)
+	evmAddr := gethCrypto.PubkeyToAddress(privKey.PublicKey)
+
+	chainID := sdk.UnwrapSDKContext(f.ctx).ChainID()
+	senderBz := []byte("relayer_stale_____")
+	sender, _ := f.addressCodec.BytesToString(senderBz)
+
+	createIntent := &types.EvmCreateDealIntent{
+		CreatorEvm:      evmAddr.Hex(),
+		DurationBlocks:  100,
+		ServiceHint:     "General",
+		InitialEscrow:   math.NewInt(1000000),
+		MaxMonthlySpend: math.NewInt(500000),
+		Nonce:           1,
+		ChainId:         chainID,
+	}
+	createSig := signCreateIntentEIP712(t, createIntent, privKey)
+
+	createRes, err := msgServer.CreateDealFromEvm(f.ctx, &types.MsgCreateDealFromEvm{
+		Sender:       sender,
+		Intent:       createIntent,
+		EvmSignature: createSig,
+	})
+	require.NoError(t, err)
+
+	firstRoot := makeManifestRootHex(0x41)
+	firstIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  firstRoot,
+		SizeBytes:            100,
+		TotalMdus:            3,
+		WitnessMdus:          1,
+		Nonce:                2,
+		ChainId:              chainID,
+	}
+	firstSig := signUpdateIntentEIP712(t, firstIntent, privKey)
+
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       firstIntent,
+		EvmSignature: firstSig,
+	})
+	require.NoError(t, err)
+
+	staleIntent := &types.EvmUpdateContentIntent{
+		CreatorEvm:           evmAddr.Hex(),
+		DealId:               createRes.DealId,
+		PreviousManifestRoot: validManifestCid,
+		Cid:                  makeManifestRootHex(0x42),
+		SizeBytes:            120,
+		TotalMdus:            4,
+		WitnessMdus:          1,
+		Nonce:                3,
+		ChainId:              chainID,
+	}
+	staleSig := signUpdateIntentEIP712(t, staleIntent, privKey)
+
+	_, err = msgServer.UpdateDealContentFromEvm(f.ctx, &types.MsgUpdateDealContentFromEvm{
+		Sender:       sender,
+		Intent:       staleIntent,
+		EvmSignature: staleSig,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stale previous_manifest_root")
 }
 
 func TestCreateDealFromEvm_InvalidSignature(t *testing.T) {

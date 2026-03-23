@@ -19,6 +19,7 @@ export const NILSTORE_PRECOMPILE_ABI = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'dealId', type: 'uint64' },
+      { name: 'previousManifestRoot', type: 'bytes' },
       { name: 'manifestRoot', type: 'bytes' },
       { name: 'sizeBytes', type: 'uint64' },
       { name: 'totalMdus', type: 'uint64' },

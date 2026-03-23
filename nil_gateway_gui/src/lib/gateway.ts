@@ -34,6 +34,7 @@ export type GatewayCreateDealIntent = {
 export type GatewayUpdateContentIntent = {
   creator_evm: string;
   deal_id: number;
+  previous_manifest_root: string;
   cid: string;
   size_bytes: number;
   total_mdus: number;

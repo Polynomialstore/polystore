@@ -48,6 +48,7 @@ export interface UploadTransportPort {
 
 export interface ChainCommitRequest {
   dealId: string
+  previousManifestRoot: string
   manifestRoot: string
   fileSize: number
   totalMdus: number
@@ -103,6 +104,7 @@ export interface StripedUploadInput {
 
 export interface PreparedCommitInput {
   dealId: string
+  previousManifestRoot: string
   manifestRoot: string
   isMode2: boolean
   fileBytesTotal: number
@@ -283,6 +285,7 @@ export function buildCommitRequest(input: PreparedCommitInput): ChainCommitReque
 
   return {
     dealId: input.dealId,
+    previousManifestRoot: input.previousManifestRoot,
     manifestRoot: input.manifestRoot,
     fileSize: input.fileBytesTotal,
     totalMdus,

@@ -43,6 +43,7 @@ const nilstoreABIJSON = `[
     "stateMutability":"nonpayable",
     "inputs":[
       {"name":"dealId","type":"uint64"},
+      {"name":"previousManifestRoot","type":"bytes"},
       {"name":"manifestRoot","type":"bytes"},
       {"name":"sizeBytes","type":"uint64"},
       {"name":"totalMdus","type":"uint64"},
@@ -933,6 +934,13 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 	if err != nil {
 		return nil, errors.New("updateDealContent: invalid dealId")
 	}
+	previousManifestRoot, err := asBytes(args["previousManifestRoot"])
+	if err != nil {
+		return nil, errors.New("updateDealContent: invalid previousManifestRoot")
+	}
+	if len(previousManifestRoot) != 0 && len(previousManifestRoot) != 48 {
+		return nil, errors.New("updateDealContent: previousManifestRoot must be empty or 48 bytes")
+	}
 	manifestRoot, err := asBytes(args["manifestRoot"])
 	if err != nil {
 		return nil, errors.New("updateDealContent: invalid manifestRoot")
@@ -958,16 +966,21 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
+	previousRootHex := ""
+	if len(previousManifestRoot) > 0 {
+		previousRootHex = "0x" + hex.EncodeToString(previousManifestRoot)
+	}
 	cid := "0x" + hex.EncodeToString(manifestRoot)
 
 	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
 	_, err = msgServer.UpdateDealContent(sdk.WrapSDKContext(ctx), &types.MsgUpdateDealContent{
-		Creator:     creator,
-		DealId:      dealID,
-		Cid:         cid,
-		Size_:       sizeBytes,
-		TotalMdus:   totalMdus,
-		WitnessMdus: witnessMdus,
+		Creator:              creator,
+		DealId:               dealID,
+		PreviousManifestRoot: previousRootHex,
+		Cid:                  cid,
+		Size_:                sizeBytes,
+		TotalMdus:            totalMdus,
+		WitnessMdus:          witnessMdus,
 	})
 	if err != nil {
 		return nil, err

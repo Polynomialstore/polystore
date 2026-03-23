@@ -237,6 +237,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<PreparedBrowserMdu[]>([]);
+  const [baseManifestRoot, setBaseManifestRoot] = useState<string>('');
   const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
   const [currentManifestBlob, setCurrentManifestBlob] = useState<Uint8Array | null>(null);
   const [currentManifestBlobFullSize, setCurrentManifestBlobFullSize] = useState<number | null>(null);
@@ -335,6 +336,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     async function loadDeal() {
       setStripeParamsLoaded(false)
       if (!dealId) {
+        setBaseManifestRoot('')
         setStripeParams(null)
         setSlotBases([])
         setStripeParamsLoaded(true)
@@ -344,6 +346,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
         const parsed = parseServiceHint(deal?.service_hint)
         if (!cancelled) {
+          setBaseManifestRoot(String(deal?.cid || '').trim())
           if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
             setStripeParams({ k: parsed.rsK, m: parsed.rsM })
           } else if (parsed.mode === 'auto') {
@@ -359,6 +362,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       } catch {
         if (!cancelled) {
+          setBaseManifestRoot('')
           setStripeParams(null)
           setSlotBases([])
           setStripeParamsLoaded(true)
@@ -377,6 +381,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (lastCommitTxRef.current === commitHash) return;
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
+    setBaseManifestRoot(currentManifestRoot)
     onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined);
 
     const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
@@ -2943,6 +2948,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     try {
                       await uploadEngine.commitPreparedContent({
                         dealId,
+                        previousManifestRoot: baseManifestRoot,
                         manifestRoot: currentManifestRoot || '',
                         isMode2,
                         fileBytesTotal: shardProgress.fileBytesTotal,

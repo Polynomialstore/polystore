@@ -1032,6 +1032,7 @@ export function Dashboard() {
         await submitUpdate({
             creator: address,
             dealId: Number(targetDealId),
+            previousManifestRoot: String(targetDeal?.cid || '').trim(),
             cid: trimmedRoot,
             sizeBytes: manifestSize,
             totalMdus,

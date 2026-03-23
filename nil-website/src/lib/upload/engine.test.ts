@@ -276,6 +276,7 @@ test('buildCommitRequest: mode2 derives total mdus from witness + user counts', 
   assert.deepEqual(
     buildCommitRequest({
       dealId: '12',
+      previousManifestRoot: '0xaaaa',
       manifestRoot: '0x1234',
       isMode2: true,
       fileBytesTotal: 1024,
@@ -285,6 +286,7 @@ test('buildCommitRequest: mode2 derives total mdus from witness + user counts', 
     }),
     {
       dealId: '12',
+      previousManifestRoot: '0xaaaa',
       manifestRoot: '0x1234',
       fileSize: 1024,
       totalMdus: 8,
@@ -297,6 +299,7 @@ test('buildCommitRequest: mode1 uses concrete MDU count', () => {
   assert.deepEqual(
     buildCommitRequest({
       dealId: '14',
+      previousManifestRoot: '',
       manifestRoot: '0x99',
       isMode2: false,
       fileBytesTotal: 2048,
@@ -309,6 +312,7 @@ test('buildCommitRequest: mode1 uses concrete MDU count', () => {
     }),
     {
       dealId: '14',
+      previousManifestRoot: '',
       manifestRoot: '0x99',
       fileSize: 2048,
       totalMdus: 2,

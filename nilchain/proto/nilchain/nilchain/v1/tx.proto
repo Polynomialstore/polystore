@@ -164,6 +164,7 @@ message MsgUpdateDealContent {
   uint64 size = 4; // Actual size of the content in bytes
   uint64 total_mdus = 5; // Total committed MDUs (metadata + witness + user)
   uint64 witness_mdus = 6; // Witness MDUs committed after MDU #0
+  string previous_manifest_root = 7; // Previous committed manifest root (empty on first commit)
 }
 
 message MsgUpdateDealContentResponse {
@@ -201,6 +202,7 @@ message EvmUpdateContentIntent {
   string chain_id = 6;
   uint64 total_mdus = 7;
   uint64 witness_mdus = 8;
+  string previous_manifest_root = 9;
 }
 
 // MsgCreateDealFromEvm wraps a signed EVM intent and is executed on nilchaind.

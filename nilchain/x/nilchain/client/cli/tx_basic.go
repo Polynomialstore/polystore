@@ -139,14 +139,19 @@ func CmdUpdateDealContent() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			previousManifestRoot, err := cmd.Flags().GetString("previous-manifest-root")
+			if err != nil {
+				return err
+			}
 
 			msg := types.MsgUpdateDealContent{
-				Creator:     clientCtx.GetFromAddress().String(),
-				DealId:      dealId,
-				Cid:         cid,
-				Size_:       size,
-				TotalMdus:   totalMdus,
-				WitnessMdus: witnessMdus,
+				Creator:              clientCtx.GetFromAddress().String(),
+				DealId:               dealId,
+				PreviousManifestRoot: previousManifestRoot,
+				Cid:                  cid,
+				Size_:                size,
+				TotalMdus:            totalMdus,
+				WitnessMdus:          witnessMdus,
 			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
@@ -157,6 +162,7 @@ func CmdUpdateDealContent() *cobra.Command {
 	cmd.Flags().Uint64("size", 0, "New size of the content in bytes")
 	cmd.Flags().Uint64("total-mdus", 0, "Total committed MDUs (metadata + witness + user)")
 	cmd.Flags().Uint64("witness-mdus", 0, "Witness MDUs committed after MDU #0")
+	cmd.Flags().String("previous-manifest-root", "", "Previous committed manifest root (empty on first commit)")
 	_ = cmd.MarkFlagRequired("deal-id")
 	_ = cmd.MarkFlagRequired("cid")
 	_ = cmd.MarkFlagRequired("size")

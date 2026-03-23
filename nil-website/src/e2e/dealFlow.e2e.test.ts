@@ -104,6 +104,7 @@ test(
     const updateIntent = {
       creator_evm: account.address,
       deal_id: Number(dealId),
+      previous_manifest_root: '',
       cid: manifestRoot,
       size_bytes: Number(uploadJson.size_bytes ?? 0),
       total_mdus: Number(uploadJson.total_mdus ?? 0),

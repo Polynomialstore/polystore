@@ -458,12 +458,13 @@ func (m *MsgCreateDealResponse) GetAssignedProviders() []string {
 
 // MsgUpdateDealContent allows a user to commit or update the manifest of a deal.
 type MsgUpdateDealContent struct {
-	Creator     string `protobuf:"bytes,1,opt,name=creator,proto3" json:"creator,omitempty"`
-	DealId      uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
-	Cid         string `protobuf:"bytes,3,opt,name=cid,proto3" json:"cid,omitempty"`
-	Size_       uint64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	TotalMdus   uint64 `protobuf:"varint,5,opt,name=total_mdus,json=totalMdus,proto3" json:"total_mdus,omitempty"`
-	WitnessMdus uint64 `protobuf:"varint,6,opt,name=witness_mdus,json=witnessMdus,proto3" json:"witness_mdus,omitempty"`
+	Creator              string `protobuf:"bytes,1,opt,name=creator,proto3" json:"creator,omitempty"`
+	DealId               uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Cid                  string `protobuf:"bytes,3,opt,name=cid,proto3" json:"cid,omitempty"`
+	Size_                uint64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	TotalMdus            uint64 `protobuf:"varint,5,opt,name=total_mdus,json=totalMdus,proto3" json:"total_mdus,omitempty"`
+	WitnessMdus          uint64 `protobuf:"varint,6,opt,name=witness_mdus,json=witnessMdus,proto3" json:"witness_mdus,omitempty"`
+	PreviousManifestRoot string `protobuf:"bytes,7,opt,name=previous_manifest_root,json=previousManifestRoot,proto3" json:"previous_manifest_root,omitempty"`
 }
 
 func (m *MsgUpdateDealContent) Reset()         { *m = MsgUpdateDealContent{} }
@@ -539,6 +540,13 @@ func (m *MsgUpdateDealContent) GetWitnessMdus() uint64 {
 		return m.WitnessMdus
 	}
 	return 0
+}
+
+func (m *MsgUpdateDealContent) GetPreviousManifestRoot() string {
+	if m != nil {
+		return m.PreviousManifestRoot
+	}
+	return ""
 }
 
 type MsgUpdateDealContentResponse struct {
@@ -669,14 +677,15 @@ func (m *EvmCreateDealIntent) GetChainId() string {
 
 // EvmUpdateContentIntent captures fields for updating deal content via EVM.
 type EvmUpdateContentIntent struct {
-	CreatorEvm  string `protobuf:"bytes,1,opt,name=creator_evm,json=creatorEvm,proto3" json:"creator_evm,omitempty"`
-	DealId      uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
-	Cid         string `protobuf:"bytes,3,opt,name=cid,proto3" json:"cid,omitempty"`
-	SizeBytes   uint64 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	Nonce       uint64 `protobuf:"varint,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	ChainId     string `protobuf:"bytes,6,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
-	TotalMdus   uint64 `protobuf:"varint,7,opt,name=total_mdus,json=totalMdus,proto3" json:"total_mdus,omitempty"`
-	WitnessMdus uint64 `protobuf:"varint,8,opt,name=witness_mdus,json=witnessMdus,proto3" json:"witness_mdus,omitempty"`
+	CreatorEvm           string `protobuf:"bytes,1,opt,name=creator_evm,json=creatorEvm,proto3" json:"creator_evm,omitempty"`
+	DealId               uint64 `protobuf:"varint,2,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Cid                  string `protobuf:"bytes,3,opt,name=cid,proto3" json:"cid,omitempty"`
+	SizeBytes            uint64 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Nonce                uint64 `protobuf:"varint,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	ChainId              string `protobuf:"bytes,6,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
+	TotalMdus            uint64 `protobuf:"varint,7,opt,name=total_mdus,json=totalMdus,proto3" json:"total_mdus,omitempty"`
+	WitnessMdus          uint64 `protobuf:"varint,8,opt,name=witness_mdus,json=witnessMdus,proto3" json:"witness_mdus,omitempty"`
+	PreviousManifestRoot string `protobuf:"bytes,9,opt,name=previous_manifest_root,json=previousManifestRoot,proto3" json:"previous_manifest_root,omitempty"`
 }
 
 func (m *EvmUpdateContentIntent) Reset()         { *m = EvmUpdateContentIntent{} }
@@ -766,6 +775,13 @@ func (m *EvmUpdateContentIntent) GetWitnessMdus() uint64 {
 		return m.WitnessMdus
 	}
 	return 0
+}
+
+func (m *EvmUpdateContentIntent) GetPreviousManifestRoot() string {
+	if m != nil {
+		return m.PreviousManifestRoot
+	}
+	return ""
 }
 
 // MsgCreateDealFromEvm wraps a signed EVM intent and is executed on nilchaind.
@@ -4465,6 +4481,13 @@ func (m *MsgUpdateDealContent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.PreviousManifestRoot) > 0 {
+		i -= len(m.PreviousManifestRoot)
+		copy(dAtA[i:], m.PreviousManifestRoot)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.PreviousManifestRoot)))
+		i--
+		dAtA[i] = 0x3a
+	}
 	if m.WitnessMdus != 0 {
 		i = encodeVarintTx(dAtA, i, uint64(m.WitnessMdus))
 		i--
@@ -4629,6 +4652,13 @@ func (m *EvmUpdateContentIntent) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
+	if len(m.PreviousManifestRoot) > 0 {
+		i -= len(m.PreviousManifestRoot)
+		copy(dAtA[i:], m.PreviousManifestRoot)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.PreviousManifestRoot)))
+		i--
+		dAtA[i] = 0x4a
+	}
 	if m.WitnessMdus != 0 {
 		i = encodeVarintTx(dAtA, i, uint64(m.WitnessMdus))
 		i--
@@ -6560,6 +6590,10 @@ func (m *MsgUpdateDealContent) Size() (n int) {
 	if m.WitnessMdus != 0 {
 		n += 1 + sovTx(uint64(m.WitnessMdus))
 	}
+	l = len(m.PreviousManifestRoot)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
 	return n
 }
 
@@ -6638,6 +6672,10 @@ func (m *EvmUpdateContentIntent) Size() (n int) {
 	}
 	if m.WitnessMdus != 0 {
 		n += 1 + sovTx(uint64(m.WitnessMdus))
+	}
+	l = len(m.PreviousManifestRoot)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
 	}
 	return n
 }
@@ -8465,6 +8503,38 @@ func (m *MsgUpdateDealContent) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PreviousManifestRoot", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PreviousManifestRoot = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])
@@ -9028,6 +9098,38 @@ func (m *EvmUpdateContentIntent) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PreviousManifestRoot", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PreviousManifestRoot = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])

@@ -17,6 +17,7 @@ export type CreateDealIntent = {
 export type UpdateContentIntent = {
   creator: string;
   deal_id: bigint;
+  previous_manifest_root: string;
   cid: string;
   size: bigint;
   total_mdus: bigint;
@@ -55,6 +56,7 @@ const createDealType = [
 const updateContentType = [
   { name: "creator", type: "address" },
   { name: "deal_id", type: "uint64" },
+  { name: "previous_manifest_root", type: "string" },
   { name: "cid", type: "string" },
   { name: "size", type: "uint64" },
   { name: "total_mdus", type: "uint64" },
@@ -115,6 +117,7 @@ export function buildUpdateContentTypedData(
     message: {
       creator: normalizeEvmAddress(intent.creator),
       deal_id: intent.deal_id.toString(),
+      previous_manifest_root: intent.previous_manifest_root,
       cid: intent.cid,
       size: intent.size.toString(),
       total_mdus: intent.total_mdus.toString(),

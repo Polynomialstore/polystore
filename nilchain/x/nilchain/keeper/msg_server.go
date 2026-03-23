@@ -42,6 +42,36 @@ func wallDurationToBlocks(wallDuration uint64) uint64 {
 // Ensure msgServer implements the types.MsgServer interface
 var _ types.MsgServer = msgServer{}
 
+func parseOptionalManifestRootField(value string, label string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	decoded, err := hex.DecodeString(strings.TrimPrefix(trimmed, "0x"))
+	if err != nil || len(decoded) != 48 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("%s must be empty or a 48-byte hex manifest root", label)
+	}
+	return decoded, nil
+}
+
+func manifestRootHexOrEmpty(root []byte) string {
+	if len(root) == 0 {
+		return ""
+	}
+	return "0x" + hex.EncodeToString(root)
+}
+
+func validatePreviousManifestRootMatch(previous []byte, current []byte) error {
+	if bytes.Equal(previous, current) {
+		return nil
+	}
+	return sdkerrors.ErrInvalidRequest.Wrapf(
+		"stale previous_manifest_root (expected %s, got %s)",
+		manifestRootHexOrEmpty(current),
+		manifestRootHexOrEmpty(previous),
+	)
+}
+
 // CreateDealFromEvm handles MsgCreateDealFromEvm to create a new storage deal
 // from an EVM-signed intent bridged into nilchaind.
 func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreateDealFromEvm) (*types.MsgCreateDealFromEvmResponse, error) {
@@ -568,6 +598,13 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if msg.Size_ > types.MAX_DEAL_BYTES {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("size_bytes exceeds MAX_DEAL_BYTES (size=%d max=%d)", msg.Size_, types.MAX_DEAL_BYTES)
 	}
+	previousManifestRoot, err := parseOptionalManifestRootField(msg.PreviousManifestRoot, "previous_manifest_root")
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePreviousManifestRootMatch(previousManifestRoot, deal.ManifestRoot); err != nil {
+		return nil, err
+	}
 
 	params := k.GetParams(ctx)
 
@@ -681,6 +718,10 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	if intent.SizeBytes > types.MAX_DEAL_BYTES {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("size_bytes exceeds MAX_DEAL_BYTES (size=%d max=%d)", intent.SizeBytes, types.MAX_DEAL_BYTES)
 	}
+	previousManifestRoot, err := parseOptionalManifestRootField(intent.PreviousManifestRoot, "previous_manifest_root")
+	if err != nil {
+		return nil, err
+	}
 	if intent.TotalMdus == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
 	}
@@ -759,6 +800,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 
 	if deal.Owner != ownerAcc.String() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
+	}
+	if err := validatePreviousManifestRootMatch(previousManifestRoot, deal.ManifestRoot); err != nil {
+		return nil, err
 	}
 
 	height := uint64(ctx.BlockHeight())

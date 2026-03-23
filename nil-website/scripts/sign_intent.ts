@@ -138,6 +138,7 @@ async function main() {
   const intent: UpdateContentIntent = {
     creator_evm: account.address,
     deal_id: Number(process.env.DEAL_ID || 0),
+    previous_manifest_root: process.env.PREVIOUS_MANIFEST_ROOT || '',
     cid,
     size_bytes: Number(process.env.SIZE_BYTES || 0),
     total_mdus: totalMdus,

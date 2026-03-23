@@ -106,6 +106,26 @@ func parseUintFromJSON(raw any) (uint64, bool) {
 	}
 }
 
+func parseManifestRootOrEmpty(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	parsed, err := parseManifestRoot(trimmed)
+	if err != nil {
+		return "", err
+	}
+	return parsed.Canonical, nil
+}
+
+func normalizeManifestRootOrEmpty(raw string) string {
+	parsed, err := parseManifestRootOrEmpty(raw)
+	if err != nil {
+		return strings.TrimSpace(raw)
+	}
+	return parsed
+}
+
 // Configurable paths & chain settings (overridable via env).
 var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
@@ -1790,12 +1810,13 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateDealContentRequest struct {
-	Creator     string `json:"creator"`
-	DealID      uint64 `json:"deal_id"`
-	Cid         string `json:"cid"`
-	SizeBytes   uint64 `json:"size_bytes"`
-	TotalMdus   uint64 `json:"total_mdus"`
-	WitnessMdus uint64 `json:"witness_mdus"`
+	Creator              string `json:"creator"`
+	DealID               uint64 `json:"deal_id"`
+	PreviousManifestRoot string `json:"previous_manifest_root"`
+	Cid                  string `json:"cid"`
+	SizeBytes            uint64 `json:"size_bytes"`
+	TotalMdus            uint64 `json:"total_mdus"`
+	WitnessMdus          uint64 `json:"witness_mdus"`
 }
 
 // GatewayUpdateDealContent is a legacy/devnet helper to commit content to a deal
@@ -1820,8 +1841,21 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing fields", http.StatusBadRequest)
 		return
 	}
+	if _, err := parseManifestRootOrEmpty(req.PreviousManifestRoot); err != nil {
+		http.Error(w, "invalid previous_manifest_root", http.StatusBadRequest)
+		return
+	}
 	if req.TotalMdus <= 1+req.WitnessMdus {
 		http.Error(w, "total_mdus must be > 1 + witness_mdus", http.StatusBadRequest)
+		return
+	}
+	meta, err := fetchDealMeta(req.DealID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to validate deal state: %v", err), http.StatusBadGateway)
+		return
+	}
+	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(req.PreviousManifestRoot) {
+		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
 
@@ -1831,9 +1865,10 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 	witnessMdusStr := strconv.FormatUint(req.WitnessMdus, 10)
 
 	log.Printf(
-		"Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
+		"Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --previous-manifest-root %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
 		nilchaindBin,
 		dealIDStr,
+		req.PreviousManifestRoot,
 		req.Cid,
 		sizeStr,
 		totalMdusStr,
@@ -1844,6 +1879,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		"tx", "nilchain", "update-deal-content",
 		"--deal-id", dealIDStr,
+		"--previous-manifest-root", req.PreviousManifestRoot,
 		"--cid", req.Cid,
 		"--size", sizeStr,
 		"--total-mdus", totalMdusStr,
@@ -2132,12 +2168,36 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 
 	// Light validation
 	rawCid, okCid := req.Intent["cid"].(string)
+	rawPreviousManifestRoot, okPreviousManifestRoot := req.Intent["previous_manifest_root"].(string)
 	rawSize, okSize := req.Intent["size_bytes"]
 	rawTotalMdus, okTotalMdus := req.Intent["total_mdus"]
 	rawWitnessMdus, okWitnessMdus := req.Intent["witness_mdus"]
 
-	if !okCid || strings.TrimSpace(rawCid) == "" || !okSize || !okTotalMdus || !okWitnessMdus {
-		http.Error(w, "intent must include cid, size_bytes, total_mdus, and witness_mdus", http.StatusBadRequest)
+	if !okCid || strings.TrimSpace(rawCid) == "" || !okPreviousManifestRoot || !okSize || !okTotalMdus || !okWitnessMdus {
+		http.Error(w, "intent must include previous_manifest_root, cid, size_bytes, total_mdus, and witness_mdus", http.StatusBadRequest)
+		return
+	}
+	if _, err := parseManifestRootOrEmpty(rawPreviousManifestRoot); err != nil {
+		http.Error(w, "previous_manifest_root must be empty or a valid 48-byte manifest root", http.StatusBadRequest)
+		return
+	}
+	rawDealID, okDealID := req.Intent["deal_id"]
+	if !okDealID {
+		http.Error(w, "intent must include deal_id", http.StatusBadRequest)
+		return
+	}
+	dealID, ok := parseUintFromJSON(rawDealID)
+	if !ok {
+		http.Error(w, "deal_id must be a valid integer", http.StatusBadRequest)
+		return
+	}
+	meta, err := fetchDealMeta(dealID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to validate deal state: %v", err), http.StatusBadGateway)
+		return
+	}
+	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(rawPreviousManifestRoot) {
+		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
 

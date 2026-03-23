@@ -6,6 +6,7 @@ import { appConfig } from '../config'
 
 interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
+  previousManifestRoot: string; // Previous committed manifest root or empty on first commit
   manifestRoot: string; // The canonical 0x-prefixed hex string
   fileSize: number; // Size in bytes
   totalMdus: number;
@@ -22,9 +23,12 @@ export function useDirectCommit() {
   });
 
   const commitContent = useCallback(async (options: DirectCommitOptions) => {
-    const { dealId, manifestRoot, fileSize, totalMdus, witnessMdus } = options
+    const { dealId, previousManifestRoot, manifestRoot, fileSize, totalMdus, witnessMdus } = options
     
     // Ensure manifestRoot is bytes (0x prefixed)
+    const formattedPreviousRoot = previousManifestRoot
+      ? (previousManifestRoot.startsWith('0x') ? previousManifestRoot : `0x${previousManifestRoot}`)
+      : '0x'
     const formattedRoot = manifestRoot.startsWith('0x') ? manifestRoot : `0x${manifestRoot}`;
 
     const totalMdusInt = Math.max(0, Number(totalMdus))
@@ -46,6 +50,7 @@ export function useDirectCommit() {
         functionName: 'updateDealContent',
         args: [
           BigInt(dealId),
+          formattedPreviousRoot as Hex,
           formattedRoot as Hex,
           BigInt(fileSize),
           BigInt(totalMdusInt),
