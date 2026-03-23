@@ -3,6 +3,7 @@ import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import type { Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { appConfig } from '../config'
+import { classifyNilfsCommitError } from '../lib/nilfsCommitError'
 
 interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
@@ -59,11 +60,19 @@ export function useDirectCommit() {
       })
       options.onSuccess?.(String(txHash))
     } catch (e) {
-      const error = e instanceof Error ? e : new Error(String(e))
+      const classified = classifyNilfsCommitError(e)
+      const error = new Error(classified.message)
       options.onError?.(error)
       throw error
     }
   }, [writeContractAsync]);
+
+  const normalizedError = (() => {
+    const raw = writeError || receiptError
+    if (!raw) return null
+    const classified = classifyNilfsCommitError(raw)
+    return new Error(classified.message)
+  })()
 
   return {
     commitContent,
@@ -71,6 +80,6 @@ export function useDirectCommit() {
     isConfirming,   // Waiting for block inclusion
     isSuccess,      // Transaction confirmed
     hash,
-    error: writeError || receiptError,
+    error: normalizedError,
   };
 }

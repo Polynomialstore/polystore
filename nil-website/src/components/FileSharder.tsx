@@ -42,6 +42,7 @@ import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 import { bootstrapAppendBaseFromNetwork as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
+import { classifyNilfsCommitError } from '../lib/nilfsCommitError';
 
 interface ShardItem {
   id: number;
@@ -297,6 +298,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const persistInFlightRef = useRef<Promise<void> | null>(null)
   const lastPersistedManifestRootRef = useRef<string | null>(null)
   const autoUploadManifestRef = useRef<string | null>(null)
+  const lastStaleCommitMessageRef = useRef<string | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
     phase: '',
     workDone: 0,
@@ -509,6 +511,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     address,
     stripeParams,
   ]);
+
+  useEffect(() => {
+    if (!commitError) {
+      lastStaleCommitMessageRef.current = null
+      return
+    }
+    if (!dealId) return
+    const classified = classifyNilfsCommitError(commitError)
+    if (!classified.staleBase) return
+    if (lastStaleCommitMessageRef.current === classified.message) return
+    lastStaleCommitMessageRef.current = classified.message
+
+    addLog('> Commit rejected: local NilFS base is stale. Clearing browser slab cache for this deal...')
+    addLog('> Refresh the deal state and retry. The browser will bootstrap the current committed slab before append.')
+
+    void deleteDealDirectory(dealId)
+      .then(() => {
+        lastPersistedManifestRootRef.current = null
+        addLog('> Cleared stale browser slab cache.')
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        addLog(`> Failed to clear stale browser slab cache: ${message}`)
+      })
+  }, [addLog, commitError, dealId]);
 
   const uploadMode2 = useCallback(async () => {
     if (!currentManifestRoot || !currentManifestBlob) {
