@@ -71,6 +71,19 @@ test.describe('mode2 sparse live', () => {
     const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
     const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
     let gatewayUploadAttempts = 0
+    let activeUploads = 0
+    let peakActiveUploads = 0
+
+    async function recordConcurrentUpload<T>(fn: () => Promise<T>): Promise<T> {
+      activeUploads += 1
+      peakActiveUploads = Math.max(peakActiveUploads, activeUploads)
+      await page.waitForTimeout(75)
+      try {
+        return await fn()
+      } finally {
+        activeUploads -= 1
+      }
+    }
 
     await page.route('**/gateway/upload*', async (route) => {
       gatewayUploadAttempts += 1
@@ -89,7 +102,7 @@ test.describe('mode2 sparse live', () => {
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
         mduIndex: headers['x-nil-mdu-index'] || '',
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
@@ -99,7 +112,7 @@ test.describe('mode2 sparse live', () => {
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
@@ -111,7 +124,7 @@ test.describe('mode2 sparse live', () => {
         mduIndex: headers['x-nil-mdu-index'] || '',
         slot: headers['x-nil-slot'] || '',
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -164,11 +177,13 @@ test.describe('mode2 sparse live', () => {
       mduUploads,
       manifestUploads,
       shardUploads: shardUploads.slice(0, 6),
+      peakActiveUploads,
     })
 
     expect(sparseMduUploads.length).toBeGreaterThan(0)
     expect(sparseManifestUploads.length).toBeGreaterThan(0)
     expect(sparseShardUploads.length).toBeGreaterThan(0)
+    expect(peakActiveUploads).toBeGreaterThan(1)
     expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(3 * 1024 * 1024)
 
     await expect(commitBtn).toBeEnabled({ timeout: 120_000 })

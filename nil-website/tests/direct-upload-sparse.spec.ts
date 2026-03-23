@@ -25,6 +25,19 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
   const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
   let gatewayUploadAttempts = 0
+  let activeUploads = 0
+  let peakActiveUploads = 0
+
+  async function recordConcurrentUpload<T>(fn: () => Promise<T>): Promise<T> {
+    activeUploads += 1
+    peakActiveUploads = Math.max(peakActiveUploads, activeUploads)
+    await page.waitForTimeout(75)
+    try {
+      return await fn()
+    } finally {
+      activeUploads -= 1
+    }
+  }
 
   await page.route('**/gateway/upload*', async (route) => {
     gatewayUploadAttempts += 1
@@ -45,7 +58,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
       mduIndex: headers['x-nil-mdu-index'] || '',
     })
-    return route.fulfill({ status: 200, body: 'OK' })
+    return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
 
   await page.route('**/sp/upload_manifest', async (route) => {
@@ -56,7 +69,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
     })
-    return route.fulfill({ status: 200, body: 'OK' })
+    return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
 
   await page.route('**/sp/upload_shard', async (route) => {
@@ -69,7 +82,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       mduIndex: headers['x-nil-mdu-index'] || '',
       slot: headers['x-nil-slot'] || '',
     })
-    return route.fulfill({ status: 200, body: 'OK' })
+    return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
 
   await page.route('**://localhost:8545/**', async (route) => {
@@ -229,11 +242,12 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const sparseManifestUploads = manifestUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
   const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
 
-  console.log('[direct sparse upload evidence]', { mduUploads, manifestUploads, shardUploads })
+  console.log('[direct sparse upload evidence]', { mduUploads, manifestUploads, shardUploads, peakActiveUploads })
 
   expect(sparseMduUploads.length).toBeGreaterThan(0)
   expect(sparseManifestUploads.length).toBeGreaterThan(0)
   expect(sparseShardUploads.length).toBeGreaterThan(0)
+  expect(peakActiveUploads).toBeGreaterThan(1)
   expect(
     Math.max(...sparseMduUploads.map((upload) => upload.bodyLen / Math.max(1, upload.fullSize || 1))),
   ).toBeLessThan(0.35)

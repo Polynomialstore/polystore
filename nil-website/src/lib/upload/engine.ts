@@ -63,6 +63,16 @@ export interface UploadEnginePorts {
   chainCommitter?: ChainCommitPort
 }
 
+export interface UploadEngineParallelism {
+  direct?: number
+  stripedMetadata?: number
+  stripedShards?: number
+}
+
+export interface UploadEngineOptions extends UploadEnginePorts {
+  parallelism?: UploadEngineParallelism
+}
+
 export interface UploadEngineResult {
   ok: boolean
   steps: UploadProgressStep[]
@@ -185,6 +195,76 @@ function emitProgress(steps: UploadProgressStep[], onProgress?: (steps: UploadPr
   return snapshot
 }
 
+interface UploadTask {
+  predicate: (step: UploadProgressStep) => boolean
+  request: UploadTransportRequest
+}
+
+const DEFAULT_DIRECT_UPLOAD_CONCURRENCY = 4
+const DEFAULT_STRIPED_METADATA_UPLOAD_CONCURRENCY = 6
+const DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY = 6
+
+function normalizeConcurrency(value: number | undefined, fallback: number): number {
+  const normalized = Number(value)
+  if (!Number.isFinite(normalized) || normalized <= 0) return fallback
+  return Math.max(1, Math.floor(normalized))
+}
+
+async function runUploadTasks(
+  tasks: UploadTask[],
+  initialSteps: UploadProgressStep[],
+  onProgress: ((steps: UploadProgressStep[]) => void) | undefined,
+  concurrency: number,
+  transport: UploadTransportPort,
+): Promise<UploadEngineResult> {
+  let steps = initialSteps
+  let nextIndex = 0
+  let active = 0
+  let firstError: string | null = null
+
+  return await new Promise<UploadEngineResult>((resolve) => {
+    const settleIfDone = () => {
+      if (active !== 0) return
+      if (nextIndex < tasks.length && !firstError) return
+      if (firstError) {
+        resolve({ ok: false, steps, error: firstError })
+      } else {
+        resolve({ ok: true, steps })
+      }
+    }
+
+    const launchNext = () => {
+      while (!firstError && active < concurrency && nextIndex < tasks.length) {
+        const task = tasks[nextIndex]
+        nextIndex += 1
+        active += 1
+
+        steps = emitProgress(updateStep(steps, task.predicate, { status: 'uploading', error: undefined }), onProgress)
+
+        void transport
+          .sendArtifact(task.request)
+          .then(() => {
+            steps = emitProgress(updateStep(steps, task.predicate, { status: 'complete' }), onProgress)
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            if (!firstError) firstError = message
+            steps = emitProgress(updateStep(steps, task.predicate, { status: 'error', error: message }), onProgress)
+          })
+          .finally(() => {
+            active -= 1
+            launchNext()
+            settleIfDone()
+          })
+      }
+
+      settleIfDone()
+    }
+
+    launchNext()
+  })
+}
+
 export function buildCommitRequest(input: PreparedCommitInput): ChainCommitRequest {
   const witnessMdus = Math.max(0, Number(input.totalWitnessMdus) || 0)
   const totalMdus = input.isMode2
@@ -210,131 +290,93 @@ export function buildCommitRequest(input: PreparedCommitInput): ChainCommitReque
   }
 }
 
-export function createUploadEngine(ports: UploadEnginePorts) {
+export function createUploadEngine(options: UploadEngineOptions) {
+  const { parallelism, ...ports } = options
+  const directConcurrency = normalizeConcurrency(parallelism?.direct, DEFAULT_DIRECT_UPLOAD_CONCURRENCY)
+  const stripedMetadataConcurrency = normalizeConcurrency(
+    parallelism?.stripedMetadata,
+    DEFAULT_STRIPED_METADATA_UPLOAD_CONCURRENCY,
+  )
+  const stripedShardConcurrency = normalizeConcurrency(parallelism?.stripedShards, DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY)
+
   return {
     async uploadDirect(input: DirectUploadInput): Promise<UploadEngineResult> {
       let steps = emitProgress(buildDirectUploadSteps(input), input.onProgress)
+      if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
+        const message = 'manifest blob missing (re-shard to regenerate)'
+        steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }), input.onProgress)
+        return { ok: false, steps, error: message }
+      }
 
-      for (const mdu of input.mdus) {
-        steps = emitProgress(
-          updateStep(steps, (step) => step.kind === 'mdu' && step.index === mdu.index, { status: 'uploading', error: undefined }),
-          input.onProgress,
-        )
-        try {
-          await ports.transport.sendArtifact({
+      const tasks: UploadTask[] = [
+        ...input.mdus.map((mdu) => ({
+          predicate: (step: UploadProgressStep) => step.kind === 'mdu' && step.index === mdu.index,
+          request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
             target: input.target,
-            artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize },
-          })
-          steps = emitProgress(
-            updateStep(steps, (step) => step.kind === 'mdu' && step.index === mdu.index, { status: 'complete' }),
-            input.onProgress,
-          )
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error)
-          steps = emitProgress(
-            updateStep(steps, (step) => step.kind === 'mdu' && step.index === mdu.index, { status: 'error', error: message }),
-            input.onProgress,
-          )
-          return { ok: false, steps, error: message }
-        }
-      }
+            artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
+          },
+        })),
+        {
+          predicate: (step: UploadProgressStep) => step.kind === 'manifest',
+          request: {
+            dealId: input.dealId,
+            manifestRoot: input.manifestRoot,
+            target: input.target,
+            artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+          },
+        },
+      ]
 
-      steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'uploading', error: undefined }), input.onProgress)
-      try {
-        if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
-          throw new Error('manifest blob missing (re-shard to regenerate)')
-        }
-        await ports.transport.sendArtifact({
-          dealId: input.dealId,
-          manifestRoot: input.manifestRoot,
-          target: input.target,
-          artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize },
-        })
-        steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'complete' }), input.onProgress)
-        return { ok: true, steps }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error)
-        steps = emitProgress(
-          updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }),
-          input.onProgress,
-        )
-        return { ok: false, steps, error: message }
-      }
+      return runUploadTasks(tasks, steps, input.onProgress, directConcurrency, ports.transport)
     },
 
     async uploadStriped(input: StripedUploadInput): Promise<UploadEngineResult> {
       let steps = emitProgress(buildStripedUploadSteps(input), input.onProgress)
+      if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
+        const message = 'manifest blob missing (re-shard to regenerate)'
+        steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }), input.onProgress)
+        return { ok: false, steps, error: message }
+      }
 
+      const metadataTasks: UploadTask[] = []
       for (const target of input.metadataTargets) {
         const targetLabel = target.label || target.baseUrl
         for (const mdu of input.metadataMdus) {
-          steps = emitProgress(
-            updateStep(
-              steps,
-              (step) => step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
-              { status: 'uploading', error: undefined },
-            ),
-            input.onProgress,
-          )
-          try {
-            await ports.transport.sendArtifact({
+          metadataTasks.push({
+            predicate: (step: UploadProgressStep) =>
+              step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
+            request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
               target,
-              artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize },
-            })
-            steps = emitProgress(
-              updateStep(
-                steps,
-                (step) => step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
-                { status: 'complete' },
-              ),
-              input.onProgress,
-            )
-          } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error)
-            steps = emitProgress(
-              updateStep(
-                steps,
-                (step) => step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
-                { status: 'error', error: message },
-              ),
-              input.onProgress,
-            )
-            return { ok: false, steps, error: message }
-          }
+              artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
+            },
+          })
         }
-
-        steps = emitProgress(
-          updateStep(steps, (step) => step.kind === 'manifest' && step.target === targetLabel, { status: 'uploading', error: undefined }),
-          input.onProgress,
-        )
-        try {
-          if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
-            throw new Error('manifest blob missing (re-shard to regenerate)')
-          }
-          await ports.transport.sendArtifact({
+        metadataTasks.push({
+          predicate: (step: UploadProgressStep) => step.kind === 'manifest' && step.target === targetLabel,
+          request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
             target,
-            artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize },
-          })
-          steps = emitProgress(
-            updateStep(steps, (step) => step.kind === 'manifest' && step.target === targetLabel, { status: 'complete' }),
-            input.onProgress,
-          )
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error)
-          steps = emitProgress(
-            updateStep(steps, (step) => step.kind === 'manifest' && step.target === targetLabel, { status: 'error', error: message }),
-            input.onProgress,
-          )
-          return { ok: false, steps, error: message }
-        }
+            artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+          },
+        })
       }
 
+      const metadataResult = await runUploadTasks(
+        metadataTasks,
+        steps,
+        input.onProgress,
+        stripedMetadataConcurrency,
+        ports.transport,
+      )
+      steps = metadataResult.steps
+      if (!metadataResult.ok) return metadataResult
+
+      const shardTasks: UploadTask[] = []
       for (const shardSet of input.shardSets ?? []) {
         for (let slot = 0; slot < shardSet.shards.length; slot += 1) {
           const shard = shardSet.shards[slot]
@@ -351,45 +393,20 @@ export function createUploadEngine(ports: UploadEnginePorts) {
             )
             return { ok: false, steps, error: message }
           }
-          steps = emitProgress(
-            updateStep(
-              steps,
-              (step) => step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
-              { status: 'uploading', error: undefined },
-            ),
-            input.onProgress,
-          )
-          try {
-            await ports.transport.sendArtifact({
+          shardTasks.push({
+            predicate: (step: UploadProgressStep) =>
+              step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
+            request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
               target,
-              artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize },
-            })
-            steps = emitProgress(
-              updateStep(
-                steps,
-                (step) => step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
-                { status: 'complete' },
-              ),
-              input.onProgress,
-            )
-          } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error)
-            steps = emitProgress(
-              updateStep(
-                steps,
-                (step) => step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
-                { status: 'error', error: message },
-              ),
-              input.onProgress,
-            )
-            return { ok: false, steps, error: message }
-          }
+              artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize } as const,
+            },
+          })
         }
       }
 
-      return { ok: true, steps }
+      return runUploadTasks(shardTasks, steps, input.onProgress, stripedShardConcurrency, ports.transport)
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {

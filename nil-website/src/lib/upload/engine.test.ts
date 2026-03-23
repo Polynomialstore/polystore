@@ -124,6 +124,51 @@ test('upload engine: striped upload sequences metadata per target before shard u
   assert.equal(transport.calls[6].artifact.fullSize, 1024)
 })
 
+test('upload engine: direct upload overlaps artifact requests with bounded concurrency', async () => {
+  const started: string[] = []
+  let active = 0
+  let peakActive = 0
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      started.push(`${request.artifact.kind}:${request.artifact.kind === 'manifest' ? 'manifest' : request.artifact.index}`)
+      active += 1
+      peakActive = Math.max(peakActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      active -= 1
+    },
+  }
+
+  const engine = createUploadEngine({
+    transport,
+    parallelism: { direct: 2 },
+  })
+
+  const startedAt = Date.now()
+  const result = await engine.uploadDirect({
+    dealId: '15',
+    manifestRoot: '0x999',
+    manifestBlob: new Uint8Array([9, 9, 9]),
+    manifestBlobFullSize: 128 * 1024,
+    mdus: [
+      { index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 },
+      { index: 1, data: new Uint8Array([2]), fullSize: 8 * 1024 * 1024 },
+      { index: 2, data: new Uint8Array([3]), fullSize: 8 * 1024 * 1024 },
+    ],
+    target: {
+      baseUrl: 'http://provider-a',
+      mduPath: '/sp/upload_mdu',
+      manifestPath: '/sp/upload_manifest',
+      label: 'provider-a',
+    },
+  })
+  const elapsedMs = Date.now() - startedAt
+
+  assert.equal(result.ok, true)
+  assert.equal(started.length, 4)
+  assert.equal(peakActive, 2)
+  assert.ok(elapsedMs < 140, `expected bounded parallel direct upload, got ${elapsedMs}ms`)
+})
+
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {
   assert.deepEqual(
     buildCommitRequest({
