@@ -29,7 +29,7 @@ import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from
 import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
 import { makeSparseArtifact } from '../lib/upload/sparseArtifacts';
-import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness';
+import { normalizeManifestRoot } from '../lib/cacheFreshness';
 import {
   buildUploadPlan,
   nonTrivialBlobsForPayload,
@@ -41,6 +41,7 @@ import { createUploadEngine } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 import { bootstrapAppendBaseFromNetwork as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
+import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
 
 interface ShardItem {
   id: number;
@@ -2011,73 +2012,61 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       let existingUserMdus: { index: number; data: Uint8Array }[] = [];
       let existingUserCount = 0;
     let existingMaxEnd = 0
-    let appendStartOffset = 0
 
     if (useMode2) {
       const localManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
-      const freshness = evaluateCacheFreshness(localManifestRoot, baseManifestRoot)
-      if (freshness.status === 'stale') {
-        addLog(`> Mode 2 append: local slab manifest ${freshness.localManifestRoot} is stale; bootstrapping from current committed root ${freshness.chainManifestRoot}.`)
-        await deleteDealDirectory(dealId).catch(() => undefined)
+      const loadLocalAppendBase = async () => {
+        const mdu0 = await readMdu(dealId, 0)
+        if (!mdu0) return null
+        const files = parseNilfsFilesFromMdu0(mdu0)
+        if (files.length <= 0) return null
+        const existing = await inferWitnessCountFromOpfs(dealId, files)
+        if (existing.userCount <= 0) return null
+
+        const localUserMdus: { index: number; data: Uint8Array }[] = []
+        for (let i = 0; i < existing.userCount; i++) {
+          const mdu = await readMdu(dealId, existing.slabStartIdx + i)
+          if (!mdu) {
+            throw new Error(`missing local MDU: mdu_${existing.slabStartIdx + i}.bin`)
+          }
+          localUserMdus.push({ index: i, data: mdu })
+        }
+
+        return {
+          baseMdu0Bytes: mdu0,
+          existingUserMdus: localUserMdus,
+          existingUserCount: existing.userCount,
+          existingMaxEnd: existing.maxEnd,
+          appendStartOffset: existing.userCount * RawMduCapacity,
+        }
       }
 
       try {
-        const mdu0 = await readMdu(dealId, 0)
-        if (mdu0) {
-          const files = parseNilfsFilesFromMdu0(mdu0)
-          if (files.length > 0) {
-            const existing = await inferWitnessCountFromOpfs(dealId, files)
-            if (existing.userCount > 0) {
-              baseMdu0Bytes = mdu0
-              existingUserCount = existing.userCount
-              existingMaxEnd = existing.maxEnd
-              appendStartOffset = existing.userCount * RawMduCapacity
-              for (let i = 0; i < existing.userCount; i++) {
-                const mdu = await readMdu(dealId, existing.slabStartIdx + i)
-                if (!mdu) {
-                  throw new Error(`missing local MDU: mdu_${existing.slabStartIdx + i}.bin`)
-                }
-                existingUserMdus.push({ index: i, data: mdu })
-              }
-              addLog(`> Mode 2 append: found ${existing.userCount} existing user MDUs; starting new file at ${formatBytes(appendStartOffset)}.`)
-            }
-          }
-        }
+        const resolvedAppendBase = await resolveMode2AppendBase({
+          localManifestRoot,
+          chainManifestRoot: baseManifestRoot,
+          loadLocal: loadLocalAppendBase,
+          clearLocal: () => deleteDealDirectory(dealId).catch(() => undefined),
+          bootstrapFromNetwork: bootstrapMode2AppendBaseFromNetwork,
+          addLog,
+          formatBytes,
+        })
+        baseMdu0Bytes = resolvedAppendBase.baseMdu0Bytes
+        existingUserMdus = resolvedAppendBase.existingUserMdus
+        existingUserCount = resolvedAppendBase.existingUserCount
+        existingMaxEnd = resolvedAppendBase.existingMaxEnd
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
-        addLog(`> Mode 2 append: failed to load existing slab (${msg}).`)
-        baseMdu0Bytes = null
-        existingUserMdus = []
-        existingUserCount = 0
-        existingMaxEnd = 0
-        appendStartOffset = 0
-      }
-
-      if (!baseMdu0Bytes && normalizeManifestRoot(baseManifestRoot)) {
-        try {
-          const bootstrapped = await bootstrapMode2AppendBaseFromNetwork()
-          if (!bootstrapped) {
-            throw new Error('remote bootstrap did not produce an append base')
-          }
-          baseMdu0Bytes = bootstrapped.baseMdu0Bytes
-          existingUserMdus = bootstrapped.existingUserMdus
-          existingUserCount = bootstrapped.existingUserCount
-          existingMaxEnd = bootstrapped.existingMaxEnd
-          appendStartOffset = bootstrapped.appendStartOffset
-          addLog(`> Mode 2 append: bootstrapped ${existingUserCount} committed user MDUs from provider retrieval.`)
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e)
-          addLog(`> Mode 2 append bootstrap failed: ${msg}`)
-          setShardProgress((p) => ({
-            ...p,
-            phase: 'error',
-            label: `Mode 2 append bootstrap failed: ${msg}`,
-            currentOpStartedAtMs: null,
-            lastOpMs: performance.now() - startTs,
-          }))
-          setProcessing(false)
-          return
-        }
+        addLog(`> Mode 2 append bootstrap failed: ${msg}`)
+        setShardProgress((p) => ({
+          ...p,
+          phase: 'error',
+          label: `Mode 2 append bootstrap failed: ${msg}`,
+          currentOpStartedAtMs: null,
+          lastOpMs: performance.now() - startTs,
+        }))
+        setProcessing(false)
+        return
       }
     }
 
