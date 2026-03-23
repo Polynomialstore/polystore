@@ -639,6 +639,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     const filePath = 'mode2-no-gateway-upload.txt'
     const fileBytes = Buffer.alloc(192 * 1024, 'N')
+    const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string }> = []
+    const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
+    const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
@@ -682,8 +685,44 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     })
     await page.route('**/gateway/upload*', maybeBlockGatewayUpload)
     await page.route('**/gateway/upload-status*', maybeBlockGatewayUpload)
+    await page.route('**/sp/upload_mdu', async (route) => {
+      const body = route.request().postDataBuffer() || Buffer.alloc(0)
+      const headers = route.request().headers()
+      const fullSizeHeader = headers['x-nil-full-size']
+      mduUploads.push({
+        bodyLen: body.length,
+        fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
+        mduIndex: headers['x-nil-mdu-index'] || '',
+      })
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_manifest', async (route) => {
+      const body = route.request().postDataBuffer() || Buffer.alloc(0)
+      const headers = route.request().headers()
+      const fullSizeHeader = headers['x-nil-full-size']
+      manifestUploads.push({
+        bodyLen: body.length,
+        fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
+      })
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_shard', async (route) => {
+      const body = route.request().postDataBuffer() || Buffer.alloc(0)
+      const headers = route.request().headers()
+      const fullSizeHeader = headers['x-nil-full-size']
+      shardUploads.push({
+        bodyLen: body.length,
+        fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
+        mduIndex: headers['x-nil-mdu-index'] || '',
+        slot: headers['x-nil-slot'] || '',
+      })
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
 
-    const compressCheckbox = page.getByLabel('Compress locally (NilCE zstd) before sharding')
+    const compressCheckbox = page
+      .locator('label')
+      .filter({ hasText: 'Compress before upload' })
+      .locator('input[type="checkbox"]')
     if (await compressCheckbox.isChecked().catch(() => false)) {
       await compressCheckbox.uncheck()
     }
@@ -706,6 +745,24 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
       timeout: mode2FastUploadWaitMs,
     })
+    expect(mduUploads.length).toBeGreaterThan(0)
+    expect(manifestUploads.length).toBeGreaterThan(0)
+    expect(shardUploads.length).toBeGreaterThan(0)
+
+    const sparseMduUploads = mduUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
+    const sparseManifestUploads = manifestUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
+    const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
+
+    console.log('[mode2 sparse upload evidence]', {
+      mduUploads,
+      manifestUploads,
+      shardUploads: shardUploads.slice(0, 6),
+    })
+
+    expect(sparseMduUploads.length).toBeGreaterThan(0)
+    expect(sparseManifestUploads.length).toBeGreaterThan(0)
+    expect(sparseShardUploads.length).toBeGreaterThan(0)
+    expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(2 * 1024 * 1024)
     await expect(commitBtn).toBeEnabled({ timeout: mode2FastUploadWaitMs })
     await commitBtn.click()
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: mode2FastPrimaryWaitMs })
