@@ -25,6 +25,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
   const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
   let gatewayUploadAttempts = 0
+  let gatewayProbeAttempts = 0
   let activeUploads = 0
   let peakActiveUploads = 0
 
@@ -48,6 +49,16 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     gatewayUploadAttempts += 1
     await route.fulfill({ status: 599, body: 'gateway disabled in sparse e2e' })
   })
+
+  const failGatewayProbe = async (route: import('@playwright/test').Route) => {
+    gatewayProbeAttempts += 1
+    await route.fulfill({ status: 503, body: 'gateway unavailable in sparse e2e' })
+  }
+
+  await page.route('http://127.0.0.1:8080/status', failGatewayProbe)
+  await page.route('http://127.0.0.1:8080/health', failGatewayProbe)
+  await page.route('http://localhost:8080/status', failGatewayProbe)
+  await page.route('http://localhost:8080/health', failGatewayProbe)
 
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
@@ -208,6 +219,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   })
 
   await page.goto(path)
+  await expect.poll(() => gatewayProbeAttempts, { timeout: 60_000 }).toBeGreaterThan(0)
 
   if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible().catch(() => false))) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
@@ -237,12 +249,19 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   expect(manifestUploads.length).toBeGreaterThan(0)
   expect(shardUploads.length).toBeGreaterThan(0)
   expect(gatewayUploadAttempts).toBe(0)
+  expect(gatewayProbeAttempts).toBeGreaterThan(0)
 
   const sparseMduUploads = mduUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
   const sparseManifestUploads = manifestUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
   const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
 
-  console.log('[direct sparse upload evidence]', { mduUploads, manifestUploads, shardUploads, peakActiveUploads })
+  console.log('[direct sparse upload evidence]', {
+    gatewayProbeAttempts,
+    mduUploads,
+    manifestUploads,
+    shardUploads,
+    peakActiveUploads,
+  })
 
   expect(sparseMduUploads.length).toBeGreaterThan(0)
   expect(sparseManifestUploads.length).toBeGreaterThan(0)

@@ -23,7 +23,7 @@ import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
-import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
+import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
 import { makeSparseArtifact } from '../lib/upload/sparseArtifacts';
 import {
@@ -317,7 +317,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
   const gatewayMode2Enabled = isMode2 && !appConfig.gatewayDisabled
-  const gatewayReachable = localGateway.status === 'connected' && gatewayMode2Enabled
+  const gatewayReachable = isGatewayMode2UploadEnabled({
+    gatewayDisabled: !gatewayMode2Enabled,
+    gatewayBase: localGateway.url || appConfig.gatewayBase,
+    localGatewayStatus: localGateway.status,
+  })
   const activeUploading = isMode2 ? mode2Uploading : isUploading
   const isUploadComplete = isMode2
     ? mode2UploadComplete
@@ -1149,7 +1153,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       });
 
       const useMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
-      const shouldTryGatewayMode2 = useMode2 && gatewayMode2Enabled
+      const shouldTryGatewayMode2 = useMode2 && isGatewayMode2UploadEnabled({
+        gatewayDisabled: !gatewayMode2Enabled,
+        gatewayBase: localGateway.url || appConfig.gatewayBase,
+        localGatewayStatus: localGateway.status,
+      })
+
+      if (useMode2 && gatewayMode2Enabled && !shouldTryGatewayMode2) {
+        addLog('> Gateway diagnostics report disconnected; skipping gateway upload/status probes and using in-browser Mode 2 sharding + stripe upload.')
+      }
 
       const RawMduCapacity = RAW_MDU_CAPACITY
       const rsK = useMode2 ? stripeParams!.k : 0
@@ -2437,7 +2449,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
+  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {

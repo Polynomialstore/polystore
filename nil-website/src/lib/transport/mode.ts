@@ -13,6 +13,14 @@ export interface GatewayTransportEnabledInput {
   localGatewayConnected: boolean
 }
 
+export type LocalGatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+
+export interface GatewayMode2UploadEnabledInput {
+  gatewayDisabled: boolean
+  gatewayBase: string
+  localGatewayStatus: LocalGatewayStatus
+}
+
 export function resolveTransportPreference(input: ResolveTransportPreferenceInput): RoutePreference {
   const { candidate, gatewayDisabled, p2pEnabled, localGatewayConnected } = input
 
@@ -64,4 +72,13 @@ export function isGatewayTransportEnabled(input: GatewayTransportEnabledInput): 
   if (gatewayDisabled) return false
   if (!localGatewayConnected) return false
   return isTrustedLocalGatewayBase(gatewayBase)
+}
+
+export function isGatewayMode2UploadEnabled(input: GatewayMode2UploadEnabledInput): boolean {
+  const { gatewayDisabled, gatewayBase, localGatewayStatus } = input
+  return isGatewayTransportEnabled({
+    gatewayDisabled,
+    gatewayBase,
+    localGatewayConnected: localGatewayStatus === 'connected',
+  })
 }

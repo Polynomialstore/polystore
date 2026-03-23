@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   allowNonGatewayBackends,
+  isGatewayMode2UploadEnabled,
   isGatewayTransportEnabled,
   isTrustedLocalGatewayBase,
   resolveTransportPreference,
@@ -117,6 +118,44 @@ test('isGatewayTransportEnabled requires trusted local gateway and positive conn
       gatewayDisabled: true,
       gatewayBase: 'http://localhost:8080',
       localGatewayConnected: true,
+    }),
+    false,
+  )
+})
+
+test('isGatewayMode2UploadEnabled requires diagnostics-connected local gateway', () => {
+  assert.equal(
+    isGatewayMode2UploadEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://127.0.0.1:8080',
+      localGatewayStatus: 'connected',
+    }),
+    true,
+  )
+
+  assert.equal(
+    isGatewayMode2UploadEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://127.0.0.1:8080',
+      localGatewayStatus: 'disconnected',
+    }),
+    false,
+  )
+
+  assert.equal(
+    isGatewayMode2UploadEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://127.0.0.1:8080',
+      localGatewayStatus: 'connecting',
+    }),
+    false,
+  )
+
+  assert.equal(
+    isGatewayMode2UploadEnabled({
+      gatewayDisabled: false,
+      gatewayBase: 'http://127.0.0.1:8080',
+      localGatewayStatus: 'error',
     }),
     false,
   )
