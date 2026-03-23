@@ -52,12 +52,13 @@ func TestExtendDeal_BeforeExpiry_UpdatesEndAndAnchorAndEscrow(t *testing.T) {
 
 	// Commit some bytes so ExtendDeal has something to price.
 	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
-		Creator:     owner,
-		DealId:      resDeal.DealId,
-		Cid:         validManifestCid,
-		Size_:       100,
-		TotalMdus:   3,
-		WitnessMdus: 1,
+		Creator:              owner,
+		DealId:               resDeal.DealId,
+		PreviousManifestRoot: "",
+		Cid:                  validManifestCid,
+		Size_:                100,
+		TotalMdus:            3,
+		WitnessMdus:          1,
 	})
 	require.NoError(t, err)
 
@@ -144,12 +145,13 @@ func TestUpdateDealContent_UsesPricingAnchorAfterExtend(t *testing.T) {
 	// Expected duration for delta bytes = end(21) - pricing_anchor_block(5) = 16.
 	ctx6 := ctx.WithBlockHeight(6)
 	_, err = msgServer.UpdateDealContent(ctx6, &types.MsgUpdateDealContent{
-		Creator:     owner,
-		DealId:      resDeal.DealId,
-		Cid:         validManifestCid,
-		Size_:       200,
-		TotalMdus:   3,
-		WitnessMdus: 1,
+		Creator:              owner,
+		DealId:               resDeal.DealId,
+		PreviousManifestRoot: validManifestCid,
+		Cid:                  validManifestCid,
+		Size_:                200,
+		TotalMdus:            3,
+		WitnessMdus:          1,
 	})
 	require.NoError(t, err)
 
