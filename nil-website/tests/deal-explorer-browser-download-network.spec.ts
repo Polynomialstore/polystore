@@ -21,19 +21,21 @@ async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buf
   return Buffer.concat(chunks)
 }
 
-test('Deal Explorer: browser Download uses network even if OPFS has only manifest root', async ({ page }) => {
+test('Deal Explorer: browser Download ignores stale browser cache and uses network', async ({ page }) => {
   test.setTimeout(180_000)
 
   const randomPk = generatePrivateKey()
   const account = privateKeyToAccount(randomPk)
-  const chainId = Number(process.env.CHAIN_ID || 31337)
+  const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
 
   const dealId = '1'
   const manifestRoot = `0x${'bb'.repeat(48)}`
+  const staleManifestRoot = `0x${'cc'.repeat(48)}`
   const filePath = 'browser-network.txt'
   const fileBytes = Buffer.from('hello browser network')
+  const staleCachedBytes = Buffer.from('stale browser cache bytes')
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
@@ -45,8 +47,6 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   })
 
   let fetchCalls = 0
-  let gatewayProofCalls = 0
-  let spProofCalls = 0
   let listFilesCalls = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
@@ -82,7 +82,14 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ providers: [] }),
+      body: JSON.stringify({
+        providers: [
+          {
+            address: 'nil1provider',
+            endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+        ],
+      }),
     })
   })
 
@@ -96,13 +103,69 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   })
 
   await page.route('**/health', async (route) => {
-    await route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'not running' })
+    await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
   await page.route('**/status', async (route) => {
-    await route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'not running' })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        persona: 'user-gateway',
+        mode: 'standalone',
+        capabilities: { upload: true, fetch: true, list_files: true, slab: true, retrieval_plan: true, mode2_rs: true },
+        deps: { lcd_reachable: true, sp_reachable: true },
+        extra: { artifact_spec: 'mode2-artifacts-v1', rs_default: '2+1' },
+      }),
+    })
+  })
+
+  const slabResponse = {
+    manifest_root: manifestRoot,
+    mdu_size_bytes: 8 * 1024 * 1024,
+    blob_size_bytes: 128 * 1024,
+    total_mdus: 3,
+    witness_mdus: 1,
+    user_mdus: 1,
+    file_records: 1,
+    file_count: 1,
+    total_size_bytes: fileBytes.length,
+    segments: [
+      { kind: 'mdu0', start_index: 0, count: 1, size_bytes: 8 * 1024 * 1024 },
+      { kind: 'witness', start_index: 1, count: 1, size_bytes: 8 * 1024 * 1024 },
+      { kind: 'user', start_index: 2, count: 1, size_bytes: 8 * 1024 * 1024 },
+    ],
+  }
+
+  await page.route('**/gateway/slab/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(slabResponse),
+    })
+  })
+  await page.route('**/sp/retrieval/slab/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(slabResponse),
+    })
   })
 
   await page.route('**/gateway/list-files/**', async (route) => {
+    listFilesCalls += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0 }],
+      }),
+    })
+  })
+  await page.route('**/sp/retrieval/list-files/**', async (route) => {
     listFilesCalls += 1
     await route.fulfill({
       status: 200,
@@ -138,17 +201,26 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     })
   })
 
-  // Gateway slab can be missing; this test is about the Browser download behavior.
-  await page.route('**/gateway/slab/**', async (route) => {
+  await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
     await route.fulfill({
-      status: 404,
+      status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: 'slab not found on disk' }),
+      body: JSON.stringify({
+        deal_id: Number(dealId),
+        owner: nilAddress,
+        provider: 'nil1provider',
+        manifest_root: manifestRoot,
+        file_path: filePath,
+        range_start: 0,
+        range_len: fileBytes.length,
+        start_mdu_index: 2,
+        start_blob_index: 0,
+        blob_count: 1,
+      }),
     })
   })
-
-  await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
+  await page.route('**/sp/retrieval/plan/**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -181,11 +253,21 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
       body: fileBytes,
     })
   })
+  await page.route('**/sp/retrieval/fetch/**', async (route) => {
+    fetchCalls += 1
+    await route.fulfill({
+      status: 206,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Content-Type': 'application/octet-stream',
+        'X-Nil-Provider': 'nil1provider',
+      },
+      body: fileBytes,
+    })
+  })
 
   await page.route('**/gateway/session-proof**', async (route) => {
-    const url = route.request().url()
-    if (url.includes(':8080/')) gatewayProofCalls += 1
-    if (url.includes(':8082/')) spProofCalls += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -194,23 +276,40 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     })
   })
 
-  // EVM RPC mocks
   await page.route('**/*', async (route) => {
     const req = route.request()
     if (req.method() !== 'POST') return route.fallback()
     const url = req.url()
     if (!/8545/.test(url)) return route.fallback()
 
-    let payload: any = null
-    try {
-      payload = JSON.parse(req.postData() || 'null')
-    } catch {
-      payload = null
-    }
+    const payload = JSON.parse(req.postData() || '{}') as any
     const method = payload?.method
+    const params = payload?.params || []
+
+    if (method === 'eth_chainId') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: chainIdHex }),
+      })
+    }
+    if (method === 'eth_blockNumber') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x2' }),
+      })
+    }
+    if (method === 'eth_call') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: computeResult }),
+      })
+    }
 
     if (method === 'eth_getTransactionReceipt') {
-      const [hash] = payload?.params ?? []
+      const [hash] = params ?? []
 
       const openedTopic0 = getEventSelector(getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
       const dealIdTopic = padHex(toHex(BigInt(dealId)), { size: 32 })
@@ -307,27 +406,41 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  // Seed OPFS with ONLY the manifest root (no MDUs).
-  await page.evaluate(async ({ dealId, manifestRoot }) => {
+  // Seed OPFS with a stale manifest root and stale browser file cache. The default Download
+  // path must ignore this stale local cache and fetch the current bytes from the network.
+  await page.evaluate(async ({ dealId, manifestRoot, filePath, cachedBytes }) => {
+    async function sha256Hex(text: string): Promise<string> {
+      const encoded = new TextEncoder().encode(text)
+      const digest = await crypto.subtle.digest('SHA-256', encoded)
+      return Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+    }
+
     const root = await navigator.storage.getDirectory()
     const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
-    const h = await dealDir.getFileHandle('manifest_root.txt', { create: true })
-    const w = await (h as any).createWritable()
-    await w.write(manifestRoot)
-    await w.close()
-  }, { dealId, manifestRoot })
+    const writeFile = async (name: string, bytes: Uint8Array | string) => {
+      const h = await dealDir.getFileHandle(name, { create: true })
+      const w = await (h as any).createWritable()
+      await w.write(bytes as any)
+      await w.close()
+    }
+    await writeFile('manifest_root.txt', manifestRoot)
+    const cacheName = `filecache_${await sha256Hex(filePath)}.bin`
+    await writeFile(cacheName, new Uint8Array(cachedBytes as number[]))
+  }, { dealId, manifestRoot: staleManifestRoot, filePath, cachedBytes: [...staleCachedBytes] })
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
-  await expect.poll(() => listFilesCalls, { timeout: 60_000 }).toBeGreaterThan(0)
 
   const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+  const cacheSourceLabel = page.getByTestId('transport-cache-source')
   await expect(downloadButton).toBeVisible({ timeout: 60_000 })
   const download = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
+  expect(listFilesCalls).toBeGreaterThan(0)
   expect(fetchCalls).toBeGreaterThan(0)
-  expect(gatewayProofCalls).toBeGreaterThan(0)
-  expect(spProofCalls).toBe(0)
+  await expect(cacheSourceLabel).not.toContainText(/browser_cached_file/i)
 })

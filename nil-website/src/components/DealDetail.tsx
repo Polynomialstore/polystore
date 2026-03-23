@@ -354,19 +354,26 @@ function FileRow({
         })
         return
       } catch {
-        const cachedBytes = await readCachedFile(dealId, file.path)
-        if (cachedBytes) {
-          downloadBytesAsFile(cachedBytes, file.path)
-          markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-          onFileActivity?.({
-            dealId,
-            filePath: file.path,
-            sizeBytes: file.size_bytes,
-            manifestRoot: manifestHex,
-            action: 'download',
-            status: 'success',
-          })
-          return
+        const cacheFreshness = await withTimeout(
+          reconcileLocalMduCache(dealId, manifestHex),
+          15_000,
+          'browser cache reconciliation',
+        ).catch(() => null)
+        if (cacheFreshness?.usable) {
+          const cachedBytes = await readCachedFile(dealId, file.path)
+          if (cachedBytes) {
+            downloadBytesAsFile(cachedBytes, file.path)
+            markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
+            onFileActivity?.({
+              dealId,
+              filePath: file.path,
+              sizeBytes: file.size_bytes,
+              manifestRoot: manifestHex,
+              action: 'download',
+              status: 'success',
+            })
+            return
+          }
         }
       }
       const autoRoutePreference =
