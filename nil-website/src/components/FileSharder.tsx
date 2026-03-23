@@ -15,9 +15,6 @@ import {
   readManifestRoot,
   readMdu,
   readShard,
-  writeManifestRoot,
-  writeMdu,
-  writeSlabMetadata,
   writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
@@ -43,6 +40,7 @@ import {
 import { createUploadEngine } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 import { bootstrapAppendBaseFromNetwork as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
+import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 
 interface ShardItem {
   id: number;
@@ -829,32 +827,65 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
     try {
       await deleteDealDirectory(dealId)
-      await writeManifestRoot(dealId, manifestRoot)
-      await writeMdu(dealId, 0, bootstrapped.baseMdu0Bytes)
-      for (const userMdu of bootstrapped.existingUserMdus) {
-        await writeMdu(dealId, 1 + userMdu.index, userMdu.data)
-      }
-      await writeSlabMetadata(dealId, {
-        schema_version: 1,
-        generation_id: `bootstrap-${manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
-        deal_id: dealId,
-        manifest_root: manifestRoot,
-        owner,
-        redundancy: { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m },
-        source: 'browser_bootstrap_retrieval',
-        created_at: new Date().toISOString(),
-        last_validated_at: new Date().toISOString(),
-        witness_mdus: 0,
-        user_mdus: bootstrapped.existingUserCount,
-        total_mdus: 1 + bootstrapped.existingUserCount,
-        file_records: bootstrapped.files.map((file) => ({
-          path: file.path,
-          start_offset: Number(file.start_offset || 0),
-          size_bytes: Number(file.size_bytes || 0),
-          flags: Number(file.flags || 0),
-        })),
+      const materialized = await materializeBootstrapGeneration({
+        baseMdu0Bytes: bootstrapped.baseMdu0Bytes,
+        existingUserMdus: bootstrapped.existingUserMdus,
+        expectedManifestRoot: manifestRoot,
+        rsK: stripeParams.k,
+        rsM: stripeParams.m,
+        rawMduCapacity: RAW_MDU_CAPACITY,
+        encodeToMdu,
+        loadMdu0Builder: (data, maxUserMdus, commitmentsPerMdu) =>
+          workerClient.loadMdu0Builder(data, maxUserMdus, commitmentsPerMdu),
+        setMdu0Root: (index, root) => workerClient.setMdu0Root(index, root),
+        getMdu0Bytes: () => workerClient.getMdu0Bytes(),
+        expandMduRs: (data, k, m) => workerClient.expandMduRs(data, k, m),
+        shardFile: (data) => workerClient.shardFile(data),
+        computeManifest: (roots) => workerClient.computeManifest(roots),
       })
-      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${bootstrapped.files.length} files, ${bootstrapped.existingUserCount} user MDUs).`)
+      addLog(`> Mode 2 append bootstrap: verified committed manifest root ${materialized.manifestRoot}.`)
+      await writeSlabGenerationAtomically(dealId, {
+        manifestRoot: materialized.manifestRoot,
+        manifestBlob: materialized.manifestBlob,
+        mdus: [
+          { index: 0, data: materialized.mdu0Bytes },
+          ...materialized.witnessMdus.map((mdu) => ({ index: mdu.index, data: mdu.data })),
+          ...materialized.userMdus.map((mdu) => ({
+            index: 1 + materialized.witnessCount + mdu.index,
+            data: mdu.data,
+          })),
+        ],
+        shards: materialized.shardSets.flatMap((set) =>
+          set.shards.map((shard, slot) => ({
+            mduIndex: 1 + materialized.witnessCount + set.index,
+            slot,
+            data: shard.data,
+            fullSize: shard.fullSize,
+          })),
+        ),
+        metadata: {
+          schema_version: 1,
+          generation_id: `bootstrap-${materialized.manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
+          deal_id: dealId,
+          manifest_root: materialized.manifestRoot,
+          owner,
+          redundancy: { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m },
+          source: 'browser_bootstrap_retrieval',
+          created_at: new Date().toISOString(),
+          last_validated_at: new Date().toISOString(),
+          witness_mdus: materialized.witnessCount,
+          user_mdus: bootstrapped.existingUserCount,
+          total_mdus: 1 + materialized.witnessCount + bootstrapped.existingUserCount,
+          file_records: bootstrapped.files.map((file) => ({
+            path: file.path,
+            start_offset: Number(file.start_offset || 0),
+            size_bytes: Number(file.size_bytes || 0),
+            flags: Number(file.flags || 0),
+          })),
+        },
+      })
+      bootstrapped.baseMdu0Bytes = materialized.mdu0Bytes
+      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${bootstrapped.files.length} files, ${bootstrapped.existingUserCount} user MDUs, ${materialized.witnessCount} witness MDUs).`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
