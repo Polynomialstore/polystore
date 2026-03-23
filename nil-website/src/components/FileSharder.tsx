@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
-import { FileJson, Cpu, Wallet } from 'lucide-react';
+import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
@@ -59,6 +59,8 @@ interface PreparedBrowserShardSet {
   index: number
   shards: PreparedBrowserShard[]
 }
+
+type WorkflowStepState = 'idle' | 'active' | 'done' | 'error'
 
 export interface FileSharderProps {
   dealId: string;
@@ -285,6 +287,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const persistInFlightRef = useRef<Promise<void> | null>(null)
   const lastPersistedManifestRootRef = useRef<string | null>(null)
+  const autoUploadManifestRef = useRef<string | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
     phase: '',
     workDone: 0,
@@ -1126,6 +1129,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       setCurrentManifestBlob(null);
       setCurrentManifestBlobFullSize(null);
       setLogs([]);
+      autoUploadManifestRef.current = null
       resetUpload();
       setMode2Shards([]);
       setMode2Uploading(false);
@@ -2495,6 +2499,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     (collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0));
   const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
   const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitError);
+  const currentFileMeta = lastFileMetaRef.current
+  const uploadErrorMessage =
+    mode2UploadError ||
+    uploadProgress.find((entry) => entry.status === 'error')?.error ||
+    null
   const showStatusPanel =
     processing ||
     activeUploading ||
@@ -2541,6 +2550,129 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       : gatewayReachable && isMode2 && gatewayMode2Enabled
         ? 'text-success'
         : 'text-muted-foreground'
+
+  const startPreparedUpload = useCallback(
+    async (trigger: 'auto' | 'manual' = 'manual') => {
+      if (!currentManifestRoot) return false
+      if (processing || activeUploading || isUploadComplete) return false
+
+      if (trigger === 'auto') {
+        addLog('> Expansion complete. Starting upload to Storage Providers...')
+      } else {
+        addLog('> Retrying upload to Storage Providers...')
+      }
+
+      const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
+      if (ok) {
+        void mirrorSlabToGateway()
+      }
+      return ok
+    },
+    [
+      activeUploading,
+      addLog,
+      collectedMdus,
+      currentManifestRoot,
+      isMode2,
+      isUploadComplete,
+      mirrorSlabToGateway,
+      processing,
+      uploadMdus,
+      uploadMode2,
+    ],
+  )
+
+  const retryPreparedUpload = useCallback(async () => {
+    autoUploadManifestRef.current = currentManifestRoot
+    await startPreparedUpload('manual')
+  }, [currentManifestRoot, startPreparedUpload])
+
+  useEffect(() => {
+    if (!readyToUpload || processing || activeUploading || isUploadComplete) return
+    const manifestRoot = String(currentManifestRoot || '').trim()
+    if (!manifestRoot) return
+    if (autoUploadManifestRef.current === manifestRoot) return
+    autoUploadManifestRef.current = manifestRoot
+    void startPreparedUpload('auto')
+  }, [activeUploading, currentManifestRoot, isUploadComplete, processing, readyToUpload, startPreparedUpload])
+
+  const workflowSteps = useMemo(() => {
+    const stepState = (
+      state: WorkflowStepState,
+      title: string,
+      detail: string,
+    ) => ({ state, title, detail })
+
+    const selected = Boolean(currentFileMeta || processing || hasManifestRoot)
+    const uploadDone = isUploadComplete || readyToCommit || isAlreadyCommitted || isCommitPending || isCommitConfirming
+
+    const selectState: WorkflowStepState = hasError && !selected ? 'error' : selected ? 'done' : 'active'
+    const expandState: WorkflowStepState =
+      hasError && (processing || hasManifestRoot) ? 'error' : processing ? 'active' : hasManifestRoot ? 'done' : 'idle'
+    const uploadState: WorkflowStepState =
+      uploadErrorMessage ? 'error' : activeUploading ? 'active' : uploadDone ? 'done' : hasManifestRoot ? 'active' : 'idle'
+    const commitState: WorkflowStepState =
+      commitError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
+
+    return [
+      stepState(
+        selectState,
+        '1. Select file',
+        currentFileMeta ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}` : 'Choose a file for this deal',
+      ),
+      stepState(
+        expandState,
+        '2. Expand slab',
+        processing ? shardProgress.label || 'Sharding in browser' : hasManifestRoot ? `${shards.length} MDUs prepared` : 'Browser computes slab layout',
+      ),
+      stepState(
+        uploadState,
+        '3. Upload to SPs',
+        activeUploading
+          ? 'Uploading sparse artifacts in parallel'
+          : uploadDone
+            ? 'Provider upload complete'
+            : uploadErrorMessage
+              ? uploadErrorMessage
+              : hasManifestRoot
+                ? 'Starts automatically after expansion'
+                : 'Waiting for prepared artifacts',
+      ),
+      stepState(
+        commitState,
+        '4. Commit manifest',
+        isAlreadyCommitted
+          ? 'Committed on-chain'
+          : isCommitPending || isCommitConfirming
+            ? 'Waiting for wallet / chain confirmation'
+            : readyToCommit
+              ? 'Ready for final on-chain commit'
+              : 'Commit becomes available after upload',
+      ),
+    ]
+  }, [
+    activeUploading,
+    commitError,
+    currentFileMeta,
+    hasError,
+    hasManifestRoot,
+    isAlreadyCommitted,
+    isCommitConfirming,
+    isCommitPending,
+    isUploadComplete,
+    processing,
+    readyToCommit,
+    shardProgress.label,
+    shards.length,
+    uploadErrorMessage,
+  ])
+
+  const stepToneClasses: Record<WorkflowStepState, string> = {
+    idle: 'border-border/50 bg-background/35 text-muted-foreground',
+    active: 'border-primary/40 bg-primary/10 text-foreground',
+    done: 'border-success/40 bg-success/10 text-foreground',
+    error: 'border-destructive/40 bg-destructive/10 text-destructive',
+  }
 
   useEffect(() => {
     const node = logContainerRef.current;
@@ -2641,6 +2773,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             /proc/sharder
           </p>
           <div className="relative space-y-2">
+            <div className="grid gap-2 md:grid-cols-4">
+              {workflowSteps.map((step) => (
+                <div
+                  key={step.title}
+                  className={`nil-tab-panel px-3 py-3 ${stepToneClasses[step.state]}`}
+                >
+                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+                    {step.state === 'done' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                    ) : step.state === 'active' ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
+                    ) : step.state === 'error' ? (
+                      <UploadCloud className="h-3.5 w-3.5" />
+                    ) : (
+                      <span className="inline-block h-3.5 w-3.5 border border-current/50" />
+                    )}
+                    <span>{step.title}</span>
+                  </div>
+                  <div className="mt-2 text-[11px] font-mono-data leading-relaxed">
+                    {step.detail}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {hasError ? (
               <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
                 {commitError ? `Commit failed: ${commitError.message}` : null}
@@ -2763,7 +2920,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             {readyToUpload && !processing && !activeUploading ? (
               <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
-                Expansion complete. Ready to upload to Storage Providers.
+                Expansion complete. Upload starts automatically; use retry only if the provider step fails.
               </div>
             ) : null}
 
@@ -2834,26 +2991,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </div>
       )}
 
-      {/* Upload to SP Button */}
+      {/* Upload Retry / Transport Details */}
       {collectedMdus.length > 0 && currentManifestRoot && (
         <div className="flex flex-col gap-2">
-            <button
-              onClick={async () => {
-                const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
-                if (ok) void mirrorSlabToGateway()
-              }}
-              disabled={activeUploading || processing || isUploadComplete}
-              data-testid="mdu-upload"
-              className={`cta-shadow mt-4 inline-flex items-center justify-center border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-all disabled:opacity-50 ${isUploadComplete ? 'cursor-not-allowed border-success/30 bg-success/20 text-success ring-1 ring-success/30' : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'}`}
-            >
-              {activeUploading
-                ? 'Uploading...'
-                : isUploadComplete
-                  ? 'Upload Complete'
-                  : isMode2
-                    ? `Upload Stripes (Mode 2)`
-                    : `Upload ${collectedMdus.length} MDUs to SP`}
-            </button>
+            {!isUploadComplete ? (
+              <button
+                onClick={() => {
+                  void retryPreparedUpload()
+                }}
+                disabled={activeUploading || processing}
+                data-testid="mdu-upload"
+                className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+              >
+                {activeUploading ? 'Uploading...' : 'Retry Upload'}
+              </button>
+            ) : (
+              <div
+                data-testid="mdu-upload-state"
+                className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
+              >
+                Upload Complete
+              </div>
+            )}
 
             {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
               <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
@@ -2914,7 +3073,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </div>
           </div>
 
-          <div className="relative grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 max-h-[420px] overflow-y-auto pr-2">
+          <div className="relative grid grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 max-h-[520px] overflow-y-auto pr-2">
             {shards.map((shard) => {
               const state =
                 shard.status === 'expanded' ? 'COMPLETE' : shard.status === 'processing' ? 'PROCESSING' : 'EMPTY'
@@ -2940,7 +3099,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               return (
                 <div
                   key={shard.id}
-                  className={`relative overflow-hidden glass-panel industrial-border aspect-square p-2 ${ringClass}`}
+                  className={`relative overflow-hidden glass-panel industrial-border min-h-[168px] p-3 ${ringClass}`}
                   title={shard.commitments[0] || 'Pending...'}
                 >
                   {shard.status === 'processing' ? (
@@ -2952,13 +3111,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     <span className={stateClass}>{state}</span>
                   </div>
 
-                  <div className="relative mt-2 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
+                  <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
                     {Array.from({ length: 64 }).map((_, i) => (
                       <div key={i} className={`aspect-square ${cellClass}`} />
                     ))}
                   </div>
 
-                  <div className="relative mt-2 truncate text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                  <div className="relative mt-3 text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                    <div className="truncate">
+                      {shard.id === 0 ? 'Meta MDU' : shard.id <= shardProgress.totalWitnessMdus ? 'Witness MDU' : 'User MDU'}
+                    </div>
+                  </div>
+
+                  <div className="relative mt-1 truncate text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
                     {shard.status === 'expanded'
                       ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
                       : shard.status === 'processing'

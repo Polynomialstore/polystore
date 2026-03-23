@@ -239,11 +239,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   })
 
   await expect(page.getByText('Client-side expansion complete')).toBeVisible({ timeout: 60_000 })
-
-  const uploadBtn = page.getByRole('button', { name: /Upload Stripes \(Mode 2\)|Upload \d+ MDUs to SP/ })
-  await expect(uploadBtn).toBeEnabled()
-  await uploadBtn.click()
-  await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 30_000 })
 
   expect(mduUploads.length).toBeGreaterThan(0)
   expect(manifestUploads.length).toBeGreaterThan(0)
