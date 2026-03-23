@@ -4,6 +4,9 @@ This repo now supports two standard E2E profiles for browser + gateway flows.
 Deterministic upload, commit, and sparse transport assertions should prefer the
 Node integration lane (`cd nil-website && npm run test:integration`).
 Playwright is retained for browser-only smoke paths.
+The browser-only sparse upload proof is also a push-gated fast check because it
+verifies the exact browser transport contract for sparse and parallel uploads
+without requiring the local stack.
 
 ## Fast profile (PR/default)
 
@@ -14,6 +17,9 @@ Playwright is retained for browser-only smoke paths.
   - Mode 2 worker bootstrap and file input wiring
   - one gateway-backed Mode 2 upload/commit/download smoke
   - one gateway-absent direct-SP download smoke
+  - one browser-only sparse upload proof asserting:
+    - truncated request bodies with `X-Nil-Full-Size`
+    - bounded in-flight upload overlap (`peakActiveUploads > 1`)
 
 ```bash
 set -a
@@ -47,4 +53,6 @@ scripts/e2e_stack_down.sh
 
 - Push CI uses the fast Mode2 E2E profile.
 - Push CI also keeps the gateway-absent Playwright smoke for browser-only no-gateway behavior.
+- Push CI also runs `scripts/e2e_sparse_browser_upload.sh` as the fast browser-only
+  proof for sparse + parallel uploads.
 - LibP2P relay Playwright is removed from push gating and available only in `NilStore E2E Heavy` via manual dispatch.

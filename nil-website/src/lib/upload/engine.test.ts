@@ -169,6 +169,109 @@ test('upload engine: direct upload overlaps artifact requests with bounded concu
   assert.ok(elapsedMs < 140, `expected bounded parallel direct upload, got ${elapsedMs}ms`)
 })
 
+test('upload engine: striped upload overlaps metadata and shard requests with bounded concurrency', async () => {
+  let activeMetadata = 0
+  let activeShards = 0
+  let peakMetadata = 0
+  let peakShards = 0
+  let completedMetadata = 0
+  let shardStartedBeforeMetadataComplete = false
+  const totalMetadataTasks = 6
+
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      const isShard = request.artifact.kind === 'shard'
+      if (isShard) {
+        if (completedMetadata < totalMetadataTasks) shardStartedBeforeMetadataComplete = true
+        activeShards += 1
+        peakShards = Math.max(peakShards, activeShards)
+      } else {
+        activeMetadata += 1
+        peakMetadata = Math.max(peakMetadata, activeMetadata)
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 40))
+
+      if (isShard) {
+        activeShards -= 1
+      } else {
+        activeMetadata -= 1
+        completedMetadata += 1
+      }
+    },
+  }
+
+  const engine = createUploadEngine({
+    transport,
+    parallelism: { stripedMetadata: 2, stripedShards: 2 },
+  })
+
+  const result = await engine.uploadStriped({
+    dealId: '17',
+    manifestRoot: '0x777',
+    manifestBlob: new Uint8Array([5, 4, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [
+      { index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 },
+      { index: 1, data: new Uint8Array([2]), fullSize: 8 * 1024 * 1024 },
+    ],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+          { data: new Uint8Array([9]), fullSize: 1024 },
+        ],
+      },
+    ],
+    metadataTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-b',
+      },
+    ],
+    shardTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-b',
+      },
+      {
+        baseUrl: 'http://provider-c',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-c',
+      },
+    ],
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(shardStartedBeforeMetadataComplete, false)
+  assert.equal(peakMetadata, 2)
+  assert.equal(peakShards, 2)
+})
+
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {
   assert.deepEqual(
     buildCommitRequest({
