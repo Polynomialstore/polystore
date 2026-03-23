@@ -3,11 +3,17 @@ import type { SparseArtifactInput, SparseArtifactKind } from './sparseArtifacts'
 export interface PreparedMdu {
   index: number
   data: Uint8Array
+  fullSize?: number
+}
+
+export interface PreparedShard {
+  data: Uint8Array
+  fullSize?: number
 }
 
 export interface PreparedShardSet {
   index: number
-  shards: Uint8Array[]
+  shards: PreparedShard[]
 }
 
 export interface UploadTarget {
@@ -67,6 +73,7 @@ export interface DirectUploadInput {
   dealId: string
   manifestRoot: string
   manifestBlob?: Uint8Array | null
+  manifestBlobFullSize?: number
   mdus: PreparedMdu[]
   target: UploadTarget
   onProgress?: (steps: UploadProgressStep[]) => void
@@ -76,6 +83,7 @@ export interface StripedUploadInput {
   dealId: string
   manifestRoot: string
   manifestBlob?: Uint8Array | null
+  manifestBlobFullSize?: number
   metadataMdus: PreparedMdu[]
   shardSets?: PreparedShardSet[]
   metadataTargets: UploadTarget[]
@@ -217,7 +225,7 @@ export function createUploadEngine(ports: UploadEnginePorts) {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
             target: input.target,
-            artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data },
+            artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize },
           })
           steps = emitProgress(
             updateStep(steps, (step) => step.kind === 'mdu' && step.index === mdu.index, { status: 'complete' }),
@@ -242,7 +250,7 @@ export function createUploadEngine(ports: UploadEnginePorts) {
           dealId: input.dealId,
           manifestRoot: input.manifestRoot,
           target: input.target,
-          artifact: { kind: 'manifest', bytes: input.manifestBlob },
+          artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize },
         })
         steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'complete' }), input.onProgress)
         return { ok: true, steps }
@@ -275,7 +283,7 @@ export function createUploadEngine(ports: UploadEnginePorts) {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
               target,
-              artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data },
+              artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize },
             })
             steps = emitProgress(
               updateStep(
@@ -311,7 +319,7 @@ export function createUploadEngine(ports: UploadEnginePorts) {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
             target,
-            artifact: { kind: 'manifest', bytes: input.manifestBlob },
+            artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize },
           })
           steps = emitProgress(
             updateStep(steps, (step) => step.kind === 'manifest' && step.target === targetLabel, { status: 'complete' }),
@@ -356,7 +364,7 @@ export function createUploadEngine(ports: UploadEnginePorts) {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
               target,
-              artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard },
+              artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize },
             })
             steps = emitProgress(
               updateStep(
