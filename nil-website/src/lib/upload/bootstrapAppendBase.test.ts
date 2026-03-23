@@ -53,11 +53,18 @@ test('bootstrapAppendBaseFromNetwork reconstructs user MDUs and MDU0 state from 
 
   const first = result.existingUserMdus[0]?.data
   const second = result.existingUserMdus[1]?.data
+  const firstRaw = result.existingUserMdus[0]?.rawData
+  const secondRaw = result.existingUserMdus[1]?.rawData
   assert.ok(first)
   assert.ok(second)
+  assert.ok(firstRaw)
+  assert.ok(secondRaw)
   assert.equal(new TextDecoder().decode(first.subarray(0, 5)), 'HELLO')
   assert.equal(new TextDecoder().decode(first.subarray(6, 8)), 'WX')
   assert.equal(new TextDecoder().decode(second.subarray(0, 2)), 'YZ')
+  assert.equal(new TextDecoder().decode(firstRaw.subarray(0, 5)), 'HELLO')
+  assert.equal(new TextDecoder().decode(firstRaw.subarray(6, 8)), 'WX')
+  assert.equal(new TextDecoder().decode(secondRaw.subarray(0, 2)), 'YZ')
 })
 
 test('bootstrapAppendBaseFromNetwork returns null when provider has no committed files', async () => {

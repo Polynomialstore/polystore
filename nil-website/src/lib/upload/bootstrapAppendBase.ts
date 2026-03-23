@@ -3,6 +3,7 @@ import type { NilfsFileEntry } from '../../domain/nilfs'
 export interface BootstrappedAppendMdu {
   index: number
   data: Uint8Array
+  rawData?: Uint8Array
 }
 
 export interface BootstrappedAppendBaseResult {
@@ -98,6 +99,7 @@ export async function bootstrapAppendBaseFromNetwork(
   const existingUserMdus = rawUserMdus.map((rawMdu, index) => ({
     index,
     data: input.encodeToMdu(rawMdu),
+    rawData: rawMdu,
   }))
 
   return {

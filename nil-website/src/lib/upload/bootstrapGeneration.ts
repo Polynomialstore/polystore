@@ -3,6 +3,7 @@ import { normalizeManifestRoot } from '../cacheFreshness'
 export interface ExistingUserMdu {
   index: number
   data: Uint8Array
+  rawData?: Uint8Array
 }
 
 export interface ExpandedBootstrapStripe {
@@ -38,6 +39,7 @@ export interface MaterializeBootstrapGenerationInput {
   setMdu0Root: (index: number, root: Uint8Array) => Promise<unknown>
   getMdu0Bytes: () => Promise<Uint8Array>
   expandMduRs: (data: Uint8Array, k: number, m: number) => Promise<ExpandedBootstrapStripe>
+  expandPayloadRs: (data: Uint8Array, k: number, m: number) => Promise<ExpandedBootstrapStripe>
   shardFile: (data: Uint8Array) => Promise<CommittedMduResult>
   computeManifest: (roots: Uint8Array) => Promise<{ root: Uint8Array; blob: Uint8Array }>
 }
@@ -66,7 +68,9 @@ export async function materializeBootstrapGeneration(
   const witnessDataBlobs: Uint8Array[] = []
 
   for (const userMdu of userMdus) {
-    const expanded = await input.expandMduRs(new Uint8Array(userMdu.data), rsK, rsM)
+    const expanded = userMdu.rawData
+      ? await input.expandPayloadRs(new Uint8Array(userMdu.rawData), rsK, rsM)
+      : await input.expandMduRs(new Uint8Array(userMdu.data), rsK, rsM)
     userRoots.push(toU8(expanded.mdu_root))
     witnessDataBlobs.push(toU8(expanded.witness_flat))
     shardSets.push({

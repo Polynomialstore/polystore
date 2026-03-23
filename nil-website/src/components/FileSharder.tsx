@@ -28,7 +28,7 @@ import { useFetch } from '../hooks/useFetch';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
 import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
-import { makeSparseArtifact } from '../lib/upload/sparseArtifacts';
+import { expandSparseBytes, makeSparseArtifact } from '../lib/upload/sparseArtifacts';
 import { normalizeManifestRoot } from '../lib/cacheFreshness';
 import {
   buildUploadPlan,
@@ -423,7 +423,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       try {
         addLog('> Saving committed slab to OPFS...')
-        const mdu0Bytes = mdus.find((mdu) => mdu.index === 0)?.data
+        const mdu0Artifact = mdus.find((mdu) => mdu.index === 0)
+        const mdu0Bytes =
+          mdu0Artifact?.data && mdu0Artifact.fullSize && mdu0Artifact.data.byteLength < mdu0Artifact.fullSize
+            ? expandSparseBytes(mdu0Artifact.data, mdu0Artifact.fullSize)
+            : mdu0Artifact?.data
         const parsedFiles = mdu0Bytes ? parseNilfsFilesFromMdu0(mdu0Bytes) : []
         const fileRecords = parsedFiles.map((file) => ({
           path: file.path,
@@ -841,6 +845,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         setMdu0Root: (index, root) => workerClient.setMdu0Root(index, root),
         getMdu0Bytes: () => workerClient.getMdu0Bytes(),
         expandMduRs: (data, k, m) => workerClient.expandMduRs(data, k, m),
+        expandPayloadRs: (data, k, m) => workerClient.expandPayloadRs(data, k, m),
         shardFile: (data) => workerClient.shardFile(data),
         computeManifest: (roots) => workerClient.computeManifest(roots),
       })

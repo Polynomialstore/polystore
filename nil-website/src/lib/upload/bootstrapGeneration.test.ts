@@ -36,6 +36,11 @@ test('materializeBootstrapGeneration builds witness/mdus/manifest and verifies r
       mdu_root: rootByte((data[0] ?? 0) + 10),
       shards: [blobByte((data[0] ?? 0) + 20), blobByte((data[0] ?? 0) + 30), blobByte((data[0] ?? 0) + 40)],
     }),
+    expandPayloadRs: async (data) => ({
+      witness_flat: new Uint8Array([data[0] ?? 0, data[0] ?? 0, data[0] ?? 0]),
+      mdu_root: rootByte((data[0] ?? 0) + 10),
+      shards: [blobByte((data[0] ?? 0) + 20), blobByte((data[0] ?? 0) + 30), blobByte((data[0] ?? 0) + 40)],
+    }),
     shardFile: async (data) => ({
       mdu_root: rootByte(data[0] ?? 0),
     }),
@@ -92,9 +97,51 @@ test('materializeBootstrapGeneration rejects manifest mismatches', async () => {
           mdu_root: rootByte(2),
           shards: [new Uint8Array([1])],
         }),
+        expandPayloadRs: async () => ({
+          witness_flat: new Uint8Array([1, 2, 3]),
+          mdu_root: rootByte(2),
+          shards: [new Uint8Array([1])],
+        }),
         shardFile: async () => ({ mdu_root: rootByte(3) }),
         computeManifest: async () => ({ root: rootByte(4), blob: new Uint8Array([4]) }),
       }),
     /bootstrap manifest root mismatch/,
   )
+})
+
+test('materializeBootstrapGeneration prefers payload-aware expansion for bootstrapped raw mdus', async () => {
+  const calls: string[] = []
+
+  await materializeBootstrapGeneration({
+    baseMdu0Bytes: new Uint8Array([5]),
+    existingUserMdus: [{ index: 0, data: new Uint8Array([9, 9]), rawData: new Uint8Array([7, 7]) }],
+    expectedManifestRoot: `0x${'05'.repeat(32)}`,
+    rsK: 2,
+    rsM: 1,
+    rawMduCapacity: 8,
+    encodeToMdu: (raw) => raw,
+    loadMdu0Builder: async () => undefined,
+    setMdu0Root: async () => undefined,
+    getMdu0Bytes: async () => new Uint8Array([5]),
+    expandMduRs: async () => {
+      calls.push('mdu')
+      return {
+        witness_flat: new Uint8Array([1, 2, 3]),
+        mdu_root: rootByte(2),
+        shards: [new Uint8Array([1])],
+      }
+    },
+    expandPayloadRs: async (data) => {
+      calls.push(`payload:${Array.from(data).join(',')}`)
+      return {
+        witness_flat: new Uint8Array([4, 5, 6]),
+        mdu_root: rootByte(3),
+        shards: [new Uint8Array([2])],
+      }
+    },
+    shardFile: async () => ({ mdu_root: rootByte(1) }),
+    computeManifest: async () => ({ root: rootByte(5), blob: new Uint8Array([5]) }),
+  })
+
+  assert.deepEqual(calls, ['payload:7,7'])
 })
