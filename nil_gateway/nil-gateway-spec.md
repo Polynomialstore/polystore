@@ -92,6 +92,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
     *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
     *   **Observability:** `/status` reports the effective TTL and generation counters via `nilfs_generation_*` fields, plus stale CAS preflight counters via `nilfs_cas_preflight_conflicts_*`.
+    *   **Inspection tooling:** `GET /gateway/deal-generations/{deal_id}` returns the local active/provisional/incomplete/invalid generations for a specific deal, including `previous_manifest_root`, age/classification, and on-disk bytes.
 
 #### Health & Status
 *   **`GET /health`**
@@ -103,6 +104,9 @@ These endpoints support the `nil-website` "Thin Client" flow.
         *   `extra.rs_profile = "8+4"` (or similar)
         *   `extra.artifact_spec = "mode2-artifacts-v1"`
             *   Canonical contract: `notes/mode2-artifacts-v1.md`
+*   **`GET /gateway/deal-generations/{deal_id}`**
+    *   **Role:** Operator/debug inspection endpoint for local NilFS generation state by deal.
+    *   **Returns:** active pointer root, configured provisional retention TTL, and generation entries with status (`active`, `provisional_recent`, `provisional_expired`, `incomplete`, `invalid`), `previous_manifest_root`, file count, MDU counts, and bytes on disk.
 
 #### Deal Management (EVM Bridge, Optional Relay)
 *   **`POST /gateway/create-deal-evm`**

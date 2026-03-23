@@ -244,6 +244,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/deal-generations/{deal_id}", GatewayDealGenerations).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/receipt", GatewaySubmitReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/gateway/receipts", GatewaySubmitReceipts).Methods("POST", "OPTIONS")

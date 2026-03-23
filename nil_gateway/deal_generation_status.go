@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,31 @@ type dealGenerationStatusSnapshot struct {
 	BytesProvisional   uint64
 	BytesTotal         uint64
 	RetentionTTL       time.Duration
+}
+
+type dealGenerationDetail struct {
+	ManifestRoot         string  `json:"manifest_root"`
+	Status               string  `json:"status"`
+	GenerationState      string  `json:"generation_state,omitempty"`
+	PreviousManifestRoot string  `json:"previous_manifest_root,omitempty"`
+	Source               string  `json:"source,omitempty"`
+	CreatedAt            string  `json:"created_at,omitempty"`
+	LastValidatedAt      *string `json:"last_validated_at,omitempty"`
+	TotalMdus            uint64  `json:"total_mdus,omitempty"`
+	WitnessMdus          uint64  `json:"witness_mdus,omitempty"`
+	UserMdus             uint64  `json:"user_mdus,omitempty"`
+	FileCount            int     `json:"file_count"`
+	BytesTotal           uint64  `json:"bytes_total"`
+	Ready                bool    `json:"ready"`
+	Expired              bool    `json:"expired"`
+	ActivePointer        bool    `json:"active_pointer"`
+}
+
+type dealGenerationListResponse struct {
+	DealID                      uint64                 `json:"deal_id"`
+	ActiveGeneration            string                 `json:"active_generation,omitempty"`
+	ProvisionalRetentionSeconds int64                  `json:"provisional_retention_ttl_seconds"`
+	Generations                 []dealGenerationDetail `json:"generations"`
 }
 
 func dealGenerationStatusSnapshotForStatus() map[string]string {
@@ -87,6 +113,104 @@ func dealGenerationStatusSnapshotAt(now time.Time) dealGenerationStatusSnapshot 
 
 	snapshot.BytesTotal = snapshot.BytesActive + snapshot.BytesProvisional
 	return snapshot
+}
+
+func listDealGenerationDetails(dealID uint64, now time.Time) ([]dealGenerationDetail, ManifestRoot, error) {
+	baseDealDir := dealScopedBaseDir(dealID)
+	entries, err := os.ReadDir(baseDealDir)
+	if err != nil {
+		return nil, ManifestRoot{}, err
+	}
+
+	activeRoot, activeErr := readActiveDealGeneration(dealID)
+	activeKey := ""
+	if activeErr == nil {
+		activeKey = activeRoot.Key
+	}
+	retentionTTL := configuredProvisionalGenerationRetentionTTL()
+	details := make([]dealGenerationDetail, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if !isManifestRootDirName(name) {
+			continue
+		}
+		detail := describeDealGenerationDir(filepath.Join(baseDealDir, name), activeKey, now, retentionTTL)
+		if detail.ManifestRoot == "" {
+			continue
+		}
+		details = append(details, detail)
+	}
+
+	sort.SliceStable(details, func(i, j int) bool {
+		if details[i].ActivePointer != details[j].ActivePointer {
+			return details[i].ActivePointer
+		}
+		if details[i].Status != details[j].Status {
+			return details[i].Status < details[j].Status
+		}
+		if details[i].CreatedAt != details[j].CreatedAt {
+			return details[i].CreatedAt > details[j].CreatedAt
+		}
+		return details[i].ManifestRoot < details[j].ManifestRoot
+	})
+
+	if activeErr != nil {
+		return details, ManifestRoot{}, nil
+	}
+	return details, activeRoot, nil
+}
+
+func describeDealGenerationDir(generationDir string, activeKey string, now time.Time, retentionTTL time.Duration) dealGenerationDetail {
+	manifestRoot := inferManifestRootForDealDir(generationDir)
+	detail := dealGenerationDetail{
+		ManifestRoot:  manifestRoot,
+		BytesTotal:    dirSizeBytes(generationDir),
+		Ready:         mode2DirLooksComplete(generationDir),
+		ActivePointer: activeKey != "" && strings.EqualFold(activeKey, filepath.Base(generationDir)),
+		Status:        "incomplete",
+	}
+	if !detail.Ready {
+		return detail
+	}
+
+	meta, err := loadSlabMetadataWithFallback(generationDir)
+	if err != nil {
+		detail.Status = "invalid"
+		return detail
+	}
+
+	detail.GenerationState = strings.TrimSpace(meta.GenerationState)
+	if detail.GenerationState == "" {
+		detail.GenerationState = slabGenerationStateActive
+	}
+	detail.PreviousManifestRoot = strings.TrimSpace(meta.PreviousManifestRoot)
+	detail.Source = strings.TrimSpace(meta.Source)
+	detail.CreatedAt = strings.TrimSpace(meta.CreatedAt)
+	detail.LastValidatedAt = meta.LastValidatedAt
+	detail.TotalMdus = meta.TotalMdus
+	detail.WitnessMdus = meta.WitnessMdus
+	detail.UserMdus = meta.UserMdus
+	detail.FileCount = len(meta.FileRecords)
+
+	switch detail.GenerationState {
+	case slabGenerationStateActive:
+		detail.Status = slabGenerationStateActive
+	case slabGenerationStateProvisional:
+		detail.Status = "provisional_recent"
+		if createdAt, parseErr := time.Parse(time.RFC3339Nano, detail.CreatedAt); parseErr != nil {
+			detail.Status = "invalid"
+		} else if retentionTTL > 0 && now.Sub(createdAt) > retentionTTL {
+			detail.Status = "provisional_expired"
+			detail.Expired = true
+		}
+	default:
+		detail.Status = "invalid"
+	}
+
+	return detail
 }
 
 func classifyDealGenerationStatus(snapshot *dealGenerationStatusSnapshot, generationDir string, now time.Time) {

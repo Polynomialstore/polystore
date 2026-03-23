@@ -414,4 +414,7 @@ curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | s
 
 # Observe stale CAS / concurrent-writer pressure at the gateway preflight layer.
 curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_cas_preflight_conflicts_")))'
+
+# Inspect a single deal's local staged generations before forcing cleanup.
+curl -s http://127.0.0.1:8080/gateway/deal-generations/$DEAL_ID | jq
 ```
