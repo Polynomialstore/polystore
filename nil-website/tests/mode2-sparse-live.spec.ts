@@ -152,11 +152,8 @@ test.describe('mode2 sparse live', () => {
       buffer: fileBytes,
     })
 
-    const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
-    await expect(uploadBtn).toBeEnabled({ timeout: 120_000 })
-    await uploadBtn.click()
-    await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 180_000 })
+    await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 180_000 })
 
     const statusPanel = page.getByTestId('mdu-status-panel')
     await expect(statusPanel).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
