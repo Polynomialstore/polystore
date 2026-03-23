@@ -398,3 +398,16 @@ Manual checks derived from keeper tests:
 ## 6. Keeping the runbook up to date
 
 Whenever the scripts above change, mirror the updated commands back into this runbook. This doc should remain the human-readable companion to the scripted automation.
+### Provisional generation retention
+
+The gateway keeps newly uploaded NilFS generations in a provisional state until the signed chain swap succeeds.
+
+- Default devnet retention: `24h`
+- Override with: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL`
+- Disable age-based provisional GC: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0`
+
+Inspect the effective policy and current generation inventory with:
+
+```bash
+curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_generation_")))'
+```

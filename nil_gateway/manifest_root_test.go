@@ -216,6 +216,31 @@ func TestCleanupInterruptedDealGenerations_RemovesExpiredProvisionalGeneration(t
 	}
 }
 
+func TestCleanupInterruptedDealGenerations_DisabledRetentionKeepsExpiredProvisionalGeneration(t *testing.T) {
+	useTempUploadDir(t)
+	t.Setenv("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", "0")
+
+	dealID := uint64(80)
+	root := mustTestManifestRoot(t, "expired-provisional-retention-disabled")
+	dealDir := writeTestDealGeneration(t, dealID, root, 2, false)
+
+	meta, err := readSlabMetadataFile(dealDir)
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	meta.GenerationState = slabGenerationStateProvisional
+	meta.CreatedAt = time.Now().Add(-(provisionalGenerationRetentionTTL + 2*time.Hour)).UTC().Format(time.RFC3339Nano)
+	if err := writeSlabMetadataFile(dealDir, meta); err != nil {
+		t.Fatalf("rewrite metadata: %v", err)
+	}
+
+	cleanupInterruptedDealGenerations(dealID)
+
+	if info, err := os.Stat(dealDir); err != nil || !info.IsDir() {
+		t.Fatalf("expected expired provisional generation retained when retention TTL disabled, stat err=%v", err)
+	}
+}
+
 func TestResolveDealDirForDealReconcilesPointerToRequestedGeneration(t *testing.T) {
 	useTempUploadDir(t)
 	dealID := uint64(91)

@@ -21,6 +21,7 @@ type dealGenerationStatusSnapshot struct {
 	BytesActive        uint64
 	BytesProvisional   uint64
 	BytesTotal         uint64
+	RetentionTTL       time.Duration
 }
 
 func dealGenerationStatusSnapshotForStatus() map[string]string {
@@ -29,21 +30,24 @@ func dealGenerationStatusSnapshotForStatus() map[string]string {
 
 func (s dealGenerationStatusSnapshot) toStatusMap() map[string]string {
 	return map[string]string{
-		"nilfs_generation_deals":               strconv.FormatUint(s.Deals, 10),
-		"nilfs_generation_active":              strconv.FormatUint(s.Active, 10),
-		"nilfs_generation_provisional":         strconv.FormatUint(s.Provisional, 10),
-		"nilfs_generation_provisional_recent":  strconv.FormatUint(s.ProvisionalRecent, 10),
-		"nilfs_generation_provisional_expired": strconv.FormatUint(s.ProvisionalExpired, 10),
-		"nilfs_generation_incomplete":          strconv.FormatUint(s.Incomplete, 10),
-		"nilfs_generation_invalid":             strconv.FormatUint(s.Invalid, 10),
-		"nilfs_generation_bytes_active":        strconv.FormatUint(s.BytesActive, 10),
-		"nilfs_generation_bytes_provisional":   strconv.FormatUint(s.BytesProvisional, 10),
-		"nilfs_generation_bytes_total":         strconv.FormatUint(s.BytesTotal, 10),
+		"nilfs_generation_deals":                             strconv.FormatUint(s.Deals, 10),
+		"nilfs_generation_active":                            strconv.FormatUint(s.Active, 10),
+		"nilfs_generation_provisional":                       strconv.FormatUint(s.Provisional, 10),
+		"nilfs_generation_provisional_recent":                strconv.FormatUint(s.ProvisionalRecent, 10),
+		"nilfs_generation_provisional_expired":               strconv.FormatUint(s.ProvisionalExpired, 10),
+		"nilfs_generation_incomplete":                        strconv.FormatUint(s.Incomplete, 10),
+		"nilfs_generation_invalid":                           strconv.FormatUint(s.Invalid, 10),
+		"nilfs_generation_bytes_active":                      strconv.FormatUint(s.BytesActive, 10),
+		"nilfs_generation_bytes_provisional":                 strconv.FormatUint(s.BytesProvisional, 10),
+		"nilfs_generation_bytes_total":                       strconv.FormatUint(s.BytesTotal, 10),
+		"nilfs_generation_provisional_retention_ttl_seconds": strconv.FormatInt(int64(s.RetentionTTL/time.Second), 10),
 	}
 }
 
 func dealGenerationStatusSnapshotAt(now time.Time) dealGenerationStatusSnapshot {
-	var snapshot dealGenerationStatusSnapshot
+	snapshot := dealGenerationStatusSnapshot{
+		RetentionTTL: configuredProvisionalGenerationRetentionTTL(),
+	}
 	baseDealsDir := filepath.Join(uploadDir, "deals")
 	dealEntries, err := os.ReadDir(baseDealsDir)
 	if err != nil {
@@ -111,7 +115,7 @@ func classifyDealGenerationStatus(snapshot *dealGenerationStatusSnapshot, genera
 			snapshot.Invalid++
 			return
 		}
-		if now.Sub(createdAt) > provisionalGenerationRetentionTTL {
+		if snapshot.RetentionTTL > 0 && now.Sub(createdAt) > snapshot.RetentionTTL {
 			snapshot.ProvisionalExpired++
 		} else {
 			snapshot.ProvisionalRecent++

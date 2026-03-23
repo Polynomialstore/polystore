@@ -67,6 +67,9 @@ func TestDealGenerationStatusSnapshotAt(t *testing.T) {
 	invalidBytes := dirSizeBytes(invalidDir)
 
 	snapshot := dealGenerationStatusSnapshotAt(time.Now().UTC())
+	if snapshot.RetentionTTL != provisionalGenerationRetentionTTL {
+		t.Fatalf("unexpected retention TTL: got=%s want=%s", snapshot.RetentionTTL, provisionalGenerationRetentionTTL)
+	}
 	if snapshot.Deals != 5 {
 		t.Fatalf("unexpected deals count: got=%d want=5", snapshot.Deals)
 	}
@@ -97,6 +100,16 @@ func TestDealGenerationStatusSnapshotAt(t *testing.T) {
 	}
 	if snapshot.BytesTotal != activeBytes+wantProvisionalBytes {
 		t.Fatalf("unexpected total bytes: got=%d want=%d", snapshot.BytesTotal, activeBytes+wantProvisionalBytes)
+	}
+}
+
+func TestDealGenerationStatusSnapshotAt_UsesConfiguredRetentionTTL(t *testing.T) {
+	useTempUploadDir(t)
+	t.Setenv("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", "36h")
+
+	snapshot := dealGenerationStatusSnapshotAt(time.Now().UTC())
+	if snapshot.RetentionTTL != 36*time.Hour {
+		t.Fatalf("unexpected configured retention TTL: got=%s want=%s", snapshot.RetentionTTL, 36*time.Hour)
 	}
 }
 
@@ -132,6 +145,9 @@ func TestGatewayStatusIncludesDealGenerationSnapshot(t *testing.T) {
 	}
 	if status.Extra["nilfs_generation_deals"] != "1" {
 		t.Fatalf("expected nilfs_generation_deals=1, got=%q", status.Extra["nilfs_generation_deals"])
+	}
+	if status.Extra["nilfs_generation_provisional_retention_ttl_seconds"] != strconv.FormatInt(int64(provisionalGenerationRetentionTTL/time.Second), 10) {
+		t.Fatalf("unexpected retention TTL seconds: got=%q", status.Extra["nilfs_generation_provisional_retention_ttl_seconds"])
 	}
 	bytesTotal, err := strconv.ParseUint(status.Extra["nilfs_generation_bytes_total"], 10, 64)
 	if err != nil {

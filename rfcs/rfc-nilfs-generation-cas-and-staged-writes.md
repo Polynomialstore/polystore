@@ -63,6 +63,8 @@ Future policy needs:
 Current devnet reference policy:
 * complete provisional generations older than 24 hours may be garbage-collected during gateway/provider startup or recovery cleanup
 * the active committed generation is never subject to this provisional TTL
+* the gateway exposes the effective retention window as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `nilfs_generation_provisional_retention_ttl_seconds`
+* `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
 
 ## Implementation Notes
 Current implementation anchors signed CAS at:

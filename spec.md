@@ -377,6 +377,8 @@ Abandoned provisional generations are a storage-churn / griefing surface and MUS
 Devnet gateway policy:
 * user-gateway/provider-daemon implementations MAY retain provisional generations for a bounded TTL before GC.
 * The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
+* The reference gateway exposes this as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `nilfs_generation_provisional_retention_ttl_seconds`.
+* Setting `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
 
 ## Appendix A: Core Cryptographic Primitives
 

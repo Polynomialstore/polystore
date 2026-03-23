@@ -21,6 +21,32 @@ var (
 )
 
 const provisionalGenerationRetentionTTL = 24 * time.Hour
+const defaultProvisionalGenerationRetentionTTL = 24 * time.Hour
+
+func configuredProvisionalGenerationRetentionTTL() time.Duration {
+	raw := strings.TrimSpace(envDefault("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", defaultProvisionalGenerationRetentionTTL.String()))
+	if raw == "" {
+		return defaultProvisionalGenerationRetentionTTL
+	}
+	ttl, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Printf(
+			"Gateway cache recovery: invalid NIL_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
+			raw,
+			defaultProvisionalGenerationRetentionTTL,
+		)
+		return defaultProvisionalGenerationRetentionTTL
+	}
+	if ttl < 0 {
+		log.Printf(
+			"Gateway cache recovery: negative NIL_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
+			raw,
+			defaultProvisionalGenerationRetentionTTL,
+		)
+		return defaultProvisionalGenerationRetentionTTL
+	}
+	return ttl
+}
 
 type ManifestRoot struct {
 	Bytes     [48]byte
@@ -266,7 +292,11 @@ func cleanupInterruptedDealGenerations(dealID uint64) {
 			log.Printf("Gateway cache recovery: invalid provisional generation timestamp deal_id=%d generation=%s created_at=%q err=%v", dealID, name, meta.CreatedAt, parseErr)
 			continue
 		}
-		if time.Since(createdAt) <= provisionalGenerationRetentionTTL {
+		retentionTTL := configuredProvisionalGenerationRetentionTTL()
+		if retentionTTL <= 0 {
+			continue
+		}
+		if time.Since(createdAt) <= retentionTTL {
 			continue
 		}
 		if err := os.RemoveAll(fullPath); err != nil && !os.IsNotExist(err) {
