@@ -336,6 +336,44 @@ Append-only updates advance `Deal.current_gen` and `Deal.manifest_root`. Repairi
 #### 8.4.4 Future: full versioned writes
 In future versions, non-append mutations (rewrite, delete/GC, compaction) SHOULD be represented as a new “pending generation” promoted to current only once placement conditions are met. This generalizes the append-only rule without changing the read/repair model.
 
+#### 8.4.5 NilFS generation compare-and-swap (normative)
+Every NilFS content mutation MUST be treated as a **generation swap**:
+* `previous_manifest_root = H1`
+* `new_manifest_root = H2`
+
+The authoritative overwrite guard is the **deal owner’s signed update intent**:
+* `previous_manifest_root` MUST be included in the owner-signed `MsgUpdateDealContent*` payload.
+* The chain MUST reject the update unless `previous_manifest_root == Deal.manifest_root` at execution time.
+* On success, the chain promotes `new_manifest_root` to `Deal.manifest_root` and advances `Deal.current_gen`.
+
+Consequences:
+* Writer A may commit `H1 -> H2`.
+* Writer B attempting `H1 -> H3` after A succeeds MUST be rejected as **stale**.
+* A provider or gateway MUST NOT be trusted as the sole source of `previous_manifest_root`; any provider/gateway copy is advisory preflight data only.
+
+#### 8.4.6 Browser/bootstrap semantics (normative)
+Clients MUST treat local NilFS caches as generation-scoped:
+* Before appending or rewriting content, a client MUST compare its local cached generation against the on-chain `Deal.manifest_root`.
+* If the local cache is missing or stale, the client MUST bootstrap the **current committed generation** from the retrieval path before preparing a mutation.
+* A client MUST NOT silently fall back from “append to current generation” into “build from empty state” when the deal already has a committed `manifest_root`.
+
+For browser clients:
+* OPFS SHOULD be used as the persistent local slab cache.
+* A fresh browser instance SHOULD reconstruct the committed NilFS state into OPFS before preparing an append.
+* The browser happy-path download SHOULD prefer OPFS when the cached generation matches the on-chain `Deal.manifest_root`.
+
+#### 8.4.7 Provider/gateway staged generations (normative target)
+Providers and gateways SHOULD treat incoming NilFS writes as **provisional generations** until the signed chain swap succeeds:
+* New bytes for `new_manifest_root` MAY be uploaded before the chain update is finalized.
+* The previously committed generation `previous_manifest_root` MUST remain readable while the new generation is provisional.
+* A failed or stale chain swap MUST NOT cause the live generation to be discarded.
+
+The system therefore distinguishes:
+* **current generation:** the on-chain committed `Deal.manifest_root`
+* **provisional generation(s):** uploaded bytes awaiting a successful chain swap
+
+Abandoned provisional generations are a storage-churn / griefing surface and MUST be covered by explicit cleanup, accounting, and governance policy.
+
 ## Appendix A: Core Cryptographic Primitives
 
 ### A.3 File Manifest & Crypto Policy (Normative)

@@ -9,23 +9,30 @@ import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
 import { NILFS_RECORD_PATH_MAX_BYTES, sanitizeNilfsRecordPath } from '../lib/nilfsPath';
 import {
+  deleteDealDirectory,
   listDealFiles,
   readManifestBlob,
   readManifestRoot,
   readMdu,
   readShard,
+  writeManifestRoot,
+  writeMdu,
+  writeSlabMetadata,
   writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
+import { providerListFiles } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
+import { useFetch } from '../hooks/useFetch';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
 import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
 import { makeSparseArtifact } from '../lib/upload/sparseArtifacts';
+import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness';
 import {
   buildUploadPlan,
   nonTrivialBlobsForPayload,
@@ -238,6 +245,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [shards, setShards] = useState<ShardItem[]>([]);
   const [collectedMdus, setCollectedMdus] = useState<PreparedBrowserMdu[]>([]);
   const [baseManifestRoot, setBaseManifestRoot] = useState<string>('');
+  const [dealOwner, setDealOwner] = useState<string>('');
   const [currentManifestRoot, setCurrentManifestRoot] = useState<string | null>(null);
   const [currentManifestBlob, setCurrentManifestBlob] = useState<Uint8Array | null>(null);
   const [currentManifestBlobFullSize, setCurrentManifestBlobFullSize] = useState<number | null>(null);
@@ -306,6 +314,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   // Use the direct commit hook
   const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
+  const { fetchFile } = useFetch();
   const uploadEngine = useMemo(
     () =>
       createUploadEngine({
@@ -337,6 +346,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       setStripeParamsLoaded(false)
       if (!dealId) {
         setBaseManifestRoot('')
+        setDealOwner('')
         setStripeParams(null)
         setSlotBases([])
         setStripeParamsLoaded(true)
@@ -347,6 +357,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const parsed = parseServiceHint(deal?.service_hint)
         if (!cancelled) {
           setBaseManifestRoot(String(deal?.cid || '').trim())
+          setDealOwner(String(deal?.owner || '').trim())
           if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
             setStripeParams({ k: parsed.rsK, m: parsed.rsM })
           } else if (parsed.mode === 'auto') {
@@ -363,6 +374,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       } catch {
         if (!cancelled) {
           setBaseManifestRoot('')
+          setDealOwner('')
           setStripeParams(null)
           setSlotBases([])
           setStripeParamsLoaded(true)
@@ -750,6 +762,140 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       return false
     }
   }, [addLog, dealId, localGateway.url])
+
+  const bootstrapMode2AppendBaseFromNetwork = useCallback(async (): Promise<{
+    baseMdu0Bytes: Uint8Array
+    existingUserMdus: Array<{ index: number; data: Uint8Array }>
+    existingUserCount: number
+    existingMaxEnd: number
+    appendStartOffset: number
+  } | null> => {
+    const manifestRoot = normalizeManifestRoot(baseManifestRoot)
+    const owner = String(dealOwner || '').trim()
+    const providerBase = String(slotBases[0] || appConfig.spBase || '').trim().replace(/\/$/, '')
+    if (!manifestRoot || !owner || !providerBase || !stripeParams) {
+      return null
+    }
+
+    addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
+    const remoteFiles = await providerListFiles(providerBase, manifestRoot, { dealId, owner })
+    const files = [...remoteFiles]
+      .filter((file) => Number.isFinite(Number(file.start_offset)) && Number(file.start_offset) >= 0)
+      .sort((a, b) => {
+        const startDiff = Number(a.start_offset) - Number(b.start_offset)
+        if (startDiff !== 0) return startDiff
+        return String(a.path).localeCompare(String(b.path))
+      })
+    if (!files.length) {
+      addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
+      return null
+    }
+
+    let maxEnd = 0
+    for (const file of files) {
+      const start = Number(file.start_offset || 0)
+      const size = Number(file.size_bytes || 0)
+      if (!Number.isFinite(start) || !Number.isFinite(size) || size <= 0) continue
+      maxEnd = Math.max(maxEnd, start + size)
+    }
+    const userCount = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
+    if (userCount <= 0) {
+      throw new Error('committed slab has no user MDUs to bootstrap')
+    }
+
+    const commitmentsPerMdu = (stripeParams.k + stripeParams.m) * (64 / stripeParams.k)
+    await workerClient.initMdu0Builder(userCount, commitmentsPerMdu)
+    const rawUserMdus = Array.from({ length: userCount }, () => new Uint8Array(RAW_MDU_CAPACITY))
+
+    for (const file of files) {
+      const startOffset = Number(file.start_offset || 0)
+      const sizeBytes = Number(file.size_bytes || 0)
+      addLog(`> Bootstrap fetch: ${file.path} (${formatBytes(sizeBytes)})...`)
+      const result = await fetchFile({
+        dealId,
+        manifestRoot,
+        owner,
+        filePath: file.path,
+        serviceBase: providerBase,
+        rangeStart: 0,
+        rangeLen: 0,
+        fileStartOffset: startOffset,
+        fileSizeBytes: sizeBytes,
+        mduSizeBytes: MDU_SIZE_BYTES,
+        blobSizeBytes: 128 * 1024,
+        decodeNilce: false,
+        routePreference: 'prefer_direct_sp',
+      })
+      if (!result) {
+        throw new Error(`bootstrap retrieval returned no data for ${file.path}`)
+      }
+      try {
+        const fileBytes = new Uint8Array(await result.blob.arrayBuffer())
+        if (fileBytes.byteLength !== sizeBytes) {
+          throw new Error(`bootstrap retrieval size mismatch for ${file.path}: got ${fileBytes.byteLength}, want ${sizeBytes}`)
+        }
+        let remaining = fileBytes.byteLength
+        let fileOffset = 0
+        let cursor = startOffset
+        while (remaining > 0) {
+          const userMduIdx = Math.floor(cursor / RAW_MDU_CAPACITY)
+          const offsetInMdu = cursor % RAW_MDU_CAPACITY
+          const take = Math.min(remaining, RAW_MDU_CAPACITY - offsetInMdu)
+          rawUserMdus[userMduIdx].set(fileBytes.subarray(fileOffset, fileOffset + take), offsetInMdu)
+          fileOffset += take
+          cursor += take
+          remaining -= take
+        }
+        await workerClient.appendFileToMdu0(file.path, sizeBytes, startOffset, Number(file.flags || 0))
+      } finally {
+        URL.revokeObjectURL(result.url)
+      }
+    }
+
+    const baseMdu0Bytes = await workerClient.getMdu0Bytes()
+    const existingUserMdus = rawUserMdus.map((rawMdu, index) => ({ index, data: encodeToMdu(rawMdu) }))
+
+    try {
+      await deleteDealDirectory(dealId)
+      await writeManifestRoot(dealId, manifestRoot)
+      await writeMdu(dealId, 0, baseMdu0Bytes)
+      for (const userMdu of existingUserMdus) {
+        await writeMdu(dealId, 1 + userMdu.index, userMdu.data)
+      }
+      await writeSlabMetadata(dealId, {
+        schema_version: 1,
+        generation_id: `bootstrap-${manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
+        deal_id: dealId,
+        manifest_root: manifestRoot,
+        owner,
+        redundancy: { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m },
+        source: 'browser_bootstrap_retrieval',
+        created_at: new Date().toISOString(),
+        last_validated_at: new Date().toISOString(),
+        witness_mdus: 0,
+        user_mdus: userCount,
+        total_mdus: 1 + userCount,
+        file_records: files.map((file) => ({
+          path: file.path,
+          start_offset: Number(file.start_offset || 0),
+          size_bytes: Number(file.size_bytes || 0),
+          flags: Number(file.flags || 0),
+        })),
+      })
+      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${files.length} files, ${userCount} user MDUs).`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
+    }
+
+    return {
+      baseMdu0Bytes,
+      existingUserMdus,
+      existingUserCount: userCount,
+      existingMaxEnd: maxEnd,
+      appendStartOffset: userCount * RAW_MDU_CAPACITY,
+    }
+  }, [addLog, baseManifestRoot, dealId, dealOwner, fetchFile, slotBases, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;
@@ -1872,6 +2018,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     let appendStartOffset = 0
 
     if (useMode2) {
+      const localManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
+      const freshness = evaluateCacheFreshness(localManifestRoot, baseManifestRoot)
+      if (freshness.status === 'stale') {
+        addLog(`> Mode 2 append: local slab manifest ${freshness.localManifestRoot} is stale; bootstrapping from current committed root ${freshness.chainManifestRoot}.`)
+        await deleteDealDirectory(dealId).catch(() => undefined)
+      }
+
       try {
         const mdu0 = await readMdu(dealId, 0)
         if (mdu0) {
@@ -1902,6 +2055,33 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         existingUserCount = 0
         existingMaxEnd = 0
         appendStartOffset = 0
+      }
+
+      if (!baseMdu0Bytes && normalizeManifestRoot(baseManifestRoot)) {
+        try {
+          const bootstrapped = await bootstrapMode2AppendBaseFromNetwork()
+          if (!bootstrapped) {
+            throw new Error('remote bootstrap did not produce an append base')
+          }
+          baseMdu0Bytes = bootstrapped.baseMdu0Bytes
+          existingUserMdus = bootstrapped.existingUserMdus
+          existingUserCount = bootstrapped.existingUserCount
+          existingMaxEnd = bootstrapped.existingMaxEnd
+          appendStartOffset = bootstrapped.appendStartOffset
+          addLog(`> Mode 2 append: bootstrapped ${existingUserCount} committed user MDUs from provider retrieval.`)
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e)
+          addLog(`> Mode 2 append bootstrap failed: ${msg}`)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'error',
+            label: `Mode 2 append bootstrap failed: ${msg}`,
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+          setProcessing(false)
+          return
+        }
       }
     }
 
@@ -2458,7 +2638,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {

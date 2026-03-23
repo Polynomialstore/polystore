@@ -231,6 +231,7 @@ Commit the content (Profile A relay path; mirrors `scripts/e2e_lifecycle.sh`):
 UPDATE_PAYLOAD=$(
   NONCE=2 \
   DEAL_ID="$DEAL_ID" \
+  PREVIOUS_MANIFEST_ROOT="$(curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | jq -r '.deal.manifest_root // ""')" \
   CID="$MANIFEST_ROOT" \
   SIZE_BYTES="$SIZE_BYTES" \
   TOTAL_MDUS="$TOTAL_MDUS" \
@@ -240,6 +241,8 @@ UPDATE_PAYLOAD=$(
 curl -sS -X POST -H "Content-Type: application/json" -d "$UPDATE_PAYLOAD" \
   "$GATEWAY_BASE/gateway/update-deal-content-evm"
 ```
+
+The signed update intent now carries both `previous_manifest_root` and `manifest_root`; the relay and chain reject stale swaps.
 
 Verify on chain (LCD):
 

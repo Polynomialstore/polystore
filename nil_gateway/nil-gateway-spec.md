@@ -87,6 +87,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
+    *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
 
 #### Health & Status
 *   **`GET /health`**
@@ -110,6 +111,7 @@ These endpoints support the `nil-website` "Thin Client" flow.
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
 *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
 *   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal when clients opt into the relay.
+    *   **CAS rule:** the signed intent MUST include `previous_manifest_root`, and relay/chain execution MUST reject the update if it does not match the current on-chain deal root.
 
 #### Data Retrieval & Proofs
 *   **`GET /gateway/plan-retrieval-session/{manifest_root}`**

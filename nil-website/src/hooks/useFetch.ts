@@ -50,6 +50,7 @@ export interface FetchInput {
   fileSizeBytes?: number
   mduSizeBytes?: number
   blobSizeBytes?: number
+  decodeNilce?: boolean
   sponsoredAuth?: SponsoredRetrievalAuth
   routePreference?: RoutePreference
 }
@@ -233,6 +234,7 @@ export function useFetch() {
         effectiveRangeLen = wantFileSize - wantRangeStart
       }
       const shouldDecodeNilce =
+        input.decodeNilce !== false &&
         wantRangeStart === 0 && wantFileSize > 0 && effectiveRangeLen === wantFileSize
 
       const hasMeta =
