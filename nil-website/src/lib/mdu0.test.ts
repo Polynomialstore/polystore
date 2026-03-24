@@ -111,3 +111,19 @@ test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async 
         mdu.append_file(sanitized, 1n, 0n);
     });
 });
+
+test('sanitizeNilfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
+    const wasm = await loadNilCoreWasm()
+    if (!wasm) {
+        t.skip('WASM artifacts not present (nil-website/public/wasm).')
+        return
+    }
+    const wasmBuffer = await fs.readFile(wasm.wasmPath);
+    await wasm.init({ module_or_path: wasmBuffer });
+
+    const mdu = new wasm.WasmMdu0Builder(10n);
+    const sanitized = sanitizeNilfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
+    assert.doesNotThrow(() => {
+        mdu.append_file(sanitized, 1n, 0n);
+    });
+});
