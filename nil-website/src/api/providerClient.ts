@@ -369,10 +369,36 @@ export async function providerFetchMduWindowWithSession(
   providerBase: string,
   manifestRoot: string,
   mduIndex: number,
-  params: { dealId: string; owner: string; sessionId: string },
+  params: { dealId: string; owner: string; sessionId: string; startBlobIndex: number; blobCount: number },
   fetchFn: typeof fetch = fetch,
 ): Promise<Uint8Array> {
-  return providerFetchMduWithSession(providerBase, manifestRoot, mduIndex, params, fetchFn)
+  const q = new URLSearchParams()
+  q.set('deal_id', params.dealId)
+  q.set('owner', params.owner)
+  q.set('start_blob_index', String(Math.max(0, Number(params.startBlobIndex || 0))))
+  q.set('blob_count', String(Math.max(0, Number(params.blobCount || 0))))
+  const url = `${providerBase}/sp/retrieval/mdu/${encodeURIComponent(manifestRoot)}/${encodeURIComponent(
+    String(mduIndex),
+  )}?${q.toString()}`
+
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'GET',
+      headers: {
+        'X-Nil-Session-Id': params.sessionId,
+        'X-Nil-Start-Blob-Index': String(Math.max(0, Number(params.startBlobIndex || 0))),
+        'X-Nil-Blob-Count': String(Math.max(0, Number(params.blobCount || 0))),
+      },
+    },
+    60_000,
+    fetchFn,
+  )
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Provider mdu returned ${res.status}`)
+  }
+  return new Uint8Array(await res.arrayBuffer())
 }
 
 export async function providerPlanRetrievalSession(

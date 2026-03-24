@@ -925,6 +925,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               dealId,
               owner,
               sessionId,
+              startBlobIndex: entry.slot * rows,
+              blobCount: rows,
             })
             return { slot: entry.slot, data }
           }),

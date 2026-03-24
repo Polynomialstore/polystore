@@ -1830,7 +1830,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     resolveProviderHttpBaseFor(request.provider),
                     manifestRoot,
                     mduIndex,
-                    { dealId, owner, sessionId },
+                    { dealId, owner, sessionId, startBlobIndex: request.startBlobIndex, blobCount: request.blobCount },
                   ),
                 }
               }),
@@ -1858,7 +1858,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel}`)
         try {
           setDealIndexSyncMessage(`Fetching committed ${kindLabel} from provider…`)
-          return await providerFetchMduWindowWithSession(providerBase, manifestRoot, mduIndex, { dealId, owner, sessionId })
+          return await providerFetchMduWindowWithSession(providerBase, manifestRoot, mduIndex, {
+            dealId,
+            owner,
+            sessionId,
+            startBlobIndex: 0,
+            blobCount: 64,
+          })
         } finally {
           await confirmMduRetrievalSessions(Array.from(sessions.values()))
         }

@@ -55,6 +55,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   let mduFetchCalls = 0
   let badManifestRequests = 0
   let sessionlessMduRequests = 0
+  let missingWindowParamRequests = 0
   const removedFreeEndpointUrls: string[] = []
   let computeSessionCallCount = 0
 
@@ -186,6 +187,8 @@ test('Deal Explorer: missing local index requires provider sync before file view
     const url = new URL(route.request().url())
     const parts = url.pathname.split('/')
     const index = Number(parts[parts.length - 1] || -1)
+    const startBlobIndex = url.searchParams.get('start_blob_index')
+    const blobCount = url.searchParams.get('blob_count')
     const sessionId = route.request().headers()['x-nil-session-id']
     if (!sessionId) {
       sessionlessMduRequests += 1
@@ -194,6 +197,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({ error: 'missing X-Nil-Session-Id' }),
+      })
+      return
+    }
+    if (startBlobIndex !== '0' || blobCount !== '64') {
+      missingWindowParamRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'retrieval session does not match request', hint: 'start_blob_index mismatch' }),
       })
       return
     }
@@ -418,12 +431,29 @@ test('Deal Explorer: missing local index requires provider sync before file view
 
   await page.getByTestId('deal-index-sync-button').click()
   await expect(page.getByTestId('deal-index-sync-panel')).toHaveAttribute('data-sync-status', 'syncing')
-  await expect(page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)).toBeVisible({ timeout: 60_000 })
+  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
+  await expect(fileRow).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
 
   expect(mduFetchCalls).toBeGreaterThan(0)
   expect(sessionlessMduRequests).toBe(0)
+  expect(missingWindowParamRequests).toBe(0)
   expect(removedFreeEndpointUrls).toEqual([])
   expect(badManifestRequests).toBe(0)
   await expect(page.getByTestId('deal-detail-file-list')).toContainText(filePath)
+
+  const routeLabel = page.getByTestId('transport-route')
+  const cacheSourceLabel = page.getByTestId('transport-cache-source')
+  const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+  const mduFetchCallsBeforeDownload = mduFetchCalls
+  const removedRoutesBeforeDownload = removedFreeEndpointUrls.length
+  const download = page.waitForEvent('download', { timeout: 60_000 })
+  await downloadButton.click()
+  const saved = await download
+  expect(saved.suggestedFilename()).toBe(filePath)
+  expect(mduFetchCalls).toBe(mduFetchCallsBeforeDownload)
+  expect(removedFreeEndpointUrls.length).toBe(removedRoutesBeforeDownload)
+  await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes')
+  await expect(routeLabel).toContainText(/browser mdu cache/i)
+  await expect(cacheSourceLabel).toContainText(/browser_mdu_cache/i)
 })
