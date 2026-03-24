@@ -39,11 +39,11 @@ import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
-import { toHexFromBase64OrHex } from '../domain/hex'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import { providerListFiles } from '../api/providerClient'
+import { lcdFetchDeal } from '../api/lcdClient'
 import { bootstrapAppendBaseFromNetwork } from '../lib/upload/bootstrapAppendBase'
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration'
 
@@ -216,6 +216,8 @@ interface DealIndexRequirement {
 interface FileRowProps {
   file: NilfsFileEntry
   deal: LcdDeal
+  manifestRoot: string
+  owner: string
   browserCached: boolean
   gatewayCached: boolean
   isBusy: boolean
@@ -298,6 +300,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 function FileRow({
   file,
   deal,
+  manifestRoot,
+  owner,
   browserCached,
   gatewayCached,
   isBusy,
@@ -322,7 +326,7 @@ function FileRow({
   allFiles,
   transportPreference,
 }: FileRowProps) {
-  const requestOwner = String(deal.owner || '').trim()
+  const requestOwner = String(owner || deal.owner || '').trim()
 
   const readFromLocalMduCache = async (dealId: string, chainCid: string): Promise<Uint8Array> => {
     const cacheFreshness = await withTimeout(
@@ -357,8 +361,8 @@ function FileRow({
     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
     try {
-      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const manifestHex = manifestRoot
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -481,8 +485,8 @@ function FileRow({
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (deal.cid) {
-        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (manifestRoot) {
+        const manifestHex = manifestRoot
         onFileActivity?.({
           dealId,
           filePath: file.path,
@@ -506,8 +510,8 @@ function FileRow({
     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
     try {
-      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const manifestHex = manifestRoot
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -547,8 +551,8 @@ function FileRow({
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (deal.cid) {
-        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (manifestRoot) {
+        const manifestHex = manifestRoot
         onFileActivity?.({
           dealId,
           filePath: file.path,
@@ -573,8 +577,8 @@ function FileRow({
     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
     try {
-      if (!deal.cid) throw new Error('commit required (no on-chain CID)')
-      const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const manifestHex = manifestRoot
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -610,8 +614,8 @@ function FileRow({
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (deal.cid) {
-        const manifestHex = toHexFromBase64OrHex(deal.cid) || deal.cid
+      if (manifestRoot) {
+        const manifestHex = manifestRoot
         onFileActivity?.({
           dealId,
           filePath: file.path,
@@ -634,7 +638,7 @@ function FileRow({
     setBusyFilePath(file.path)
     const dealId = String(deal.id)
     try {
-      const chainCid = String(deal.cid || '').trim()
+      const chainCid = String(manifestRoot || '').trim()
       const bytes = await readFromLocalMduCache(dealId, chainCid)
       downloadBytesAsFile(bytes, file.path)
       queueCachedDownloadPersist(dealId, chainCid, file.path, bytes, () => {
@@ -655,7 +659,7 @@ function FileRow({
     setBusyFilePath(file.path)
     const dealId = String(deal.id)
     try {
-      const chainCid = String(deal.cid || '').trim()
+      const chainCid = String(manifestRoot || '').trim()
       if (chainCid) {
         const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
         if (!cacheFreshness.usable) {
@@ -712,7 +716,7 @@ function FileRow({
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoDownload}
-          disabled={isAnyDownloading || isBusy || !deal.cid}
+          disabled={isAnyDownloading || isBusy || !manifestRoot}
           data-testid="deal-detail-download"
           data-file-path={file.path}
           className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-none transition-colors disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
@@ -722,7 +726,7 @@ function FileRow({
         <div className="hidden xl:flex items-center gap-1">
           <button
             onClick={handleGatewayCacheDownload}
-            disabled={isAnyDownloading || isBusy || !deal.cid}
+            disabled={isAnyDownloading || isBusy || !manifestRoot}
             data-testid="deal-detail-download-gateway"
             data-file-path={file.path}
             className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
@@ -731,7 +735,7 @@ function FileRow({
           </button>
           <button
             onClick={handleOnchainRetrieval}
-            disabled={isAnyDownloading || isBusy || !deal.cid}
+            disabled={isAnyDownloading || isBusy || !manifestRoot}
             data-testid="deal-detail-download-sp"
             data-file-path={file.path}
             className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
@@ -740,7 +744,7 @@ function FileRow({
           </button>
           <button
             onClick={handleAssembleMdus}
-            disabled={isAnyDownloading || isBusy || !deal.cid}
+            disabled={isAnyDownloading || isBusy || !manifestRoot}
             data-testid="deal-detail-download-browser-slab"
             data-file-path={file.path}
             className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
@@ -781,7 +785,7 @@ function FileRow({
               </div>
               <button
                 onClick={handleOnchainRetrieval}
-                disabled={isAnyDownloading || isBusy || !deal.cid}
+                disabled={isAnyDownloading || isBusy || !manifestRoot}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5" />
@@ -789,7 +793,7 @@ function FileRow({
               </button>
               <button
                 onClick={handleGatewayCacheDownload}
-                disabled={isAnyDownloading || isBusy || !deal.cid}
+                disabled={isAnyDownloading || isBusy || !manifestRoot}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Server className="w-3.5 h-3.5" />
@@ -797,7 +801,7 @@ function FileRow({
               </button>
               <button
                 onClick={handleAssembleMdus}
-                disabled={isAnyDownloading || isBusy || !deal.cid}
+                disabled={isAnyDownloading || isBusy || !manifestRoot}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Database className="w-3.5 h-3.5" />
@@ -831,9 +835,15 @@ function FileRow({
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, requestedTab, requestedTabNonce }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const dealOwner = String(deal.owner || '').trim()
-  const requestOwner = dealOwner || String(nilAddress || '').trim()
+  const fallbackManifestRoot = normalizeManifestRoot(String(deal.cid || ''))
+  const fallbackOwner = dealOwner || String(nilAddress || '').trim()
+  const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
+  const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
+  const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
+  const requestOwner = authoritativeOwner || fallbackOwner
+  const committedManifestRoot = authoritativeManifestRoot || fallbackManifestRoot
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
-  const hasCommittedContent = Boolean(String(deal.cid || '').trim())
+  const hasCommittedContent = Boolean(committedManifestRoot)
   const dealStatusLabel = hasCommittedContent ? 'Active' : 'Empty'
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
   const dealSizeLabel = Number.isFinite(dealSizeBytes) && dealSizeBytes > 0
@@ -896,7 +906,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
-  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || String(deal.cid || ''))
+  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || committedManifestRoot)
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -1084,6 +1094,43 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       cancelled = true
     }
   }, [dealProvidersKey])
+
+  const refreshAuthoritativeDealHead = useCallback(async (): Promise<{ manifestRoot: string; owner: string }> => {
+    const fallback = {
+      manifestRoot: fallbackManifestRoot,
+      owner: fallbackOwner,
+    }
+    try {
+      const latest = await lcdFetchDeal(appConfig.lcdBase, String(deal.id))
+      const manifestRoot = normalizeManifestRoot(String(latest?.cid || '')) || fallback.manifestRoot
+      const owner = String(latest?.owner || '').trim() || fallback.owner
+      setAuthoritativeManifestRoot(manifestRoot)
+      setAuthoritativeOwner(owner)
+      return { manifestRoot, owner }
+    } catch {
+      setAuthoritativeManifestRoot(fallback.manifestRoot)
+      setAuthoritativeOwner(fallback.owner)
+      return fallback
+    } finally {
+      setAuthoritativeDealLoaded(true)
+    }
+  }, [deal.id, fallbackManifestRoot, fallbackOwner])
+
+  useEffect(() => {
+    let cancelled = false
+    setAuthoritativeManifestRoot(fallbackManifestRoot)
+    setAuthoritativeOwner(fallbackOwner)
+    setAuthoritativeDealLoaded(false)
+    void refreshAuthoritativeDealHead().then((head) => {
+      if (cancelled) return
+      setAuthoritativeManifestRoot(head.manifestRoot)
+      setAuthoritativeOwner(head.owner)
+      setAuthoritativeDealLoaded(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [fallbackManifestRoot, fallbackOwner, refreshAuthoritativeDealHead])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -1610,9 +1657,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   }, [manifestInfoTransport, resolveProviderHttpBase, resolveProviderP2pTarget, reconcileLocalMduCache])
 
   const syncDealIndexFromProviders = useCallback(async () => {
-    const manifestRoot = normalizeManifestRoot(String(deal.cid || ''))
     const dealId = String(deal.id)
-    const owner = requestOwner
+    const { manifestRoot, owner } = await refreshAuthoritativeDealHead()
     const providerBase = resolveProviderHttpBase()
     const rsK = serviceHint.rsK ?? 8
     const rsM = serviceHint.rsM ?? 4
@@ -1777,7 +1823,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.cid, deal.id, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
+  }, [deal.id, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -1903,12 +1949,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   }, [fetchHeat, receiptStatus, deal.id])
 
   useEffect(() => {
-    if (deal.cid && deal.cid !== '') {
+    if (!authoritativeDealLoaded) return
+    if (committedManifestRoot) {
       const owner = requestOwner
       setDealIndexSyncMessage('')
-      void fetchSlab(deal.cid, deal.id, owner)
-      void fetchFiles(deal.cid, deal.id, owner)
-      void fetchManifestInfo(deal.cid, deal.id, owner)
+      void fetchSlab(committedManifestRoot, deal.id, owner)
+      void fetchFiles(committedManifestRoot, deal.id, owner)
+      void fetchManifestInfo(committedManifestRoot, deal.id, owner)
     } else {
       // Do not surface local OPFS slabs for "empty" deals; OPFS is treated as a cache for on-chain content.
       // This avoids showing stale slabs after a chain reset where deal IDs are reused.
@@ -1930,7 +1977,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
     setFileActionError(null)
     void fetchHeat(deal.id)
-  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
+  }, [authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||
@@ -2024,7 +2071,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           className="nil-tab-inset font-mono-data break-all text-primary font-bold select-all"
                           data-testid="deal-detail-cid"
                         >
-                          {deal.cid || 'EMPTY_CONTAINER'}
+                          {committedManifestRoot || 'EMPTY_CONTAINER'}
                         </div>
                     </div>
                     <div className="space-y-2">
@@ -2053,8 +2100,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                       </div>
                       <div className="nil-detail-metric">
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
-                        <span className={`font-bold uppercase ${deal.cid ? 'text-success' : 'text-muted-foreground'}`}>
-                          {deal.cid ? 'Active' : 'Empty'}
+                        <span className={`font-bold uppercase ${committedManifestRoot ? 'text-success' : 'text-muted-foreground'}`}>
+                          {committedManifestRoot ? 'Active' : 'Empty'}
                         </span>
                       </div>
                     </div>
@@ -2192,7 +2239,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
               </div>
           )}
 
-          {activeTab === 'files' && deal.cid && (
+          {activeTab === 'files' && committedManifestRoot && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="nil-tab-panel space-y-3">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2309,6 +2356,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               file={f}
                               allFiles={files}
                               deal={deal}
+                              manifestRoot={committedManifestRoot}
+                              owner={requestOwner}
                               browserCached={!!browserCachedByPath[f.path]}
                               gatewayCached={f.cache_present === true}
                               isBusy={busyFilePath === f.path}
@@ -2342,7 +2391,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                     </div>
                   )}
 
-                  {activeTab === 'files' && !deal.cid && (
+                  {activeTab === 'files' && !committedManifestRoot && (
                     <div className="nil-tab-panel sm:col-span-2 p-8 text-center">
                       <div className="text-sm font-semibold text-foreground">No files yet</div>
                       <div className="mt-1 text-xs text-muted-foreground">

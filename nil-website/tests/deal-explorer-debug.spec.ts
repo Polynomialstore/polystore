@@ -24,7 +24,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   const nilAddress = ethToNil(account.address)
 
   const dealId = '1'
-  const manifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
+  const manifestRoot = '0xae5359579124255db62f04c55f1d1490655ed5479988a528bbca9f5a2245de9286452e5ffd8e76e05763c8241632c517'
   const filePath = 'provider-base.txt'
   const fileBytes = Buffer.from('hello from provider base')
 
@@ -59,6 +59,24 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
             providers: ['nil1provider'],
           },
         ],
+      }),
+    })
+  })
+
+  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deal: {
+          id: dealId,
+          owner: nilAddress,
+          manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
+          size: String(24 * 1024 * 1024),
+          escrow_balance: '1000000',
+          end_block: '1000',
+          providers: ['nil1provider'],
+        },
       }),
     })
   })

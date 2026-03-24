@@ -62,6 +62,24 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
+  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deal: {
+          id: dealId,
+          owner: nilAddress,
+          manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
+          size: String(24 * 1024 * 1024),
+          escrow_balance: '1000000',
+          end_block: '1000',
+          providers: ['nil1provider'],
+        },
+      }),
+    })
+  })
+
   await page.route('**/cosmos/bank/v1beta1/balances/*', async (route) => {
     await route.fulfill({
       status: 200,

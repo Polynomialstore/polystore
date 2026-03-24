@@ -26,7 +26,9 @@ test('Deal Explorer: missing local index requires provider sync before file view
   const dealId = '1'
   const filePath = 'provider-base.txt'
   const fileBytes = Buffer.from('hello from provider base')
-  const manifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
+  const manifestRoot = '0xae5359579124255db62f04c55f1d1490655ed5479988a528bbca9f5a2245de9286452e5ffd8e76e05763c8241632c517'
+  const staleManifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
+  const manifestRootBase64 = Buffer.from(manifestRoot.slice(2), 'hex').toString('base64')
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
@@ -38,6 +40,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   let spFetchCalls = 0
+  let badManifestRequests = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     await route.fulfill({
@@ -48,13 +51,31 @@ test('Deal Explorer: missing local index requires provider sync before file view
           {
             id: dealId,
             owner: nilAddress,
-            cid: manifestRoot,
+            cid: staleManifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
             end_block: '1000',
             providers: ['nil1provider'],
           },
         ],
+      }),
+    })
+  })
+
+  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deal: {
+          id: dealId,
+          owner: nilAddress,
+          manifest_root: manifestRootBase64,
+          size: String(24 * 1024 * 1024),
+          escrow_balance: '1000000',
+          end_block: '1000',
+          providers: ['nil1provider'],
+        },
       }),
     })
   })
@@ -83,6 +104,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   await page.route('**/sp/retrieval/list-files/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -103,6 +134,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
     })
   })
   await page.route('**/sp/retrieval/slab/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -142,6 +183,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   await page.route('**/sp/retrieval/plan/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -162,6 +213,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   await page.route('**/sp/retrieval/fetch/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
     spFetchCalls += 1
     await route.fulfill({
       status: 206,
@@ -331,5 +392,6 @@ test('Deal Explorer: missing local index requires provider sync before file view
   await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
 
   expect(spFetchCalls).toBeGreaterThan(0)
+  expect(badManifestRequests).toBe(0)
   await expect(page.getByTestId('deal-detail-file-list')).toContainText(filePath)
 })
