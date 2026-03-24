@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,11 +21,94 @@ import (
 	niltypes "nilchain/x/nilchain/types"
 )
 
+func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t *testing.T) {
+	requireOnchainSessionForTest(t, true)
+	useTempUploadDir(t)
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	owner := testDealOwner(t)
+	dealMetaCache = sync.Map{}
+
+	dbPath := filepath.Join(t.TempDir(), "sessions.db")
+	_ = closeSessionDB()
+	require.NoError(t, initSessionDB(dbPath))
+	t.Cleanup(func() { _ = closeSessionDB() })
+
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	filePath := "sync.txt"
+	fileContent := []byte("hello from bundled download session")
+	manifestRoot := mustTestManifestRoot(t, "bundled-download-session")
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	require.NoError(t, os.MkdirAll(dealDir, 0o755))
+
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile(filePath, uint64(len(fileContent)), 0)
+	mdu0Data, _ := b.Bytes()
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "manifest.bin"), make([]byte, 128*1024), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(make([]byte, niltypes.BLOBS_PER_MDU*48)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644))
+
+	const dealID = uint64(1)
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"id":        "1",
+					"owner":     owner,
+					"cid":       manifestRoot.Canonical,
+					"end_block": "1000",
+				},
+			})
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := testRouter()
+	openURL := fmt.Sprintf("/gateway/open-session/%s?deal_id=%d&owner=%s&file_path=%s&req_range_start=0&req_range_len=%d", manifestRoot.Canonical, dealID, owner, url.QueryEscape(filePath), len(fileContent))
+	openReq := httptest.NewRequest(http.MethodPost, openURL, nil)
+	openResp := httptest.NewRecorder()
+	r.ServeHTTP(openResp, openReq)
+	if openResp.Code != http.StatusOK {
+		t.Fatalf("expected open-session 200, got %d (%s)", openResp.Code, openResp.Body.String())
+	}
+	var opened map[string]any
+	require.NoError(t, json.Unmarshal(openResp.Body.Bytes(), &opened))
+	downloadSession := strings.TrimSpace(fmt.Sprint(opened["download_session"]))
+	if downloadSession == "" {
+		t.Fatalf("expected download_session, got %v", opened)
+	}
+
+	fetchURL := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=%s&download_session=%s", manifestRoot.Canonical, dealID, owner, url.QueryEscape(filePath), url.QueryEscape(downloadSession))
+	fetchReq := httptest.NewRequest(http.MethodGet, fetchURL, nil)
+	fetchReq.Header.Set("Range", fmt.Sprintf("bytes=0-%d", len(fileContent)-1))
+	fetchResp := httptest.NewRecorder()
+	r.ServeHTTP(fetchResp, fetchReq)
+	if fetchResp.Code != http.StatusPartialContent {
+		t.Fatalf("expected bundled session fetch 206, got %d (%s)", fetchResp.Code, fetchResp.Body.String())
+	}
+	if got := fetchResp.Body.String(); got != string(fileContent) {
+		t.Fatalf("content mismatch: want %q got %q", string(fileContent), got)
+	}
+}
+
 func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 	useTempUploadDir(t)
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
+	dealMetaCache = sync.Map{}
 
 	// GatewayFetch records per-blob proofs for on-chain sessions; ensure the DB exists.
 	dbPath := filepath.Join(t.TempDir(), "sessions.db")

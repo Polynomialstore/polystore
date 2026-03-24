@@ -2926,12 +2926,8 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		downloadSessionID = onchainSessionID
 	}
 	isDownloadSession := downloadSessionID != ""
-	if requireOnchainSession && !isOnchainSession && (!isDownloadSession || !unsafeAllowLegacyDownloadSession) {
+	if requireOnchainSession && !isOnchainSession && !isDownloadSession {
 		writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "open an on-chain retrieval session first")
-		return
-	}
-	if requireOnchainSession && isDownloadSession && !isOnchainSession && !unsafeAllowLegacyDownloadSession {
-		writeJSONError(w, http.StatusBadRequest, "download_session is not supported without X-Nil-Session-Id", "use an on-chain session id")
 		return
 	}
 	if dealIDStr == "" || owner == "" {

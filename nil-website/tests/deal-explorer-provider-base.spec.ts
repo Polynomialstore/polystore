@@ -40,6 +40,8 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   let spFetchCalls = 0
+  let openSessionCalls = 0
+  let planCalls = 0
   let badManifestRequests = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
@@ -183,6 +185,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   await page.route('**/sp/retrieval/plan/**', async (route) => {
+    planCalls += 1
     if (route.request().url().includes(staleManifestRoot)) {
       badManifestRequests += 1
       await route.fulfill({
@@ -212,6 +215,32 @@ test('Deal Explorer: missing local index requires provider sync before file view
     })
   })
 
+  await page.route('**/sp/retrieval/open-session/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
+    openSessionCalls += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        download_session: 'test-download-session',
+        deal_id: Number(dealId),
+        provider: 'nil1provider',
+        file_path: filePath,
+        expires_at: Math.floor(Date.now() / 1000) + 600,
+      }),
+    })
+  })
+
   await page.route('**/sp/retrieval/fetch/**', async (route) => {
     if (route.request().url().includes(staleManifestRoot)) {
       badManifestRequests += 1
@@ -220,6 +249,16 @@ test('Deal Explorer: missing local index requires provider sync before file view
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
+    const url = new URL(route.request().url())
+    if (!url.searchParams.get('download_session')) {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'missing download_session' }),
       })
       return
     }
@@ -392,6 +431,8 @@ test('Deal Explorer: missing local index requires provider sync before file view
   await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
 
   expect(spFetchCalls).toBeGreaterThan(0)
+  expect(openSessionCalls).toBeGreaterThan(0)
+  expect(planCalls).toBe(0)
   expect(badManifestRequests).toBe(0)
   await expect(page.getByTestId('deal-detail-file-list')).toContainText(filePath)
 })

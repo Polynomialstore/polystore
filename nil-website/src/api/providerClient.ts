@@ -334,3 +334,60 @@ export async function providerPlanRetrievalSession(
   return json
 }
 
+type ProviderOpenSessionResponse = {
+  download_session?: unknown
+}
+
+export async function providerDownloadWithBundledSession(
+  providerBase: string,
+  manifestRoot: string,
+  params: { dealId: string; owner: string; filePath: string; rangeStart?: number; rangeLen: number },
+  fetchFn: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const q = new URLSearchParams()
+  q.set('deal_id', params.dealId)
+  q.set('owner', params.owner)
+  q.set('file_path', params.filePath)
+  q.set('req_range_start', String(Math.max(0, Number(params.rangeStart ?? 0))))
+  q.set('req_range_len', String(Math.max(0, Number(params.rangeLen))))
+
+  const openUrl = `${providerBase}/sp/retrieval/open-session/${encodeURIComponent(manifestRoot)}?${q.toString()}`
+  const openRes = await fetchWithTimeout(openUrl, { method: 'POST' }, 15_000, fetchFn)
+  if (!openRes.ok) {
+    const txt = await openRes.text().catch(() => '')
+    throw new Error(txt || `Provider open-session returned ${openRes.status}`)
+  }
+  const openJson = (await openRes.json().catch(() => null)) as ProviderOpenSessionResponse | null
+  const downloadSession = asString(openJson?.download_session)
+  if (!downloadSession) {
+    throw new Error('Provider open-session did not return download_session')
+  }
+
+  const rangeStart = Math.max(0, Number(params.rangeStart ?? 0))
+  const rangeLen = Math.max(0, Number(params.rangeLen))
+  if (!Number.isFinite(rangeLen) || rangeLen <= 0) {
+    throw new Error('rangeLen must be > 0')
+  }
+  const rangeEnd = rangeStart + rangeLen - 1
+  const fetchUrl = `${providerBase}/sp/retrieval/fetch/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
+    params.dealId,
+  )}&owner=${encodeURIComponent(params.owner)}&file_path=${encodeURIComponent(params.filePath)}&download_session=${encodeURIComponent(
+    downloadSession,
+  )}`
+  const fetchRes = await fetchWithTimeout(
+    fetchUrl,
+    {
+      method: 'GET',
+      headers: {
+        Range: `bytes=${rangeStart}-${rangeEnd}`,
+      },
+    },
+    60_000,
+    fetchFn,
+  )
+  if (!fetchRes.ok) {
+    const txt = await fetchRes.text().catch(() => '')
+    throw new Error(txt || `Provider bundled fetch returned ${fetchRes.status}`)
+  }
+  return new Uint8Array(await fetchRes.arrayBuffer())
+}

@@ -42,14 +42,13 @@ import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { providerListFiles } from '../api/providerClient'
+import { providerDownloadWithBundledSession, providerListFiles } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { bootstrapAppendBaseFromNetwork } from '../lib/upload/bootstrapAppendBase'
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration'
 
 let wasmReadyPromise: Promise<void> | null = null
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
-const BLOB_SIZE_BYTES = 128 * 1024
 
 function toU8(value: Uint8Array | number[] | null | undefined): Uint8Array {
   if (!value) return new Uint8Array()
@@ -1705,30 +1704,21 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         commitmentsPerMdu,
         listFiles: async () => remoteFiles,
         fetchFileBytes: async (file) => {
-          const result = await fetchFile({
-            dealId,
-            manifestRoot,
-            owner,
-            filePath: file.path,
-            serviceBase: providerBase,
-            rangeStart: 0,
-            rangeLen: 0,
-            fileStartOffset: Number(file.start_offset || 0),
-            fileSizeBytes: Number(file.size_bytes || 0),
-            mduSizeBytes: MDU_SIZE_BYTES,
-            blobSizeBytes: BLOB_SIZE_BYTES,
-            decodeNilce: false,
-            routePreference: 'prefer_direct_sp',
-            sponsoredAuth,
-          })
-          if (!result) {
+          const sizeBytes = Number(file.size_bytes || 0)
+          if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
             throw new Error(`provider retrieval returned no data for ${file.path}`)
           }
-          try {
-            return new Uint8Array(await result.blob.arrayBuffer())
-          } finally {
-            URL.revokeObjectURL(result.url)
-          }
+          return await providerDownloadWithBundledSession(
+            providerBase,
+            manifestRoot,
+            {
+              dealId,
+              owner,
+              filePath: file.path,
+              rangeStart: 0,
+              rangeLen: sizeBytes,
+            },
+          )
         },
         initMdu0Builder: (userCount, leafCount) => workerClient.initMdu0Builder(userCount, leafCount),
         appendFileToMdu0: (filePath, sizeBytes, startOffset, flags) =>
@@ -1823,7 +1813,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.id, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
+  }, [deal.id, fetchLocalFiles, fetchManifestInfo, fetchSlab, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
