@@ -3,6 +3,7 @@ import type { NilfsFileEntry } from '../domain/nilfs'
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const BLOB_SIZE_BYTES = 128 * 1024
 const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
+const ROOT_TABLE_END = FILE_TABLE_START
 const FILE_TABLE_HEADER_SIZE = 128
 const FILE_RECORD_SIZE = 64
 
@@ -54,3 +55,20 @@ export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
   return files
 }
 
+export function parseNilfsRootTableFromMdu0(mdu0: Uint8Array): Uint8Array[] {
+  if (mdu0.length !== MDU_SIZE_BYTES) return []
+
+  const roots: Uint8Array[] = []
+  for (let off = 0; off + 32 <= ROOT_TABLE_END; off += 32) {
+    const chunk = mdu0.slice(off, off + 32)
+    let allZero = true
+    for (let i = 0; i < chunk.length; i += 1) {
+      if (chunk[i] !== 0) {
+        allZero = false
+        break
+      }
+    }
+    if (!allZero) roots.push(chunk)
+  }
+  return roots
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"nilchain/x/crypto_ffi"
+	"nilchain/x/nilchain/types"
 )
 
 type manifestInfoResponse struct {
@@ -76,6 +77,64 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSONError(w, status, err.Error(), "")
 		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") {
+		sessionID := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
+		if sessionID == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "open an on-chain retrieval session first")
+			return
+		}
+		if !hasDealQuery {
+			writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "provider retrieval requires session-scoped deal context")
+			return
+		}
+		onchainSession, err := fetchRetrievalSession(sessionID)
+		if err != nil {
+			if errors.Is(err, ErrSessionNotFound) {
+				writeJSONError(w, http.StatusNotFound, "retrieval session not found", "")
+				return
+			}
+			writeJSONError(w, http.StatusBadGateway, "failed to load retrieval session", err.Error())
+			return
+		}
+		providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
+		if providerAddr == "" {
+			writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "")
+			return
+		}
+		if onchainSession.DealId != dealID {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "deal_id mismatch")
+			return
+		}
+		if strings.TrimSpace(onchainSession.Owner) != strings.TrimSpace(r.URL.Query().Get("owner")) {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "owner mismatch")
+			return
+		}
+		if strings.TrimSpace(onchainSession.Provider) != providerAddr {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match this provider", "provider mismatch")
+			return
+		}
+		sessionRootHex := "0x" + hex.EncodeToString(onchainSession.ManifestRoot)
+		if normalizeManifestRootOrEmpty(sessionRootHex) != manifestRoot.Canonical {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "manifest_root mismatch")
+			return
+		}
+		if onchainSession.StartMduIndex != mduIndex {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "mdu_index mismatch")
+			return
+		}
+		if onchainSession.StartBlobIndex != 0 {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "start_blob_index mismatch")
+			return
+		}
+		if onchainSession.BlobCount != uint64(types.BLOBS_PER_MDU) {
+			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "blob_count mismatch")
+			return
+		}
+		if len(onchainSession.SessionId) == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid retrieval session", "missing session id bytes")
+			return
+		}
 	}
 
 	var dealDir string

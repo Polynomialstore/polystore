@@ -333,6 +333,38 @@ export async function providerFetchMdu(
   return new Uint8Array(await res.arrayBuffer())
 }
 
+export async function providerFetchMduWithSession(
+  providerBase: string,
+  manifestRoot: string,
+  mduIndex: number,
+  params: { dealId: string; owner: string; sessionId: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const q = new URLSearchParams()
+  q.set('deal_id', params.dealId)
+  q.set('owner', params.owner)
+  const url = `${providerBase}/sp/retrieval/mdu/${encodeURIComponent(manifestRoot)}/${encodeURIComponent(
+    String(mduIndex),
+  )}?${q.toString()}`
+
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'GET',
+      headers: {
+        'X-Nil-Session-Id': params.sessionId,
+      },
+    },
+    60_000,
+    fetchFn,
+  )
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Provider mdu returned ${res.status}`)
+  }
+  return new Uint8Array(await res.arrayBuffer())
+}
+
 export async function providerPlanRetrievalSession(
   providerBase: string,
   manifestRoot: string,

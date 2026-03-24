@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { appConfig } from '../config'
 import { 
   FileJson, 
@@ -34,8 +34,8 @@ import {
   writeManifestRoot,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
-import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
-import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
+import { parseNilfsFilesFromMdu0, parseNilfsRootTableFromMdu0 } from '../lib/nilfsLocal'
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
@@ -43,8 +43,15 @@ import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { providerFetchManifestInfo, providerFetchMdu, providerFetchSlabLayout } from '../api/providerClient'
+import { providerFetchMduWithSession } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
+import { waitForTransactionReceipt } from '../lib/evmRpc'
+import {
+  decodeComputeRetrievalSessionIdsResult,
+  encodeComputeRetrievalSessionIdsData,
+  encodeConfirmRetrievalSessionsData,
+  encodeOpenRetrievalSessionsData,
+} from '../lib/nilstorePrecompile'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -59,17 +66,31 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   return out
 }
 
-function hexToBytes(hex: string): Uint8Array {
-  const normalized = String(hex || '').trim().replace(/^0x/i, '')
-  if (normalized === '') return new Uint8Array()
-  if (normalized.length % 2 !== 0) throw new Error('invalid hex length')
-  const out = new Uint8Array(normalized.length / 2)
-  for (let i = 0; i < out.length; i += 1) {
-    const byte = Number.parseInt(normalized.slice(i * 2, i * 2 + 2), 16)
-    if (!Number.isFinite(byte)) throw new Error('invalid hex byte')
-    out[i] = byte
+function deriveSlabLayoutFromMdu0(mdu0: Uint8Array, files: NilfsFileEntry[]): {
+  totalMdus: number
+  witnessMdus: number
+  userMdus: number
+} {
+  const roots = parseNilfsRootTableFromMdu0(mdu0)
+  let maxEnd = 0
+  for (const file of files) {
+    const start = Number(file.start_offset || 0)
+    const size = Number(file.size_bytes || 0)
+    if (!Number.isFinite(start) || start < 0) continue
+    if (!Number.isFinite(size) || size <= 0) continue
+    const end = start + size
+    if (end > maxEnd) maxEnd = end
   }
-  return out
+  const userMdus = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
+  if (roots.length < userMdus) {
+    throw new Error(`invalid slab layout: roots=${roots.length} user_mdus=${userMdus}`)
+  }
+  const witnessMdus = roots.length - userMdus
+  return {
+    totalMdus: 1 + roots.length,
+    witnessMdus,
+    userMdus,
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -858,6 +879,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
   }, [isMode2, serviceHint.rsK, serviceHint.rsM])
   const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient({ chainId: appConfig.chainId })
   const { submitPolicyUpdate, loading: policyUpdating } = useUpdateDealRetrievalPolicy()
   const [policyMode, setPolicyMode] = useState<RetrievalPolicyMode>(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -1003,6 +1026,69 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
     return appConfig.spBase
   }, [primaryProvider, providersByAddr])
+
+  const openMduRetrievalSessions = useCallback(
+    async (params: { dealId: string; provider: string; manifestRoot: string; mduIndexes: number[] }): Promise<Map<number, Hex>> => {
+      if (!publicClient) throw new Error('EVM RPC client unavailable')
+      if (!walletClient) throw new Error('Wallet not connected')
+      const signer = (walletClient.account?.address || address) as Hex | undefined
+      if (!signer || !String(signer).startsWith('0x')) {
+        throw new Error('Connect wallet to open retrieval sessions')
+      }
+      const requests = params.mduIndexes.map((mduIndex, idx) => ({
+        dealId: BigInt(params.dealId),
+        provider: params.provider,
+        manifestRoot: params.manifestRoot as Hex,
+        startMduIndex: BigInt(mduIndex),
+        startBlobIndex: 0,
+        blobCount: BigInt(64),
+        nonce: BigInt(Date.now() + idx),
+        expiresAt: 0n,
+      }))
+      const computeCall = await publicClient.call({
+        account: signer,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: encodeComputeRetrievalSessionIdsData(requests),
+      })
+      const computeData = computeCall.data as Hex
+      if (!computeData || computeData === '0x') throw new Error('computeRetrievalSessionIds returned empty data')
+      const { sessionIds } = decodeComputeRetrievalSessionIdsResult(computeData)
+      if (sessionIds.length !== requests.length) {
+        throw new Error('computeRetrievalSessionIds returned unexpected session count')
+      }
+      const openTxHash = await walletClient.sendTransaction({
+        account: signer,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: encodeOpenRetrievalSessionsData(requests),
+        value: 0n,
+        chain: walletClient.chain ?? undefined,
+      })
+      await waitForTransactionReceipt(openTxHash)
+      return new Map(params.mduIndexes.map((mduIndex, idx) => [mduIndex, sessionIds[idx] as Hex]))
+    },
+    [address, publicClient, walletClient],
+  )
+
+  const confirmMduRetrievalSessions = useCallback(
+    async (sessionIds: readonly Hex[]) => {
+      if (sessionIds.length === 0) return
+      if (!publicClient) throw new Error('EVM RPC client unavailable')
+      if (!walletClient) throw new Error('Wallet not connected')
+      const signer = (walletClient.account?.address || address) as Hex | undefined
+      if (!signer || !String(signer).startsWith('0x')) {
+        throw new Error('Connect wallet to confirm retrieval sessions')
+      }
+      const txHash = await walletClient.sendTransaction({
+        account: signer,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: encodeConfirmRetrievalSessionsData(sessionIds),
+        value: 0n,
+        chain: walletClient.chain ?? undefined,
+      })
+      await waitForTransactionReceipt(txHash)
+    },
+    [address, publicClient, walletClient],
+  )
 
   const handlePolicyUpdate = useCallback(async () => {
     setPolicyError(null)
@@ -1652,6 +1738,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     const dealId = String(deal.id)
     const { manifestRoot, owner } = await refreshAuthoritativeDealHead()
     const providerBase = resolveProviderHttpBase()
+    const provider = String(primaryProvider || '').trim()
     const rsK = serviceHint.rsK ?? 8
     const rsM = serviceHint.rsM ?? 4
 
@@ -1673,6 +1760,15 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       })
       return
     }
+    if (!provider) {
+      setDealIndexRequirement({
+        status: 'sync_failed',
+        reason: 'provider address is required for retrieval session sync',
+        localManifestRoot: '',
+        chainManifestRoot: manifestRoot,
+      })
+      return
+    }
 
     setDealIndexRequirement((prev) => ({
       ...prev,
@@ -1684,42 +1780,81 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     setFileActionError(null)
 
     try {
-      const [slabInfo, remoteManifestInfo, mdu0Bytes] = await Promise.all([
-        providerFetchSlabLayout(providerBase, manifestRoot, { dealId, owner }),
-        providerFetchManifestInfo(providerBase, manifestRoot, { dealId, owner }),
-        providerFetchMdu(providerBase, manifestRoot, 0, { dealId, owner }),
-      ])
-
+      setDealIndexSyncMessage('Opening retrieval sessions for committed index MDUs…')
+      const mdu0Sessions = await openMduRetrievalSessions({
+        dealId,
+        provider,
+        manifestRoot,
+        mduIndexes: [0],
+      })
+      const mdu0SessionId = mdu0Sessions.get(0)
+      if (!mdu0SessionId) throw new Error('missing retrieval session for mdu_0')
+      setDealIndexSyncMessage('Fetching committed mdu_0 from provider…')
+      const mdu0Bytes = await providerFetchMduWithSession(providerBase, manifestRoot, 0, { dealId, owner, sessionId: mdu0SessionId })
       const parsedFiles = parseNilfsFilesFromMdu0(mdu0Bytes)
-      const manifestBlob = hexToBytes(remoteManifestInfo.manifest_blob_hex)
-      if (manifestBlob.byteLength === 0) {
-        throw new Error('provider manifest-info returned empty manifest blob')
-      }
-      if (normalizeManifestRoot(remoteManifestInfo.manifest_root) !== normalizeManifestRoot(manifestRoot)) {
-        throw new Error('provider manifest-info returned mismatched manifest root')
-      }
-      if (Number(slabInfo.witness_mdus) !== Number(remoteManifestInfo.witness_mdus)) {
-        throw new Error('provider slab/manifest witness count mismatch')
-      }
-      if (Number(slabInfo.total_mdus) !== Number(remoteManifestInfo.total_mdus)) {
-        throw new Error('provider slab/manifest total MDU mismatch')
+      const { totalMdus, witnessMdus, userMdus } = deriveSlabLayoutFromMdu0(mdu0Bytes, parsedFiles)
+      const rootTable = parseNilfsRootTableFromMdu0(mdu0Bytes)
+      if (rootTable.length !== totalMdus - 1) {
+        throw new Error('invalid root table length for committed mdu_0')
       }
 
-      setDealIndexSyncMessage('Fetching committed slab index artifacts from providers…')
-      const witnessMduIndexes = Array.from({ length: Math.max(0, Number(slabInfo.witness_mdus) || 0) }, (_, idx) => idx + 1)
-      const witnessMdus = await Promise.all(
+      await ensureWasmReady()
+      const committed = await workerClient.shardFile(new Uint8Array(mdu0Bytes))
+      const mdu0Root = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
+      if (mdu0Root.byteLength !== 32) throw new Error('invalid mdu_0 root length')
+      const rootsAgg = new Uint8Array(totalMdus * 32)
+      rootsAgg.set(mdu0Root, 0)
+      for (let i = 0; i < rootTable.length; i += 1) {
+        rootsAgg.set(rootTable[i], (i + 1) * 32)
+      }
+      const manifest = await workerClient.computeManifest(rootsAgg)
+      const computedManifestRoot = bytesTo0xHex(toU8((manifest as { root?: Uint8Array | number[] }).root))
+      const manifestBlob = toU8((manifest as { blob?: Uint8Array | number[] }).blob)
+      if (manifestBlob.byteLength === 0) throw new Error('failed to reconstruct manifest blob from committed MDUs')
+      if (normalizeManifestRoot(computedManifestRoot) !== normalizeManifestRoot(manifestRoot)) {
+        throw new Error(`committed mdu_0 produced mismatched manifest root: ${computedManifestRoot}`)
+      }
+      const rootRecords = [
+        { mdu_index: 0, kind: 'mdu0' as const, root_hex: computedManifestRoot },
+        ...rootTable.map((rootBytes, idx) => ({
+          mdu_index: idx + 1,
+          kind: (idx + 1) <= witnessMdus ? ('witness' as const) : ('user' as const),
+          root_hex: bytesTo0xHex(rootBytes),
+          root_table_index: idx,
+        })),
+      ]
+
+      setDealIndexSyncMessage('Fetching committed witness MDUs from provider…')
+      const witnessMduIndexes = Array.from({ length: witnessMdus }, (_, idx) => idx + 1)
+      const witnessSessions = witnessMduIndexes.length
+        ? await openMduRetrievalSessions({
+            dealId,
+            provider,
+            manifestRoot,
+            mduIndexes: witnessMduIndexes,
+          })
+        : new Map<number, Hex>()
+      const witnessMduArtifacts = await Promise.all(
         witnessMduIndexes.map(async (index) => ({
           index,
-          data: await providerFetchMdu(providerBase, manifestRoot, index, { dealId, owner }),
+          data: await providerFetchMduWithSession(providerBase, manifestRoot, index, {
+            dealId,
+            owner,
+            sessionId: String(witnessSessions.get(index) || ''),
+          }),
         })),
       )
+      await confirmMduRetrievalSessions([
+        ...Array.from(mdu0Sessions.values()),
+        ...Array.from(witnessSessions.values()),
+      ])
 
       setDealIndexSyncMessage('Writing browser deal index cache…')
       await deleteDealDirectory(dealId)
       await writeManifestRoot(dealId, manifestRoot)
       await writeManifestBlob(dealId, manifestBlob, manifestBlob.byteLength)
       await writeMdu(dealId, 0, mdu0Bytes, mdu0Bytes.byteLength)
-      for (const witnessMdu of witnessMdus) {
+      for (const witnessMdu of witnessMduArtifacts) {
         await writeMdu(dealId, witnessMdu.index, witnessMdu.data, witnessMdu.data.byteLength)
       }
       await writeSlabMetadata(dealId, {
@@ -1732,9 +1867,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         source: 'browser_deal_index_sync',
         created_at: new Date().toISOString(),
         last_validated_at: new Date().toISOString(),
-        witness_mdus: Number(slabInfo.witness_mdus || 0),
-        user_mdus: Number(slabInfo.user_mdus || 0),
-        total_mdus: Number(slabInfo.total_mdus || 0),
+        witness_mdus: witnessMdus,
+        user_mdus: userMdus,
+        total_mdus: totalMdus,
         file_records: parsedFiles.map((file) => ({
           path: file.path,
           start_offset: Number(file.start_offset || 0),
@@ -1749,10 +1884,33 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         localManifestRoot: manifestRoot,
         chainManifestRoot: manifestRoot,
       })
+      setFiles(parsedFiles)
+      setSlabSource('opfs')
+      setSlab({
+        manifest_root: manifestRoot,
+        mdu_size_bytes: 8 * 1024 * 1024,
+        blob_size_bytes: 128 * 1024,
+        total_mdus: totalMdus,
+        witness_mdus: witnessMdus,
+        user_mdus: userMdus,
+        file_records: parsedFiles.length,
+        file_count: parsedFiles.length,
+        total_size_bytes: parsedFiles.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0),
+        segments: [
+          { kind: 'mdu0', start_index: 0, count: 1, size_bytes: 8 * 1024 * 1024 },
+          ...(witnessMdus > 0 ? [{ kind: 'witness' as const, start_index: 1, count: witnessMdus, size_bytes: 8 * 1024 * 1024 }] : []),
+          ...(userMdus > 0 ? [{ kind: 'user' as const, start_index: 1 + witnessMdus, count: userMdus, size_bytes: 8 * 1024 * 1024 }] : []),
+        ],
+      })
+      setManifestInfo({
+        manifest_root: manifestRoot,
+        manifest_blob_hex: bytesTo0xHex(manifestBlob),
+        total_mdus: totalMdus,
+        witness_mdus: witnessMdus,
+        user_mdus: userMdus,
+        roots: rootRecords,
+      })
       setDealIndexSyncMessage('Committed deal index synced locally.')
-      await fetchLocalFiles(dealId)
-      await fetchSlab(manifestRoot, dealId, owner)
-      await fetchManifestInfo(manifestRoot, dealId, owner)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setDealIndexRequirement({
@@ -1765,7 +1923,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.id, fetchLocalFiles, fetchManifestInfo, fetchSlab, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM])
+  }, [confirmMduRetrievalSessions, deal.id, openMduRetrievalSessions, primaryProvider, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)

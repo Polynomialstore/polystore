@@ -271,13 +271,8 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/retrieval/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/download/{cid}", GatewayDownload).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/fetch/{cid}", GatewayFetch).Methods("GET", "OPTIONS")
-	r.HandleFunc("/sp/retrieval/debug/raw-fetch/{cid}", GatewayDebugRawFetch).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/plan/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
-	r.HandleFunc("/sp/retrieval/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
-	r.HandleFunc("/sp/retrieval/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
-	r.HandleFunc("/sp/retrieval/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/mdu/{cid}/{index}", GatewayMdu).Methods("GET", "OPTIONS")
-	r.HandleFunc("/sp/retrieval/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 }
 

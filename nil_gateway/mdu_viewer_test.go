@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+
+	"github.com/gorilla/mux"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -238,5 +243,167 @@ func TestGatewayMdu_Basic(t *testing.T) {
 	}
 	if got := w.Body.Bytes(); len(got) != len(mdu0Bytes) {
 		t.Fatalf("expected %d bytes, got %d", len(mdu0Bytes), len(got))
+	}
+}
+
+func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
+	useTempUploadDir(t)
+
+	cid := mustTestManifestRoot(t, "provider-mdu-session-required")
+	dealDir := filepath.Join(uploadDir, cid.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "manifest.bin"), []byte{0x01}, 0o644); err != nil {
+		t.Fatalf("write manifest.bin: %v", err)
+	}
+
+	b := crypto_ffi.NewMdu0Builder(256)
+	defer b.Free()
+	if err := b.AppendFile("file.txt", 100, 0); err != nil {
+		t.Fatalf("AppendFileRecord: %v", err)
+	}
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
+	zeros := make([]byte, types.MDU_SIZE)
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), zeros, 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), zeros, 0o644); err != nil {
+		t.Fatalf("write mdu_2.bin: %v", err)
+	}
+
+	owner := testDealOwner(t)
+	const dealID = uint64(1)
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"id":        "1",
+					"owner":     owner,
+					"cid":       cid.Canonical,
+					"end_block": "1000",
+				},
+			})
+			return
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+
+	r := mux.NewRouter()
+	registerProviderDaemonRoutes(r)
+	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/0?deal_id=1&owner="+owner, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 missing session, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
+	useTempUploadDir(t)
+	dealMetaCache = sync.Map{}
+	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+
+	cid := mustTestManifestRoot(t, "provider-mdu-session-ok")
+	dealDir := filepath.Join(uploadDir, cid.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "manifest.bin"), []byte{0x01}, 0o644); err != nil {
+		t.Fatalf("write manifest.bin: %v", err)
+	}
+
+	b := crypto_ffi.NewMdu0Builder(256)
+	defer b.Free()
+	if err := b.AppendFile("file.txt", 100, 0); err != nil {
+		t.Fatalf("AppendFileRecord: %v", err)
+	}
+	mdu0Bytes, _ := b.Bytes()
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		t.Fatalf("write mdu_0.bin: %v", err)
+	}
+	zeros := make([]byte, types.MDU_SIZE)
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), zeros, 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), zeros, 0o644); err != nil {
+		t.Fatalf("write mdu_2.bin: %v", err)
+	}
+
+	owner := testDealOwner(t)
+	const dealID = uint64(1)
+	sessionHex := "0x" + strings.Repeat("11", 32)
+	sessionBytes, _ := hex.DecodeString(strings.Repeat("11", 32))
+	sessionB64 := base64.URLEncoding.EncodeToString(sessionBytes)
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"id":        "1",
+					"owner":     owner,
+					"cid":       cid.Canonical,
+					"end_block": "1000",
+				},
+			})
+			return
+		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/"):
+			sid := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/")
+			if sid != sessionB64 {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"session": map[string]any{
+					"session_id":       base64.URLEncoding.EncodeToString(sessionBytes),
+					"deal_id":          "1",
+					"owner":            owner,
+					"provider":         "nil1provider",
+					"manifest_root":    base64.StdEncoding.EncodeToString(cid.Bytes[:]),
+					"start_mdu_index":  "0",
+					"start_blob_index": "0",
+					"blob_count":       "64",
+					"total_bytes":      "8388608",
+					"nonce":            "1",
+					"expires_at":       "100",
+					"opened_height":    "1",
+					"updated_height":   "1",
+					"status":           "RETRIEVAL_SESSION_STATUS_OPEN",
+				},
+			})
+			return
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := mux.NewRouter()
+	registerProviderDaemonRoutes(r)
+	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/0?deal_id=1&owner="+owner, nil)
+	req.Header.Set("X-Nil-Session-Id", sessionHex)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Nil-Mdu-Index"); got != "0" {
+		t.Fatalf("expected mdu index header 0, got %q", got)
+	}
+	if len(w.Body.Bytes()) != len(mdu0Bytes) {
+		t.Fatalf("expected %d bytes, got %d", len(mdu0Bytes), len(w.Body.Bytes()))
 	}
 }

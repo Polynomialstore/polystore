@@ -9,14 +9,7 @@ import {
   gatewayUpload,
 } from '../api/gatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
-import {
-  providerFetchSlabLayout,
-  providerFetchManifestInfo,
-  providerFetchMduKzg,
-  providerListFiles,
-  providerPlanRetrievalSession,
-  providerUpload,
-} from '../api/providerClient'
+import { providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
 import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
@@ -176,7 +169,6 @@ export function useTransportRouter() {
 
   const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
-    const directBase = resolveDirectBase(req.directBase)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
@@ -199,21 +191,6 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase && allowNonGatewayBackends(effectivePreference)) {
-      candidates.push({
-        backend: 'direct_sp' as const,
-        endpoint: directBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            providerListFiles(directBase, req.manifestRoot, {
-              dealId: req.dealId,
-              owner: req.owner,
-            }),
-          )
-        },
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for list files')
     }
@@ -230,11 +207,10 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const slab = useCallback(async (req: SlabRequest): Promise<TransportOutcome<SlabLayoutData>> => {
     const effectivePreference = resolvePreference(req.preference)
-    const directBase = resolveDirectBase(req.directBase)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
@@ -257,21 +233,6 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase && allowNonGatewayBackends(effectivePreference)) {
-      candidates.push({
-        backend: 'direct_sp' as const,
-        endpoint: directBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            providerFetchSlabLayout(directBase, req.manifestRoot, {
-              dealId: req.dealId,
-              owner: req.owner,
-            }),
-          )
-        },
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for slab')
     }
@@ -288,7 +249,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const plan = useCallback(async (req: PlanRequest): Promise<TransportOutcome<GatewayPlanResponse>> => {
     const effectivePreference = resolvePreference(req.preference)
@@ -416,7 +377,6 @@ export function useTransportRouter() {
 
   const manifestInfo = useCallback(async (req: ManifestInfoRequest): Promise<TransportOutcome<ManifestInfoData>> => {
     const effectivePreference = resolvePreference(req.preference)
-    const directBase = resolveDirectBase(req.directBase)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
@@ -440,22 +400,6 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase && allowNonGatewayBackends(effectivePreference)) {
-      candidates.push({
-        backend: 'direct_sp' as const,
-        endpoint: directBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            providerFetchManifestInfo(
-              directBase,
-              req.manifestRoot,
-              req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            ),
-          )
-        },
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for manifest info')
     }
@@ -472,11 +416,10 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const mduKzg = useCallback(async (req: MduKzgRequest): Promise<TransportOutcome<MduKzgData>> => {
     const effectivePreference = resolvePreference(req.preference)
-    const directBase = resolveDirectBase(req.directBase)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
@@ -501,23 +444,6 @@ export function useTransportRouter() {
           }]
         : []),
     ]
-    if (directBase && allowNonGatewayBackends(effectivePreference)) {
-      candidates.push({
-        backend: 'direct_sp' as const,
-        endpoint: directBase,
-        execute: async (signal) => {
-          void signal
-          return wrapExecute(() =>
-            providerFetchMduKzg(
-              directBase,
-              req.manifestRoot,
-              req.mduIndex,
-              req.dealId && req.owner ? { dealId: req.dealId, owner: req.owner } : undefined,
-            ),
-          )
-        },
-      })
-    }
     if (candidates.length === 0) {
       throw new Error('No available transport candidates for MDU KZG')
     }
@@ -534,7 +460,7 @@ export function useTransportRouter() {
       if (err instanceof TransportTraceError) recordTrace(err.trace)
       throw err
     }
-  }, [recordTrace, resolveDirectBase, resolvePreference, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const fetchRange = useCallback(async (req: FetchRangeRequest): Promise<TransportOutcome<FetchRangeOutcome>> => {
     if (!Number.isFinite(req.rangeLen) || req.rangeLen <= 0) {
