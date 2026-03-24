@@ -34,7 +34,12 @@ import {
   writeManifestRoot,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
-import { parseNilfsFilesFromMdu0, parseNilfsRootTableFromMdu0 } from '../lib/nilfsLocal'
+import {
+  mode2RowsForK,
+  parseNilfsFilesFromMdu0,
+  parseNilfsRootTableFromMdu0,
+  reconstructMduFromMode2SlotSlices,
+} from '../lib/nilfsLocal'
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
@@ -43,7 +48,7 @@ import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { providerFetchMduWithSession } from '../api/providerClient'
+import { providerFetchMduWindowWithSession } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import {
@@ -975,7 +980,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
-  const dealProviders = deal.providers || []
+  const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
   const isDealOwner = Boolean(nilAddress && dealOwner === String(nilAddress).trim())
@@ -1015,8 +1020,8 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     setCacheFreshnessOverride('')
   }, [deal.id, deal.cid])
 
-  const resolveProviderHttpBase = useCallback((): string => {
-    const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
+  const resolveProviderHttpBaseFor = useCallback((providerAddr?: string): string => {
+    const endpoints = (providerAddr && providersByAddr[providerAddr]?.endpoints) || []
     for (const ep of endpoints) {
       const trimmed = String(ep || '').trim()
       if (!trimmed) continue
@@ -1025,23 +1030,37 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       if (httpUrl) return httpUrl
     }
     return appConfig.spBase
-  }, [primaryProvider, providersByAddr])
+  }, [providersByAddr])
 
-  const openMduRetrievalSessions = useCallback(
-    async (params: { dealId: string; provider: string; manifestRoot: string; mduIndexes: number[] }): Promise<Map<number, Hex>> => {
+  const resolveProviderHttpBase = useCallback((): string => resolveProviderHttpBaseFor(primaryProvider), [primaryProvider, resolveProviderHttpBaseFor])
+
+  const openRetrievalWindows = useCallback(
+    async (
+      params: {
+        manifestRoot: string
+        requests: Array<{
+          key: string
+          provider: string
+          startMduIndex: number
+          startBlobIndex: number
+          blobCount: number
+        }>
+      },
+    ): Promise<Map<string, Hex>> => {
       if (!publicClient) throw new Error('EVM RPC client unavailable')
       if (!walletClient) throw new Error('Wallet not connected')
       const signer = (walletClient.account?.address || address) as Hex | undefined
       if (!signer || !String(signer).startsWith('0x')) {
         throw new Error('Connect wallet to open retrieval sessions')
       }
-      const requests = params.mduIndexes.map((mduIndex, idx) => ({
-        dealId: BigInt(params.dealId),
-        provider: params.provider,
+      if (params.requests.length === 0) return new Map<string, Hex>()
+      const requests = params.requests.map((request, idx) => ({
+        dealId: BigInt(deal.id),
+        provider: request.provider,
         manifestRoot: params.manifestRoot as Hex,
-        startMduIndex: BigInt(mduIndex),
-        startBlobIndex: 0,
-        blobCount: BigInt(64),
+        startMduIndex: BigInt(request.startMduIndex),
+        startBlobIndex: request.startBlobIndex,
+        blobCount: BigInt(request.blobCount),
         nonce: BigInt(Date.now() + idx),
         expiresAt: 0n,
       }))
@@ -1064,9 +1083,9 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         chain: walletClient.chain ?? undefined,
       })
       await waitForTransactionReceipt(openTxHash)
-      return new Map(params.mduIndexes.map((mduIndex, idx) => [mduIndex, sessionIds[idx] as Hex]))
+      return new Map(params.requests.map((request, idx) => [request.key, sessionIds[idx] as Hex]))
     },
-    [address, publicClient, walletClient],
+    [address, deal.id, publicClient, walletClient],
   )
 
   const confirmMduRetrievalSessions = useCallback(
@@ -1780,17 +1799,72 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     setFileActionError(null)
 
     try {
-      setDealIndexSyncMessage('Opening retrieval sessions for committed index MDUs…')
-      const mdu0Sessions = await openMduRetrievalSessions({
-        dealId,
-        provider,
-        manifestRoot,
-        mduIndexes: [0],
-      })
-      const mdu0SessionId = mdu0Sessions.get(0)
-      if (!mdu0SessionId) throw new Error('missing retrieval session for mdu_0')
-      setDealIndexSyncMessage('Fetching committed mdu_0 from provider…')
-      const mdu0Bytes = await providerFetchMduWithSession(providerBase, manifestRoot, 0, { dealId, owner, sessionId: mdu0SessionId })
+      const fetchCommittedMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
+        if (serviceHint.mode === 'mode2') {
+          const dataSlotProviders = dealProviders
+            .map((addr) => String(addr || '').trim())
+            .filter((addr) => addr)
+            .slice(0, Math.max(1, rsK))
+          if (dataSlotProviders.length < Math.max(1, rsK)) {
+            throw new Error(`insufficient Mode 2 slot providers for ${kindLabel}`)
+          }
+          const rows = mode2RowsForK(rsK)
+          const requests = dataSlotProviders.map((providerAddr, slot) => ({
+            key: `${mduIndex}:${slot}`,
+            provider: providerAddr,
+            startMduIndex: mduIndex,
+            startBlobIndex: slot * rows,
+            blobCount: rows,
+          }))
+          setDealIndexSyncMessage(`Opening retrieval sessions for committed ${kindLabel} slices…`)
+          const sessions = await openRetrievalWindows({ manifestRoot, requests })
+          try {
+            setDealIndexSyncMessage(`Fetching committed ${kindLabel} slices from providers…`)
+            const slotSlices = await Promise.all(
+              requests.map(async (request, slot) => {
+                const sessionId = sessions.get(request.key)
+                if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel} slot ${slot}`)
+                return {
+                  slot,
+                  data: await providerFetchMduWindowWithSession(
+                    resolveProviderHttpBaseFor(request.provider),
+                    manifestRoot,
+                    mduIndex,
+                    { dealId, owner, sessionId },
+                  ),
+                }
+              }),
+            )
+            return reconstructMduFromMode2SlotSlices(slotSlices, rsK)
+          } finally {
+            await confirmMduRetrievalSessions(Array.from(sessions.values()))
+          }
+        }
+
+        setDealIndexSyncMessage(`Opening retrieval session for committed ${kindLabel}…`)
+        const sessions = await openRetrievalWindows({
+          manifestRoot,
+          requests: [
+            {
+              key: `${mduIndex}:full`,
+              provider,
+              startMduIndex: mduIndex,
+              startBlobIndex: 0,
+              blobCount: 64,
+            },
+          ],
+        })
+        const sessionId = sessions.get(`${mduIndex}:full`)
+        if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel}`)
+        try {
+          setDealIndexSyncMessage(`Fetching committed ${kindLabel} from provider…`)
+          return await providerFetchMduWindowWithSession(providerBase, manifestRoot, mduIndex, { dealId, owner, sessionId })
+        } finally {
+          await confirmMduRetrievalSessions(Array.from(sessions.values()))
+        }
+      }
+
+      const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
       const parsedFiles = parseNilfsFilesFromMdu0(mdu0Bytes)
       const { totalMdus, witnessMdus, userMdus } = deriveSlabLayoutFromMdu0(mdu0Bytes, parsedFiles)
       const rootTable = parseNilfsRootTableFromMdu0(mdu0Bytes)
@@ -1824,30 +1898,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
         })),
       ]
 
-      setDealIndexSyncMessage('Fetching committed witness MDUs from provider…')
       const witnessMduIndexes = Array.from({ length: witnessMdus }, (_, idx) => idx + 1)
-      const witnessSessions = witnessMduIndexes.length
-        ? await openMduRetrievalSessions({
-            dealId,
-            provider,
-            manifestRoot,
-            mduIndexes: witnessMduIndexes,
-          })
-        : new Map<number, Hex>()
       const witnessMduArtifacts = await Promise.all(
         witnessMduIndexes.map(async (index) => ({
           index,
-          data: await providerFetchMduWithSession(providerBase, manifestRoot, index, {
-            dealId,
-            owner,
-            sessionId: String(witnessSessions.get(index) || ''),
-          }),
+          data: await fetchCommittedMdu(index, `witness mdu_${index}`),
         })),
       )
-      await confirmMduRetrievalSessions([
-        ...Array.from(mdu0Sessions.values()),
-        ...Array.from(witnessSessions.values()),
-      ])
 
       setDealIndexSyncMessage('Writing browser deal index cache…')
       await deleteDealDirectory(dealId)
@@ -1923,7 +1980,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [confirmMduRetrievalSessions, deal.id, openMduRetrievalSessions, primaryProvider, refreshAuthoritativeDealHead, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM])
+  }, [confirmMduRetrievalSessions, deal.id, openRetrievalWindows, primaryProvider, refreshAuthoritativeDealHead, resolveProviderHttpBase, resolveProviderHttpBaseFor, serviceHint.mode, serviceHint.rsK, serviceHint.rsM, dealProviders])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)

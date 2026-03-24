@@ -1,7 +1,7 @@
 import type { NilfsFileEntry } from '../domain/nilfs'
 
-const MDU_SIZE_BYTES = 8 * 1024 * 1024
-const BLOB_SIZE_BYTES = 128 * 1024
+export const MDU_SIZE_BYTES = 8 * 1024 * 1024
+export const BLOB_SIZE_BYTES = 128 * 1024
 const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
 const ROOT_TABLE_END = FILE_TABLE_START
 const FILE_TABLE_HEADER_SIZE = 128
@@ -71,4 +71,46 @@ export function parseNilfsRootTableFromMdu0(mdu0: Uint8Array): Uint8Array[] {
     if (!allZero) roots.push(chunk)
   }
   return roots
+}
+
+export function mode2RowsForK(k: number): number {
+  const normalized = Math.max(1, Math.floor(Number(k) || 0))
+  if (64 % normalized !== 0) {
+    throw new Error(`invalid Mode 2 K: ${k}`)
+  }
+  return 64 / normalized
+}
+
+export function reconstructMduFromMode2SlotSlices(
+  slotSlices: ReadonlyArray<{ slot: number; data: Uint8Array }>,
+  k: number,
+): Uint8Array {
+  const rows = mode2RowsForK(k)
+  const expectedSliceBytes = rows * BLOB_SIZE_BYTES
+  const bySlot = new Map<number, Uint8Array>()
+  for (const slice of slotSlices) {
+    const slot = Math.max(0, Math.floor(Number(slice.slot) || 0))
+    if (slot >= k) continue
+    if (!(slice.data instanceof Uint8Array) || slice.data.byteLength !== expectedSliceBytes) {
+      throw new Error(`invalid Mode 2 slot slice for slot ${slot}: expected ${expectedSliceBytes} bytes`)
+    }
+    bySlot.set(slot, slice.data)
+  }
+  for (let slot = 0; slot < k; slot += 1) {
+    if (!bySlot.has(slot)) {
+      throw new Error(`missing Mode 2 slot slice for slot ${slot}`)
+    }
+  }
+
+  const mdu = new Uint8Array(MDU_SIZE_BYTES)
+  for (let row = 0; row < rows; row += 1) {
+    for (let slot = 0; slot < k; slot += 1) {
+      const shard = bySlot.get(slot)!
+      const shardOff = row * BLOB_SIZE_BYTES
+      const blobIndex = row * k + slot
+      const mduOff = blobIndex * BLOB_SIZE_BYTES
+      mdu.set(shard.subarray(shardOff, shardOff + BLOB_SIZE_BYTES), mduOff)
+    }
+  }
+  return mdu
 }

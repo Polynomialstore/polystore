@@ -17,10 +17,15 @@ import {
   readShard,
   writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
-import { parseNilfsFilesFromMdu0, parseNilfsRootTableFromMdu0 } from '../lib/nilfsLocal';
+import {
+  mode2RowsForK,
+  parseNilfsFilesFromMdu0,
+  parseNilfsRootTableFromMdu0,
+  reconstructMduFromMode2SlotSlices,
+} from '../lib/nilfsLocal';
 import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
-import { providerFetchMduWithSession } from '../api/providerClient';
+import { providerFetchMduWindowWithSession } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
@@ -339,19 +344,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
-  const openMduRetrievalSessions = useCallback(
-    async (params: { provider: string; manifestRoot: string; mduIndexes: number[] }): Promise<Map<number, `0x${string}`>> => {
+  const openRetrievalWindows = useCallback(
+    async (
+      params: {
+        manifestRoot: string
+        requests: Array<{
+          key: string
+          provider: string
+          startMduIndex: number
+          startBlobIndex: number
+          blobCount: number
+        }>
+      },
+    ): Promise<Map<string, `0x${string}`>> => {
       if (!publicClient) throw new Error('EVM RPC client unavailable')
       if (!walletClient) throw new Error('Wallet not connected')
       const signer = (walletClient.account?.address || address) as `0x${string}` | undefined
       if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to open retrieval sessions')
-      const requests = params.mduIndexes.map((mduIndex, idx) => ({
+      if (params.requests.length === 0) return new Map<string, `0x${string}`>()
+      const requests = params.requests.map((request, idx) => ({
         dealId: BigInt(dealId),
-        provider: params.provider,
+        provider: request.provider,
         manifestRoot: params.manifestRoot as `0x${string}`,
-        startMduIndex: BigInt(mduIndex),
-        startBlobIndex: 0,
-        blobCount: 64n,
+        startMduIndex: BigInt(request.startMduIndex),
+        startBlobIndex: request.startBlobIndex,
+        blobCount: BigInt(request.blobCount),
         nonce: BigInt(Date.now() + idx),
         expiresAt: 0n,
       }))
@@ -372,7 +389,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         chain: walletClient.chain ?? undefined,
       })
       await waitForTransactionReceipt(openTxHash)
-      return new Map(params.mduIndexes.map((mduIndex, idx) => [mduIndex, sessionIds[idx] as `0x${string}`]))
+      return new Map(params.requests.map((request, idx) => [request.key, sessionIds[idx] as `0x${string}`]))
     },
     [address, dealId, publicClient, walletClient],
   )
@@ -872,29 +889,56 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   } | null> => {
     const manifestRoot = normalizeManifestRoot(baseManifestRoot)
     const owner = String(dealOwner || '').trim()
-    const providerBase = String(slotBases[0] || appConfig.spBase || '').trim().replace(/\/$/, '')
-    const provider = String(slotProviders[0] || '').trim()
-    if (!manifestRoot || !owner || !providerBase || !provider || !stripeParams) {
+    if (!manifestRoot || !owner || !stripeParams) {
       return null
+    }
+    const dataSlotProviders = slotProviders
+      .map((value, slot) => ({
+        slot,
+        provider: String(value || '').trim(),
+        base: String(slotBases[slot] || appConfig.spBase || '').trim().replace(/\/$/, ''),
+      }))
+      .filter((entry) => entry.provider && entry.base)
+      .slice(0, Math.max(1, stripeParams.k))
+    if (dataSlotProviders.length < Math.max(1, stripeParams.k)) {
+      throw new Error('missing Mode 2 slot providers for bootstrap retrieval')
+    }
+    const rows = mode2RowsForK(stripeParams.k)
+
+    const fetchCommittedMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
+      addLog(`> Bootstrap fetch: opening retrieval sessions for committed ${kindLabel} slices...`)
+      const requests = dataSlotProviders.map((entry) => ({
+        key: `${mduIndex}:${entry.slot}`,
+        provider: entry.provider,
+        startMduIndex: mduIndex,
+        startBlobIndex: entry.slot * rows,
+        blobCount: rows,
+      }))
+      const sessions = await openRetrievalWindows({ manifestRoot, requests })
+      try {
+        addLog(`> Bootstrap fetch: fetching committed ${kindLabel} slices...`)
+        const slotSlices = await Promise.all(
+          dataSlotProviders.map(async (entry) => {
+            const sessionId = sessions.get(`${mduIndex}:${entry.slot}`)
+            if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel} slot ${entry.slot}`)
+            const data = await providerFetchMduWindowWithSession(entry.base, manifestRoot, mduIndex, {
+              dealId,
+              owner,
+              sessionId,
+            })
+            return { slot: entry.slot, data }
+          }),
+        )
+        return reconstructMduFromMode2SlotSlices(slotSlices, stripeParams.k)
+      } finally {
+        await confirmMduRetrievalSessions(Array.from(sessions.values()))
+      }
     }
 
     addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
-    addLog('> Bootstrap fetch: opening retrieval session for committed mdu_0...')
-    const mdu0Sessions = await openMduRetrievalSessions({
-      provider,
-      manifestRoot,
-      mduIndexes: [0],
-    })
-    const mdu0SessionId = mdu0Sessions.get(0)
-    if (!mdu0SessionId) throw new Error('missing retrieval session for committed mdu_0')
-    const mdu0Bytes = await providerFetchMduWithSession(providerBase, manifestRoot, 0, {
-      dealId,
-      owner,
-      sessionId: mdu0SessionId,
-    })
+    const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
     const files = parseNilfsFilesFromMdu0(mdu0Bytes)
     if (!files.length) {
-      await confirmMduRetrievalSessions(Array.from(mdu0Sessions.values()))
       addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
       return null
     }
@@ -914,30 +958,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const witnessCount = roots.length - userCount
     const userMduIndexes = Array.from({ length: userCount }, (_, idx) => 1 + witnessCount + idx)
 
-    addLog(`> Bootstrap fetch: fetching ${userMduIndexes.length} committed user MDUs via retrieval sessions...`)
-    const userSessions = userMduIndexes.length > 0
-      ? await openMduRetrievalSessions({
-          provider,
-          manifestRoot,
-          mduIndexes: userMduIndexes,
-        })
-      : new Map<number, `0x${string}`>()
     const userMdus = await Promise.all(
       userMduIndexes.map(async (mduIndex, idx) => {
-        const sessionId = userSessions.get(mduIndex)
-        if (!sessionId) throw new Error(`missing retrieval session for committed user MDU #${idx}`)
-        const data = await providerFetchMduWithSession(providerBase, manifestRoot, mduIndex, {
-          dealId,
-          owner,
-          sessionId,
-        })
+        const data = await fetchCommittedMdu(mduIndex, `user mdu_${mduIndex}`)
         return { index: idx, data }
       }),
     )
-    await confirmMduRetrievalSessions([
-      ...Array.from(mdu0Sessions.values()),
-      ...Array.from(userSessions.values()),
-    ])
 
     const bootstrapped = buildBootstrappedAppendBase({
       rawMduCapacity: RAW_MDU_CAPACITY,
@@ -1017,7 +1043,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
     }
     return bootstrapped
-  }, [addLog, baseManifestRoot, confirmMduRetrievalSessions, dealId, dealOwner, openMduRetrievalSessions, slotBases, slotProviders, stripeParams]);
+  }, [addLog, baseManifestRoot, confirmMduRetrievalSessions, dealId, dealOwner, openRetrievalWindows, slotBases, slotProviders, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

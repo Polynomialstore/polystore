@@ -365,6 +365,16 @@ export async function providerFetchMduWithSession(
   return new Uint8Array(await res.arrayBuffer())
 }
 
+export async function providerFetchMduWindowWithSession(
+  providerBase: string,
+  manifestRoot: string,
+  mduIndex: number,
+  params: { dealId: string; owner: string; sessionId: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  return providerFetchMduWithSession(providerBase, manifestRoot, mduIndex, params, fetchFn)
+}
+
 export async function providerPlanRetrievalSession(
   providerBase: string,
   manifestRoot: string,

@@ -123,18 +123,43 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "mdu_index mismatch")
 			return
 		}
-		if onchainSession.StartBlobIndex != 0 {
-			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "start_blob_index mismatch")
-			return
-		}
-		if onchainSession.BlobCount != uint64(types.BLOBS_PER_MDU) {
-			writeJSONError(w, http.StatusBadRequest, "retrieval session does not match request", "blob_count mismatch")
-			return
-		}
 		if len(onchainSession.SessionId) == 0 {
 			writeJSONError(w, http.StatusBadRequest, "invalid retrieval session", "missing session id bytes")
 			return
 		}
+
+		hint, err := fetchDealServiceHintFromLCD(r.Context(), dealID)
+		if err != nil {
+			writeJSONError(w, http.StatusBadGateway, "failed to load deal service hint", err.Error())
+			return
+		}
+		stripe, serr := stripeParamsFromHint(hint)
+		if serr != nil {
+			writeJSONError(w, http.StatusBadGateway, "failed to parse deal service hint", serr.Error())
+			return
+		}
+		if onchainSession.BlobCount == 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid retrieval session", "blob_count must be > 0")
+			return
+		}
+		windowBytes, err := readMduSessionWindow(metaOrNil(dealID, manifestRoot, rawManifestRoot), mduIndex, stripe, onchainSession.StartBlobIndex, onchainSession.BlobCount)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				writeJSONError(w, http.StatusNotFound, "mdu not found", "")
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to read mdu session window", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.Itoa(len(windowBytes)))
+		w.Header().Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+		w.Header().Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
+		w.Header().Set("X-Nil-Start-Blob-Index", strconv.FormatUint(uint64(onchainSession.StartBlobIndex), 10))
+		w.Header().Set("X-Nil-Blob-Count", strconv.FormatUint(onchainSession.BlobCount, 10))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(windowBytes)
+		return
 	}
 
 	var dealDir string
@@ -191,6 +216,92 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+type dealDirLocator struct {
+	dealID          uint64
+	manifestRoot    ManifestRoot
+	rawManifestRoot string
+}
+
+func metaOrNil(dealID uint64, manifestRoot ManifestRoot, rawManifestRoot string) dealDirLocator {
+	return dealDirLocator{dealID: dealID, manifestRoot: manifestRoot, rawManifestRoot: rawManifestRoot}
+}
+
+func readMduSessionWindow(locator dealDirLocator, mduIndex uint64, stripe stripeParams, startBlobIndex uint32, blobCount uint64) ([]byte, error) {
+	dealDir, err := resolveDealDirForDeal(locator.dealID, locator.manifestRoot, locator.rawManifestRoot)
+	if err != nil {
+		return nil, err
+	}
+	if blobCount == 0 {
+		return nil, fmt.Errorf("blob_count must be > 0")
+	}
+	if stripe.mode != 2 {
+		mduPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+		data, err := os.ReadFile(mduPath)
+		if err != nil {
+			return nil, err
+		}
+		start := uint64(startBlobIndex) * uint64(types.BLOB_SIZE)
+		length := blobCount * uint64(types.BLOB_SIZE)
+		end := start + length
+		if end > uint64(len(data)) {
+			return nil, fmt.Errorf("requested blob window exceeds mdu length")
+		}
+		return data[start:end], nil
+	}
+	if stripe.rows == 0 {
+		return nil, fmt.Errorf("invalid mode2 stripe rows")
+	}
+	slot := uint64(startBlobIndex) / stripe.rows
+	rowStart := uint64(startBlobIndex) % stripe.rows
+	if rowStart+blobCount > stripe.rows {
+		return nil, fmt.Errorf("requested mode2 blob window crosses slot boundary")
+	}
+
+	shardPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot))
+	if shardBytes, err := os.ReadFile(shardPath); err == nil {
+		start := rowStart * uint64(types.BLOB_SIZE)
+		length := blobCount * uint64(types.BLOB_SIZE)
+		end := start + length
+		if end > uint64(len(shardBytes)) {
+			return nil, fmt.Errorf("requested shard window exceeds stored shard length")
+		}
+		return shardBytes[start:end], nil
+	}
+
+	fullPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+	fullBytes, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	return synthesizeMode2SlotWindowFromFullMdu(fullBytes, stripe, slot, rowStart, blobCount)
+}
+
+func synthesizeMode2SlotWindowFromFullMdu(mdu []byte, stripe stripeParams, slot uint64, rowStart uint64, blobCount uint64) ([]byte, error) {
+	if stripe.k == 0 || stripe.rows == 0 {
+		return nil, fmt.Errorf("invalid mode2 stripe params")
+	}
+	if slot >= stripe.k {
+		return nil, fmt.Errorf("slot %d is not a data slot", slot)
+	}
+	if rowStart+blobCount > stripe.rows {
+		return nil, fmt.Errorf("requested mode2 blob window crosses slot boundary")
+	}
+	expectedLen := uint64(types.MDU_SIZE)
+	if uint64(len(mdu)) < expectedLen {
+		return nil, fmt.Errorf("mdu shorter than expected: got %d want %d", len(mdu), expectedLen)
+	}
+	out := make([]byte, blobCount*uint64(types.BLOB_SIZE))
+	for i := uint64(0); i < blobCount; i++ {
+		row := rowStart + i
+		blobIndex := row*stripe.k + slot
+		srcStart := blobIndex * uint64(types.BLOB_SIZE)
+		srcEnd := srcStart + uint64(types.BLOB_SIZE)
+		dstStart := i * uint64(types.BLOB_SIZE)
+		copy(out[dstStart:dstStart+uint64(types.BLOB_SIZE)], mdu[srcStart:srcEnd])
+	}
+	return out, nil
 }
 
 type slabMeta struct {
