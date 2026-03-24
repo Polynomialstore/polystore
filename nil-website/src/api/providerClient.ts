@@ -380,6 +380,7 @@ export async function providerDownloadWithBundledSession(
       method: 'GET',
       headers: {
         Range: `bytes=${rangeStart}-${rangeEnd}`,
+        'X-Nil-Download-Session': downloadSession,
       },
     },
     60_000,

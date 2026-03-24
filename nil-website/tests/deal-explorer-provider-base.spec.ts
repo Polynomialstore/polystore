@@ -253,7 +253,8 @@ test('Deal Explorer: missing local index requires provider sync before file view
       return
     }
     const url = new URL(route.request().url())
-    if (!url.searchParams.get('download_session')) {
+    const headerDownloadSession = route.request().headers()['x-nil-download-session']
+    if (!url.searchParams.get('download_session') && !headerDownloadSession) {
       await route.fulfill({
         status: 400,
         contentType: 'application/json',
