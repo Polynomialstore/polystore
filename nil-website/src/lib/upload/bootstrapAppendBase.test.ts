@@ -65,6 +65,28 @@ test('bootstrapAppendBaseFromNetwork reconstructs user MDUs and MDU0 state from 
   assert.equal(new TextDecoder().decode(firstRaw.subarray(0, 5)), 'HELLO')
   assert.equal(new TextDecoder().decode(firstRaw.subarray(6, 8)), 'WX')
   assert.equal(new TextDecoder().decode(secondRaw.subarray(0, 2)), 'YZ')
+  assert.equal(firstRaw.length, 8)
+  assert.equal(secondRaw.length, 2)
+})
+
+test('bootstrapAppendBaseFromNetwork trims raw payloads to occupied committed bytes', async () => {
+  const result = await bootstrapAppendBaseFromNetwork({
+    rawMduCapacity: 8,
+    commitmentsPerMdu: 96,
+    listFiles: async () => [
+      { path: 'zeros.bin', size_bytes: 3, start_offset: 2, flags: 0, cache_present: true },
+    ],
+    fetchFileBytes: async () => new Uint8Array([0, 0, 0]),
+    initMdu0Builder: async () => undefined,
+    appendFileToMdu0: async () => undefined,
+    getMdu0Bytes: async () => new Uint8Array([1]),
+    encodeToMdu: (rawMdu) => rawMdu.slice(),
+  })
+
+  assert.ok(result)
+  assert.equal(result.existingUserMdus.length, 1)
+  assert.equal(result.existingUserMdus[0]?.rawData?.length, 5)
+  assert.deepEqual(Array.from(result.existingUserMdus[0]?.rawData ?? []), [0, 0, 0, 0, 0])
 })
 
 test('bootstrapAppendBaseFromNetwork returns null when provider has no committed files', async () => {

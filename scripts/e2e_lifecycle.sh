@@ -12,13 +12,14 @@ set -x
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_SCRIPT="$ROOT_DIR/scripts/run_local_stack.sh"
 
-LCD_BASE="${LCD_BASE:-http://localhost:1317}"
-GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
-FAUCET_BASE="${FAUCET_BASE:-http://localhost:8081}"
+LCD_BASE="${LCD_BASE:-http://localhost:${LCD_PORT:-1317}}"
+GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:${GATEWAY_PORT:-8080}}"
+FAUCET_BASE="${FAUCET_BASE:-http://localhost:${FAUCET_PORT:-8081}}"
 RPC_ADDR_FALLBACK="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 RPC_PORT="${RPC_ADDR_FALLBACK##*:}"
 RPC_BASE="${RPC_BASE:-http://127.0.0.1:${RPC_PORT}}"
 EVM_RPC="${EVM_RPC:-http://localhost:${EVM_RPC_PORT:-8545}}"
+GATEWAY_TX_TIMEOUT="${GATEWAY_TX_TIMEOUT:-30s}"
 
 CHAIN_ID="${CHAIN_ID:-test-1}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
@@ -121,7 +122,7 @@ wait_for_manifest_root() {
   local observed_root
   for attempt in $(seq 1 "$max_attempts"); do
     observed_root=$(timeout 10s curl -sS "$lcd_base/nilchain/nilchain/v1/deals/$deal_id" \
-      | python3 -c "import sys, json, base64; j=json.load(sys.stdin); r=(j.get('deal') or {}).get('manifest_root') or ''; print(r if r.startswith('0x') else ('0x'+base64.b64decode(r).hex() if r else ''))" \
+      | python3 -c "import sys, json, base64; deal=(json.load(sys.stdin).get('deal') or {}); raw=str(deal.get('cid') or deal.get('manifest_root_hex') or deal.get('manifest_root') or '').strip(); print(raw if raw.startswith('0x') else ('0x'+base64.b64decode(raw).hex() if raw else ''))" \
       || echo "")
     if [ "$observed_root" == "$expected_root" ]; then
       return 0
@@ -221,7 +222,7 @@ for i in $(seq 1 5); do
     MAX_MONTHLY_SPEND="500000" \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
   )
-  CREATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
+  CREATE_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
     -H "Content-Type: application/json" \
     -d "$CREATE_PAYLOAD")
 
@@ -307,13 +308,14 @@ for i in $(seq 1 5); do
   UPDATE_PAYLOAD=$(
     NONCE="$EVM_NONCE" \
     DEAL_ID="$DEAL_ID" \
+    PREVIOUS_MANIFEST_ROOT="" \
     CID="$MANIFEST_ROOT" \
     SIZE_BYTES="$SIZE_BYTES" \
     TOTAL_MDUS="$TOTAL_MDUS" \
     WITNESS_MDUS="$WITNESS_MDUS" \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
   )
-  UPDATE_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
+  UPDATE_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
     -d "$UPDATE_PAYLOAD")
 
@@ -354,7 +356,8 @@ import sys, json, base64
 with open("$TMP_DEAL_JSON_FILE", "r") as f:
     raw_json_input = f.read()
 
-raw_manifest_root = json.loads(raw_json_input).get('deal', {}).get('manifest_root', '')
+deal = json.loads(raw_json_input).get('deal', {})
+raw_manifest_root = deal.get('cid') or deal.get('manifest_root_hex') or deal.get('manifest_root', '')
 
 if raw_manifest_root:
     # Check if it's already a 0x-prefixed hex string
@@ -604,13 +607,14 @@ for i in $(seq 1 5); do
   UPDATE2_PAYLOAD=$(
     NONCE="$EVM_NONCE" \
     DEAL_ID="$DEAL_ID" \
+    PREVIOUS_MANIFEST_ROOT="$MANIFEST_ROOT" \
     CID="$MANIFEST_ROOT_2" \
     SIZE_BYTES="$SIZE_BYTES_2" \
     TOTAL_MDUS="$TOTAL_MDUS_2" \
     WITNESS_MDUS="$WITNESS_MDUS_2" \
     "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
   )
-  UPDATE2_RESP=$(timeout 10s curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
+  UPDATE2_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
     -d "$UPDATE2_PAYLOAD")
 
@@ -651,7 +655,8 @@ import sys, json, base64
 with open("$TMP_DEAL_JSON_FILE_2", "r") as f:
     raw_json_input = f.read()
 
-raw_manifest_root = json.loads(raw_json_input).get('deal', {}).get('manifest_root', '')
+deal = json.loads(raw_json_input).get('deal', {})
+raw_manifest_root = deal.get('cid') or deal.get('manifest_root_hex') or deal.get('manifest_root', '')
 
 if raw_manifest_root:
     if raw_manifest_root.startswith('0x'):

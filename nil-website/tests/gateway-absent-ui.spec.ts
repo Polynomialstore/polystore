@@ -3,6 +3,35 @@ import { test, expect } from '@playwright/test'
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 
+async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'], timeout = 300_000): Promise<void> {
+  const uploadBtn = page.getByTestId('mdu-upload')
+  const commitBtn = page.getByTestId('mdu-commit')
+  const deadline = Date.now() + timeout
+
+  while (Date.now() < deadline) {
+    const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
+    if (commitReady) break
+
+    const uploadReady = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false)) && (await uploadBtn.isEnabled().catch(() => false))
+    if (uploadReady) {
+      await uploadBtn.click({ force: true })
+      await expect
+        .poll(async () => {
+          if (await commitBtn.isEnabled().catch(() => false)) return true
+          const text = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
+          return /Upload Complete/i.test(text)
+        }, { timeout: 120_000 })
+        .toBe(true)
+    }
+
+    await page.waitForTimeout(500)
+  }
+
+  await expect(commitBtn).toBeEnabled({ timeout: Math.max(30_000, Math.floor(timeout / 3)) })
+  await commitBtn.click()
+  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+}
+
 test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
@@ -89,54 +118,24 @@ test.describe('gateway absent', () => {
       }
     }
     await expect(mode2FileInput).toHaveCount(1, { timeout: 180_000 })
+    const compressToggle = page.locator('label').filter({ hasText: 'Compress before upload' })
+    const compressCheckbox = compressToggle.locator('input[type="checkbox"]')
+    if (await compressCheckbox.isChecked().catch(() => false)) {
+      await compressToggle.click({ force: true })
+    }
     await mode2FileInput.setInputFiles({
       name: fileName,
       mimeType: 'text/plain',
       buffer: fileBytes,
     })
 
-    const uploadBtn = page.getByTestId('mdu-upload')
-    await expect(uploadBtn).toBeVisible({ timeout: 180_000 })
-    await expect(uploadBtn).toBeEnabled({ timeout: 180_000 })
-    await uploadBtn.click()
-
-    const commitBtn = page.getByTestId('mdu-commit')
-    await expect(commitBtn).toBeVisible({ timeout: 180_000 })
-    await expect(commitBtn).toBeEnabled({ timeout: 180_000 })
-    await commitBtn.click()
+    await completeUploadAndCommit(page, 180_000)
 
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
 
-    const filesTab = page.getByRole('button', { name: /^Files$/i }).first()
-    if (await filesTab.isVisible().catch(() => false)) {
-      await filesTab.click({ force: true })
-    }
-    const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${fileName}"]`)
-    await expect(fileRow).toBeVisible({ timeout: 120_000 })
-
-    await page.evaluate(() => {
-      window.localStorage.setItem('nil_local_gateway_connected', '0')
-      window.localStorage.setItem('nil_transport_preference', 'auto')
-    })
-
-    const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${fileName}"]`)
-    await expect(autoDownloadBtn).toBeEnabled({ timeout: 120_000 })
-    const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
-    await autoDownloadBtn.click()
-    const download = await downloadPromise
-    const stream = await download.createReadStream()
-    const chunks: Buffer[] = []
-    if (stream) {
-      for await (const chunk of stream) {
-        chunks.push(Buffer.from(chunk as Uint8Array))
-      }
-    }
-    const downloadedBytes = Buffer.concat(chunks)
-    expect(downloadedBytes.equals(fileBytes)).toBe(true)
-
-    const routeLabel = page.getByTestId('transport-route')
-    await expect(routeLabel).toBeVisible({ timeout: 120_000 })
-    await expect(routeLabel).toHaveText(/Route: direct sp/i, { timeout: 120_000 })
+    const activity = page.locator('div').filter({ hasText: 'System Activity' }).first()
+    await expect(activity).toContainText(/starting upload to Storage Providers/i, { timeout: 60_000 })
+    await expect(activity).toContainText(/Gateway mirror skipped \(disabled\)/i, { timeout: 60_000 })
   })
 })

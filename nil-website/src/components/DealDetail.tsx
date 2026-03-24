@@ -216,7 +216,6 @@ interface DealIndexRequirement {
 interface FileRowProps {
   file: NilfsFileEntry
   deal: LcdDeal
-  nilAddress: string
   browserCached: boolean
   gatewayCached: boolean
   isBusy: boolean
@@ -299,7 +298,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 function FileRow({
   file,
   deal,
-  nilAddress,
   browserCached,
   gatewayCached,
   isBusy,
@@ -324,6 +322,8 @@ function FileRow({
   allFiles,
   transportPreference,
 }: FileRowProps) {
+  const requestOwner = String(deal.owner || '').trim()
+
   const readFromLocalMduCache = async (dealId: string, chainCid: string): Promise<Uint8Array> => {
     const cacheFreshness = await withTimeout(
       reconcileLocalMduCache(dealId, chainCid),
@@ -417,7 +417,7 @@ function FileRow({
         const result = await fetchFile({
           dealId,
           manifestRoot: manifestHex,
-          owner: String(deal.owner || nilAddress || ''),
+          owner: requestOwner,
           filePath: file.path,
           routePreference: autoRoutePreference,
           rangeStart: safeStart,
@@ -457,7 +457,7 @@ function FileRow({
       const gatewayBlob = await downloadViaGatewayCache({
         manifestRoot: manifestHex,
         dealId,
-        owner: String(deal.owner || nilAddress || ''),
+        owner: requestOwner,
         filePath: file.path,
         rangeStart: safeStart,
         rangeLen: safeLen,
@@ -519,7 +519,7 @@ function FileRow({
       const result = await fetchFile({
         dealId,
         manifestRoot: manifestHex,
-        owner: String(deal.owner || nilAddress || ''),
+        owner: requestOwner,
         filePath: file.path,
         serviceBase: resolveProviderHttpBase(),
         routePreference: 'prefer_direct_sp',
@@ -586,7 +586,7 @@ function FileRow({
       const gatewayBlob = await downloadViaGatewayCache({
         manifestRoot: manifestHex,
         dealId,
-        owner: String(deal.owner || nilAddress || ''),
+        owner: requestOwner,
         filePath: file.path,
         rangeStart: safeStart,
         rangeLen: safeLen,
@@ -830,6 +830,8 @@ function FileRow({
 
 export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, requestedTab, requestedTabNonce }: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
+  const dealOwner = String(deal.owner || '').trim()
+  const requestOwner = dealOwner || String(nilAddress || '').trim()
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(String(deal.cid || '').trim())
   const dealStatusLabel = hasCommittedContent ? 'Active' : 'Empty'
@@ -951,7 +953,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
-  const isDealOwner = Boolean(nilAddress && deal.owner === nilAddress)
+  const isDealOwner = Boolean(nilAddress && dealOwner === String(nilAddress).trim())
   const [routeOverride, setRouteOverride] = useState<string>('')
   const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
@@ -1610,7 +1612,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const syncDealIndexFromProviders = useCallback(async () => {
     const manifestRoot = normalizeManifestRoot(String(deal.cid || ''))
     const dealId = String(deal.id)
-    const owner = String(nilAddress || deal.owner || '').trim()
+    const owner = requestOwner
     const providerBase = resolveProviderHttpBase()
     const rsK = serviceHint.rsK ?? 8
     const rsM = serviceHint.rsM ?? 4
@@ -1775,7 +1777,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.cid, deal.id, deal.owner, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
+  }, [deal.cid, deal.id, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -1902,7 +1904,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
-      const owner = nilAddress || deal.owner
+      const owner = requestOwner
       setDealIndexSyncMessage('')
       void fetchSlab(deal.cid, deal.id, owner)
       void fetchFiles(deal.cid, deal.id, owner)
@@ -1928,7 +1930,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     }
     setFileActionError(null)
     void fetchHeat(deal.id)
-  }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
+  }, [deal.cid, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||
@@ -2307,7 +2309,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                               file={f}
                               allFiles={files}
                               deal={deal}
-                              nilAddress={nilAddress}
                               browserCached={!!browserCachedByPath[f.path]}
                               gatewayCached={f.cache_present === true}
                               isBusy={busyFilePath === f.path}

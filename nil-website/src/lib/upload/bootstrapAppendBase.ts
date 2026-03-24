@@ -70,6 +70,7 @@ export async function bootstrapAppendBaseFromNetwork(
 
   await input.initMdu0Builder(userCount, commitmentsPerMdu)
   const rawUserMdus = Array.from({ length: userCount }, () => new Uint8Array(rawMduCapacity))
+  const usedLengths = new Array<number>(userCount).fill(0)
 
   for (const file of files) {
     const startOffset = toSafeNumber(file.start_offset)
@@ -87,6 +88,7 @@ export async function bootstrapAppendBaseFromNetwork(
       const offsetInMdu = cursor % rawMduCapacity
       const take = Math.min(remaining, rawMduCapacity - offsetInMdu)
       rawUserMdus[userMduIdx].set(fileBytes.subarray(fileOffset, fileOffset + take), offsetInMdu)
+      usedLengths[userMduIdx] = Math.max(usedLengths[userMduIdx] || 0, offsetInMdu + take)
       fileOffset += take
       cursor += take
       remaining -= take
@@ -96,11 +98,15 @@ export async function bootstrapAppendBaseFromNetwork(
   }
 
   const baseMdu0Bytes = await input.getMdu0Bytes()
-  const existingUserMdus = rawUserMdus.map((rawMdu, index) => ({
-    index,
-    data: input.encodeToMdu(rawMdu),
-    rawData: rawMdu,
-  }))
+  const existingUserMdus = rawUserMdus.map((rawMdu, index) => {
+    const usedLength = Math.max(0, Math.min(rawMduCapacity, usedLengths[index] || 0))
+    const rawPayload = rawMdu.slice(0, usedLength)
+    return {
+      index,
+      data: input.encodeToMdu(rawMdu),
+      rawData: rawPayload,
+    }
+  })
 
   return {
     baseMdu0Bytes,

@@ -182,6 +182,16 @@ async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, t
   await page.waitForTimeout(150)
 }
 
+async function syncDealIndexIfNeeded(page: Page, timeout = 180_000): Promise<void> {
+  const syncPanel = page.getByTestId('deal-index-sync-panel')
+  if (!(await syncPanel.isVisible().catch(() => false))) return
+
+  const syncButton = page.getByTestId('deal-index-sync-button')
+  await expect(syncButton).toBeVisible({ timeout: 30_000 })
+  await syncButton.click({ force: true })
+  await expect(syncPanel).toBeHidden({ timeout })
+}
+
 async function waitForDealFileRow(
   page: Page,
   dealId: string,
@@ -196,7 +206,7 @@ async function waitForDealFileRow(
   const fileList = page.getByTestId('deal-detail-file-list')
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
 
-  const pollForRow = async () => {
+  const pollForRow = async (allowSync: boolean, pollTimeout: number) => {
     await expect
       .poll(async () => {
         const byTestIdCount = await dealRow.count().catch(() => 0)
@@ -209,19 +219,22 @@ async function waitForDealFileRow(
         if (await filesTab.isVisible().catch(() => false)) {
           await filesTab.click({ force: true }).catch(() => undefined)
         }
+        if (allowSync && !(await fileRow.isVisible().catch(() => false))) {
+          await syncDealIndexIfNeeded(page, Math.max(60_000, Math.floor(timeout / 2))).catch(() => undefined)
+        }
         const listVisible = await fileList.isVisible().catch(() => false)
         if (!listVisible) return false
         return await fileRow.isVisible().catch(() => false)
-      }, { timeout })
+      }, { timeout: pollTimeout })
       .toBe(true)
   }
 
   try {
-    await pollForRow()
+    await pollForRow(false, Math.max(30_000, Math.floor(timeout / 2)))
   } catch {
     await page.reload({ waitUntil: 'networkidle' })
     try {
-      await pollForRow()
+      await pollForRow(true, Math.max(60_000, Math.floor(timeout / 2)))
     } catch {
       if (await refreshDealsBtn.isVisible().catch(() => false)) {
         await refreshDealsBtn.click({ force: true }).catch(() => undefined)
@@ -235,6 +248,9 @@ async function waitForDealFileRow(
           await targetRow.click({ force: true }).catch(() => undefined)
           if (await filesTab.isVisible().catch(() => false)) {
             await filesTab.click({ force: true }).catch(() => undefined)
+          }
+          if (!(await fileRow.isVisible().catch(() => false))) {
+            await syncDealIndexIfNeeded(page, Math.max(30_000, Math.floor(timeout / 3))).catch(() => undefined)
           }
           return await fileRow.isVisible().catch(() => false)
         }, { timeout: Math.max(60_000, Math.floor(timeout / 2)) })
@@ -256,8 +272,9 @@ async function waitForFileRowInAnyDeal(
   const dealRows = page.locator('[data-testid^="deal-row-"]')
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
 
-  await expect
-    .poll(async () => {
+  const pollForRow = async (allowSync: boolean, pollTimeout: number) => {
+    await expect
+      .poll(async () => {
       const totalRows = await dealRows.count().catch(() => 0)
       for (let i = 0; i < totalRows; i += 1) {
         const row = dealRows.nth(i)
@@ -266,6 +283,9 @@ async function waitForFileRowInAnyDeal(
         if (await filesTab.isVisible().catch(() => false)) {
           await filesTab.click({ force: true }).catch(() => undefined)
         }
+        if (allowSync && !(await fileRow.isVisible().catch(() => false))) {
+          await syncDealIndexIfNeeded(page, Math.max(60_000, Math.floor(timeout / 2))).catch(() => undefined)
+        }
         if (!(await fileList.isVisible().catch(() => false))) continue
         if (await fileRow.isVisible().catch(() => false)) return true
       }
@@ -273,8 +293,15 @@ async function waitForFileRowInAnyDeal(
         await refreshDealsBtn.click({ force: true }).catch(() => undefined)
       }
       return false
-    }, { timeout })
+    }, { timeout: pollTimeout })
     .toBe(true)
+  }
+
+  try {
+    await pollForRow(false, Math.max(30_000, Math.floor(timeout / 2)))
+  } catch {
+    await pollForRow(true, timeout)
+  }
 
   return fileRow
 }

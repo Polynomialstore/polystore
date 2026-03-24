@@ -684,6 +684,7 @@ start_provider() {
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
+      NIL_NODE="$RPC_ADDR" \
       NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
       NIL_UPLOAD_DIR="$dir" \
       NIL_CLI_BIN="$NIL_CLI_BIN" \
@@ -710,6 +711,7 @@ start_router() {
       NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_HOME="$CHAIN_HOME" \
+      NIL_NODE="$RPC_ADDR" \
       NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
