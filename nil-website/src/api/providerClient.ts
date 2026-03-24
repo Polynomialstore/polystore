@@ -310,6 +310,29 @@ export async function providerFetchMduKzg(
   return json
 }
 
+export async function providerFetchMdu(
+  providerBase: string,
+  manifestRoot: string,
+  mduIndex: number,
+  params?: { dealId?: string; owner?: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  let url = `${providerBase}/sp/retrieval/mdu/${encodeURIComponent(manifestRoot)}/${encodeURIComponent(String(mduIndex))}`
+  if (params?.dealId && params?.owner) {
+    const q = new URLSearchParams()
+    q.set('deal_id', String(params.dealId))
+    q.set('owner', params.owner)
+    url = `${url}?${q.toString()}`
+  }
+
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 60_000, fetchFn)
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Provider mdu returned ${res.status}`)
+  }
+  return new Uint8Array(await res.arrayBuffer())
+}
+
 export async function providerPlanRetrievalSession(
   providerBase: string,
   manifestRoot: string,

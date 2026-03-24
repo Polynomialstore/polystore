@@ -129,6 +129,7 @@ func testRouter() *mux.Router {
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/mdu/{cid}/{index}", GatewayMdu).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")

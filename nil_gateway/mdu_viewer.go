@@ -42,6 +42,98 @@ type mduKzgResponse struct {
 	Blobs        []string `json:"blobs"`
 }
 
+func GatewayMdu(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	vars := mux.Vars(r)
+	rawManifestRoot := strings.TrimSpace(vars["cid"])
+	if rawManifestRoot == "" {
+		writeJSONError(w, http.StatusBadRequest, "manifest_root path parameter is required", "")
+		return
+	}
+	manifestRoot, err := parseManifestRoot(rawManifestRoot)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", err.Error())
+		return
+	}
+	indexStr := strings.TrimSpace(vars["index"])
+	if indexStr == "" {
+		writeJSONError(w, http.StatusBadRequest, "index is required", "")
+		return
+	}
+	mduIndex, err := strconv.ParseUint(indexStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid index", "")
+		return
+	}
+
+	dealID, _, status, err := validateDealOwnerCidQuery(r, manifestRoot)
+	hasDealQuery := strings.TrimSpace(r.URL.Query().Get("deal_id")) != ""
+	if err != nil {
+		writeJSONError(w, status, err.Error(), "")
+		return
+	}
+
+	var dealDir string
+	if hasDealQuery {
+		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	} else {
+		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+	}
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
+			return
+		}
+		if errors.Is(err, ErrDealDirConflict) {
+			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
+		return
+	}
+
+	meta, err := loadSlabMeta(dealDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "slab not found", "")
+			return
+		}
+		log.Printf("GatewayMdu: load slab meta error: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
+		return
+	}
+	defer meta.Close()
+
+	if mduIndex >= meta.totalMdus {
+		writeJSONError(w, http.StatusNotFound, "mdu index out of range", "")
+		return
+	}
+
+	mduPath := filepath.Join(meta.dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
+	data, err := os.ReadFile(mduPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "mdu not found", "")
+			return
+		}
+		log.Printf("GatewayMdu: read mdu error: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to read mdu", "")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
+	w.Header().Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 type slabMeta struct {
 	dealDir     string
 	builder     *crypto_ffi.Mdu0Builder

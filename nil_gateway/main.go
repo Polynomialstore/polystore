@@ -222,6 +222,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 		r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/slab/{cid}", RouterGatewaySlab).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/manifest-info/{cid}", RouterGatewayManifestInfo).Methods("GET", "OPTIONS")
+		r.HandleFunc("/gateway/mdu/{cid}/{index}", RouterGatewayMdu).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", RouterGatewayMduKzg).Methods("GET", "OPTIONS")
 		r.HandleFunc("/gateway/receipt", RouterGatewaySubmitReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
@@ -243,6 +244,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 	r.HandleFunc("/gateway/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+	r.HandleFunc("/gateway/mdu/{cid}/{index}", GatewayMdu).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/deal-generations/{deal_id}", GatewayDealGenerations).Methods("GET", "OPTIONS")
 	r.HandleFunc("/gateway/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
@@ -274,6 +276,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/retrieval/list-files/{cid}", GatewayListFiles).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/slab/{cid}", GatewaySlab).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/manifest-info/{cid}", GatewayManifestInfo).Methods("GET", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/mdu/{cid}/{index}", GatewayMdu).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/mdu-kzg/{cid}/{index}", GatewayMduKzg).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
 }

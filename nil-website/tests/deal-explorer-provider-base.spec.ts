@@ -7,11 +7,26 @@ import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
 
 const routePath = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
+const MDU_SIZE_BYTES = 8 * 1024 * 1024
+const BLOB_SIZE_BYTES = 128 * 1024
+const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
+const FILE_TABLE_HEADER_SIZE = 128
 
 function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
+}
+
+function buildMdu0WithSingleFile(filePath: string, sizeBytes: number, startOffset: number): Buffer {
+  const mdu0 = Buffer.alloc(MDU_SIZE_BYTES)
+  mdu0.write('NILF', FILE_TABLE_START, 'utf8')
+  mdu0.writeUInt32LE(1, FILE_TABLE_START + 8)
+  const recordOffset = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE
+  mdu0.writeBigUInt64LE(BigInt(startOffset), recordOffset)
+  mdu0.writeBigUInt64LE(BigInt(sizeBytes), recordOffset + 8)
+  Buffer.from(filePath, 'utf8').copy(mdu0, recordOffset + 24, 0, 40)
+  return mdu0
 }
 
 test('Deal Explorer: missing local index requires provider sync before file view', async ({ page }) => {
@@ -25,10 +40,12 @@ test('Deal Explorer: missing local index requires provider sync before file view
 
   const dealId = '1'
   const filePath = 'provider-base.txt'
-  const fileBytes = Buffer.from('hello from provider base')
+  const fileBytes = Buffer.alloc(200_000, 0x61)
   const manifestRoot = '0xae5359579124255db62f04c55f1d1490655ed5479988a528bbca9f5a2245de9286452e5ffd8e76e05763c8241632c517'
   const staleManifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
   const manifestRootBase64 = Buffer.from(manifestRoot.slice(2), 'hex').toString('base64')
+  const mdu0Bytes = buildMdu0WithSingleFile(filePath, fileBytes.length, 0)
+  const witnessMduBytes = Buffer.alloc(MDU_SIZE_BYTES)
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
@@ -42,6 +59,8 @@ test('Deal Explorer: missing local index requires provider sync before file view
   let spFetchCalls = 0
   let openSessionCalls = 0
   let planCalls = 0
+  let mduFetchCalls = 0
+  let listFilesCalls = 0
   let badManifestRequests = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
@@ -106,6 +125,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   })
 
   await page.route('**/sp/retrieval/list-files/**', async (route) => {
+    listFilesCalls += 1
     if (route.request().url().includes(staleManifestRoot)) {
       badManifestRequests += 1
       await route.fulfill({
@@ -183,6 +203,31 @@ test('Deal Explorer: missing local index requires provider sync before file view
       }),
     })
   })
+  await page.route('**/sp/retrieval/manifest-info/**', async (route) => {
+    if (route.request().url().includes(staleManifestRoot)) {
+      badManifestRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'invalid manifest_root' }),
+      })
+      return
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        manifest_root: manifestRoot,
+        manifest_blob_hex: `0x${'00'.repeat(48)}`,
+        total_mdus: 3,
+        witness_mdus: 1,
+        user_mdus: 1,
+        roots: [],
+      }),
+    })
+  })
 
   await page.route('**/sp/retrieval/plan/**', async (route) => {
     planCalls += 1
@@ -215,7 +260,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
     })
   })
 
-  await page.route('**/sp/retrieval/open-session/**', async (route) => {
+  await page.route('**/sp/retrieval/mdu/**', async (route) => {
     if (route.request().url().includes(staleManifestRoot)) {
       badManifestRequests += 1
       await route.fulfill({
@@ -226,18 +271,49 @@ test('Deal Explorer: missing local index requires provider sync before file view
       })
       return
     }
-    openSessionCalls += 1
+    const url = new URL(route.request().url())
+    const parts = url.pathname.split('/')
+    const index = Number(parts[parts.length - 1] || -1)
+    mduFetchCalls += 1
+    if (index === 0) {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/octet-stream',
+          'X-Nil-Mdu-Index': '0',
+        },
+        body: mdu0Bytes,
+      })
+      return
+    }
+    if (index === 1) {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/octet-stream',
+          'X-Nil-Mdu-Index': '1',
+        },
+        body: witnessMduBytes,
+      })
+      return
+    }
     await route.fulfill({
-      status: 200,
+      status: 404,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({
-        download_session: 'test-download-session',
-        deal_id: Number(dealId),
-        provider: 'nil1provider',
-        file_path: filePath,
-        expires_at: Math.floor(Date.now() / 1000) + 600,
-      }),
+      body: JSON.stringify({ error: 'mdu not found' }),
+    })
+  })
+
+  await page.route('**/sp/retrieval/open-session/**', async (route) => {
+    openSessionCalls += 1
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'open-session should not be used for deal index sync' }),
     })
   })
 
@@ -252,27 +328,14 @@ test('Deal Explorer: missing local index requires provider sync before file view
       })
       return
     }
-    const url = new URL(route.request().url())
-    const headerDownloadSession = route.request().headers()['x-nil-download-session']
-    if (!url.searchParams.get('download_session') && !headerDownloadSession) {
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'missing download_session' }),
-      })
-      return
-    }
     spFetchCalls += 1
     await route.fulfill({
-      status: 206,
+      status: 400,
+      contentType: 'application/json',
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
-        'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
       },
-      body: fileBytes,
+      body: JSON.stringify({ error: 'range too large', hint: 'range must be <= 131072' }),
     })
   })
 
@@ -431,8 +494,10 @@ test('Deal Explorer: missing local index requires provider sync before file view
   await expect(page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
 
-  expect(spFetchCalls).toBeGreaterThan(0)
-  expect(openSessionCalls).toBeGreaterThan(0)
+  expect(mduFetchCalls).toBeGreaterThan(0)
+  expect(listFilesCalls).toBe(0)
+  expect(spFetchCalls).toBe(0)
+  expect(openSessionCalls).toBe(0)
   expect(planCalls).toBe(0)
   expect(badManifestRequests).toBe(0)
   await expect(page.getByTestId('deal-detail-file-list')).toContainText(filePath)

@@ -67,6 +67,8 @@ func mapGatewayPathToProviderPath(path string) string {
 		return "/sp/retrieval/slab/" + strings.TrimPrefix(path, "/gateway/slab/")
 	case strings.HasPrefix(path, "/gateway/manifest-info/"):
 		return "/sp/retrieval/manifest-info/" + strings.TrimPrefix(path, "/gateway/manifest-info/")
+	case strings.HasPrefix(path, "/gateway/mdu/"):
+		return "/sp/retrieval/mdu/" + strings.TrimPrefix(path, "/gateway/mdu/")
 	case strings.HasPrefix(path, "/gateway/mdu-kzg/"):
 		return "/sp/retrieval/mdu-kzg/" + strings.TrimPrefix(path, "/gateway/mdu-kzg/")
 	case strings.HasPrefix(path, "/gateway/open-session/"):
@@ -450,6 +452,7 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
 func RouterGatewayDownload(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
+func RouterGatewayMdu(w http.ResponseWriter, r *http.Request)      { RouterGatewayFetch(w, r) }
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	if requireOnchainSession {
