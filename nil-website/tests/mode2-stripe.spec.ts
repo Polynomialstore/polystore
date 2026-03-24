@@ -44,9 +44,10 @@ async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, tim
 
 async function openFileActionMenuItem(page: Page, filePath: string, testId: string): Promise<Locator> {
   const menuButton = page.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
+  const item = page.locator(`[data-testid="${testId}"][data-file-path="${filePath}"]`)
+  if (await item.isVisible().catch(() => false)) return item
   await expect(menuButton).toBeVisible({ timeout: 60_000 })
   await menuButton.click({ force: true })
-  const item = page.locator(`[data-testid="${testId}"][data-file-path="${filePath}"]`)
   await expect(item).toBeVisible({ timeout: 30_000 })
   return item
 }
