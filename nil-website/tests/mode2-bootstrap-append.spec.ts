@@ -65,6 +65,24 @@ async function readActiveSlabMetadata(
   }, dealId)
 }
 
+async function waitForActiveSlabMetadata(
+  page: import('@playwright/test').Page,
+  dealId: string,
+): Promise<{ manifest_root: string; file_records: Array<{ path: string; size_bytes: number; start_offset: number }> }> {
+  await expect
+    .poll(async () => {
+      try {
+        const meta = await readActiveSlabMetadata(page, dealId)
+        return JSON.stringify(meta)
+      } catch {
+        return null
+      }
+    }, { timeout: 30_000 })
+    .not.toBeNull()
+
+  return await readActiveSlabMetadata(page, dealId)
+}
+
 test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append', async ({ page }) => {
   test.setTimeout(300_000)
 
@@ -85,6 +103,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   let gatewayProbeAttempts = 0
   let uploadManifestCalls = 0
   const uploadPreviousRoots: string[] = []
+  const uploadedShardIndices: number[] = []
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
@@ -120,6 +139,9 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   })
   await page.route('**/sp/upload_shard', async (route) => {
     uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
+    const rawIndex = route.request().headers()['x-nil-mdu-index']
+    const parsedIndex = Number(rawIndex)
+    if (Number.isInteger(parsedIndex)) uploadedShardIndices.push(parsedIndex)
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
 
@@ -403,9 +425,14 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   expect(retrievalPlanCalls - planCallsBeforeAppend).toBeGreaterThan(0)
   expect(retrievalFetchCalls - fetchCallsBeforeAppend).toBeGreaterThan(0)
 
-  const slabMeta = await readActiveSlabMetadata(page, dealId)
+  const slabMeta = await waitForActiveSlabMetadata(page, dealId)
   const filePaths = slabMeta.file_records.map((file) => file.path).sort()
   expect(filePaths).toEqual([fileA.name, fileB.name].sort())
   expect(slabMeta.manifest_root).toMatch(/^0x[0-9a-f]{96}$/i)
   expect(uploadPreviousRoots).toContain(dealCid)
+  // The append generation must upload shards for both the carried-forward user
+  // MDU and the newly appended user MDU. Otherwise old files disappear once the
+  // previous generation is cleaned up.
+  expect(uploadedShardIndices.filter((idx) => idx === 2).length).toBeGreaterThan(0)
+  expect(uploadedShardIndices.filter((idx) => idx === 3).length).toBeGreaterThan(0)
 })

@@ -2245,9 +2245,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               const witnessFlat = toU8(result.witness_flat);
               witnessDataBlobs.push(witnessFlat);
               const shardsList = result.shards.map((s, slot) => makePreparedShard(i, slot, toU8(s)));
-              if (!isExisting) {
-                mode2UserShards.push({ index: i, shards: shardsList });
-              }
+              // Every committed generation must carry shard artifacts for the full
+              // user-MDU set. If we only upload shards for newly appended MDUs,
+              // the new manifest root can no longer serve older files once stale
+              // generations are cleaned up.
+              mode2UserShards.push({ index: i, shards: shardsList });
 
               const opMs = performance.now() - opStart;
               console.log('[perf] user mdu (mode2)', {
@@ -2619,7 +2621,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
         addLog(
           useMode2
-            ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} new striped user MDUs`
+            ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} striped user MDUs uploaded for this generation`
             : `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`,
         );
 
